@@ -18,6 +18,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatFolderReq,
     ChatReq,
     DepartmentKnowledgeSpaceBatchCreateReq,
+    DepartmentKnowledgeSpaceVisibilityReq,
     FileCreateReq,
     FileEncodingUpdateReq,
     FileMoveReq,
@@ -212,6 +213,7 @@ async def get_my_department_spaces(
 async def get_all_department_spaces(
     request: Request,
     order_by: str = "update_time",
+    include_hidden: bool = False,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     try:
@@ -219,8 +221,24 @@ async def get_all_department_spaces(
             request=request,
             login_user=login_user,
             order_by=order_by,
+            include_hidden=include_hidden,
         )
         return resp_200(spaces)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post("/department/visibility")
+async def set_department_spaces_visibility(
+    req: DepartmentKnowledgeSpaceVisibilityReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        changed = await DepartmentKnowledgeSpaceService.set_spaces_hidden(
+            login_user=login_user,
+            req=req,
+        )
+        return resp_200({"changed": changed})
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

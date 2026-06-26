@@ -21,7 +21,10 @@ from bisheng.knowledge.domain.models.knowledge import (
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceBatchItem,
+    DepartmentKnowledgeSpaceVisibilityReq,
 )
+
+_SERVICE_MODULE = "bisheng.knowledge.domain.services.department_knowledge_space_service"
 
 
 def _install_service_stubs() -> None:
@@ -436,6 +439,7 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
                     department_id=10,
                     approval_enabled=False,
                     sensitive_check_enabled=True,
+                    is_hidden=False,
                 )
             ],
         ),
@@ -443,6 +447,10 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
             "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.async_get_spaces_by_ids",
             new_callable=AsyncMock,
             return_value=[space],
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.KnowledgeSpaceService._populate_root_file_counts",
+            new_callable=AsyncMock,
         ),
         patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentDao.aget_by_ids",
@@ -458,6 +466,7 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
                     department_id=10,
                     approval_enabled=False,
                     sensitive_check_enabled=True,
+                    is_hidden=False,
                 )
             ],
         ),
@@ -578,3 +587,224 @@ async def test_get_user_department_spaces_super_admin_sees_all_departments():
     # Admin passes every gate; the view_space pre-filter would wrongly drop
     # spaces with no explicit binding, so it must be disabled.
     assert mock_format.await_args.kwargs["required_permission_id"] is None
+
+
+def _make_binding(space_id, department_id, *, is_hidden=False):
+    return SimpleNamespace(
+        space_id=space_id,
+        department_id=department_id,
+        approval_enabled=True,
+        sensitive_check_enabled=False,
+        is_hidden=is_hidden,
+    )
+
+
+def _make_space(space_id, name):
+    return Knowledge(
+        id=space_id,
+        user_id=1,
+        name=name,
+        type=KnowledgeTypeEnum.SPACE.value,
+        description="desc",
+        model="embedding-1",
+        state=KnowledgeState.PUBLISHED.value,
+        is_released=True,
+        auth_type=AuthTypeEnum.APPROVAL,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_all_department_spaces_excludes_hidden_by_default():
+    """The "已创建知识空间" management list must drop hidden bindings."""
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    bindings = [_make_binding(101, 10), _make_binding(202, 20, is_hidden=True)]
+
+    with (
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.aget_all",
+            new_callable=AsyncMock,
+            return_value=bindings,
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[_make_space(101, "可见部门的知识空间")],
+        ) as mock_spaces,
+        patch(
+            f"{_SERVICE_MODULE}.KnowledgeSpaceService._populate_root_file_counts",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentDao.aget_by_ids",
+            new_callable=AsyncMock,
+            return_value=[_make_department(dept_id=10)],
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_ids",
+            new_callable=AsyncMock,
+            return_value=[_make_binding(101, 10)],
+        ),
+    ):
+        result = await DepartmentKnowledgeSpaceService.get_all_department_spaces(
+            request=SimpleNamespace(),
+            login_user=_make_login_user(),
+            order_by="name",
+        )
+
+    # Only the visible binding's space id reaches the space lookup.
+    assert mock_spaces.await_args.args[0] == [101]
+    assert [space.id for space in result] == [101]
+    assert result[0].is_hidden is False
+
+
+@pytest.mark.asyncio
+async def test_get_all_department_spaces_include_hidden_returns_all_with_flag():
+    """The management dialog needs hidden bindings so they can be restored."""
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    bindings = [_make_binding(101, 10), _make_binding(202, 20, is_hidden=True)]
+
+    with (
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.aget_all",
+            new_callable=AsyncMock,
+            return_value=bindings,
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[
+                _make_space(101, "可见部门的知识空间"),
+                _make_space(202, "隐藏部门的知识空间"),
+            ],
+        ) as mock_spaces,
+        patch(
+            f"{_SERVICE_MODULE}.KnowledgeSpaceService._populate_root_file_counts",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentDao.aget_by_ids",
+            new_callable=AsyncMock,
+            return_value=[_make_department(dept_id=10), _make_department(dept_id=20, name="法务部")],
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_ids",
+            new_callable=AsyncMock,
+            return_value=bindings,
+        ),
+    ):
+        result = await DepartmentKnowledgeSpaceService.get_all_department_spaces(
+            request=SimpleNamespace(),
+            login_user=_make_login_user(),
+            order_by="name",
+            include_hidden=True,
+        )
+
+    assert sorted(mock_spaces.await_args.args[0]) == [101, 202]
+    hidden_flags = {space.id: space.is_hidden for space in result}
+    assert hidden_flags == {101: False, 202: True}
+
+
+@pytest.mark.asyncio
+async def test_set_spaces_hidden_updates_flag_for_super_admin():
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    req = DepartmentKnowledgeSpaceVisibilityReq(department_ids=[10, 20], is_hidden=True)
+
+    with patch(
+        f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.aset_hidden_by_department_ids",
+        new_callable=AsyncMock,
+        return_value=2,
+    ) as mock_set:
+        changed = await DepartmentKnowledgeSpaceService.set_spaces_hidden(
+            login_user=_make_login_user(),
+            req=req,
+        )
+
+    assert changed == 2
+    mock_set.assert_awaited_once_with([10, 20], True)
+
+
+@pytest.mark.asyncio
+async def test_set_spaces_hidden_requires_super_admin():
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    req = DepartmentKnowledgeSpaceVisibilityReq(department_ids=[10], is_hidden=True)
+
+    with pytest.raises(Exception):
+        await DepartmentKnowledgeSpaceService.set_spaces_hidden(
+            login_user=_make_login_user(is_admin=False),
+            req=req,
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_spaces_hidden_empty_is_noop():
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    req = DepartmentKnowledgeSpaceVisibilityReq(department_ids=[], is_hidden=False)
+
+    with patch(
+        f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.aset_hidden_by_department_ids",
+        new_callable=AsyncMock,
+    ) as mock_set:
+        changed = await DepartmentKnowledgeSpaceService.set_spaces_hidden(
+            login_user=_make_login_user(),
+            req=req,
+        )
+
+    assert changed == 0
+    mock_set.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_batch_create_defaults_to_unpublished():
+    """Department knowledge spaces must not be published to the square by default."""
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    assert DepartmentKnowledgeSpaceService.DEFAULT_IS_RELEASED is False
+
+    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    department = _make_department()
+
+    with (
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentDao.aget_by_ids",
+            new_callable=AsyncMock,
+            return_value=[department],
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.acreate",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentService.aget_admins",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._grant_default_department_admins",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._grant_department_members_viewer",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.KnowledgeSpaceService.create_knowledge_space",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=101),
+        ) as mock_create,
+        patch(
+            f"{_SERVICE_MODULE}.KnowledgeSpaceService.get_space_info",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=101),
+        ),
+    ):
+        await DepartmentKnowledgeSpaceService.batch_create_spaces(
+            request=SimpleNamespace(),
+            login_user=_make_login_user(),
+            req=req,
+        )
+
+    assert mock_create.await_args.kwargs["is_released"] is False
