@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | 🚧 进行中 | T0·T2·T3 ✅ / 15。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | T0·T2·T3·T1 ✅ / 15（T1b ⏸️ 待裁定）。偏差见下方「实际偏差记录」 |
 
 ---
 
@@ -34,7 +34,8 @@
 
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
-| T1 | **E 名册版本派生 key 缓存层**：新建缓存工具（per-tenant LRU + 轻量版本读 helper：`SELECT update_time` 不取 value 大列；主体串按 `(user_id, max(update_time) over user_group_link+user_department)`）+ fail-safe 回落；`_get_relation_bindings`/`_get_relation_models_map`/`_get_current_user_subject_strings`（`knowledge_space_service.py`）接入。先写等价测试（命中==实时构建、版本变即失效、tenant 隔离），后改实现。**无 DB schema 变更**（仅新增只读轻量查询） | 新 cache util + `knowledge_space_service.py` | AC-03, AC-21, AC-22, AC-23, AC-24, AC-25, AC-30 | 无 | 🔲 |
+| T1 | **E 名册版本派生 key 缓存层（bindings + models）**：新建 `relation_roster_cache`（版本派生 key 的 per-tenant LRU + sentinel-based get_or_build + fail-safe）；`ConfigDao.aget_config_version`（只 `SELECT update_time`，不取 value 大列）；在**源头** `_get_bindings`/`_get_relation_models`（`resource_permission.py`）接入——比改 `knowledge_space_service.py` 覆盖更广（channel/space/所有 ReBAC 路径都受益）。版本=config 行 `update_time`（`onupdate=CURRENT_TIMESTAMP`，写即变、每请求轻量版本校验→跨进程也不会服务旧名册）。先写契约+wiring 测试（命中==实时构建、版本变即失效、tenant 隔离、空值是命中）。**无 DB schema 变更**。8 测试绿、零新增回归/ruff。 | `relation_roster_cache.py`(新) + `resource_permission.py` + `config.py` | AC-21, AC-23, AC-24, AC-25, AC-30 | 无 | ✅ |
+| T1b | **E 主体串缓存（AC-22）— 延后**：design §3 决策6 原拟 `max(update_time) over 成员关系` 做版本，**实测发现删除不安全**（用户被移出某组→该 link 行被删除→剩余行 update_time 不变→版本不变→旧主体串仍命中→越权命中已撤销的组权限，安全红线）。安全版本需删除感知（`count(*)+max(update_time)` 或成员 id 集哈希），需另行设计。**待用户裁定**纳入或正式延后（见偏差记录 D1） | `relation_roster_cache.py` + 主体串源头 | AC-22 | 无 | ⏸️ |
 | T2 | **A 频道详情上下文复用 + membership 去重**：`get_channel_detail`（`channel_service.py`）传 `context=_build_channel_permission_context(...)`；合并两处 `find_membership`。先写等价测试（permission_ids 不变），后改实现 | `channel_service.py` | AC-04, AC-06 | 无 | ✅ |
 | T3 | **A 文章总数 Redis 短 TTL 缓存**：新建 `ArticleCountCache`（key `article:count:{tenant_id}:channel:{id}:main`，TTL 60–120s，miss/Redis 挂回落 ES 并回填）；`get_channel_detail`/`get_channel_square` 接入。先写测试（命中不查 ES、miss 回落） | 新 cache 模块 + `channel_service.py` | AC-07, AC-27 | 无 | ✅ |
 
@@ -65,3 +66,10 @@
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
 | T10 | **静态扫描 + 性能基线**：按 AC-31 grep 断言（详情不再调 `_calculate_sub_channel_unread_counts`、广场无逐空间 `get_permission_level`、C 组无 `page=0,limit=0` 后切片、侧栏无 mount 期批量 `checkPermission`、E 组 key 含版本/哈希且写路径零失效调用）；用 `seed_load_test_org.sh` 造大用户量数据，压 `/channel/manager/{id}`、`/space/joined`、`/children` 深展开，记录 DB/FGA/ES 往返数 + P95 对比 design §7.1，落 `loadtest-report.md` | `loadtest-report.md` | AC-26, AC-27, AC-28, AC-29, AC-30, AC-31 | T1~T9b | 🔲 |
+
+---
+
+## 实际偏差记录
+
+- **D1（T1，影响系统认知）**：E 组**主体串缓存（AC-22）延后**。design §3 决策6 原拟用 `(user_id, max(update_time) over user_group_link+user_department)` 做版本 key — 实现时发现**删除不安全**：用户被移出某用户组时其 link 行被删除，剩余行的 `update_time` 不变 ⇒ 版本不变 ⇒ 旧主体串仍命中 ⇒ 用户保留已撤销组的权限（越权，破坏等价红线）。安全版本需删除感知（`count(*)+max(update_time)` 或成员 id 集哈希）。**bindings/models 不受此影响**（config 写经 `insert_or_update_config`，`update_time` 必变，无删除-不变问题），故 T1 照常落地。论证见 design §5 坑表。
+- **D2（T1，正向偏差）**：缓存接入点从 `knowledge_space_service.py` 的 3 个 helper **改到源头** `resource_permission.py` 的 `_get_bindings`/`_get_relation_models`。原因：channel 详情（T2）经 `channel_service._build_channel_permission_context → _get_bindings` 重建名册，不走 knowledge_space_service；改在源头让 **channel + 知识空间 + 所有 ReBAC 路径**都受益，且 per-request memo 仍叠加其上。文件数不变（3 个）。

@@ -148,6 +148,8 @@
 | 6 | F036 继承快速通道：无更近绑定的项套用一次性祖先决策；**有更近绑定必须完整评估** | 优化时误放行被单独限权的项 → 越权（破 INV-7） | C 组文件搜索复用 `_filter_visible_child_items`，不改其判定 |
 | 7 | `feat/2.6.0` 比 `feat/2.6.0-beta4` 落后 22 commit；本 feature 锚点行号可能漂移；037/038 编号在该分支已有占用（本 feature 为 039） | 按旧行号改错位置 / 撞号 | 以函数名定位；编号已避让为 039 |
 | 8 | `search_space_children`（文件**搜索**，:2845）与 `list_space_children`（**浏览**，:2762）是两个方法；浏览已 F027 cursor，搜索仍 fetch-all | 误以为搜索已优化而漏改 | 决策 4 明确只改搜索 |
+| 9 | **E 组主体串版本不能用 `max(update_time)`**：用户被移出某用户组时，其成员 link 行被**删除**——剩余行的 `update_time` 不变 ⇒ 版本不变 ⇒ 缓存仍命中旧主体串 | 用户保留已撤销组的权限（越权，破坏等价红线 AC-01） | bindings/models 用 `update_time` 安全（写经 `insert_or_update_config` 必 bump，无删除问题）；**主体串缓存（AC-22）延后**，需删除感知版本（`count(*)+max(update_time)` 或成员 id 集哈希），见 tasks 偏差 D1 |
+| 10 | E 组缓存是**进程内**的，但安全不靠"进程间同步"——靠**每请求一次轻量 `aget_config_version` 校验**：任一进程 commit 新 bindings → `update_time` 变 → 其它进程下次读版本即 miss → 重建 | 误以为多 worker 会服务旧名册而不敢用进程内缓存 | 版本校验是 source-of-truth 比对，跨进程天然一致（决策 6） |
 
 ---
 
