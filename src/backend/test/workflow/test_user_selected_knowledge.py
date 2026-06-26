@@ -1,11 +1,15 @@
 import asyncio
+import importlib
+import json
 import sys
 import types
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.workflow.common.knowledge import RagUtils
 from bisheng.workflow.common.node import NodeType
@@ -16,12 +20,102 @@ from bisheng.workflow.common.runtime_knowledge import (
     RuntimeKnowledgeSelection,
     parse_runtime_knowledge_selection,
 )
+from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.graph_engine import GraphEngine
 from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NODE_CLASS_MAP
 from bisheng.workflow.nodes.user_selected_knowledge_retriever.user_selected_knowledge_retriever import (
     UserSelectedKnowledgeRetriever,
 )
+
+
+def _workflow_node(data: dict) -> dict:
+    return {"id": data["id"], "data": data}
+
+
+def _runtime_selection_payload() -> dict:
+    return {
+        "mode": "source",
+        "whole_source": {
+            "source_type": "knowledge",
+            "source_id": 11,
+            "source_name": "kb",
+        },
+        "items": [],
+        "effective_file_count": None,
+    }
+
+
+def _minimal_runtime_workflow_data() -> dict:
+    return {
+        "nodes": [
+            _workflow_node(
+                {
+                    "id": "start",
+                    "type": NodeType.START.value,
+                    "name": "开始",
+                    "v": 1,
+                    "group_params": [
+                        {
+                            "name": "基础",
+                            "params": [
+                                {"key": "guide_word", "value": ""},
+                                {"key": "guide_question", "value": []},
+                                {"key": "preset_question", "value": []},
+                                {"key": "chat_history", "value": 10},
+                                {"key": "custom_variables", "value": []},
+                            ],
+                        }
+                    ],
+                }
+            ),
+            _workflow_node(
+                {
+                    "id": "runtime",
+                    "type": NodeType.USER_SELECTED_KNOWLEDGE_RETRIEVER.value,
+                    "name": "自选知识检索",
+                    "v": 1,
+                    "group_params": [],
+                }
+            ),
+            _workflow_node(
+                {
+                    "id": "end",
+                    "type": NodeType.END.value,
+                    "name": "结束",
+                    "v": 1,
+                    "group_params": [],
+                }
+            ),
+        ],
+        "edges": [
+            {
+                "id": "e1",
+                "source": "start",
+                "sourceHandle": "source",
+                "target": "runtime",
+                "targetHandle": "target",
+            },
+            {
+                "id": "e2",
+                "source": "runtime",
+                "sourceHandle": "source",
+                "target": "end",
+                "targetHandle": "target",
+            },
+        ],
+    }
+
+
+def _import_redis_callback():
+    spec = importlib.util.spec_from_file_location(
+        "_test_redis_callback",
+        Path(__file__).parents[2] / "bisheng" / "worker" / "workflow" / "redis_callback.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.RedisCallback
 
 
 def test_runtime_selection_normalizes_legacy_folder_scope():
@@ -74,6 +168,120 @@ def test_graph_engine_extracts_runtime_selection_from_input_params():
     assert stored["items"][0]["source_type"] == "knowledge"
     assert stored["items"][0]["source_id"] == 11
     assert stored["items"][0]["id"] == 101
+
+
+def test_graph_engine_requests_runtime_selection_before_user_selected_node():
+    callback = MagicMock()
+    engine = object.__new__(GraphEngine)
+    engine.graph_state = GraphState()
+    engine.graph_config = {}
+    engine.callback = callback
+    engine.status = WorkflowStatus.RUNNING.value
+    engine.nodes_map = {
+        "runtime_node": SimpleNamespace(
+            type=NodeType.USER_SELECTED_KNOWLEDGE_RETRIEVER.value,
+            name="自选知识检索",
+        )
+    }
+    engine.graph = SimpleNamespace(get_state=lambda _: SimpleNamespace(next=("runtime_node",)))
+
+    engine.judge_status()
+
+    assert engine.status == WorkflowStatus.INPUT.value
+    callback.on_user_input.assert_called_once()
+    input_data = callback.on_user_input.call_args.args[0]
+    assert input_data.node_id == "runtime_node"
+    assert input_data.input_schema["tab"] == "runtime_knowledge"
+    assert input_data.input_schema["key"] == RUNTIME_KNOWLEDGE_SELECTION_FIELD
+
+
+def test_graph_engine_continues_when_runtime_selection_already_exists():
+    callback = MagicMock()
+    engine = object.__new__(GraphEngine)
+    engine.graph_state = GraphState()
+    engine.graph_state.set_variable(
+        RUNTIME_STATE_NODE_ID,
+        RUNTIME_USER_SELECTED_KNOWLEDGE_KEY,
+        {
+            "mode": "source",
+            "whole_source": {"source_type": "knowledge", "source_id": 11, "source_name": "kb"},
+            "items": [],
+            "effective_file_count": None,
+        },
+    )
+    engine.graph_config = {}
+    engine.callback = callback
+    engine.status = WorkflowStatus.INPUT.value
+    engine.nodes_map = {
+        "runtime_node": SimpleNamespace(
+            type=NodeType.USER_SELECTED_KNOWLEDGE_RAG.value,
+            name="自选知识问答",
+        )
+    }
+    engine.graph = SimpleNamespace(get_state=lambda _: SimpleNamespace(next=("runtime_node",)))
+
+    engine.judge_status()
+
+    assert engine.status == WorkflowStatus.RUNNING.value
+    callback.on_user_input.assert_not_called()
+
+
+def test_runtime_knowledge_input_updates_waiting_message_without_question():
+    redis_callback = _import_redis_callback()
+    selection = _runtime_selection_payload()
+    old_message = {
+        "node_id": "runtime",
+        "name": "自选知识检索",
+        "input_schema": {
+            "tab": "runtime_knowledge",
+            "key": RUNTIME_KNOWLEDGE_SELECTION_FIELD,
+        },
+    }
+    message_db = SimpleNamespace(
+        category=WorkflowEventType.UserInput.value,
+        message=json.dumps(old_message, ensure_ascii=False),
+    )
+
+    chat_response, updated_message = redis_callback._update_old_message(
+        {"runtime": {RUNTIME_KNOWLEDGE_SELECTION_FIELD: selection}},
+        message_db,
+        message_content="",
+        verify_input=True,
+    )
+
+    assert chat_response is None
+    assert updated_message is message_db
+    assert json.loads(message_db.message)["hisValue"] == selection
+
+
+def test_workflow_run_resumes_user_selected_node_after_runtime_selection(monkeypatch):
+    executed_nodes = []
+
+    def fake_runtime_run(self, unique_id):
+        executed_nodes.append(self.id)
+        return {"result": "ok"}
+
+    monkeypatch.setattr(UserSelectedKnowledgeRetriever, "_run", fake_runtime_run)
+    monkeypatch.setattr(UserSelectedKnowledgeRetriever, "parse_log", lambda self, unique_id, result: [])
+
+    callback = MagicMock()
+    workflow = Workflow(
+        workflow_id="workflow-id",
+        user_id=None,
+        workflow_data=_minimal_runtime_workflow_data(),
+        max_steps=10,
+        callback=callback,
+    )
+
+    assert workflow.run() == (WorkflowStatus.INPUT.value, "")
+    callback.on_user_input.assert_called_once()
+    assert executed_nodes == []
+
+    assert workflow.run({"runtime": {RUNTIME_KNOWLEDGE_SELECTION_FIELD: _runtime_selection_payload()}}) == (
+        WorkflowStatus.SUCCESS.value,
+        "",
+    )
+    assert executed_nodes == ["runtime"]
 
 
 def test_new_backend_node_types_are_registered():

@@ -49,6 +49,7 @@ export const enum ActionType {
     STOP = 'stop',
     RESTART = 'restart',
     FORM_SUBMIT = 'form_submit',
+    RUNTIME_KNOWLEDGE_SUBMIT = 'runtime_knowledge_submit',
     MESSAGE_INPUT = 'message_input',
     SKILL_INPUT = 'skill_input',
     SKILL_FORM_SUBMIT = 'skill_form_submit'
@@ -400,6 +401,27 @@ export const useWebSocket = (helpers) => {
 
                     helpers.message.createSendMsg(submitData.input)
                     break;
+                case ActionType.RUNTIME_KNOWLEDGE_SUBMIT: {
+                    const runtimeSessionInfo = sessionInfoMap.get(helpers.chatId)
+                    sendWsMsg({
+                        action: 'input',
+                        chat_id: submitData.chatId,
+                        flow_id: submitData.flowId,
+                        data: {
+                            [submitData.nodeId!]: {
+                                data: {
+                                    [RUNTIME_KNOWLEDGE_SELECTION_FIELD]: submitData.runtimeKnowledgeSelection,
+                                },
+                                message: '',
+                                message_id: runtimeSessionInfo?.message_id,
+                                category: 'input',
+                                extra: '',
+                                source: 0
+                            }
+                        },
+                    })
+                    break;
+                }
                 case ActionType.SKILL_FORM_SUBMIT:
                     sendWsMsg(submitData.data)
 

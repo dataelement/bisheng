@@ -24,7 +24,7 @@ export default function PortalWorkflowChat() {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-white">
-      <ChatPanne customWsHost={wsUrl} version="v2" data={data} />
+      <ChatPanne customWsHost={wsUrl} version="v2" data={data} portalMode />
     </div>
   );
 }

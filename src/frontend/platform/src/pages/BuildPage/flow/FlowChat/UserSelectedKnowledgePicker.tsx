@@ -15,11 +15,16 @@ import {
     RuntimeKnowledgeSource,
     RuntimeKnowledgeSourceType,
 } from "./userSelectedKnowledge";
+import { Button } from "@/components/bs-ui/button";
 
 interface UserSelectedKnowledgePickerProps {
     disabled?: boolean;
     value?: RuntimeKnowledgeSelection | null;
     onChange: (value: RuntimeKnowledgeSelection | null) => void;
+    showConfirm?: boolean;
+    confirmDisabled?: boolean;
+    confirmLabel?: string;
+    onConfirm?: () => void;
 }
 
 interface SourceItem extends RuntimeKnowledgeSource {
@@ -104,6 +109,10 @@ export default function UserSelectedKnowledgePicker({
     disabled,
     value,
     onChange,
+    showConfirm = false,
+    confirmDisabled = false,
+    confirmLabel = "确认",
+    onConfirm,
 }: UserSelectedKnowledgePickerProps) {
     const [keyword, setKeyword] = useState("");
     const [knowledgeList, setKnowledgeList] = useState<SourceItem[]>([]);
@@ -241,7 +250,7 @@ export default function UserSelectedKnowledgePicker({
         const rootKey = childrenKey(source, null);
         if (childrenByKey[rootKey] || childrenLoading[rootKey]) return;
         setChildrenLoading((prev) => ({ ...prev, [rootKey]: true }));
-        readFileByLibDatabase({ id: source.source_id, page: 1, pageSize: 1000 })
+        readFileByLibDatabase({ id: source.source_id, page: 1, pageSize: 1000 } as any)
             .then((res) => {
                 const items = (res.data || [])
                     .map((raw) => normalizeKnowledgeFile(raw, source))
@@ -449,6 +458,18 @@ export default function UserSelectedKnowledgePicker({
                     </>
                 )}
             </div>
+            {showConfirm && (
+                <div className="mt-2 flex justify-end">
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={disabled || confirmDisabled}
+                        onClick={onConfirm}
+                    >
+                        {confirmLabel}
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }

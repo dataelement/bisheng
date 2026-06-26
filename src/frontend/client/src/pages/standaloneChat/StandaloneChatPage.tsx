@@ -18,8 +18,10 @@ interface StandaloneChatPageProps {
   mode: 'guest' | 'auth';
   flowType: 'workflow' | 'assistant';
   hideSidebar?: boolean;
+  hideShare?: boolean;
   forceNewChatOnLoad?: boolean;
   initialChatId?: string;
+  portalWorkflowMode?: boolean;
 }
 
 const FLOW_TYPE_MAP = {
@@ -46,10 +48,12 @@ export default function StandaloneChatPage({
   mode,
   flowType,
   hideSidebar = false,
+  hideShare = false,
   forceNewChatOnLoad = false,
   initialChatId = '',
+  portalWorkflowMode = false,
 }: StandaloneChatPageProps) {
-  const pageProps = { mode, flowType, hideSidebar, forceNewChatOnLoad, initialChatId };
+  const pageProps = { mode, flowType, hideSidebar, hideShare, forceNewChatOnLoad, initialChatId, portalWorkflowMode };
 
   // Guest mode: wrap in a lightweight AuthContext that provides "not authenticated"
   // values so child components (ChatView, MessageUser) that call useAuthContext()
@@ -86,8 +90,10 @@ function StandaloneChatInner({
   mode,
   flowType,
   hideSidebar = false,
+  hideShare = false,
   forceNewChatOnLoad = false,
   initialChatId = '',
+  portalWorkflowMode = false,
 }: StandaloneChatPageProps) {
   const { flowId } = useParams<{ flowId: string }>();
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
@@ -209,6 +215,8 @@ function StandaloneChatInner({
                     flowType={numericFlowType}
                     apiVersion={apiVersion}
                     isGuestMode={isGuestMode}
+                    hideShare={hideShare}
+                    portalWorkflowMode={portalWorkflowMode}
                   />
                 ) : historyLoaded ? (
                   <ChatEmptyState onNewChat={createNewChat} />

@@ -41,6 +41,7 @@ export default function ChatMessages({
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState);
     const chatState = useRecoilValue(currentChatState);
     const localize = useLocalize();
+    const isRuntimeKnowledgeInputForm = inputForm?.tab === "runtime_knowledge";
 
     console.log("messages :>> ", chatState, messages, guideWord);
     const thumbRef = useRef(null);
@@ -146,7 +147,7 @@ export default function ChatMessages({
                 message={''}
             />}
         {guideWord && !inputDisabled && !inputForm && !readOnly && <GuideWord data={guideWord} />}
-        {inputForm && (chatState?.flow.flow_type === 10 ?
+        {inputForm && !isRuntimeKnowledgeInputForm && (chatState?.flow.flow_type === 10 ?
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :
             <InputFormSkill flow={chatState.flow} logo={logo} />
         )}

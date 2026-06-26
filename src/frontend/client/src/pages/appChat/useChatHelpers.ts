@@ -9,10 +9,15 @@ import { baseMsgItem } from "~/api/apps"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
 import { SkillMethod } from "./appUtils/skillMethod"
+import { getDialogInputUploadSettings } from "./dialogInputUpload"
 import { bishengConfState, chatApiVersionState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
 
-export default function useChatHelpers() {
+interface ChatHelpersOptions {
+    deferRuntimeKnowledgeSelection?: boolean;
+}
+
+export default function useChatHelpers(options: ChatHelpersOptions = {}) {
     const chatState = useRecoilValue(currentChatState)
     const runState = useRecoilValue(currentRunningState)
     const [bishengConfig] = useRecoilState(bishengConfState)
@@ -94,19 +99,18 @@ export default function useChatHelpers() {
 
     // 唤起输入(表单输入，文本输入)
     const showInputForm = (inputSchema) => {
-        const { tab, value } = inputSchema
+        const { tab } = inputSchema
 
         let showUpload = false
         if (tab === "dialog_input") {
-            const schemaItem = value?.find((el) => el?.key === "dialog_file_accept")
-            const fileAccept = schemaItem?.value
+            const { fileAccept, showUpload: dialogInputShowUpload } = getDialogInputUploadSettings(inputSchema)
             emitAreaTextEvent({ action: EVENT_TYPE.FILE_ACCEPTS, chatId, fileAccept })
-
-            const switchItem = value?.find((el) => el?.key === "user_input_file")
-            showUpload = switchItem ? switchItem.value : true
+            showUpload = dialogInputShowUpload
         }
 
-        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { showUpload, inputDisabled: false }
+        const runstate = tab === "form_input" || tab === "runtime_knowledge"
+            ? { inputDisabled: true, inputForm: inputSchema, showUpload: false }
+            : { showUpload, inputDisabled: false, inputForm: false }
 
         setRunningState((prev) => ({
             ...prev,
@@ -114,6 +118,7 @@ export default function useChatHelpers() {
                 ...prev[chatId],
                 showStop: false,
                 ...runstate,
+                deferRuntimeKnowledgeSelection: options.deferRuntimeKnowledgeSelection,
             },
         }))
     }

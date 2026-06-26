@@ -24,6 +24,20 @@ from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from bisheng.workflow.nodes.output.output_fake import OutputFakeNode
 
+USER_SELECTED_KNOWLEDGE_NODE_TYPES = {
+    NodeType.USER_SELECTED_KNOWLEDGE_RAG.value,
+    NodeType.USER_SELECTED_KNOWLEDGE_RETRIEVER.value,
+}
+
+RUNTIME_KNOWLEDGE_INPUT_SCHEMA = {
+    "key": RUNTIME_KNOWLEDGE_SELECTION_FIELD,
+    "type": "runtime_knowledge",
+    "tab": "runtime_knowledge",
+    "value": [],
+    "required": True,
+    "placeholder": "请选择知识库或知识空间",
+}
+
 
 class TempState(TypedDict):
     # not use, only for langgraph state graph
@@ -250,6 +264,9 @@ class GraphEngine:
             elif node_instance.type == NodeType.INPUT.value:
                 # Node that needs to abort receiving user input
                 interrupt_nodes.append(node_instance.id)
+            elif node_instance.type in USER_SELECTED_KNOWLEDGE_NODE_TYPES:
+                # 自选知识节点需要在运行前判断当前会话是否已选择知识范围。
+                interrupt_nodes.append(node_instance.id)
             elif node_instance.type == NodeType.OUTPUT.value:
                 # Node that needs to abort receiving user input
                 fake_node = OutputFakeNode(
@@ -378,6 +395,19 @@ class GraphEngine:
         )
         return node_params
 
+    def _has_runtime_knowledge_selection(self) -> bool:
+        raw_selection = self.graph_state.get_variable(
+            RUNTIME_STATE_NODE_ID,
+            RUNTIME_USER_SELECTED_KNOWLEDGE_KEY,
+        )
+        if not raw_selection:
+            return False
+        try:
+            parse_runtime_knowledge_selection(raw_selection)
+        except Exception:
+            return False
+        return True
+
     def judge_status(self):
         # Judgment Status
         snapshot = self.graph.get_state(self.graph_config)
@@ -390,7 +420,20 @@ class GraphEngine:
         # Determine what needs to be donenodetype, setting the corresponding engine state
         for node_id in next_nodes:
             node_instance = self.nodes_map[node_id]
-            if node_instance.type == NodeType.INPUT.value:
+            if node_instance.type in USER_SELECTED_KNOWLEDGE_NODE_TYPES:
+                if self._has_runtime_knowledge_selection():
+                    self.status = WorkflowStatus.RUNNING.value
+                    return
+                self.status = WorkflowStatus.INPUT.value
+                self.callback.on_user_input(
+                    UserInputData(
+                        node_id=node_id,
+                        name=node_instance.name,
+                        input_schema=dict(RUNTIME_KNOWLEDGE_INPUT_SCHEMA),
+                    )
+                )
+                return
+            elif node_instance.type == NodeType.INPUT.value:
                 input_schema = node_instance.get_input_schema()
                 if input_schema:
                     # Callback events requiring user input

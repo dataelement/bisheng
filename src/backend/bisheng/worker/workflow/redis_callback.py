@@ -82,12 +82,12 @@ class RedisCallback(BaseCallback):
         self.workflow_stop_key = f"workflow:{unique_id}:stop"
         self.workflow_expire_time = settings.get_workflow_conf().timeout * 60 + 60
 
-    def set_workflow_data(self, data: dict, override: dict = None):
+    def set_workflow_data(self, data: dict, override: dict | None = None):
         data = self.override_nodes_params(data, override)
         self.redis_client.set(self.workflow_data_key, data, expiration=self.workflow_expire_time)
 
     @staticmethod
-    def override_nodes_params(data: dict, override: dict = None) -> dict:
+    def override_nodes_params(data: dict, override: dict | None = None) -> dict:
         if not override:
             return data
 
@@ -115,7 +115,7 @@ class RedisCallback(BaseCallback):
     def get_workflow_data(self) -> dict:
         return self.redis_client.get(self.workflow_data_key)
 
-    def set_workflow_status(self, status: str, reason: str = None):
+    def set_workflow_status(self, status: str, reason: str | None = None):
         self.redis_client.set(
             self.workflow_status_key,
             {"status": status, "reason": reason, "time": time.time()},
@@ -126,7 +126,7 @@ class RedisCallback(BaseCallback):
             self.redis_client.delete(self.workflow_data_key)
             self.redis_client.delete(self.workflow_input_key)
 
-    async def async_set_workflow_status(self, status: str, reason: str = None):
+    async def async_set_workflow_status(self, status: str, reason: str | None = None):
         await self.redis_client.aset(
             self.workflow_status_key,
             {"status": status, "reason": reason, "time": time.time()},
@@ -334,7 +334,7 @@ class RedisCallback(BaseCallback):
                 yield chat_response
 
     def set_user_input(
-        self, data: dict, message_id: int = None, message_content: str = None, verify_input: bool = False
+        self, data: dict, message_id: int | None = None, message_content: str | None = None, verify_input: bool = False
     ):
         if self.chat_id and message_id:
             message_db = ChatMessageDao.get_message_by_id(message_id)
@@ -344,7 +344,7 @@ class RedisCallback(BaseCallback):
         return
 
     async def async_set_user_input(
-        self, data: dict, message_id: int = None, message_content: str = None, verify_input: bool = False
+        self, data: dict, message_id: int | None = None, message_content: str | None = None, verify_input: bool = False
     ):
         if self.chat_id and message_id:
             message_db = await ChatMessageDao.aget_message_by_id(message_id)
@@ -397,19 +397,25 @@ class RedisCallback(BaseCallback):
         elif message_db.category == WorkflowEventType.UserInput.value:
             if verify_input:
                 cls._verify_input_schema(old_message, user_input)
+            input_schema = old_message["input_schema"]
             user_input = user_input[old_message["node_id"]]
+
+            if input_schema["tab"] == "runtime_knowledge":
+                old_message["hisValue"] = user_input.get(input_schema["key"])
+                message_db.message = json.dumps(old_message, ensure_ascii=False)
+                return None, message_db
 
             # If the front-end passes user input, the front-end content is used.
             if message_content:
                 user_input_message = message_content
             # Instructions are form inputs
-            elif old_message["input_schema"]["tab"] == "form_input":
+            elif input_schema["tab"] == "form_input":
                 user_input_message = ""
-                for key_info in old_message["input_schema"]["value"]:
+                for key_info in input_schema["value"]:
                     user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"
             else:
                 # Description Dialog Input, Uploaded file information needs to be added, It is related to the data structure of the input node.
-                user_input_message = user_input[old_message["input_schema"]["key"]]
+                user_input_message = user_input[input_schema["key"]]
                 dialog_files_content = user_input.get("dialog_files_content", [])
                 for one in dialog_files_content:
                     user_input_message += f"\n{os.path.basename(one).split('?')[0]}"

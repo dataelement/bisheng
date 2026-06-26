@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UserSelectedKnowledgePicker from "@/pages/BuildPage/flow/FlowChat/UserSelectedKnowledgePicker";
 
@@ -137,5 +137,15 @@ describe("UserSelectedKnowledgePicker", () => {
         effective_file_count: 21,
       });
     });
+  });
+
+  it("calls onConfirm when the confirm button is enabled", async () => {
+    const onChange = vi.fn();
+    const onConfirm = vi.fn();
+    render(<UserSelectedKnowledgePicker value={null} onChange={onChange} showConfirm onConfirm={onConfirm} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });

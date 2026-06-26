@@ -10,8 +10,10 @@ export default function PortalWorkflowChatPage() {
       mode="auth"
       flowType="workflow"
       hideSidebar
+      hideShare
       forceNewChatOnLoad={!chatId}
       initialChatId={chatId}
+      portalWorkflowMode
     />
   );
 }

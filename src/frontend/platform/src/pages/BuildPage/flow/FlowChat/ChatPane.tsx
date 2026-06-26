@@ -5,7 +5,7 @@ import { useMessageStore } from "./messageStore";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { RUNTIME_KNOWLEDGE_SELECTION_FIELD } from "./userSelectedKnowledge";
 
-export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
+export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version, portalMode = false }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string, version?: string, portalMode?: boolean }) {
     const { changeChatId } = useMessageStore()
 
     useEffect(() => {
@@ -106,6 +106,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
         onBeforSend={getMessage}
         version = {version}
         flow={flow}
+        portalMode={portalMode}
     ></Chat>
 
 };

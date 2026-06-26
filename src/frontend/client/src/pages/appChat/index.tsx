@@ -30,11 +30,18 @@ export const enum FLOW_TYPES {
     SKILL = 1,
 }
 
-export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '', isGuestMode = false }) {
+const isPortalWorkflowEmbedRequest = () => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('portal_embed') === '1' || window.location.pathname.includes('/portal-chat/workflow/auth/');
+}
+
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '', isGuestMode = false, hideShare = false, portalWorkflowMode = false }) {
     const { conversationId: _cid, fid: _fid, type: _type } = useParams();
     const cid = _cid || chatId;
     const fid = _fid || flowId;
     const type = _type || flowType;
+    const effectivePortalWorkflowMode = portalWorkflowMode || isPortalWorkflowEmbedRequest();
     const effectiveApiVersion = apiVersion || API_VERSION;
     const [readOnly] = useState(shareToken);
     const setApiVersion = useRecoilState(chatApiVersionState)[1];
@@ -66,7 +73,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         );
     }, [cid, conversations, flow?.name, localize]);
 
-    const hideShareForMobile = flow?.can_share !== true;
+    const hideShareForMobile = hideShare || flow?.can_share !== true;
 
     // flow 尚未写入 Recoil 时 ChatView 不会挂载，但 AppRoot 的 MobileNav 仍需要标题（与桌面 HeaderTitle 同源字段）
     useEffect(() => {
@@ -89,6 +96,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         headerTitleForMobile,
         readOnly,
         hideShareForMobile,
+        hideShare,
         setChatMobileHeader,
     ]);
 
@@ -231,7 +239,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                     inputDisabled: error.code || numericType === FLOW_TYPES.WORK_FLOW,
                     error,
                     inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
-                    showUpload: numericType === FLOW_TYPES.WORK_FLOW,
+                    showUpload: numericType === FLOW_TYPES.WORK_FLOW && !effectivePortalWorkflowMode,
                     showStop: false,
                     guideWord: flowData?.guide_question,
                     showReRun: false
@@ -247,7 +255,17 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} isGuestMode={isGuestMode} />
+    return (
+        <ChatView
+            data={chatState.flow}
+            cid={cid}
+            v={effectiveApiVersion}
+            readOnly={readOnly}
+            isGuestMode={isGuestMode}
+            hideShare={hideShare}
+            portalWorkflowMode={effectivePortalWorkflowMode}
+        />
+    )
 };
 
 /**

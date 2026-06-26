@@ -39,7 +39,11 @@ export const FileTypes = {
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
 
-export const useAreaText = () => {
+interface UseAreaTextOptions {
+    deferRuntimeKnowledgeSelection?: boolean;
+}
+
+export const useAreaText = (options: UseAreaTextOptions = {}) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const [_, setSubmitDataState] = useRecoilState(submitDataState)
     const [__, setRunningState] = useRecoilState(runningState)
@@ -53,6 +57,7 @@ export const useAreaText = () => {
     const [accepts, setAccepts] = useState('')
 
     const guardRuntimeKnowledgeSelection = () => {
+        if (options.deferRuntimeKnowledgeSelection) return true
         const selectionError = hasUserSelectedKnowledgeNode(chatState?.flow)
             ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelectionStateValue)
             : ""
@@ -113,6 +118,40 @@ export const useAreaText = () => {
             },
         }))
         setChatFileState([])
+    }
+
+    const handleRuntimeKnowledgeSubmit = (
+        nodeId: string,
+        runtimeKnowledgeSelection?: RuntimeKnowledgeSelection | null,
+    ) => {
+        const selection = runtimeKnowledgeSelection || runtimeKnowledgeSelectionStateValue
+        const selectionError = validateRuntimeKnowledgeSelection(selection)
+        if (selectionError) {
+            showToast({
+                message: selectionError,
+                severity: NotificationSeverity.ERROR,
+            })
+            return false
+        }
+        setSubmitDataState({
+            action: ActionType.RUNTIME_KNOWLEDGE_SUBMIT,
+            chatId,
+            flowId: chatState.flow.id,
+            nodeId,
+            runtimeKnowledgeSelection: selection,
+        })
+        setRunningState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...prev[chatId],
+                running: true,
+                showStop: true,
+                showUpload: false,
+                inputDisabled: true,
+                inputForm: false,
+            },
+        }))
+        return true
     }
 
     const handleStopClick = () => {
@@ -266,6 +305,7 @@ export const useAreaText = () => {
         inputRef: textareaRef,
         handleInput,
         handleSendClick,
+        handleRuntimeKnowledgeSubmit,
         handleStopClick,
         handleRestart,
         setChatFiles: setChatFileState,

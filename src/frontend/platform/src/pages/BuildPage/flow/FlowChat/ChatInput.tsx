@@ -12,7 +12,7 @@ import Tip from "@/components/bs-ui/tooltip/tip";
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
-import { RefreshCw } from "lucide-react";
+import { Database, RefreshCw } from "lucide-react";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
@@ -29,6 +29,7 @@ import {
     validateRuntimeKnowledgeSelection,
 } from "./userSelectedKnowledge";
 const GuideQuestionsAny = GuideQuestions as any;
+const ChatFilesAny = ChatFiles as any;
 
 export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
@@ -36,7 +37,7 @@ export const FileTypes = {
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
 
-export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad, flow }) {
+export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad, flow, portalMode = false }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -74,17 +75,26 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const inputRef = useRef(null)
     const continueRef = useRef(false)
     const [runtimeKnowledgeSelection, setRuntimeKnowledgeSelection] = useState<RuntimeKnowledgeSelection | null>(null)
+    const [runtimeKnowledgeDraft, setRuntimeKnowledgeDraft] = useState<RuntimeKnowledgeSelection | null>(null)
+    const [runtimeKnowledgePickerOpen, setRuntimeKnowledgePickerOpen] = useState(false)
+    const [runtimeKnowledgePendingInput, setRuntimeKnowledgePendingInput] = useState<{ nodeId: string; messageId: string } | null>(null)
     const requiresRuntimeKnowledge = useMemo(() => hasUserSelectedKnowledgeNode(flow), [flow])
     const hasActiveInputForm = Boolean(inputForm)
-    const showRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
+    const legacyShowRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
         requiresRuntimeKnowledge,
         inputDisabled: inputLock.locked,
         hasInputForm: hasActiveInputForm,
     })
+    const showRuntimeKnowledgePicker = portalMode
+        ? requiresRuntimeKnowledge && runtimeKnowledgePickerOpen
+        : legacyShowRuntimeKnowledgePicker || (requiresRuntimeKnowledge && runtimeKnowledgePickerOpen)
     const runtimeKnowledgePickerDisabled = isRuntimeKnowledgePickerDisabled({
         inputDisabled: inputLock.locked,
         hasInputForm: hasActiveInputForm,
     })
+    const effectiveRuntimeKnowledgePickerDisabled = portalMode || Boolean(runtimeKnowledgePendingInput)
+        ? false
+        : runtimeKnowledgePickerDisabled
     // 停止状态
     const [stop, setStop] = useState({
         show: true,
@@ -126,6 +136,13 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         })
     }, [chatId])
 
+    useEffect(() => {
+        setRuntimeKnowledgeSelection(null)
+        setRuntimeKnowledgeDraft(null)
+        setRuntimeKnowledgePickerOpen(false)
+        setRuntimeKnowledgePendingInput(null)
+    }, [flow?.id])
+
     // 销毁
     useEffect(() => {
         return () => {
@@ -135,6 +152,60 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             }
         }
     }, [])
+
+    const runtimeKnowledgeButtonText = useMemo(() => {
+        if (!runtimeKnowledgeSelection) return '选择知识库'
+        if (runtimeKnowledgeSelection.mode === 'source') {
+            return runtimeKnowledgeSelection.whole_source?.source_name || '已选择知识库'
+        }
+        const count = runtimeKnowledgeSelection.effective_file_count ?? runtimeKnowledgeSelection.items.length
+        return `已选 ${count} 个文件`
+    }, [runtimeKnowledgeSelection])
+
+    const openRuntimeKnowledgePicker = () => {
+        if (!requiresRuntimeKnowledge) return
+        setRuntimeKnowledgeDraft(runtimeKnowledgeSelection)
+        setRuntimeKnowledgePickerOpen(true)
+    }
+
+    const submitRuntimeKnowledgeSelection = async (selection: RuntimeKnowledgeSelection) => {
+        if (!runtimeKnowledgePendingInput) return
+        const { flow_id, chat_id } = onBeforSend('flowInfo', {})
+        await createWebSocket()
+        sendWsMsg({
+            action: 'input',
+            flow_id,
+            chat_id,
+            data: {
+                [runtimeKnowledgePendingInput.nodeId]: {
+                    data: {
+                        [RUNTIME_KNOWLEDGE_SELECTION_FIELD]: selection
+                    },
+                    message: '',
+                    message_id: runtimeKnowledgePendingInput.messageId,
+                    category: 'input',
+                    extra: '',
+                    source: 0
+                }
+            }
+        })
+        setRuntimeKnowledgePendingInput(null)
+        setInputLock({ locked: true, reason: '' })
+    }
+
+    const confirmRuntimeKnowledgeSelection = async () => {
+        const selectionError = validateRuntimeKnowledgeSelection(runtimeKnowledgeDraft)
+        if (selectionError) {
+            return toast({
+                variant: 'error',
+                description: selectionError
+            })
+        }
+        const selection = runtimeKnowledgeDraft as RuntimeKnowledgeSelection
+        setRuntimeKnowledgeSelection(selection)
+        setRuntimeKnowledgePickerOpen(false)
+        await submitRuntimeKnowledgeSelection(selection)
+    }
 
     const handleSendClick = async () => {
         if (fileUploading) return
@@ -153,7 +224,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         // 文件拼接入消息
         const _value = inputRef.current.value
         if (_value.trim() === '' && filePath.length === 0) return
-        const selectionError = requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : ''
+        const selectionError = !portalMode && requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : ''
         if (selectionError) {
             return toast({
                 variant: 'error',
@@ -306,7 +377,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 setInputLock({ locked: true, reason: data.message.message })
             } else {
                 // 特殊状态吗支持输入框展示reason
-                const reason = [10421, 13002, 13010].includes(status_code) ? t(`errors.${status_code}`, params) : ' '
+                const reason = ([10421, 13002, 13010].includes(status_code) ? t(`errors.${status_code}`, params) : ' ') as string
                 setInputLock({ locked: true, reason })
             }
 
@@ -337,6 +408,13 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
             messageIdRef.current = data.message_id
+            if (input_schema.tab === 'runtime_knowledge') {
+                setRuntimeKnowledgePendingInput({ nodeId: node_id, messageId: data.message_id })
+                setRuntimeKnowledgeDraft(runtimeKnowledgeSelection)
+                setRuntimeKnowledgePickerOpen(true)
+                setInputLock({ locked: true, reason: '' })
+                return
+            }
             // 限制文件类型
             if (input_schema.tab === 'dialog_input') {
                 const schemaItem = input_schema.value?.find(el => el?.key === 'dialog_file_accept')
@@ -426,7 +504,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         }
         const handleSendForm = async (e) => {
             const { data, msg } = e.detail
-            const selectionError = requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : ''
+            const selectionError = !portalMode && requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : ''
             if (selectionError) {
                 return toast({
                     variant: 'error',
@@ -464,7 +542,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             document.removeEventListener('outputMsgEvent', handleOutPutEvent)
             document.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
-    }, [inputLock.locked, showWhenLocked, requiresRuntimeKnowledge, runtimeKnowledgeSelection])
+    }, [inputLock.locked, showWhenLocked, requiresRuntimeKnowledge, runtimeKnowledgeSelection, portalMode])
 
     // 点击引导词
     const handleClickGuideWord = (message) => {
@@ -550,15 +628,102 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         }
     });
 
+    if (portalMode) {
+        return <div className="absolute bottom-0 z-10 w-full bg-transparent pb-5">
+            {isDragging && <DragDropOverlay />}
+            <div className="mx-auto w-full max-w-[760px] px-4">
+                {showRuntimeKnowledgePicker && (
+                    <div className="mb-3">
+                        <UserSelectedKnowledgePicker
+                            disabled={effectiveRuntimeKnowledgePickerDisabled}
+                            value={runtimeKnowledgeDraft}
+                            onChange={setRuntimeKnowledgeDraft}
+                            showConfirm
+                            confirmLabel="确认"
+                            onConfirm={confirmRuntimeKnowledgeSelection}
+                        />
+                    </div>
+                )}
+
+                <GuideQuestionsAny
+                    ref={questionsRef}
+                    locked={inputLock.locked}
+                    onClick={handleClickGuideWord}
+                />
+
+                <div className="relative rounded-xl border border-[#b9d2f6] bg-white px-5 pb-12 pt-4 shadow-[0_8px_24px_rgba(37,99,235,0.12)]">
+                    {!inputLock.locked && uploadLock && <ChatFilesAny
+                        ref={inputFilesRef}
+                        accepts={accepts}
+                        disabled={audioOpening}
+                        v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'}
+                        onChange={loadingChange} />}
+
+                    <div
+                        id="bs-send-btn"
+                        className="absolute right-4 top-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-primary text-white shadow-sm transition disabled:cursor-not-allowed"
+                        onClick={() => { !inputLock.locked && !fileUploading && !audioOpening && handleSendClick() }}>
+                        <SendIcon className={`${inputLock.locked || fileUploading || audioOpening ? 'text-white/60' : 'text-white'}`} />
+                    </div>
+
+                    {requiresRuntimeKnowledge && (
+                        <button
+                            type="button"
+                            className="absolute bottom-3 right-4 flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-[#5f7395] hover:bg-[#eef4ff] hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={Boolean(runtimeKnowledgePendingInput) ? false : inputLock.locked}
+                            onClick={openRuntimeKnowledgePicker}
+                        >
+                            <Database size={16} />
+                            <span className="max-w-[180px] truncate">{runtimeKnowledgeButtonText}</span>
+                        </button>
+                    )}
+
+                    {!stop.show && <div className="absolute left-0 -top-12 flex w-full justify-center">
+                        <Button
+                            className="rounded-full bg-white"
+                            variant="outline"
+                            disabled={restarted}
+                            onClick={handleRestartClick}>
+                            <RefreshCw className="mr-1" size={16} />
+                            {t('chat.runNewWorkflow')}
+                        </Button>
+                    </div>}
+
+                    <Textarea
+                        id="bs-send-input"
+                        ref={inputRef}
+                        rows={2}
+                        style={{ height: 72 }}
+                        disabled={inputLock.locked}
+                        onInput={handleTextAreaHeight}
+                        onPaste={handlePaste}
+                        placeholder={placholder}
+                        className="min-h-[72px] max-h-[180px] resize-none border-none bg-transparent p-0 pr-24 text-base text-gray-800 shadow-none outline-none scrollbar-hide placeholder:text-[#b8c5d8] focus-visible:ring-0"
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey) {
+                                event.preventDefault();
+                                !inputLock.locked && handleSendClick()
+                            }
+                        }}
+                    />
+                </div>
+                <p className="pt-2 text-center text-sm text-gray-400">{appConfig.dialogTips}</p>
+            </div>
+        </div>
+    }
+
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         {isDragging && <DragDropOverlay />}
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
             {showRuntimeKnowledgePicker && (
                 <div className="px-1 pb-2">
                     <UserSelectedKnowledgePicker
-                        disabled={runtimeKnowledgePickerDisabled}
-                        value={runtimeKnowledgeSelection}
-                        onChange={setRuntimeKnowledgeSelection}
+                        disabled={effectiveRuntimeKnowledgePickerDisabled}
+                        value={runtimeKnowledgePendingInput ? runtimeKnowledgeDraft : runtimeKnowledgeSelection}
+                        onChange={runtimeKnowledgePendingInput ? setRuntimeKnowledgeDraft : setRuntimeKnowledgeSelection}
+                        showConfirm={Boolean(runtimeKnowledgePendingInput)}
+                        confirmLabel="确认"
+                        onConfirm={confirmRuntimeKnowledgeSelection}
                     />
                 </div>
             )}
@@ -591,7 +756,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             </div>
 
             {/* 附件 */}
-            {!inputLock.locked && uploadLock && <ChatFiles
+            {!inputLock.locked && uploadLock && <ChatFilesAny
                 ref={inputFilesRef}
                 accepts={accepts}
                 disabled={audioOpening}

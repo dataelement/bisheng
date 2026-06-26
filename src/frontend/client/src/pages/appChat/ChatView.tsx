@@ -15,9 +15,9 @@ import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
 import { generateUUID } from "~/utils";
 
-export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
+export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, hideShare: forceHideShare = false, portalWorkflowMode = false }) {
     const { user } = useAuthContext();
-    const help = useChatHelpers()
+    const help = useChatHelpers({ deferRuntimeKnowledgeSelection: portalWorkflowMode })
     useWebSocket(help)
 
     const localize = useLocalize();
@@ -60,7 +60,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         .find(Boolean) || localize('com_ui_new_chat');
 
     /** 与侧栏「分享应用」一致：仅 can_share === true 时展示对话顶栏分享入口 */
-    const hideShare = data?.can_share !== true;
+    const hideShare = forceHideShare || data?.can_share !== true;
 
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
@@ -107,7 +107,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                                 />
                             </div>
                         </div>
-                        {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
+                        {!readOnly && <ChatInput v={v} readOnly={readOnly} portalWorkflowMode={portalWorkflowMode} />}
                     </div>
 
                     {citationPanelElement}

@@ -96,6 +96,8 @@ export interface RunningStatus {
   guideWord?: string[];
   /** 重新运行展示 */
   showReRun?: boolean;
+  /** Portal workflow 页面延迟到运行时自选知识节点再强制选择知识范围 */
+  deferRuntimeKnowledgeSelection?: boolean;
 }
 
 // 毕昇配置

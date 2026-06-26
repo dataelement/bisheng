@@ -18,7 +18,17 @@ import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '', chatList, chat, appendHistory = false, data, version = 'v1' }) {
+type ChatPanneProps = {
+    customWsHost?: string;
+    chatList?: any;
+    chat?: any;
+    appendHistory?: boolean;
+    data: any;
+    version?: string;
+    portalMode?: boolean;
+};
+
+export default function ChatPanne({ customWsHost = '', chatList, chat, appendHistory = false, data, version = 'v1', portalMode = false }: ChatPanneProps) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -287,7 +297,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     <AppAvator id={workflow.name} url={workflow.logo} flowType={10} ></AppAvator>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} />
+                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} portalMode={portalMode} />
             </div>
         }
     </div>
