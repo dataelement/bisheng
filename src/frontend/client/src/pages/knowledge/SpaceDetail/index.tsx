@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
+import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
@@ -420,192 +420,71 @@ export function KnowledgeSpaceContent({
         };
     }, [currentFolderId, space.id]);
 
+    // F040: per-file action permissions (rename / download / delete / manage) are NO
+    // LONGER probed eagerly for every file on list load (that fired ~4 checkPermission
+    // per file → hundreds of requests). They are resolved lazily when the user opens a
+    // file's "⋯" action menu, via `ensureFilePermissions` below. `permissionEntryIds`
+    // etc. start empty and get populated on demand; menu items gate on them (fail-closed
+    // until the check resolves). Admin (rename/download/manage) and space-owner (delete)
+    // short-circuit without a request, matching the previous behavior.
+    const checkedFileIdsRef = useRef<Set<string>>(new Set());
+
+    // Drop lazily-cached grants when the listed files / folder change, so a re-opened
+    // menu re-checks against the new context (mirrors the old probe-key re-fetch).
     useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
+        checkedFileIdsRef.current = new Set();
+        setPermissionEntryIds(new Set());
+        setRenameEntryIds(new Set());
+        setDownloadEntryIds(new Set());
+        setDeleteEntryIds(new Set());
+    }, [permissionEntryProbeKey]);
 
-        if (isAdmin) {
-            setPermissionEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
+    const ensureFilePermissions = useCallback(
+        async (file: KnowledgeFile) => {
+            const id = String(file.id);
+            if (file.isCreating || !/^\d+$/.test(id)) return;
+            if (checkedFileIdsRef.current.has(id)) return; // already resolved for this file
+            checkedFileIdsRef.current.add(id);
 
-        if (candidates.length === 0) {
-            setPermissionEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
+            const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+            const grant = (setter: (updater: (prev: Set<string>) => Set<string>) => void) =>
+                setter((prev) => new Set(prev).add(id));
 
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const allowed = await canOpenPermissionDialog(resourceType, file.id, {
-                    signal: controller.signal,
-                }).catch(() => false);
-                return allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setPermissionEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            // Admin holds rename/download/manage; space owner holds delete — no request.
+            if (isAdmin) {
+                grant(setPermissionEntryIds);
+                grant(setRenameEntryIds);
+                grant(setDownloadEntryIds);
             }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [
-        isAdmin,
-        permissionEntryProbeKey,
-    ]);
-
-    useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
-
-        if (isAdmin) {
-            setRenameEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        if (candidates.length === 0) {
-            setRenameEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const result = await checkPermission(
-                    resourceType,
-                    file.id,
-                    "can_edit",
-                    file.type === FileType.FOLDER ? "rename_folder" : "rename_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setRenameEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            if (isOwner) {
+                grant(setDeleteEntryIds);
             }
-        });
 
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [isAdmin, permissionEntryProbeKey]);
-
-    useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
-
-        if (isAdmin) {
-            setDownloadEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        if (candidates.length === 0) {
-            setDownloadEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const result = await checkPermission(
-                    resourceType,
-                    file.id,
-                    "can_read",
-                    file.type === FileType.FOLDER ? "download_folder" : "download_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setDownloadEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            const tasks: Promise<unknown>[] = [];
+            if (!isAdmin) {
+                tasks.push(
+                    canOpenPermissionDialog(resourceType, file.id)
+                        .then((ok) => { if (ok) grant(setPermissionEntryIds); })
+                        .catch(() => { }),
+                    checkPermission(resourceType, file.id, "can_edit", file.type === FileType.FOLDER ? "rename_folder" : "rename_file")
+                        .then((r) => { if (r.allowed) grant(setRenameEntryIds); })
+                        .catch(() => { }),
+                    checkPermission(resourceType, file.id, "can_read", file.type === FileType.FOLDER ? "download_folder" : "download_file")
+                        .then((r) => { if (r.allowed) grant(setDownloadEntryIds); })
+                        .catch(() => { }),
+                );
             }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [isAdmin, permissionEntryProbeKey]);
-
-    useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
-
-        if (isOwner) {
-            setDeleteEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        if (candidates.length === 0) {
-            setDeleteEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const result = await checkPermission(
-                    resourceType,
-                    file.id,
-                    "can_delete",
-                    file.type === FileType.FOLDER ? "delete_folder" : "delete_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setDeleteEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            if (!isOwner) {
+                tasks.push(
+                    checkPermission(resourceType, file.id, "can_delete", file.type === FileType.FOLDER ? "delete_folder" : "delete_file")
+                        .then((r) => { if (r.allowed) grant(setDeleteEntryIds); })
+                        .catch(() => { }),
+                );
             }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [isOwner, permissionEntryProbeKey]);
+            await Promise.all(tasks);
+        },
+        [isAdmin, isOwner],
+    );
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -1384,6 +1263,7 @@ export function KnowledgeSpaceContent({
                                         <FileCard
                                             file={file}
                                             userRole={space.role}
+                                            onEnsureFilePermissions={ensureFilePermissions}
                                             isSelected={selectedFiles.has(file.id)}
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
@@ -1423,6 +1303,7 @@ export function KnowledgeSpaceContent({
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
                             <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
+                                    onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
                                        a 40px visual gap above the input. */

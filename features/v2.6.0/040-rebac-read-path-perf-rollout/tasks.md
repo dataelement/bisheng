@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | 🚧 进行中 | T0·T1·T2·T3·T4·T5 ✅ / 15（T1b·T5方案2 ⏸️）。偏差见下方「实际偏差记录」 |
+| 实现 | 🚧 进行中 | T0·T1·T2·T3·T4·T5·T11 ✅ / 16（T1b·T5方案2 ⏸️）。偏差见下方「实际偏差记录」 |
 
 ---
 
@@ -74,3 +74,4 @@
 - **D1（T1，影响系统认知）**：E 组**主体串缓存（AC-22）延后**。design §3 决策6 原拟用 `(user_id, max(update_time) over user_group_link+user_department)` 做版本 key — 实现时发现**删除不安全**：用户被移出某用户组时其 link 行被删除，剩余行的 `update_time` 不变 ⇒ 版本不变 ⇒ 旧主体串仍命中 ⇒ 用户保留已撤销组的权限（越权，破坏等价红线）。安全版本需删除感知（`count(*)+max(update_time)` 或成员 id 集哈希）。**bindings/models 不受此影响**（config 写经 `insert_or_update_config`，`update_time` 必变，无删除-不变问题），故 T1 照常落地。论证见 design §5 坑表。
 - **D2（T1，正向偏差）**：缓存接入点从 `knowledge_space_service.py` 的 3 个 helper **改到源头** `resource_permission.py` 的 `_get_bindings`/`_get_relation_models`。原因：channel 详情（T2）经 `channel_service._build_channel_permission_context → _get_bindings` 重建名册，不走 knowledge_space_service；改在源头让 **channel + 知识空间 + 所有 ReBAC 路径**都受益，且 per-request memo 仍叠加其上。文件数不变（3 个）。
 - **D3（T5，方案1）**：用户裁定 T5 走「方案1 安全版」。已做：`_format_accessible_spaces` 共享 `binding_index`+tuple 缓存跨空间（不再每空间重建索引/重读 tuple，membership/public 合并原样保留→等价）、`list_uploadable_spaces` 串行→`gather`（AC-09）。**未做（AC-08 / 完整 AC-28）**：逐空间 `get_permission_level`→单次跨空间 `batch_check`（需重构 `get_permission_level`，等价风险更大）——保留并行 `gather`，FGA 调用更便宜但仍 O(N)。真要 O(N)→O(1) 另起方案2。注：`/space/joined` 的主要成本是非创建空间的 effective-ids（已优化）；`get_permission_level` 仅作用于「无 membership 行」的空间，对 /joined 多为空集。
+- **D4（新增 T11，2026-06-26 用户追加）**：D 组「权限懒加载」扩展到**知识空间文件列表**（原 D 组只覆盖侧栏空间菜单）。现状：`SpaceDetail/index.tsx` 4 个 mount 期 effect 对每文件 ×4 发 `permissions/check`（50 文件≈200 请求）。改：删 eager effect，菜单 `onOpenChange` 打开时才查该文件（rename/download/delete/manage），按文件去重、admin/owner 短路、fail-closed、列表切换清空。客户端 3 文件（`SpaceDetail/index.tsx`、`FileCard.tsx`、`FileTable.tsx`）。tsc 零新增错误；前端手动验证：打开文件列表→0 个 check，点开某文件「⋯」→仅该文件 ≤4 check。
