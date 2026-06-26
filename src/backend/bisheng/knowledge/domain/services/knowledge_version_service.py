@@ -620,6 +620,26 @@ class KnowledgeVersionService:
             == source_encoding_key
         )
 
+    async def _similarity_matches_threshold(
+        self,
+        source_file: KnowledgeFile,
+        candidate_file: KnowledgeFile,
+        threshold: float | None = None,
+    ) -> bool:
+        from bisheng.common.utils.simhash_utils import similarity as _similarity
+
+        if not self._has_valid_simhash(getattr(source_file, "simhash", None)):
+            return False
+        if not self._has_valid_simhash(getattr(candidate_file, "simhash", None)):
+            return False
+        if not self._shougang_encoding_matches(source_file, candidate_file):
+            return False
+        if threshold is None:
+            conf = await bisheng_settings.async_get_knowledge()
+            vmc = getattr(conf, "version_management", None)
+            threshold = vmc.simhash_similarity_threshold if vmc else 0.85
+        return _similarity(source_file.simhash, candidate_file.simhash) >= threshold
+
     async def search_shougang_publish_version_sources(
         self,
         knowledge_id: int,
@@ -816,11 +836,8 @@ class KnowledgeVersionService:
         if source_kf.status != KnowledgeFileStatus.SUCCESS.value:
             # File still around but not finished parsing.
             raise VersionLinkFileNotReadyError()
-        # Version linking is a deliberate, user-driven action: the user manually
-        # searches for and picks the document to merge. We therefore do NOT gate
-        # the link on content/encoding similarity — any parsed document the user
-        # selects may be linked. (The md5 duplicate guard below still prevents
-        # linking byte-identical content twice into the same chain.)
+        if not await self._similarity_matches_threshold(current_kf, source_kf):
+            raise HTTPException(status_code=409, detail="source document is not similar to current file")
 
         existing = await self.version_repo.find_by_document_id(target_doc_id)
         existing_kf_ids = [v.knowledge_file_id for v in existing]

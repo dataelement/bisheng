@@ -305,20 +305,16 @@ async def test_version_recommendations_require_first_three_encoding_segments(ena
 
 
 @pytest.mark.asyncio
-async def test_merge_allows_document_regardless_of_similarity(enable_switch, async_db_session, monkeypatch):
-    """Version linking is a deliberate, user-driven choice: the user manually picks
-    the document to merge, so the merge must NOT be gated on content/encoding
-    similarity. Here source (GF-BG) and current (GF-ZD) differ in business domain
-    and the merge must still succeed."""
+async def test_merge_rejects_document_without_shougang_similarity(enable_switch, async_db_session, monkeypatch):
     async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
     await async_db_session.commit()
     source_doc = await _seed_file_with_doc(
         async_db_session,
         200,
-        simhash="ffffffffffffffff",
+        simhash="aaaaaaaaaaaaaaaa",
         file_encoding="GF-BG-SC-20260500000002",
     )
-    current_doc = await _seed_file_with_doc(
+    await _seed_file_with_doc(
         async_db_session,
         100,
         simhash="aaaaaaaaaaaaaaaa",
@@ -332,18 +328,12 @@ async def test_merge_allows_document_regardless_of_similarity(enable_switch, asy
 
     svc = _build_svc(async_db_session)
 
-    result = await svc.merge_source_document_into_current(
-        current_knowledge_file_id=100,
-        source_document_id=source_doc.id,
-    )
-
-    assert result.document_id == current_doc.id
-    assert result.new_version_no == 2
-    # The current file's chain now has two versions, with the source file as the new primary.
-    chain = await svc.version_repo.find_by_document_id(current_doc.id)
-    assert len(chain) == 2
-    primary = await svc.version_repo.find_primary(current_doc.id)
-    assert primary.knowledge_file_id == 200
+    with pytest.raises(HTTPException) as ctx:
+        await svc.merge_source_document_into_current(
+            current_knowledge_file_id=100,
+            source_document_id=source_doc.id,
+        )
+    assert getattr(ctx.value, "status_code", None) == 409
 
 
 @pytest.mark.asyncio
