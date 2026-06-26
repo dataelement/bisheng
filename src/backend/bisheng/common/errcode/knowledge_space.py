@@ -170,5 +170,5 @@ class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
 
 
 class FavoriteSpaceProtectedError(BaseErrorCode):
-    Code: int = 18044
+    Code: int = 18071
     Msg: str = '『我的收藏』为系统知识库，不可删除或修改'
