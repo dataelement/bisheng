@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
-import logging
 
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -44,7 +44,8 @@ class SgDepartmentsSyncService:
 
     @classmethod
     async def execute(
-        cls, payload: SgDepartmentSyncRequest,
+        cls,
+        payload: SgDepartmentSyncRequest,
     ) -> SgDepartmentSyncResponse:
         normalized: list[_NormalizedItem] = []
         info_map: dict[int, SgDataInfoItem] = {}
@@ -52,24 +53,24 @@ class SgDepartmentsSyncService:
 
         for idx, item in enumerate(payload.fields):
             try:
-                code = (item.code or '').strip()
+                code = (item.code or "").strip()
                 if not code:
-                    raise ValueError('code is required')
+                    raise ValueError("code is required")
                 status = cls._parse_status(item.state)
                 normalized_item = _NormalizedItem(
                     index=idx,
                     payload=item,
                     code=code,
-                    parent_code=(item.pid or '').strip(),
-                    name=(item.remark or '').strip() or code,
+                    parent_code=(item.pid or "").strip(),
+                    name=(item.remark or "").strip() or code,
                     status=status,
                 )
                 normalized.append(normalized_item)
                 unresolved.add(idx)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 info_map[idx] = cls._failed_info(
                     item=item,
-                    code=(item.code or '').strip(),
+                    code=(item.code or "").strip(),
                     mdm_id=payload.mdm_id,
                     message=str(exc),
                 )
@@ -84,7 +85,9 @@ class SgDepartmentsSyncService:
                         if row.index not in unresolved:
                             continue
                         if row.parent_code and cls._parent_still_pending(
-                            row.parent_code, normalized, unresolved,
+                            row.parent_code,
+                            normalized,
+                            unresolved,
                         ):
                             continue
                         info_map[row.index] = await cls._apply_one(row, payload.mdm_id)
@@ -100,8 +103,9 @@ class SgDepartmentsSyncService:
             for idx in sorted(unresolved):
                 row = idx_to_row[idx]
                 msg = (
-                    f'parent external_id={row.parent_code} not found or unresolved'
-                    if row.parent_code else 'item unresolved'
+                    f"parent external_id={row.parent_code} not found or unresolved"
+                    if row.parent_code
+                    else "item unresolved"
                 )
                 info_map[idx] = cls._failed_info(
                     item=row.payload,
@@ -111,11 +115,11 @@ class SgDepartmentsSyncService:
                 )
 
         ordered_infos = [info_map[i] for i in sorted(info_map.keys())]
-        all_success = all(one.status == '0' for one in ordered_infos)
+        all_success = all(one.status == "0" for one in ordered_infos)
         response = SgDepartmentSyncResponse(
             ESB=SgEsbPayload(
-                CODE='0' if all_success else '1',
-                DESC='success' if all_success else 'partial_failure',
+                CODE="0" if all_success else "1",
+                DESC="success" if all_success else "partial_failure",
                 DATA=SgDataPayload(
                     UUID=payload.uuid,
                     DATAINFOS=SgDataInfos(DATAINFO=ordered_infos),
@@ -126,26 +130,25 @@ class SgDepartmentsSyncService:
 
     @classmethod
     async def _apply_one(
-        cls, row: _NormalizedItem, mdm_id: int,
+        cls,
+        row: _NormalizedItem,
+        mdm_id: int,
     ) -> SgDataInfoItem:
         try:
             parent: Department | None = None
             if row.parent_code:
                 parent = await DepartmentDao.aget_by_external_id(
-                    row.parent_code, ROOT_TENANT_ID,
+                    row.parent_code,
+                    ROOT_TENANT_ID,
                 )
                 if parent is None:
                     raise ValueError(
-                        f'parent external_id={row.parent_code} not found',
+                        f"parent external_id={row.parent_code} not found",
                     )
 
             ts = int(time.time())
-            parent_id = (
-                int(parent.id)
-                if parent is not None and parent.id is not None
-                else None
-            )
-            parent_path = parent.path if parent is not None else ''
+            parent_id = int(parent.id) if parent is not None and parent.id is not None else None
+            parent_path = parent.path if parent is not None else ""
             await DepartmentDao.aupsert_by_external_id(
                 source=cls.SOURCE,
                 external_id=row.code,
@@ -158,18 +161,22 @@ class SgDepartmentsSyncService:
             )
             if row.status == 1:
                 await DepartmentDao.aarchive_by_external_id(
-                    cls.SOURCE, row.code, ts,
+                    cls.SOURCE,
+                    row.code,
+                    ts,
                 )
             return SgDataInfoItem(
                 uuid=row.payload.uuid,
                 code=row.code,
-                status='0',
+                status="0",
                 version=str(mdm_id),
-                errorText='',
+                errorText="",
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
-                'SG department sync failed for code=%s: %s', row.code, exc,
+                "SG department sync failed for code=%s: %s",
+                row.code,
+                exc,
             )
             return cls._failed_info(
                 item=row.payload,
@@ -180,10 +187,14 @@ class SgDepartmentsSyncService:
 
     @staticmethod
     def _parse_status(value: str) -> int:
-        raw = (value or '').strip()
-        if raw not in {'0', '1'}:
-            raise ValueError('state must be 0(enabled) or 1(disabled)')
-        return int(raw)
+        raw = (value or "").strip()
+        if raw in {"0", "01"}:
+            return 0
+        if raw in {"1", "00"}:
+            return 1
+        raise ValueError(
+            "state must be 0/01(enabled) or 1/00(disabled)",
+        )
 
     @staticmethod
     def _parent_still_pending(
@@ -207,8 +218,7 @@ class SgDepartmentsSyncService:
         return SgDataInfoItem(
             uuid=item.uuid,
             code=code,
-            status='1',
+            status="1",
             version=str(mdm_id),
             errorText=message,
         )
-
