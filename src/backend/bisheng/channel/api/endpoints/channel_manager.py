@@ -321,6 +321,19 @@ async def get_channel_detail(
     return resp_200(data=result.model_dump())
 
 
+@router.get("/{channel_id}/unread-counts")
+async def get_channel_unread_counts(
+    channel_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    """F040: per-sub-channel unread counts for the current user, split out of channel
+    detail (the per-user ES cost no longer rides on the detail/preview path). The
+    in-channel view fetches this lazily to fill sub-channel unread badges."""
+    result = await channel_service.get_sub_channel_unread_counts(channel_id, login_user)
+    return resp_200(data=result)
+
+
 @router.put("/{channel_id}")
 async def update_channel_info(
     channel_id: str,

@@ -800,6 +800,57 @@ class ChannelService:
         counts = await asyncio.gather(*[unread_for(n) for n in sub_names])
         return {name: count for name, count in zip(sub_names, counts)}
 
+    async def _calculate_sub_channel_unread_counts_batch(
+        self, channel: Channel, all_read_ids: list[str]
+    ) -> dict[str, int]:
+        """F040: per-sub-channel unread for one channel in a single ES msearch.
+
+        Expresses each sub-channel's unread directly as ``count(main+sub filter AND
+        NOT read_ids)`` (must_not terms) and batches all sub-channels via
+        ``count_articles_batch`` — collapsing the per-sub ``total - matching_read``
+        loop (S x (1 + read-chunk) sequential ES queries) into one round-trip. Set
+        identity makes this equal to the ``_calculate_sub_channel_unread_counts``
+        oracle. Oversized read sets fall back to that oracle for correctness."""
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+        sub_names: list[str] = []
+        for fr in channel.filter_rules or []:
+            if isinstance(fr, dict) and fr.get("channel_type") == "sub":
+                name = fr.get("name")
+                if name and name not in sub_names:
+                    sub_names.append(name)
+        if not sub_names:
+            return {}
+        if all_read_ids and len(all_read_ids) > _MAX_UNREAD_EXCLUDE_TERMS:
+            return await self._calculate_sub_channel_unread_counts(channel, all_read_ids)
+
+        exclude = all_read_ids or None
+        requests = []
+        for name in sub_names:
+            sub_rule_groups = self._extract_filter_rule_groups(channel, channel_type="sub", sub_channel_name=name)
+            effective_rule_groups = [*main_rule_groups, *sub_rule_groups]
+            requests.append(
+                {
+                    "source_ids": channel.source_list,
+                    "filter_rules": effective_rule_groups if effective_rule_groups else None,
+                    "exclude_article_ids": exclude,
+                }
+            )
+        counts = await self.article_es_service.count_articles_batch(requests)
+        return {name: count for name, count in zip(sub_names, counts)}
+
+    async def get_sub_channel_unread_counts(self, channel_id: str, login_user: UserPayload) -> dict[str, int]:
+        """F040: per-sub-channel unread for the current user — served by the dedicated
+        ``GET /channel/manager/{id}/unread-counts`` endpoint (split out of channel
+        detail so the preview/detail path no longer pays this per-user ES cost)."""
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ChannelNotFoundError()
+        channel = channels[0]
+        all_read_ids: list[str] = []
+        if self.article_read_repository:
+            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
+        return await self._calculate_sub_channel_unread_counts_batch(channel, all_read_ids)
+
     @staticmethod
     def _sort_channels(items: list[ChannelItemResponse], sort_by: SortByEnum) -> list[ChannelItemResponse]:
         """
@@ -1752,11 +1803,9 @@ class ChannelService:
             )
             await ArticleCountCache.set_main_count(channel_id, article_count)
 
-        # 5b. Per-sub-channel unread counts (sub-channel name → unread) for this user.
-        all_read_ids = []
-        if self.article_read_repository:
-            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
-        sub_channel_unread_counts = await self._calculate_sub_channel_unread_counts(channel, all_read_ids)
+        # 5b. F040: per-sub-channel unread counts are NO LONGER computed here — they
+        # are the dominant per-user ES cost and the preview drawer never shows them.
+        # In-channel views fetch them lazily via GET /channel/manager/{id}/unread-counts.
 
         # Complete info source list
         source_infos = []
@@ -1811,7 +1860,6 @@ class ChannelService:
             creator_name=creator_name,
             subscriber_count=subscriber_count,
             article_count=article_count,
-            sub_channel_unread_counts=sub_channel_unread_counts,
             subscription_status=subscription_status,
             relation=relation,
             permission_ids=_sorted_channel_permission_ids(permission_ids),

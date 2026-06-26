@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | 🚧 进行中 | T0·T2·T3·T1 ✅ / 15（T1b ⏸️ 待裁定）。偏差见下方「实际偏差记录」 |
+| 实现 | 🚧 进行中 | T0·T1·T2·T3·T4 ✅ / 15（T1b ⏸️）。偏差见下方「实际偏差记录」 |
 
 ---
 
@@ -43,7 +43,7 @@
 
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
-| T4 | **A 未读拆独立端点**：新增 `GET /channel/manager/{id}/unread-counts`（service 方法内 `count_articles_batch`/msearch）；`get_channel_detail` 移除 `_calculate_sub_channel_unread_counts` 调用 + 响应去 `sub_channel_unread_counts`。先写等价测试（端点返回与改造前逐子频道计算一致） | `channel_manager.py`(router) + `channel_service.py` + schema | AC-01, AC-05, AC-26 | T2 | 🔲 |
+| T4 | **A 未读拆独立端点**：新增 `GET /channel/manager/{id}/unread-counts`（service 方法内 `count_articles_batch`/msearch）；`get_channel_detail` 移除 `_calculate_sub_channel_unread_counts` 调用 + 响应去 `sub_channel_unread_counts`。先写等价测试（端点返回与改造前逐子频道计算一致） | `channel_manager.py`(router) + `channel_service.py` + schema | AC-01, AC-05, AC-26 | T2 | ✅ |
 | T5 | **B 空间广场批量化**：`_format_accessible_spaces`（`knowledge_space_service.py`）逐空间 `get_permission_level`→单次 `batch_check`、effective_ids→`filter_object_ids_by_permission_async` 共享上下文；`list_uploadable_spaces` 并行+共享上下文。先写等价测试（返回空间集+权限标记不变、全返回契约不动、fail-closed） | `knowledge_space_service.py` | AC-01, AC-03, AC-08, AC-09, AC-10, AC-11, AC-28 | 无 | 🔲 |
 | T6a | **C 助手列表 cursor**：`get_all_assistants(name,0,0,...)` 去 fetch-all-slice，改 cursor 边取边筛 / accessible-id 预过滤；复用 `common/cursor.py` + `AppInvalidCursorError`(10550)。先写等价测试（同页结果集不变） | `bisheng/api/services/assistant.py` | AC-01, AC-12, AC-13, AC-14 | 无 | 🔲 |
 | T6b | **C 工作台最近·常用·推荐 cursor**：`workflow.py`/`apps.py` 去 `page=0,limit=0`+手切，最近·常用改 cursor、推荐改有界拉取+共享上下文过滤；复用 `AppInvalidCursorError`(10550)。先写等价测试 | `bisheng/api/services/workflow.py`, `bisheng/workstation/api/endpoints/apps.py` | AC-01, AC-12, AC-13, AC-14, AC-15 | 无 | 🔲 |
