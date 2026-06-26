@@ -56,7 +56,7 @@
 
 - [ ] **T005**: LicenseExpiredGlobalFilter —— 降级拦截
   **仓库/文件**: `bisheng-gateway` · `src/main/java/com/dataelem/gateway/filter/LicenseExpiredGlobalFilter.java`（新，`GlobalFilter, Ordered`，仿 `PathRateGlobalFilter`）
-  **逻辑**: `holder.isExpired()` 为真时，对业务路由（`/api/v1/**`、`/api/v2/**`）返回降级错误体（HTTP 200 + `{status_code, status_message}`）；放行白名单：`/api/oauth2/**`、`/api/getkey`、登录/用户鉴权、`/api/license/status`、actuator 健康检查、静态资源。order 取高优先级（早于代理）。
+  **逻辑**: `holder.isExpired()` 为真时，**只拦网关自处理的付费接口**（`isGatewayPaidEndpoint()`：`/api/*` 中非 `/api/v1`、`/api/v2`、`/api/license` 的，如 `/api/oauth2`、`/api/sensitive`、`/api/group`、`/api/getkey`）→ 返回降级错误体（HTTP 200 + `{data:"", status_code:11001, status_message}`）；**放行**透传 `/api/v1/**`、`/api/v2/**`（bisheng 核心）、`/api/license/status`、非 `/api/` 路径（静态/actuator）。order 取高优先级。详见 design §3 决策 4。
   **覆盖 AC**: AC-02, AC-03
   **依赖**: T001
 
@@ -64,7 +64,7 @@
 
 - [ ] **T006**: Gateway 单元测试
   **仓库/文件**: `bisheng-gateway` · `src/test/java/com/dataelem/gateway/...`
-  **逻辑**: severity 映射边界（31/30/8/7/1/0/-1、pro、null）；`LicenseExpiredGlobalFilter` 白名单放行 vs 业务拦截；配置异常进入降级而非退出（mock `BishengConfig.getLicense` 返坏值，断言不抛/不退出、holder.expired=true）。
+  **逻辑**: severity 映射边界（31/30/8/7/1/0/-1、pro、null）；`LicenseExpiredGlobalFilter` —— 网关付费接口（oauth2/sensitive/group/getkey）被拦 vs 透传 `/api/v1,v2` 及 `/api/license` 放行；配置异常进入降级而非退出（mock `BishengConfig.getLicense` 返坏值，断言不抛/不退出、holder.expired=true）。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-07
   **依赖**: T003, T004, T005
 
@@ -83,7 +83,7 @@
 ### Wave 4 — 端到端手动验证
 
 - [ ] **T009**: 端到端手动验证
-  **逻辑**: 构造过期 / 临期 trial license（改测试日期或 mock `LicenseLoader`），启动 Gateway：① 过期后进程不退出；② 业务路由返降级错误体、登录与 `/api/license/status` 可访问；③ 超管登录 platform 看到红色置顶 Banner；④ 改 20 天临期看黄色 warning；⑤ 非超管不展示。
+  **逻辑**: 构造过期 / 临期 trial license（改测试日期或 mock `LicenseLoader`），启动 Gateway：① 过期后进程不退出；② **网关付费接口返 11001 错误体、透传 `/api/v1,v2` 与 `/api/license/status` 正常放行**；③ 超管登录 platform 看到红色置顶 Banner；④ 改 20 天临期看黄色 warning；⑤ 非超管不展示。
   **覆盖 AC**: AC-01~AC-11
   **依赖**: T006, T008
 
