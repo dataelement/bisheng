@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import { ArrowLeft, Search } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
@@ -227,16 +228,31 @@ export default function KnowledgeSquare({
     return (
         <div className="h-full w-full flex flex-col bg-white overflow-hidden">
             <div
-                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
-                style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg.svg)` }}
+                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
             >
+                {/* Decorative scattered icons — kept from the original banner art, recolored
+                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-blue-200"
+                    style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
+                        WebkitMaskSize: "cover",
+                        maskSize: "cover",
+                        WebkitMaskPosition: "center",
+                        maskPosition: "center",
+                        WebkitMaskRepeat: "no-repeat",
+                        maskRepeat: "no-repeat",
+                    }}
+                />
 
                 {onBack && (
                     <div className="absolute left-4 top-4 z-10">
                         <Button
                             variant="ghost"
                             onClick={onBack}
-                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#165DFF]"
+                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-blue-500"
                         >
                             <ArrowLeft className="size-3.5" />
                         </Button>
@@ -244,7 +260,7 @@ export default function KnowledgeSquare({
                 )}
 
                 <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
-                    <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">{tTitle}</h1>
+                    <h1 className="mb-1 text-[26px] font-semibold text-blue-500">{tTitle}</h1>
                     <p className="text-[13px] text-[#86909C]">{tSubtitle}</p>
                 </div>
             </div>
@@ -279,12 +295,8 @@ export default function KnowledgeSquare({
                         <div className="flex-1 flex items-center justify-center text-[#86909C]">{localize("com_knowledge.loading")}</div>
                     ) : visibleSpaces.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
-                            <img
-                                className="size-[120px] mb-3 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
+                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
                         </div>
                     ) : (
                         <div className="space-y-3">

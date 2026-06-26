@@ -421,7 +421,7 @@ function UserBubble({
                                 "w-fit max-w-full px-3 py-2 whitespace-pre-wrap break-words rounded-[8px]",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
-                                    : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"
+                                    : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
                             )}
                         >
                             {tag && (
@@ -432,7 +432,7 @@ function UserBubble({
                                             ? "text-[14px] font-normal leading-[22px]"
                                             : "h-5 text-xs font-medium leading-none align-middle"
                                     )}
-                                    style={{ backgroundColor: "#335CFF59" }}
+                                    style={{ backgroundColor: "rgb(var(--brand-500)/0.35)" }}
                                     title={`#${tag.name}`}
                                 >
                                     <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">

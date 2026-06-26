@@ -22,6 +22,7 @@ import store from "~/store";
 import type { AiChatInputFeatures } from "~/components/Chat/AiChatInput";
 import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { ArticleQAIllustration } from "~/components/illustrations";
 import useAiChat from "~/hooks/useAiChat";
 import useChannelChat from "~/hooks/useChannelChat";
 import useChatModelMemo from "~/hooks/useChatModelMemo";
@@ -204,6 +205,7 @@ export function AiAssistantPanel({
                 flatMode={isSimpleMode}
                 knowledgeChatLayout
                 contentWidthClassName="max-w-none px-4"
+                emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
             />

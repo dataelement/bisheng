@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -914,14 +915,10 @@ export default function Knowledge() {
             ) : (
                 /* PC empty state when no space is selected */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                    <img
-                        className="size-[120px] mb-4 object-contain opacity-90"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                        alt="empty"
-                    />
-                    <p className="text-[14px] leading-6 text-[#4E5969]">
+                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                    <p className="text-[14px] font-normal leading-6 text-[#999999]">
                         {localize("com_knowledge.no_related_content_please")}<span
-                            className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                            className="ml-1.5 cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
                             onClick={handleCreateSpace}
                         >
                             {localize("com_knowledge.create_knowledge_space")}</span>

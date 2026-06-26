@@ -174,7 +174,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                         className={cn(
                                             'inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-3 py-0 text-sm leading-none transition-colors',
                                             l.selected
-                                                ? 'border-[#335CFF] bg-[#E8F0FF] text-[#335CFF]'
+                                                ? 'border-blue-500 bg-[#E8F0FF] text-blue-500'
                                                 : 'border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]',
                                         )}
                                     >
@@ -265,7 +265,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                         {localize('com_label_cancel')}
                     </Button>
                     <Button
-                        className="h-8 rounded-[6px] bg-[#335CFF] px-4 text-[14px] font-normal hover:bg-[#2A4AE0] max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
+                        className="h-8 rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal hover:bg-blue-600 max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
                         onClick={handleConfirm}
                     >
                         {localize('com_label_save')}

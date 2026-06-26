@@ -37,7 +37,7 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
         },
         10: {
             icon: <WorkflowIcon className={cn(iconClassName, "text-primary")} />,
-            bgColor: '#E8F3FF'
+            bgColor: 'rgb(var(--brand-50))'
         }
     }
 

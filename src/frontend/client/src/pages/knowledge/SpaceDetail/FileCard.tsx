@@ -28,7 +28,7 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     const lowerKw = kw.toLowerCase();
     return parts.map((part, i) =>
         part.toLowerCase() === lowerKw
-            ? <span key={i} className="text-[#3a74e9]">{part}</span>
+            ? <span key={i} className="text-blue-500">{part}</span>
             : part
     );
 };
@@ -205,7 +205,7 @@ export function FileCard({
         type Tone = { bg: string; text: string; dot: string };
         const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
         const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
-        const infoTone: Tone = { bg: "bg-[#e8f3ff]", text: "text-[#165dff]", dot: "bg-[#165dff]" };
+        const infoTone: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
 
         let label: string | null = null;
         let tone: Tone = neutralTone;
@@ -299,7 +299,7 @@ export function FileCard({
         return (
             <div className="flex min-w-0 items-start gap-1.5">
                 {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
-                    <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                    <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
                         {`V${file.version_no}`}
                     </span>
                 )}
@@ -372,7 +372,7 @@ export function FileCard({
                 )}
                 style={
                     isSelected
-                        ? { background: "linear-gradient(0deg, rgba(230, 237, 252, 0.30) 0%, rgba(230, 237, 252, 0.30) 100%), #FFF" }
+                        ? { background: "linear-gradient(0deg, rgb(var(--brand-500)/0.07) 0%, rgb(var(--brand-500)/0.07) 100%), #FFF" }
                         : undefined
                 }
                 onClick={handleCardClick}
@@ -468,7 +468,7 @@ export function FileCard({
                 !mobileListMode && "h-[160px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
-                    ? "bg-[rgba(230,237,252,0.3)]"
+                    ? "bg-blue-500/[0.07]"
                     : isNotParsed
                         ? "bg-[#fbfbfb]"
                         : "bg-white",
@@ -484,7 +484,7 @@ export function FileCard({
                 transitionDuration: '350ms',
                 transitionTimingFunction: 'ease-in-out',
                 ...(isSelected
-                    ? { backgroundColor: 'rgba(230,237,252,0.3)' }
+                    ? { backgroundColor: 'rgb(var(--brand-500)/0.07)' }
                     : isNotParsed
                         ? { backgroundColor: '#fbfbfb' }
                         : {}),

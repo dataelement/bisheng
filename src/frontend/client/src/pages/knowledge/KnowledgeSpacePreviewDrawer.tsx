@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { NoPermissionIllustration } from "~/components/illustrations";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -472,7 +473,7 @@ export function KnowledgeSpacePreviewDrawer({
                             )}
 
                             <div className="flex items-center gap-1.5 mb-3 mt-4">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#165DFF] text-white text-xs">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs">
                                     {space.creator?.[0] || "?"}
                                 </span>
                                 <span className="text-sm text-[#86909c]">{space.creator}</span>
@@ -514,7 +515,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     <div className="mb-1 text-sm text-[#4E5969] flex items-center gap-2 flex-wrap">
                                         <button
                                             type="button"
-                                            className="text-[#165DFF] hover:underline"
+                                            className="text-blue-500 hover:underline"
                                             onClick={() => goToParentDepth(0)}
                                         >
                                             {localize("com_knowledge.all_files")}</button>
@@ -526,7 +527,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     <button
                                                         type="button"
                                                         onClick={() => goToParentDepth(depth)}
-                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-[#165DFF] hover:underline"}
+                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-blue-500 hover:underline"}
                                                         disabled={depth === parentNameStack.length}
                                                     >
                                                         {name}
@@ -577,23 +578,15 @@ export function KnowledgeSpacePreviewDrawer({
                                 </div>
                             ) : space?.visibility === VisibilityType.APPROVAL ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <img
-                                        className="size-[140px] object-contain mb-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
-                                        alt="Locked"
-                                    />
-                                    <div className="text-[#1d2129] text-[14px]">
+                                    <NoPermissionIllustration className="size-[140px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <img
-                                        className="size-[140px] object-contain mb-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
-                                        alt="Locked"
-                                    />
-                                    <div className="text-[#1d2129] text-[14px]">
+                                    <NoPermissionIllustration className="size-[140px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_join")}
                                     </div>
                                 </div>

@@ -83,8 +83,8 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                 className={cn(
                     "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
                     isActive
-                        ? "border-[#335CFF] text-[#335CFF]"
-                        : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                        ? "border-blue-500 text-blue-500"
+                        : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
                 )}
             >
                 {label}

@@ -1,0 +1,40 @@
+/**
+ * Brand tick spinner: the 12 ticks are filled with `currentColor`, so the
+ * spinner follows whatever `color` the container sets — for the admin console
+ * that is `var(--primary)` (the backend theme color).
+ *
+ * The comet-trail fade is a conic-gradient MASK (not a baked-in gradient), so it
+ * is color-independent: white→transparent works in both the luminance
+ * (`mask-image`) and alpha (`-webkit-mask-image`) mask models. Mask + rotation
+ * live on the same element, so the faded ring rotates as one rigid unit.
+ */
+.bs-tick-spinner {
+    transform-origin: center;
+    animation:
+        bs-tick-spin 1.1s linear infinite,
+        bs-tick-breathe 0.72s ease-in-out infinite;
+    -webkit-mask-image: conic-gradient(from 90deg, transparent 0deg, #fff 360deg);
+    mask-image: conic-gradient(from 90deg, transparent 0deg, #fff 360deg);
+}
+
+@keyframes bs-tick-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes bs-tick-breathe {
+    0%,
+    100% {
+        opacity: 0.74;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bs-tick-spinner {
+        animation: none;
+    }
+}

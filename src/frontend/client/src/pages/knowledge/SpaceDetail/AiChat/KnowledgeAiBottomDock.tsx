@@ -30,6 +30,7 @@ import {
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
@@ -197,7 +198,7 @@ export function KnowledgeAiBottomDock({
                             aria-label={localize("com_knowledge.history_chat")}
                             className={cn(
                                 "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                                showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                                showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
                             )}
                         >
                             <Outlined.History className="size-4" />
@@ -238,8 +239,8 @@ export function KnowledgeAiBottomDock({
                 {/* Messages — scrollable, with bottom fade-out under z-auto so the
                     focused-state grey overlay can stack above. */}
                 <div className="relative min-h-0 flex-1">
-                    {/* AiChatMessages owns the empty state (centered AI-home illustration +
-                        folderQaHint) so it stays identical to the file/article docks. */}
+                    {/* AiChatMessages owns the empty state; pass the brand ArticleQA
+                        illustration so it follows the blue ⇄ green theme. */}
                     <AiChatMessages
                         messages={messages}
                         conversationId={activeChatId}
@@ -253,6 +254,7 @@ export function KnowledgeAiBottomDock({
                         knowledgeChatLayout
                         contentWidthClassName="max-w-none px-4"
                         emptyStateHint={folderQaHint}
+                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
                     />
@@ -410,7 +412,7 @@ export function KnowledgeAiBottomDock({
                                                     aria-label={localize("com_knowledge.history_chat")}
                                                     className={cn(
                                                         "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                                                        showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                                                        showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
                                                     )}
                                                 >
                                                     <Outlined.History className="size-4 shrink-0" />
@@ -458,8 +460,8 @@ export function KnowledgeAiBottomDock({
                                 </div>
                             </div>
 
-                            {/* AiChatMessages owns the empty state (centered AI-home illustration +
-                                folderQaHint) so it stays identical to the file/article docks. */}
+                            {/* AiChatMessages owns the empty state; pass the brand ArticleQA
+                                illustration so it follows the blue ⇄ green theme. */}
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                                 <AiChatMessages
                                     messages={messages}
@@ -474,6 +476,7 @@ export function KnowledgeAiBottomDock({
                                     knowledgeChatLayout
                                     contentWidthClassName="max-w-none px-4"
                                     emptyStateHint={folderQaHint}
+                                    emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                                     onPresetClick={() => { }}
                                     onRegenerate={regenerate}
                                 />

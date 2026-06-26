@@ -1,5 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { EmptyStateIllustration } from '~/components/illustrations';
 
 /**
  * Empty state for app center home when user has no chat history.
@@ -8,12 +9,8 @@ import { Link } from 'react-router-dom';
 export function AppEmptyState() {
   return (
     <div className="flex flex-col items-center justify-center flex-1">
-      <img
-        className="size-[120px] mb-3 object-contain opacity-90"
-        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-        alt="empty"
-      />
-      <div className="text-sm text-gray-500 flex items-center gap-1">
+      <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+      <div className="text-[14px] font-normal text-[#999999] flex items-center gap-1">
         暂无使用过的应用，可以前往应用广场
         <Link
           to="/apps/explore"

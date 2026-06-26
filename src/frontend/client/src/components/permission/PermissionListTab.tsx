@@ -596,7 +596,7 @@ export function PermissionListTab({
                           />
                         </Avatar>
                       ) : (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#335CFF]">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-blue-500">
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
@@ -633,7 +633,7 @@ export function PermissionListTab({
                                   className={cn(
                                     "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
                                     active
-                                      ? "bg-[#E6EDFC] text-[#335CFF] data-[highlighted]:bg-[#E6EDFC] data-[highlighted]:text-[#335CFF]"
+                                      ? "bg-blue-500/[0.07] text-blue-500 data-[highlighted]:bg-blue-500/[0.07] data-[highlighted]:text-blue-500"
                                       : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
                                   )}
                                   onSelect={() => {

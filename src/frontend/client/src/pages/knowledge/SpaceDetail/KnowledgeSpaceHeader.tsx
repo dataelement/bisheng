@@ -143,11 +143,11 @@ export function KnowledgeSpaceHeader({
                             className={cn(
                                 "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
                                 statusFilter.length > 0
-                                    ? "border-[#024DE3] bg-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC]"
+                                    ? "border-blue-600 bg-blue-500/[0.07] text-blue-600 hover:bg-blue-500/[0.07]"
                                     : "bg-white text-[#818181] hover:bg-[#f7f8fa]"
                             )}
                         >
-                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-[#818181]")} />
+                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-blue-600" : "text-[#818181]")} />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -405,7 +405,7 @@ export function KnowledgeSpaceHeader({
                                 </h1>
                                 <Tooltip>
                                     <TooltipTrigger className="shrink-0 cursor-pointer">
-                                        <Outlined.Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
+                                        <Outlined.Info className="size-4 text-[#86909c] outline-none hover:text-blue-500" />
                                     </TooltipTrigger>
                                     <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
                                         <div className="space-y-1.5 text-gray-800 text-sm">

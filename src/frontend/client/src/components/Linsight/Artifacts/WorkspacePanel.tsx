@@ -58,7 +58,7 @@ export function WorkspacePanel({
             {/* File-type icon hidden for now; keep for an easy future re-enable. */}
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
-            <span className="min-w-0 flex-1 truncate text-sm text-[#212121] group-hover:text-[#335CFF]">
+            <span className="min-w-0 flex-1 truncate text-sm text-[#212121] group-hover:text-blue-500">
                 {file.file_name}
             </span>
         </div>

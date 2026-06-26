@@ -1,5 +1,6 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";

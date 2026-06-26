@@ -14,7 +14,6 @@ import { AgentCard } from './components/AgentCard'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
 
-const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
 
@@ -155,22 +154,37 @@ export default function ExplorePlaza() {
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white">
-            {/* 顶部横幅：背景图尺寸与知识广场（KnowledgeSquare tabbg）相同 — bg-cover + center */}
+            {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
             <div
-                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: `url(${APP_TAB_BANNER})` }}
+                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
             >
+                {/* Decorative scattered icons — kept from the original banner art, recolored
+                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-blue-200"
+                    style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
+                        WebkitMaskSize: "cover",
+                        maskSize: "cover",
+                        WebkitMaskPosition: "center",
+                        maskPosition: "center",
+                        WebkitMaskRepeat: "no-repeat",
+                        maskRepeat: "no-repeat",
+                    }}
+                />
                 <div className="absolute left-4 top-4 z-10">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-[#335CFF]"
+                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>
                 </div>
                 <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
-                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-[#335CFF]">
+                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">
                         {bannerTitle}
                     </h1>
                     <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
@@ -214,12 +228,12 @@ export default function ExplorePlaza() {
                     )}
                 >
                     {loading ? (
-                        <div className="flex flex-col items-center gap-3 text-[#335cff]">
+                        <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     ) : loadingMore ? (
-                        <div className="flex items-center gap-2 text-[#335cff]">
+                        <div className="flex items-center gap-2 text-blue-500">
                             <LoadingIcon className="size-6 text-primary" />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>

@@ -53,10 +53,10 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
           )}
         >
           {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-            className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-[#335CFF]" : "text-[#818181]"),
+            className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-blue-500" : "text-[#818181]"),
           })}
           {showLabel ? (
-            <span className={cn('text-[14px] leading-[20px]', active ? 'text-[#335CFF]' : 'text-[#212121]')}>
+            <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
               {label}
             </span>
           ) : null}

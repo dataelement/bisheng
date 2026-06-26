@@ -1009,8 +1009,8 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
             {displayApps.map((appItem) => (
               <Card
                 key={appItem.id}
-                className="group flex flex-col py-0 rounded-[8px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-[#335cff] hover:shadow-[0_4px_14px_rgba(51,92,255,0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
-                style={{ background: 'linear-gradient(135deg, #f9fbfe 0%, #fff 50%, #f9fbfe 100%)' }}
+                className="group flex flex-col py-0 rounded-[8px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+                style={{ background: 'linear-gradient(135deg, rgb(var(--brand-500)/0.04) 0%, #fff 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 onClick={() => handleCardClick(appItem)}
               >
                 <CardContent className="h-full p-2 flex flex-col relative w-full">
@@ -1037,7 +1037,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                         </div>
                       ))}
                     </div>
-                    <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-[#335cff] rounded-[6px] text-white text-[13px] font-medium opacity-0 fine-pointer:group-hover:opacity-100 transform translate-y-2 fine-pointer:group-hover:translate-y-0 transition-all duration-300 coarse-pointer:opacity-100 coarse-pointer:translate-y-0">
+                    <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-blue-500 rounded-[6px] text-white text-[13px] font-medium opacity-0 fine-pointer:group-hover:opacity-100 transform translate-y-2 fine-pointer:group-hover:translate-y-0 transition-all duration-300 coarse-pointer:opacity-100 coarse-pointer:translate-y-0">
                       开始对话
                     </div>
                   </div>

@@ -95,7 +95,7 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
   // instance result — "submitted" stays blue because the submit action itself always succeeded).
   const dotCls = a === "approved" ? "bg-[#00b42a]" : a === "rejected" ? "bg-[#f53f3f]" :
     a === "withdrawn" ? "bg-[#86909c]" :
-    a === "revoke_grant" ? "bg-[#ff7d00]" : "bg-[#165dff]";
+    a === "revoke_grant" ? "bg-[#ff7d00]" : "bg-blue-500";
   const title = a === "submitted" ? localize("com_approval_step_submitted") :
     a === "resubmitted" ? localize("com_approval_action_resubmitted") :
     a === "approved" ? localize("com_approval_action_approved") :
@@ -565,7 +565,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                         {localize("com_approval_action_reject")}
                       </button>
                       <button type="button" disabled={actionLoading}
-                        className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-[#165dff] px-4 text-[14px] font-normal text-white hover:bg-[#1350e8] disabled:opacity-60 md:flex-none"
+                        className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-blue-500 px-4 text-[14px] font-normal text-white hover:bg-blue-600 disabled:opacity-60 md:flex-none"
                         onClick={() => runTaskDecision("approve")}>
                         {localize("com_approval_action_approve")}
                       </button>
@@ -573,7 +573,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                   )}
                   {isInstancePending && (
                     <button type="button" disabled={actionLoading}
-                      className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-[#165dff] px-4 text-[14px] font-normal text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60 md:flex-none"
+                      className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-blue-500 px-4 text-[14px] font-normal text-blue-500 hover:bg-blue-500/[0.06] disabled:opacity-60 md:flex-none"
                       onClick={runWithdraw}>
                       {localize("com_approval_action_withdraw")}
                     </button>
@@ -601,7 +601,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
             onChange={(e) => setRevokeReason(e.target.value)}
             maxLength={500}
             placeholder={localize("com_approval_revoke_reason_placeholder")}
-            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-text-primary placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-text-primary placeholder:text-[#c9cdd4] outline-none focus:border-blue-500"
           />
           <div className="mt-4 flex justify-end gap-3">
             <button type="button"
@@ -627,7 +627,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
             onChange={(e) => setWithdrawReason(e.target.value)}
             maxLength={500}
             placeholder={localize("com_approval_withdraw_reason_placeholder")}
-            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-text-primary placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-text-primary placeholder:text-[#c9cdd4] outline-none focus:border-blue-500"
           />
           <div className="mt-4 flex justify-end gap-3">
             <button type="button"
@@ -636,7 +636,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               {localize("com_ui_cancel")}
             </button>
             <button type="button"
-              className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"
+              className="rounded-lg border border-blue-500 px-4 py-2 text-[14px] text-blue-500 hover:bg-blue-500/[0.06]"
               onClick={confirmWithdraw}>
               {localize("com_approval_action_withdraw")}
             </button>
@@ -765,7 +765,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
               const s = aggStatus.toLowerCase();
               const dotColor = isNotStarted ? "bg-[#e5e6eb]" :
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
-                (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
+                (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-blue-500";
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
               const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
                 approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
@@ -802,7 +802,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
                             ts === "cancelled" ? localize("com_approval_status_cancelled") :
                             localize("com_approval_node_not_started");
                           const tIconCls = ts === "approved" ? "text-[#00b42a]" : ts === "rejected" ? "text-[#f53f3f]" :
-                            (ts === "skipped" || ts === "cancelled") ? "text-[#c9cdd4]" : "text-[#165dff]";
+                            (ts === "skipped" || ts === "cancelled") ? "text-[#c9cdd4]" : "text-blue-500";
                           const tIcon = ts === "approved" ? "✓" : ts === "rejected" ? "✗" :
                             (ts === "skipped" || ts === "cancelled") ? "⊘" : "●";
                           return (
@@ -938,7 +938,7 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
               const s = aggStatus.toLowerCase();
               const dotColor = isNotStarted ? "bg-[#e5e6eb]" :
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
-                (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
+                (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-blue-500";
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
               const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
                 approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
@@ -977,7 +977,7 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
                             ts === "cancelled" ? localize("com_approval_status_cancelled") :
                             localize("com_approval_node_not_started");
                           const tIconCls = ts === "approved" ? "text-[#00b42a]" : ts === "rejected" ? "text-[#f53f3f]" :
-                            (ts === "skipped" || ts === "cancelled") ? "text-[#c9cdd4]" : "text-[#165dff]";
+                            (ts === "skipped" || ts === "cancelled") ? "text-[#c9cdd4]" : "text-blue-500";
                           const tIcon = ts === "approved" ? "✓" : ts === "rejected" ? "✗" :
                             (ts === "skipped" || ts === "cancelled") ? "⊘" : "●";
                           return (
