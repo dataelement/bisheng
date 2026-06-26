@@ -38,19 +38,40 @@ def _async_return(value):
 
 
 class _CountingMembershipRepo:
-    """Mirrors the real ACTIVE-only default; counts ``find_membership`` calls."""
+    """Holds the user's membership rows; counts membership lookups. ``rows`` is the
+    full set for this user/channel (multi-grant model) — the split derives
+    highest-active vs highest-any from it, mirroring the real repository."""
 
-    def __init__(self, member: SpaceChannelMember | None):
-        self.member = member
+    def __init__(self, member: SpaceChannelMember | None = None, rows: list[SpaceChannelMember] | None = None):
+        if rows is None:
+            rows = [member] if member is not None else []
+        self.rows = rows
         self.find_membership_calls = 0
+
+    @staticmethod
+    def _highest(rows):
+        # Mirror the real _highest_membership: max by relation rank (owner > manager
+        # > editor > viewer). VIEWER is lowest, so a higher-ranked row wins.
+        order = {
+            ChannelRelationEnum.OWNER: 3,
+            ChannelRelationEnum.MANAGER: 2,
+            ChannelRelationEnum.EDITOR: 1,
+            ChannelRelationEnum.VIEWER: 0,
+        }
+        return max(rows, key=lambda r: order.get(r.relation, 0)) if rows else None
 
     async def find_membership(self, business_id, business_type, user_id, include_inactive=False):
         self.find_membership_calls += 1
-        if self.member is None:
-            return None
-        if self.member.status != MembershipStatusEnum.ACTIVE and not include_inactive:
-            return None
-        return self.member
+        candidates = (
+            self.rows if include_inactive else [r for r in self.rows if r.status == MembershipStatusEnum.ACTIVE]
+        )
+        return self._highest(candidates)
+
+    async def find_membership_split(self, business_id, business_type, user_id):
+        self.find_membership_calls += 1
+        highest_active = self._highest([r for r in self.rows if r.status == MembershipStatusEnum.ACTIVE])
+        highest_any = self._highest(self.rows)
+        return highest_active, highest_any
 
     async def find_members_by_role(self, channel_id, role):
         return []
@@ -87,14 +108,17 @@ def _service(repo) -> ChannelService:
     )
 
 
-def _member(status: MembershipStatusEnum) -> SpaceChannelMember:
+def _member(
+    status: MembershipStatusEnum,
+    relation: ChannelRelationEnum = ChannelRelationEnum.VIEWER,
+) -> SpaceChannelMember:
     return SpaceChannelMember(
         business_id="channel-review",
         business_type=BusinessTypeEnum.CHANNEL,
         user_id=427,
         user_role=UserRoleEnum.MEMBER,
         status=status,
-        relation=ChannelRelationEnum.VIEWER,
+        relation=relation,
         update_time=datetime.now(),
     )
 
@@ -129,6 +153,35 @@ async def test_detail_dedups_membership_lookup_for_active():
     """AC-06: a single membership lookup for an ACTIVE member."""
     repo = _CountingMembershipRepo(_member(MembershipStatusEnum.ACTIVE))
     await _service(repo).get_channel_detail("channel-review", SimpleNamespace(user_id=427, tenant_id=1))
+    assert repo.find_membership_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_higher_ranked_inactive_row_does_not_mask_active_membership(monkeypatch):
+    """Review regression: in the multi-grant model a user can hold both an ACTIVE
+    VIEWER row and a higher-ranked PENDING MANAGER row. Collapsing to a single
+    highest-rank lookup would pick the PENDING row and drop ACTIVE gating
+    (fail-closed). The split lookup must still gate on the ACTIVE row while showing
+    the PENDING subscription status — all from one membership query (AC-06)."""
+    captured = {}
+
+    async def _capture_permission_ids(self, channel_id, login_user, current_membership, *, context=None):
+        captured["current_membership"] = current_membership
+        return []
+
+    monkeypatch.setattr(ChannelService, "_get_channel_permission_ids", _capture_permission_ids)
+
+    active_viewer = _member(MembershipStatusEnum.ACTIVE, ChannelRelationEnum.VIEWER)
+    pending_manager = _member(MembershipStatusEnum.PENDING, ChannelRelationEnum.MANAGER)
+    repo = _CountingMembershipRepo(rows=[active_viewer, pending_manager])
+
+    detail = await _service(repo).get_channel_detail("channel-review", SimpleNamespace(user_id=427, tenant_id=1))
+
+    # Gating uses the ACTIVE row (not masked by the higher-ranked PENDING one)...
+    assert captured["current_membership"] is active_viewer
+    # ...while the displayed subscription status reflects the PENDING application.
+    assert detail.subscription_status == SubscriptionStatusEnum.PENDING
+    # Still a single membership lookup.
     assert repo.find_membership_calls == 1
 
 

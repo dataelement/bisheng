@@ -48,6 +48,14 @@ class _MembershipRepo:
             return None
         return self.member
 
+    async def find_membership_split(self, business_id, business_type, user_id):
+        # Single-row mock: highest-active is the row only when ACTIVE; highest-any
+        # is the row regardless of status.
+        if self.member is None:
+            return None, None
+        highest_active = self.member if self.member.status == MembershipStatusEnum.ACTIVE else None
+        return highest_active, self.member
+
     async def find_members_by_role(self, channel_id, role):
         return []
 

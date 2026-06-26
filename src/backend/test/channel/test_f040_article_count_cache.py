@@ -107,6 +107,9 @@ class _Repo:
     async def find_membership(self, business_id, business_type, user_id, include_inactive=False):
         return None
 
+    async def find_membership_split(self, business_id, business_type, user_id):
+        return None, None
+
     async def find_members_by_role(self, channel_id, role):
         return []
 

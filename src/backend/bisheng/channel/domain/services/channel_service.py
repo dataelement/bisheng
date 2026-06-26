@@ -1145,6 +1145,15 @@ class ChannelService:
         )
 
     @staticmethod
+    async def _user_can_edit_channel(user_id: int, channel_id: str) -> bool:
+        return await PermissionService.check(
+            user_id=user_id,
+            relation="can_edit",
+            object_type="channel",
+            object_id=channel_id,
+        )
+
+    @staticmethod
     async def _user_can_read_channel(user_id: int, channel_id: str) -> bool:
         return await PermissionService.check(
             user_id=user_id,
@@ -1748,19 +1757,18 @@ class ChannelService:
         channel = channels[0]
 
         # 2. Verify current user permission.
-        # F040: a single ``include_inactive=True`` lookup serves both the
-        # ACTIVE-only permission gating (``current_membership``) and the displayed
-        # subscription status (``status_membership`` below), instead of two queries.
-        # ``_highest_membership`` returns the ACTIVE row when one exists, so deriving
-        # ``current_membership`` by status check is equivalent to the old ACTIVE-only
-        # query.
-        membership = await self.space_channel_member_repository.find_membership(
+        # F040: a single ``find_membership_split`` lookup returns both
+        # ``current_membership`` (highest-rank ACTIVE row → permission gating) and
+        # ``status_membership`` (highest-rank row of any status → displayed
+        # subscription status), replacing the old two-query path. Deriving both
+        # from one result set is exactly equivalent AND avoids the
+        # collapse-to-one-row bug where a higher-ranked PENDING/REJECTED row
+        # (multi-grant model) would mask an ACTIVE membership.
+        current_membership, status_membership = await self.space_channel_member_repository.find_membership_split(
             business_id=channel_id,
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id,
-            include_inactive=True,
         )
-        current_membership = membership if membership and membership.status == MembershipStatusEnum.ACTIVE else None
         # F040: build the F037 shared ReBAC context once and pass it in, instead of
         # letting ``_get_channel_permission_ids`` re-derive bindings/models/subject
         # strings inline on every detail request.
@@ -1831,10 +1839,10 @@ class ChannelService:
 
         # Determine subscription status. ``current_membership`` is ACTIVE-only (it
         # gates permissions), but the subscribe button must also reflect PENDING /
-        # REJECTED applications — the same states the channel square shows. F040: the
-        # ``include_inactive=True`` ``membership`` fetched above already carries that
-        # PENDING/REJECTED row, so reuse it directly (no second lookup).
-        subscription_status = self._resolve_membership_subscription_status(membership)
+        # REJECTED applications — the same states the channel square shows. F040:
+        # ``status_membership`` (the highest-rank row of any status from the split
+        # lookup above) carries that PENDING/REJECTED state, so use it directly.
+        subscription_status = self._resolve_membership_subscription_status(status_membership)
 
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.
