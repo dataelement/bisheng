@@ -65,6 +65,7 @@ class KnowledgeBase(SQLModelSerializable):
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
     is_released: bool = Field(default=False, description='is released to knowledge space square')
+    is_favorite: bool = Field(default=False, description="是否为用户的『我的收藏』固定知识库")
     auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
     is_shared: bool = Field(
         default=False,
@@ -124,6 +125,7 @@ class KnowledgeCreate(BaseModel):
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
     is_released: bool = Field(default=False, description='is released to knowledge space square')
+    is_favorite: bool = Field(default=False, description="是否为用户的『我的收藏』固定知识库")
     auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
     is_shared: bool = Field(default=False)
     auto_tag_enabled: bool = Field(default=False)
