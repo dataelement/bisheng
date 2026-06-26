@@ -281,7 +281,11 @@ export function KnowledgeSpaceContent({
         space.id,
         "share_space",
     );
-    const canDeleteSpace = isAdmin || hasKnowledgeSpacePermission(
+    // Delete-space gating mirrors the desktop sidebar (KnowledgeSpaceItem): only the
+    // creator/owner (or an explicit delete_space permission) may delete — a space ADMIN
+    // (manager / department admin) must NOT. Do not gate on isAdmin here (that includes
+    // the ADMIN role and would wrongly surface delete to managers).
+    const canDeleteSpace = isOwner || hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
         "delete_space",
@@ -1204,6 +1208,9 @@ export function KnowledgeSpaceContent({
                                     ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                            {/* Hide the whole "..." trigger when every item is permission-gated
+                                away — an empty menu is confusing on mobile. */}
+                            {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
@@ -1250,6 +1257,7 @@ export function KnowledgeSpaceContent({
                                     )}
                                 </SidebarListMoreMenuContent>
                             </DropdownMenu>
+                            )}
                         </div>
                     </div>
                 </div>

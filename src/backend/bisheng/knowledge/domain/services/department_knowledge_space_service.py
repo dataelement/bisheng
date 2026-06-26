@@ -233,10 +233,21 @@ class DepartmentKnowledgeSpaceService:
     async def _sync_removed_admin(
         cls,
         *,
-        space_service: KnowledgeSpaceService,
         space_id: int,
         user_id: int,
+        space_service: KnowledgeSpaceService | None = None,
     ) -> None:
+        """Revoke the department-admin space binding for ``user_id``.
+
+        Clears both materialized copies of the derived admin status: the
+        ``space_channel_member`` row (delete, or demote back to the role the
+        member held before being promoted) and the ``knowledge_space#manager``
+        OpenFGA tuple.
+
+        ``space_service`` is only needed to notify the affected user. Paths that
+        carry no ``login_user`` (调岗 / SSO 同步 / 账号删除) pass ``None`` — the
+        binding is still cleaned, the notification is simply skipped.
+        """
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is None or existing.user_role == UserRoleEnum.CREATOR:
             return
@@ -249,7 +260,7 @@ class DepartmentKnowledgeSpaceService:
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
                 await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-                if not await space_service._user_can_manage_space(user_id, space_id):
+                if space_service is not None and not await space_service._user_can_manage_space(user_id, space_id):
                     await space_service._send_space_event_notification(
                         action_code=SPACE_ADMIN_REVOKED_MESSAGE,
                         receiver_user_ids=[user_id],
@@ -259,7 +270,7 @@ class DepartmentKnowledgeSpaceService:
                 return
             await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
             await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-            if not await space_service._user_can_read_space(user_id, space_id):
+            if space_service is not None and not await space_service._user_can_read_space(user_id, space_id):
                 await space_service._send_space_event_notification(
                     action_code=SPACE_MEMBER_REMOVED_MESSAGE,
                     receiver_user_ids=[user_id],
@@ -360,6 +371,30 @@ class DepartmentKnowledgeSpaceService:
             )
 
     @classmethod
+    async def cleanup_removed_department_admins(
+        cls,
+        *,
+        department_id: int,
+        user_ids: Sequence[int],
+    ) -> None:
+        """Clear the space binding for users who lost department-admin status.
+
+        For revoke paths that carry no ``login_user`` — 调岗
+        (``_apply_local_primary_department_change``), SSO 同步 and 账号删除 — which
+        previously dropped only ``DepartmentAdminGrant`` + the ``department#admin``
+        tuple, leaving the derived ``space_channel_member`` row and the
+        ``knowledge_space#manager`` tuple behind (越权 residue). Idempotent and a
+        no-op when the department owns no knowledge space.
+        """
+        if not user_ids:
+            return
+        space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
+        if not space_id:
+            return
+        for user_id in sorted(set(int(uid) for uid in user_ids)):
+            await cls._sync_removed_admin(space_id=space_id, user_id=user_id)
+
+    @classmethod
     async def get_user_department_spaces(
         cls,
         *,
@@ -424,4 +459,5 @@ class DepartmentKnowledgeSpaceService:
         )
         results = [KnowledgeSpaceInfoResp(**space.model_dump()) for space in spaces]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
+        await svc._populate_root_file_counts(results)
         return await svc._decorate_department_metadata(results)

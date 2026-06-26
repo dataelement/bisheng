@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { Search } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
+import { Outlined } from "bisheng-icons";
 import { Input } from "~/components/ui/Input";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
@@ -8,6 +9,7 @@ import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { cn } from "~/utils";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
@@ -40,6 +42,11 @@ interface ChannelSquareProps {
   subscribeApi?: (id: string) => Promise<any>;
   /** Bump to force a full reload of the square list (e.g. after subscribe in preview drawer). */
   refreshKey?: number;
+  /** H5: render the top bar (hamburger). The 频道/广场 toggle is a persistent
+   *  single instance rendered above both views (Subscription/index), not here. */
+  isH5?: boolean;
+  /** H5: open the mobile system menu (hamburger). */
+  onOpenMobileNav?: () => void;
 }
 
 function ChannelSquare({
@@ -52,6 +59,8 @@ function ChannelSquare({
   fetchApi,
   subscribeApi,
   refreshKey = 0,
+  isH5 = false,
+  onOpenMobileNav,
 }: ChannelSquareProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
@@ -239,6 +248,27 @@ function ChannelSquare({
 
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
+      {/* H5 顶部栏：侧栏按钮。频道/广场 切换器为跨视图常驻单实例（见 Subscription/index）。 */}
+      {isH5 ? (
+        <div className="shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+          <div className="relative flex h-11 items-center px-4">
+            {onOpenMobileNav ? (
+              <button
+                type="button"
+                aria-label={localize("com_nav_open_sidebar")}
+                onClick={onOpenMobileNav}
+                className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+              >
+                <Outlined.SidebarMenu className="size-5" />
+              </button>
+            ) : (
+              <div className="size-5 shrink-0" aria-hidden />
+            )}
+            {/* 频道/广场 切换器为跨视图常驻单实例（见 Subscription/index），
+                屏幕居中悬浮在此行之上，这里不再各自渲染。 */}
+          </div>
+        </div>
+      ) : null}
       {/* 头部区域 */}
       <div
         className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
@@ -281,20 +311,22 @@ function ChannelSquare({
         className="flex-1 flex flex-col overflow-y-auto scrollbar-on-scroll bg-white"
         onScroll={handleListScroll}
       >
-        <div className="relative mx-auto mb-6 mt-6 w-full max-w-[480px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-          <Input
-            type="text"
-            placeholder={tSearchPlaceholder}
-            value={searchQuery}
-            onChange={handleSearch}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                // 回车触发，当前为实时搜索，保留该交互语义
-              }
-            }}
-            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
-          />
+        <div className={cn("mx-auto mb-6 mt-6 w-full max-w-[480px]", isH5 && "px-4")}>
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
+            <Input
+              type="text"
+              placeholder={tSearchPlaceholder}
+              value={searchQuery}
+              onChange={handleSearch}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  // 回车触发，当前为实时搜索，保留该交互语义
+                }
+              }}
+              className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+            />
+          </div>
         </div>
         <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 

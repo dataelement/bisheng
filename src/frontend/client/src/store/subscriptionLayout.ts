@@ -17,3 +17,18 @@ export const subscriptionDetailPaneWidthState = atom<number>({
     key: 'subscriptionDetailPaneWidth',
     default: 0,
 });
+
+/**
+ * True while the H5 channel-switcher dropdown panel is open (ArticleList title-bar).
+ *
+ * The 频道/广场 tab is rendered once above both views (Subscription/index), so it
+ * can't see the dropdown state that lives inside ArticleList. ArticleList publishes
+ * it here; the persistent tab reads it to grey itself out (matching the header's
+ * left/right action buttons) while the dropdown is open.
+ *
+ * Pure client UI state — never sent to the backend, issues no HTTP (constitution C7).
+ */
+export const subscriptionMobileChannelDropdownOpenState = atom<boolean>({
+    key: 'subscriptionMobileChannelDropdownOpen',
+    default: false,
+});

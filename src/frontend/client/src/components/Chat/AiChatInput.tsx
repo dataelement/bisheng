@@ -20,153 +20,19 @@ import { taskModeSkillsState } from "~/store/linsight";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
+import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
-import { ArrowDown, Loader2, Sparkles } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { useScrollRevealRef } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
-import BooksIcon from "../ui/icon/Books";
-import BookOpen from "../ui/icon/BookOpen";
-import type { FileType } from "~/components/ui/icon/File/FileIcon";
-import { Outlined } from "bisheng-icons";
-
-/** 超出该字数则省略；省略后为「前 5 字 + …」共 6 个显示单位（与产品规则一致） */
-const KB_TAG_MAX_CHARS = 5;
-
-// File-chip icons: flat bisheng outlined icons so they render in the same
-// single-color (#999) style as the knowledge-space chip icons.
-const CHIP_FILE_ICONS: Record<string, typeof Outlined.File> = {
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    pptx: Outlined.FilePdf,
-    txt: Outlined.FileTxt,
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    md: Outlined.FileEditing,
-};
-
-function formatKbTagLabel(name: string): string {
-    const chars = Array.from(name);
-    if (chars.length <= KB_TAG_MAX_CHARS) return name;
-    return `${chars.slice(0, KB_TAG_MAX_CHARS).join("")}\u2026`;
-}
-
-const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
-    const label = formatKbTagLabel(kb.name ?? "");
-    return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
-            {kb.type === 'space' ? (
-                <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
-            ) : (
-                <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
-            )}
-
-            <span className="min-w-0 flex-1 truncate text-left" title={kb.name}>
-                {label}
-            </span>
-            {onRemove && (
-                <button
-                    type="button"
-                    onClick={onRemove}
-                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
-                    aria-label="Remove"
-                >
-                    ✕
-                </button>
-            )}
-        </div>
-    );
-};
-
-const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
-    const resolveFileType = (input: any): FileType => {
-        const nameCandidate =
-            input?.name ||
-            input?.file_name ||
-            input?.filename ||
-            input?.filepath ||
-            input?.file_path ||
-            "";
-        const baseName = String(nameCandidate).split("/").pop()?.split("?")[0] || "";
-        const ext = baseName.includes(".") ? baseName.split(".").pop()?.toLowerCase() : "";
-        const normalized = ext === "htm" ? "html" : ext === "et" ? "xlsx" : ext === "jpeg" ? "jpg" : ext;
-        const allowed: FileType[] = [
-            "pdf", "doc", "docx", "ppt", "pptx", "md", "html", "txt",
-            "jpg", "jpeg", "png", "bmp", "csv", "xls", "xlsx",
-        ];
-        return (allowed as string[]).includes(normalized || "") ? (normalized as FileType) : "txt";
-    };
-
-    return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
-            {(() => {
-                const FileTypeIcon = CHIP_FILE_ICONS[resolveFileType(file)] ?? Outlined.File;
-                return <FileTypeIcon size={16} className="mr-1 shrink-0 text-[#999]" />;
-            })()}
-            <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
-                {file.name}
-            </span>
-            {onRemove && (
-                <button
-                    type="button"
-                    onClick={onRemove}
-                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
-                    aria-label="Remove"
-                >
-                    ✕
-                </button>
-            )}
-        </div>
-    );
-};
-
-const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => {
-    const label = skill?.display_name || skill?.name || "";
-    return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
-            <Sparkles className="mr-1 size-4 shrink-0 text-blue-500" />
-            <span className="min-w-0 flex-1 truncate text-left" title={label}>
-                {label}
-            </span>
-            {onRemove && (
-                <button
-                    type="button"
-                    onClick={onRemove}
-                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
-                    aria-label="Remove"
-                >
-                    ✕
-                </button>
-            )}
-        </div>
-    );
-};
-
-const UploadingFileTag = ({ name }: { name: string }) => {
-    return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700">
-            <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
-            <span className="min-w-0 flex-1 truncate text-left" title={name}>
-                {name}
-            </span>
-        </div>
-    );
-};
 
 export interface AiChatInputFeatures {
     modelSelect?: boolean;
@@ -229,6 +95,12 @@ interface AiChatInputProps {
     /** Support Lingsi mode UI differences */
     isLingsi?: boolean;
     /**
+     * Landing page coordination: fires whenever the attachment bar's presence
+     * changes (kb / file / skill mounted or cleared) so the parent can hide the
+     * welcome subtitle while keeping the title + input box positions fixed.
+     */
+    onSelectionPresenceChange?: (hasSelection: boolean) => void;
+    /**
      * F035: toggle task mode in place (no route jump). When provided, the
      * task-mode entry / toggle / skill-pick call this instead of navigating, so
      * the daily welcome page (/c) can own task mode as local state. When absent,
@@ -262,6 +134,7 @@ const AiChatInput = memo(
         searchType = "",
         onSearchTypeChange,
         isLingsi = false,
+        onSelectionPresenceChange,
         onToggleTaskMode,
     }: AiChatInputProps) => {
         const {
@@ -304,7 +177,6 @@ const AiChatInput = memo(
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
         const textareaScrollHideTimerRef = useRef<number | null>(null);
-        const selectionTagsScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
@@ -417,6 +289,16 @@ const AiChatInput = memo(
         );
 
         const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
+
+        // Tell the landing page whether the attachment bar is present so it can
+        // hide/show the welcome subtitle without shifting the title or input box.
+        // useLayoutEffect (not useEffect) so the subtitle hides in the SAME paint
+        // the attachment bar appears — otherwise the block is one frame too tall
+        // (bar shown + subtitle still visible) and the whole hero visibly jumps.
+        useLayoutEffect(() => {
+            onSelectionPresenceChange?.(hasSelectionTags);
+        }, [hasSelectionTags, onSelectionPresenceChange]);
+
         return (
             <div className="px-4 sm:px-0 pb-1 touch-mobile:px-0 touch-mobile:pb-1 shrink-0 relative">
                 {/* Drag-drop overlay */}
@@ -435,16 +317,42 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
+                {/* Mounted knowledge spaces / files — a gray strip stacked ABOVE the
+                    input box (Figma 12841:47449). The strip overlaps the box by 16px
+                    (= the box's corner radius) via -mb-4, so the white box's rounded
+                    top corner reaches the edge exactly at the strip's bottom → the
+                    left/right edges read as one continuous line ("连下来"), with the
+                    white box appearing to emerge from the gray strip. The strip's
+                    visible height (62 − 16 = 46px) matches the hidden subtitle's
+                    footprint, so the title / input box stay put. */}
+                {hasSelectionTags && (
+                    <AttachmentBar
+                        uploadingFiles={uploadingFiles}
+                        files={chatFiles || []}
+                        kbs={selectedOrgKbs}
+                        skills={taskMode ? dailySkills : []}
+                        onRemoveFile={(file) => {
+                            inputFilesRef.current?.removeByName?.(file.name);
+                            setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
+                        }}
+                        onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
+                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
+                        } : undefined}
+                        onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
+                    />
+                )}
+
                 <div
                     className={cn(
                         // Figma 12669:66966 — white surface, 16px radius, hairline
-                        // border (replaces the legacy gray fill).
-                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
-                        // Soft drop shadow only on the landing page; in-conversation
-                        // inputs stay flat against the message list.
-                        elevated && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
-                        // 有「附件 / 知识」标签时收紧顶部，避免 0 高度的 InputFiles 占位 + gap + pt 叠出一大块空区（移动端尤明显）
-                        hasSelectionTags && "touch-mobile:pt-1.5",
+                        // border (replaces the legacy gray fill). z-[1] keeps it
+                        // painted above the attachment strip it overlaps.
+                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
+                        // Soft drop shadow on the landing page (always) and on the
+                        // in-conversation input only while it has a mounted knowledge
+                        // space / file; otherwise in-conversation inputs stay flat
+                        // against the message list.
+                        (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
                     {/* File upload area: file list only. Upload entry lives in the
@@ -483,49 +391,6 @@ const AiChatInput = memo(
                             }}
                         />;
                     })()}
-
-                    {/* Selected knowledge base / space tags */}
-                    {hasSelectionTags && (
-                        <div
-                            ref={selectionTagsScrollRevealRef}
-                            className="mt-1 mb-2.5  max-h-[72px] overflow-y-auto scrollbar-on-scroll"
-                        >
-                            <div className="flex flex-wrap gap-1">
-                                {uploadingFiles.map((file) => (
-                                    <UploadingFileTag key={file.id} name={file.name} />
-                                ))}
-                                {(chatFiles || []).map((file) => (
-                                    <FileTag
-                                        key={file.file_id || file.filepath || file.name}
-                                        file={file}
-                                        onRemove={() => {
-                                            inputFilesRef.current?.removeByName?.(file.name);
-                                            setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
-                                        }}
-                                    />
-                                ))}
-                                {selectedOrgKbs.map((kb) => (
-                                    <KbTag
-                                        key={kb.id}
-                                        kb={kb}
-                                        onRemove={onSelectedOrgKbsChange ? () => {
-                                            onSelectedOrgKbsChange(
-                                                selectedOrgKbs.filter((i) => i.id !== kb.id)
-                                            );
-                                        } : undefined}
-                                    />
-                                ))}
-                                {/* F035: selected skills (task mode) shown as removable tags. */}
-                                {taskMode && dailySkills.map((skill) => (
-                                    <SkillTag
-                                        key={skill.name}
-                                        skill={skill}
-                                        onRemove={() => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
                     {/* Textarea */}
                     <TextareaAutosize
@@ -592,17 +457,13 @@ const AiChatInput = memo(
                                                 close();
                                                 // Picking a skill ENTERS task mode only when not
                                                 // already in it. onToggleTaskMode is a toggle, so
-                                                // calling it while task mode is already active flips
-                                                // it OFF — selecting a skill must never exit task
-                                                // mode. On the daily welcome page enter in place
-                                                // (callback); otherwise navigate to the linsight landing.
-                                                if (!taskMode) {
-                                                    if (onToggleTaskMode) {
-                                                        onToggleTaskMode();
-                                                    } else {
-                                                        navigate('/linsight/new');
-                                                    }
-                                                }
+                                                // calling it while already active would flip it OFF —
+                                                // selecting a skill must never exit task mode.
+                                                if (taskMode) return;
+                                                // Daily welcome page enters in place (callback);
+                                                // otherwise navigate to the linsight landing.
+                                                if (onToggleTaskMode) onToggleTaskMode();
+                                                else navigate('/linsight/new');
                                             }}
                                         />
                                     ) : undefined}

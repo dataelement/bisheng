@@ -46,7 +46,7 @@ export default function AppCenter() {
         };
     }, []);
     const [appGridCols, setAppGridCols] = useState(() => {
-        if (typeof window === 'undefined') return 4;
+        if (typeof window === 'undefined') return 3;
         const width = window.innerWidth;
         const mobile = window.matchMedia('(max-width: 767px)').matches;
         if (mobile) {
@@ -54,8 +54,7 @@ export default function AppCenter() {
         }
         if (width < 480) return 1;
         if (width < 600) return 2;
-        if (width < 768) return 3;
-        return 4;
+        return 3;
     });
 
     useEffect(() => {
@@ -72,8 +71,7 @@ export default function AppCenter() {
         const resolveCols = (width: number) => {
             if (width < 480) return 1;
             if (width < 600) return 2;
-            if (width < 768) return 3;
-            return 4;
+            return 3;
         };
 
         const update = () => {
@@ -189,7 +187,7 @@ export default function AppCenter() {
                 ) : (
                     <div
                         ref={appGridRef}
-                        className="grid w-full relative gap-x-3 gap-y-3.5"
+                        className="grid w-full relative items-start gap-4"
                         style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
                     >
                         {apps.map((agent) => (

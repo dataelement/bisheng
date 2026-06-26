@@ -23,6 +23,8 @@ import { cn, copyText } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { useSetRecoilState } from "recoil";
+import { subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
 
 interface ArticleListProps {
     channel: Channel;
@@ -192,6 +194,14 @@ export function ArticleList({
     const searchQuery = useDebounce(searchKey, 500);
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
+    // Publish the H5 dropdown-open state so the persistent 频道/广场 tab (rendered
+    // above this view in Subscription/index) can grey itself out while it's open.
+    const setMobileChannelDropdownOpen = useSetRecoilState(subscriptionMobileChannelDropdownOpenState);
+    useEffect(() => {
+        setMobileChannelDropdownOpen(mobileDropdownOpen);
+    }, [mobileDropdownOpen, setMobileChannelDropdownOpen]);
+    // Reset on unmount so leaving the channel view never leaves the tab stuck greyed.
+    useEffect(() => () => setMobileChannelDropdownOpen(false), [setMobileChannelDropdownOpen]);
 
 
     // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
@@ -424,10 +434,10 @@ export function ArticleList({
                 /* === H5 header === */
                 <>
                     <div className="sticky top-0 z-30 shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                        {/* Title row: hamburger | title (caret) | search | menu */}
+                        {/* Row 1: hamburger | 频道/广场 切换 | search | menu */}
                         <div className="relative flex h-11 items-center gap-3 px-4">
                             {/* Left group — fixed width that mirrors the right group, so the
-                                center title stays screen-centered even when truncated.
+                                center toggle stays screen-centered.
                                 76px = search(32) + gap(12) + actions(32). */}
                             <div className="flex min-w-[76px] shrink-0 items-center justify-start">
                                 {onOpenChannelNav ? (
@@ -444,36 +454,10 @@ export function ArticleList({
                                     <div className="size-5 shrink-0" aria-hidden />
                                 )}
                             </div>
-                            {/* Center group — title grows then truncates while staying centered */}
-                            <div className="flex min-w-0 flex-1 items-center justify-center">
-                                {onChannelSelect ? (
-                                    <ChannelSwitcher
-                                        variant="mobile"
-                                        activeChannelId={channel.id}
-                                        channelName={channelDetail?.name || channel.name}
-                                        onChannelSelect={onChannelSelect}
-                                        onCreateChannel={onCreateChannel}
-                                        onChannelSquare={onGoChannelSquare}
-                                        open={mobileDropdownOpen}
-                                        onOpenChange={(next) => {
-                                            if (next) setMobileSearchOpen(false);
-                                            setMobileDropdownOpen(next);
-                                        }}
-                                        mobileTopOffset={
-                                            mobileSearchOpen
-                                                ? "calc(env(safe-area-inset-top, 0px) + 104px)"
-                                                : "calc(env(safe-area-inset-top, 0px) + 52px)"
-                                        }
-                                    />
-                                ) : (
-                                    <h1
-                                        className="flex min-w-0 flex-1 items-center justify-center truncate text-[20px] leading-7 text-[#212121]"
-                                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
-                                    >
-                                        {channelDetail?.name || channel.name}
-                                    </h1>
-                                )}
-                            </div>
+                            {/* Center group — spacer. The 频道/广场 toggle is a single
+                                persistent instance rendered above both views (Subscription/index),
+                                screen-centered over this gap, so switching slides smoothly. */}
+                            <div className="flex min-w-0 flex-1 items-center justify-center" />
                             {/* Right group — same fixed width as the left group */}
                             <div className="flex min-w-[76px] shrink-0 items-center justify-end gap-3">
                                 <button
@@ -535,74 +519,103 @@ export function ArticleList({
                                 />
                             </div>
                         ) : null}
-                        {/* Sub-channels + 仅看未读 (single row; right-gradient hints scroll).
-                            Hide the tab strip when the channel has no sub-channels. */}
-                        <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-                            {subChannels.length > 0 && (
-                            <div className="relative min-w-0 flex-1 border-b border-[#F2F3F5]">
-                                {tabsScrollShadow.left ? (
-                                    <div
-                                        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
-                                        aria-hidden
-                                    />
-                                ) : null}
-                                {tabsScrollShadow.right ? (
-                                    <div
-                                        className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0)_0%,rgba(153,153,153,0.15)_100%)]"
-                                        aria-hidden
-                                    />
-                                ) : null}
-                                <div
-                                    ref={tabsScrollRef}
-                                    onScroll={updateTabsScrollShadow}
-                                    className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => handleSubChannelChange("all")}
-                                        className={cn(
-                                            "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
-                                            !selectedSubChannelName
-                                                ? "border-blue-500 text-blue-500"
-                                                : "border-transparent text-[#212121]",
-                                        )}
-                                    >
-                                        <span>{localize("com_subscription.all")}</span>
-                                        {channel.unreadCount > 0 && (
-                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
-                                                {channel.unreadCount}
-                                            </span>
-                                        )}
-                                    </button>
-                                    {subChannels.map((sub) => (
-                                        <SubChannelTab
-                                            key={sub.id}
-                                            sub={sub}
-                                            onClick={() => handleSubChannelChange(sub.name)}
-                                            className={cn(
-                                                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
-                                                selectedSubChannelName === sub.name
-                                                    ? "border-blue-500 text-blue-500"
-                                                    : "border-transparent text-[#212121]",
-                                            )}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
+                        {/* Row 2: 频道名称（左，下拉切换频道） + 仅看未读（右） */}
+                        <div className="flex h-11 items-center justify-between gap-3 px-4">
+                            {onChannelSelect ? (
+                                <ChannelSwitcher
+                                    variant="mobile"
+                                    mobileTriggerClassName="flex-1 justify-start"
+                                    activeChannelId={channel.id}
+                                    channelName={channelDetail?.name || channel.name}
+                                    onChannelSelect={onChannelSelect}
+                                    onCreateChannel={onCreateChannel}
+                                    onChannelSquare={onGoChannelSquare}
+                                    open={mobileDropdownOpen}
+                                    onOpenChange={(next) => {
+                                        if (next) setMobileSearchOpen(false);
+                                        setMobileDropdownOpen(next);
+                                    }}
+                                    mobileTopOffset={
+                                        mobileSearchOpen
+                                            ? "calc(env(safe-area-inset-top, 0px) + 148px)"
+                                            : "calc(env(safe-area-inset-top, 0px) + 96px)"
+                                    }
+                                />
+                            ) : (
+                                <h1 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-[#212121]">
+                                    {channelDetail?.name || channel.name}
+                                </h1>
                             )}
                             <button
                                 type="button"
                                 onClick={handleToggleUnread}
+                                disabled={mobileDropdownOpen}
                                 className={cn(
-                                    "ml-auto shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-[6px] border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-primary bg-primary/20 text-primary"
                                         : "border-[#E5E6EB] bg-white text-gray-800",
+                                    mobileDropdownOpen && "pointer-events-none opacity-20",
                                 )}
                             >
                                 {localize("com_subscription.show_unread_only")}
                             </button>
                         </div>
+                        {/* Row 3: 子频道（横向滚动；右侧渐变提示可滑动）。无子频道时整行隐藏。 */}
+                        {subChannels.length > 0 ? (
+                            <div className="px-4 pb-2">
+                                <div className="relative min-w-0 border-b border-[#F2F3F5]">
+                                    {tabsScrollShadow.left ? (
+                                        <div
+                                            className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
+                                            aria-hidden
+                                        />
+                                    ) : null}
+                                    {tabsScrollShadow.right ? (
+                                        <div
+                                            className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0)_0%,rgba(153,153,153,0.15)_100%)]"
+                                            aria-hidden
+                                        />
+                                    ) : null}
+                                    <div
+                                        ref={tabsScrollRef}
+                                        onScroll={updateTabsScrollShadow}
+                                        className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSubChannelChange("all")}
+                                            className={cn(
+                                                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
+                                                !selectedSubChannelName
+                                                    ? "border-[#335CFF] text-[#335CFF]"
+                                                    : "border-transparent text-[#212121]",
+                                            )}
+                                        >
+                                            <span>{localize("com_subscription.all")}</span>
+                                            {channel.unreadCount > 0 && (
+                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                    {channel.unreadCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                        {subChannels.map((sub) => (
+                                            <SubChannelTab
+                                                key={sub.id}
+                                                sub={sub}
+                                                onClick={() => handleSubChannelChange(sub.name)}
+                                                className={cn(
+                                                    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
+                                                    selectedSubChannelName === sub.name
+                                                        ? "border-[#335CFF] text-[#335CFF]"
+                                                        : "border-transparent text-[#212121]",
+                                                )}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
                 </>
             ) : (

@@ -111,6 +111,15 @@ export function useResizablePanel({
         [containerRef, minLeftWidth, minRightWidth]
     );
 
+    // Clear any persisted/custom ratio and fall back to the computed default
+    // width. Callers use this to re-assert the geometry-aligned default (e.g. on
+    // each fresh open), so the default state stays consistent regardless of a
+    // previously dragged value.
+    const resetToDefault = useCallback(() => {
+        setRatio(null);
+        localStorage.removeItem(storageKey);
+    }, [storageKey]);
+
     // Attach / detach listeners whenever isResizing changes
     useEffect(() => {
         if (!isResizing) return;
@@ -132,5 +141,6 @@ export function useResizablePanel({
         leftWidth,
         isResizing,
         startResizing,
+        resetToDefault,
     };
 }

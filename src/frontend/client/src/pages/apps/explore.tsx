@@ -5,119 +5,17 @@ import { useNavigate } from "react-router-dom"
 import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
-import AppAvator from '~/components/Avator'
-import { AiChatIcon, ShareOutlineIcon } from "~/components/icons"
 import { Button } from "~/components/ui/Button"
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks"
+import { useLocalize, useMediaQuery } from "~/hooks"
 import { useGetBsConfig } from "~/hooks/queries/data-provider"
 import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
+import { AgentCard } from './components/AgentCard'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
-
-// --- 组件：智能体卡片 (广场版 Horizontal) ---
-const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
-    const localize = useLocalize();
-    const isNarrowLayout = usePrefersMobileLayout();
-    const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
-    const showCompactActions = isNarrowLayout;
-    const compactActionsAlwaysVisible = !canHover;
-    return (
-        <div
-            onClick={() => onClick(agent)}
-            className={cn(
-                "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
-                "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)]",
-                "fine-pointer:hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
-                "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)]"
-            )}
-        >
-            {/* 左侧图标 */}
-            <AppAvator
-                url={agent.logo} id={agent.id as any}
-                flowType={String(agent.flow_type || agent.type)}
-                className="size-[48px] min-w-[48px] min-h-[48px] shrink-0 rounded-[4px]"
-                iconClassName="w-6 h-6"
-            />
-
-            {/* 右侧内容 */}
-            <div className="flex flex-[1_0_0] flex-col h-full items-start min-w-px relative">
-                <div className="flex w-full items-center justify-between gap-2">
-                    <p className="font-['PingFang_SC'] font-medium leading-[20px] text-[#212121] text-[14px] truncate">
-                        {agent.name}
-                    </p>
-                    {showCompactActions && (
-                        <div
-                            className={cn(
-                                "flex shrink-0 items-center justify-end gap-[10px] transition-opacity",
-                                compactActionsAlwaysVisible
-                                    ? "opacity-100 pointer-events-auto"
-                                    : "opacity-0 pointer-events-none fine-pointer:group-hover:opacity-100 fine-pointer:group-hover:pointer-events-auto"
-                            )}
-                        >
-                            {agent.can_share === true ? (
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                                    className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F2F3F5]"
-                                    aria-label={localize('com_app_share_app')}
-                                >
-                                    <ShareOutlineIcon className="size-3.5" />
-                                </button>
-                            ) : null}
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F2F3F5]"
-                                aria-label={localize('com_app_start_chat')}
-                            >
-                                <img
-                                    src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/message.svg`}
-                                    alt=""
-                                    className="size-[14px] text-slate-600"
-                                />
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* 描述区域：平时显示，hover时隐藏 */}
-                <p
-                    className={cn(
-                        "mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2",
-                        !showCompactActions && "fine-pointer:group-hover:hidden"
-                    )}
-                >
-                    {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
-                </p>
-
-                {/* 按纽区域：平时隐藏，hover时显示 */}
-                {!showCompactActions && (
-                    <div className="hidden fine-pointer:group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
-                        {agent.can_share === true ? (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                                className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] transition-colors fine-pointer:hover:bg-gray-50"
-                            >
-                                {localize('com_app_share_app')}
-                            </button>
-                        ) : null}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                            className="bg-blue-500 flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] transition-colors fine-pointer:hover:bg-blue-600"
-                        >
-                            {localize('com_app_start_chat')}
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
 
 export default function ExplorePlaza() {
     const [activeTabId, setActiveTabId] = useState<number | string>(-1)
@@ -164,7 +62,9 @@ export default function ExplorePlaza() {
 
             const formattedResults = pageData.map((item: any) => ({
                 ...item,
-                id: item.id || item.agentId || item.flowId
+                id: item.id || item.agentId || item.flowId,
+                // Normalize so the shared AgentCard (which reads flow_type) renders correctly.
+                flow_type: item.flow_type ?? item.type,
             }));
 
             setAgents(prev => isAppend ? [...prev, ...formattedResults] : formattedResults);
@@ -306,11 +206,16 @@ export default function ExplorePlaza() {
             {/* 智能体网格 */}
             <main className="flex min-h-0 w-full max-w-[1000px] flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-on-scroll px-5 pb-5">
                 <div
-                    className="grid w-full gap-[12px]"
+                    className="grid w-full items-start gap-4"
                     style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
                 >
                     {agents.map((agent, idx) => (
-                        <ExploreCard key={`${agent.id}-${idx}`} agent={agent} onClick={handleCardClick} onShare={handleShare} />
+                        <AgentCard
+                            key={`${agent.id}-${idx}`}
+                            agent={agent}
+                            onStartChat={handleCardClick}
+                            onShare={handleShare}
+                        />
                     ))}
                 </div>
 

@@ -264,8 +264,14 @@ function copyTextFallbackSync(text: string): boolean {
   textarea.style.left = '-9999px';
   textarea.style.top = '-9999px';
   textarea.style.opacity = '0';
-  // Append inside the active dialog to avoid focus-trap interference
-  const container = document.activeElement?.closest('[role="dialog"]') || document.body;
+  // Append inside the active dialog/menu to avoid focus-trap interference.
+  // Radix DropdownMenu/Select content ([role="menu"]/[role="listbox"]) traps focus
+  // via FocusScope: a textarea appended to <body> loses focus immediately, so
+  // select()+execCommand copies nothing. Keeping it inside the trapped container
+  // preserves the selection (fixes copy from a mobile WebView dropdown menu item).
+  const container =
+    document.activeElement?.closest('[role="dialog"],[role="menu"],[role="listbox"]') ||
+    document.body;
   container.appendChild(textarea);
   textarea.focus();
   textarea.select();

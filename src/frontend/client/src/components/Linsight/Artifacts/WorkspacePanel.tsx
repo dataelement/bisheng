@@ -21,6 +21,9 @@ interface WorkspacePanelProps {
     /** null → file-list view; set → in-place preview of this file */
     previewFile: ArtifactFile | null;
     fullscreen: boolean;
+    /** Hide the fullscreen toggle — used on mobile, where the panel is already a
+     *  full-screen overlay / drawer and the toggle would be meaningless. */
+    hideFullscreenToggle?: boolean;
     onPreview: (file: ArtifactFile) => void;
     onBack: () => void;
     onClose: () => void;
@@ -35,6 +38,7 @@ export function WorkspacePanel({
     versionId,
     previewFile,
     fullscreen,
+    hideFullscreenToggle,
     onPreview,
     onBack,
     onClose,
@@ -91,18 +95,20 @@ export function WorkspacePanel({
                         <button type="button" aria-label={localize('com_linsight_download_to_view')} className={iconBtn} onClick={handleDownload}>
                             <Outlined.Download className="size-4" />
                         </button>
-                        <button
-                            type="button"
-                            aria-label={localize(fullscreen ? 'com_linsight_exit_fullscreen' : 'com_linsight_fullscreen')}
-                            className={iconBtn}
-                            onClick={onToggleFullscreen}
-                        >
-                            {fullscreen ? (
-                                <Outlined.CollapseTextInput className="size-4" />
-                            ) : (
-                                <Outlined.ExpandTextInput className="size-4" />
-                            )}
-                        </button>
+                        {!hideFullscreenToggle && (
+                            <button
+                                type="button"
+                                aria-label={localize(fullscreen ? 'com_linsight_exit_fullscreen' : 'com_linsight_fullscreen')}
+                                className={iconBtn}
+                                onClick={onToggleFullscreen}
+                            >
+                                {fullscreen ? (
+                                    <Outlined.CollapseTextInput className="size-4" />
+                                ) : (
+                                    <Outlined.ExpandTextInput className="size-4" />
+                                )}
+                            </button>
+                        )}
                         <button type="button" aria-label={localize('com_ui_close')} className={iconBtn} onClick={onClose}>
                             <Outlined.Close className="size-4" />
                         </button>

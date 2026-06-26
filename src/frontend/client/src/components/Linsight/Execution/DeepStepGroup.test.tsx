@@ -1,16 +1,18 @@
 /**
- * DeepStepGroup — regression guard for the anti-flicker fix.
+ * DeepStepGroup — regression guard for the anti-flicker fix + the quiet-open fold.
  *
- * Root cause it locks down: the group's live-vs-done UI (open/collapse default +
- * 正在/已 label) used to be driven by `group.running` ("any step mid-flight"),
- * which toggles true↔false many times within ONE live episode — thinking frames
- * ship as `status:'end'` (never running) and a tool step is running only between
- * its start/end frames. That made the whole group expand on every tool call and
- * collapse again the instant it finished ("内容上下反复跳跃").
+ * Root cause the anti-flicker fix locks down: the group's live-vs-done UI used to be
+ * driven by `group.running` ("any step mid-flight"), which toggles true↔false many
+ * times within ONE live episode — thinking frames ship as `status:'end'` (never
+ * running) and a tool step is running only between its start/end frames. Binding the
+ * 正在/已 label (and, before b1ff8967a, the fold) to it made the group flicker on
+ * every tool call ("内容上下反复跳跃").
  *
- * The fix decouples the fold/label from `group.running` and binds it to the stable
- * `active` prop (the live tail episode, owned by ExecutionTimeline). These tests
- * assert that contract: `active` — NOT `group.running` — decides expanded/running.
+ * Current contract these tests assert:
+ *  - the 正在/已 LABEL follows the stable `active` prop (the live tail episode, owned
+ *    by ExecutionTimeline), NOT `group.running`;
+ *  - the FOLD defaults COLLAPSED for every group — even the live tail — so task mode
+ *    opens quiet (b1ff8967a); it is bound to neither `active` nor `group.running`.
  */
 import { render } from '@testing-library/react';
 import { RecoilRoot } from 'recoil';
@@ -83,14 +85,16 @@ function foldRows(container: HTMLElement): string {
     return grid.style.gridTemplateRows;
 }
 
-describe('DeepStepGroup — fold/label follow `active`, not group.running', () => {
-    it('active=true expands and shows the running label even when no step is running', () => {
+describe('DeepStepGroup — label follows `active`; fold opens quiet, bound to neither', () => {
+    it('active=true shows the running label, yet opens collapsed (quiet) even as the live tail', () => {
         const { container, getByText } = renderGroup(
             makeGroup(false, [thinkingStep('c1', 'reasoning…')]),
             true,
         );
-        getByText(RUNNING_LABEL);
-        expect(foldRows(container)).toBe('1fr'); // expanded
+        getByText(RUNNING_LABEL); // label follows active, not the (false) group.running
+        // Every group — even the live tail — defaults collapsed so task mode opens
+        // quiet (b1ff8967a); the collapsed header still streams via the NarrationTicker.
+        expect(foldRows(container)).toBe('0fr');
     });
 
     it('active=false collapses and shows the done label even while group.running=true (the regression guard)', () => {
@@ -105,7 +109,7 @@ describe('DeepStepGroup — fold/label follow `active`, not group.running', () =
         expect(foldRows(container)).toBe('0fr'); // collapsed
     });
 
-    it('toggling group.running while active stays true does NOT change the fold/label (anti-flicker)', () => {
+    it('toggling group.running while active stays true changes neither the label nor the (collapsed) fold (anti-flicker)', () => {
         const steps = [thinkingStep('c1', 'reasoning…')];
         const { container, rerender, getByText } = render(
             <RecoilRoot>
@@ -113,7 +117,7 @@ describe('DeepStepGroup — fold/label follow `active`, not group.running', () =
             </RecoilRoot>,
         );
         getByText(RUNNING_LABEL);
-        expect(foldRows(container)).toBe('1fr');
+        expect(foldRows(container)).toBe('0fr');
 
         // a tool call starts → group.running flips true … (active unchanged)
         rerender(
@@ -122,7 +126,7 @@ describe('DeepStepGroup — fold/label follow `active`, not group.running', () =
             </RecoilRoot>,
         );
         getByText(RUNNING_LABEL);
-        expect(foldRows(container)).toBe('1fr');
+        expect(foldRows(container)).toBe('0fr');
 
         // … and ends → group.running flips back to false (active still unchanged)
         rerender(
@@ -131,6 +135,6 @@ describe('DeepStepGroup — fold/label follow `active`, not group.running', () =
             </RecoilRoot>,
         );
         getByText(RUNNING_LABEL);
-        expect(foldRows(container)).toBe('1fr'); // never collapsed mid-episode
+        expect(foldRows(container)).toBe('0fr'); // fold never flips with group.running
     });
 });

@@ -228,5 +228,9 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
     activeCitationMessageId: citationPanelOpen ? citationPanelPayload?.messageId ?? null : null,
     citationPanelElement,
     onOpenCitationPanel: handleOpenCitationPanel,
+    // Imperative close, for the host view to call on KeepAlive deactivate: the
+    // 768–1023 / mobile tiers portal the panel to <body>, so it survives the
+    // host being cached and would otherwise float over the tab the user switched to.
+    closeCitationPanel: handleCloseCitationPanel,
   };
 }

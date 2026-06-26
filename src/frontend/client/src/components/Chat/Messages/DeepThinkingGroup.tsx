@@ -11,6 +11,7 @@ import {
     useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type FC,
     type MouseEvent,
@@ -71,7 +72,21 @@ function durationFallback(events: AgentEvent[]): number {
 
 const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
     ({ events, isStreaming }) => {
-        const [isExpanded, setIsExpanded] = useState(true);
+        // Open while the run is live so the user can watch it; closed for
+        // already-finished groups (history rows mount with isStreaming false).
+        const [isExpanded, setIsExpanded] = useState(isStreaming);
+
+        // Auto-collapse the moment the run finishes — i.e. the main answer
+        // starts streaming and isStreaming flips false — so focus moves to the
+        // answer body without a manual click. Manual toggling stays intact
+        // afterward since we only react to the streaming → done falling edge.
+        const wasStreamingRef = useRef(isStreaming);
+        useEffect(() => {
+            if (wasStreamingRef.current && !isStreaming) {
+                setIsExpanded(false);
+            }
+            wasStreamingRef.current = isStreaming;
+        }, [isStreaming]);
 
         const start = groupStart(events);
         const end = groupEnd(events);

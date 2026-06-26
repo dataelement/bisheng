@@ -694,6 +694,17 @@ export async function getChannelSquareApi(params?: {
 }
 
 /**
+ * GET /api/v1/channel/manager/recommend
+ * 首页空状态推荐：按内容数降序的公开频道（轮播用）。
+ * 返回 { data: ChannelSquareItem[], total }，total 为满足条件的公开频道数。
+ */
+export async function getRecommendedChannelsApi(params?: {
+    limit?: number;
+}): Promise<any> {
+    return await request.get(`/api/v1/channel/manager/recommend`, { params });
+}
+
+/**
  * POST /api/v1/channel/manager/subscribe
  * 订阅频道申请
  */
