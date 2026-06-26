@@ -11,22 +11,57 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
-| tasks.md | 🔲 草稿 | 拆解完成后改为 ✅ 已拆解（待 design 定稿后再细化下方任务表） |
+| tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
 | 实现 | 🔲 未开始 | 0 / N 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
-## 待办（spec→design 之间）
+## 开发模式
 
-- [ ] 起草 design.md：落实 5 组（A 频道详情 / B 空间广场 / C 工作台列表 / D 侧边栏懒加载 / E 名册版本派生 key 缓存）的 file:line 锚点与 How。
-- [ ] design 中**必须**给出 **INV-6 豁免论证**（B 组 `/space/joined`·`/space/department` 保持全返回，与「所有 ReBAC 列表用 cursor」的张力）或在 release-contract 登记例外。
-- [ ] design 中明确 E 组与 F036 design §3/§8 的边界（版本派生 key 解耦缓存 ≠ F036 否决的 TTL/写路径钩子方案）。
-- [ ] 在 `feat/2.6.0` 的 `features/v2.6.0/release-contract.md` 登记 F039（表 1 领域归属 / 表 3 依赖 F004·F008·F027·F036·F037 / 新增对外 API `GET /channel/manager/{id}/unread-counts` / 变更历史）。
-
-> 任务级拆解（Wave + TDD）待 design 定稿后填入下表。
+- **后端 Test-First（务实版）**：等价性是安全红线——每个后端改造任务先写"改造前逐项/全量 oracle == 改造后"的等价测试（红），再改实现（绿）。中间件/DM8/e2e 在 CI 跑。
+- **前端手动验证**：每个前端任务附验证步骤（seed 造数后人工走查）。
+- **Wave 依赖**：Wave 1 后端基础（E 缓存 + A 上下文/缓存，互相独立可并行）；Wave 2 后端拆分/批量/cursor；Wave 3 前端（依赖 Wave 2 契约）；最后 Wave 4 静态+性能验证。
 
 ## 执行记录（TDD，wave 顺序）
 
-| # | 任务 | 产物 | 覆盖 AC | 状态 |
-|---|---|---|---|---|
-| — | 待 design 定稿后拆解 | — | — | 🔲 |
+### Wave 0 — 治理（基础设施优先）
+
+| # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
+|---|---|---|---|---|---|
+| T0 | 登记 F039 到 `feat/2.6.0` 的 release-contract：表1「无新增领域对象 + 新增对外 API `…/unread-counts`」、表3 依赖 F004·F008·F027·F036·F037、**INV-6 例外条款**（per-user 有界且无深翻可全返回，但 N+1 必批量化）、变更历史。**跨 Feature 影响**：T2/T3/T4 改 `channel_service.py`（F026/F031/F037 邻接）仅改计算机制、不改授权/订阅语义（design §6.3） | `features/v2.6.0/release-contract.md` | 治理 | — | 🔲 |
+
+### Wave 1 — 后端基础（基础设施，可并行）
+
+| # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
+|---|---|---|---|---|---|
+| T1 | **E 名册版本派生 key 缓存层**：新建缓存工具（per-tenant LRU + 轻量版本读 helper：`SELECT update_time` 不取 value 大列；主体串按 `(user_id, max(update_time) over user_group_link+user_department)`）+ fail-safe 回落；`_get_relation_bindings`/`_get_relation_models_map`/`_get_current_user_subject_strings`（`knowledge_space_service.py`）接入。先写等价测试（命中==实时构建、版本变即失效、tenant 隔离），后改实现。**无 DB schema 变更**（仅新增只读轻量查询） | 新 cache util + `knowledge_space_service.py` | AC-03, AC-21, AC-22, AC-23, AC-24, AC-25, AC-30 | 无 | 🔲 |
+| T2 | **A 频道详情上下文复用 + membership 去重**：`get_channel_detail`（`channel_service.py`）传 `context=_build_channel_permission_context(...)`；合并两处 `find_membership`。先写等价测试（permission_ids 不变），后改实现 | `channel_service.py` | AC-04, AC-06 | 无 | 🔲 |
+| T3 | **A 文章总数 Redis 短 TTL 缓存**：新建 `ArticleCountCache`（key `article:count:{tenant_id}:channel:{id}:main`，TTL 60–120s，miss/Redis 挂回落 ES 并回填）；`get_channel_detail`/`get_channel_square` 接入。先写测试（命中不查 ES、miss 回落） | 新 cache 模块 + `channel_service.py` | AC-07, AC-27 | 无 | 🔲 |
+
+### Wave 2 — 后端拆分 / 批量 / cursor
+
+| # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
+|---|---|---|---|---|---|
+| T4 | **A 未读拆独立端点**：新增 `GET /channel/manager/{id}/unread-counts`（service 方法内 `count_articles_batch`/msearch）；`get_channel_detail` 移除 `_calculate_sub_channel_unread_counts` 调用 + 响应去 `sub_channel_unread_counts`。先写等价测试（端点返回与改造前逐子频道计算一致） | `channel_manager.py`(router) + `channel_service.py` + schema | AC-01, AC-05, AC-26 | T2 | 🔲 |
+| T5 | **B 空间广场批量化**：`_format_accessible_spaces`（`knowledge_space_service.py`）逐空间 `get_permission_level`→单次 `batch_check`、effective_ids→`filter_object_ids_by_permission_async` 共享上下文；`list_uploadable_spaces` 并行+共享上下文。先写等价测试（返回空间集+权限标记不变、全返回契约不动、fail-closed） | `knowledge_space_service.py` | AC-01, AC-03, AC-08, AC-09, AC-10, AC-11, AC-28 | 无 | 🔲 |
+| T6a | **C 助手列表 cursor**：`get_all_assistants(name,0,0,...)` 去 fetch-all-slice，改 cursor 边取边筛 / accessible-id 预过滤；复用 `common/cursor.py` + `AppInvalidCursorError`(10550)。先写等价测试（同页结果集不变） | `bisheng/api/services/assistant.py` | AC-01, AC-12, AC-13, AC-14 | 无 | 🔲 |
+| T6b | **C 工作台最近·常用·推荐 cursor**：`workflow.py`/`apps.py` 去 `page=0,limit=0`+手切，最近·常用改 cursor、推荐改有界拉取+共享上下文过滤；复用 `AppInvalidCursorError`(10550)。先写等价测试 | `bisheng/api/services/workflow.py`, `bisheng/workstation/api/endpoints/apps.py` | AC-01, AC-12, AC-13, AC-14, AC-15 | 无 | 🔲 |
+| T6c | **C 空间文件搜索 cursor**：`search_space_children`（`knowledge_space_service.py`）去 `_paginate_items` 手切，改 `_scan_visible_child_items` 边取边筛范式；复用 `KnowledgeSpaceInvalidCursorError`(18070)。先写等价测试（含 INV-7 不放宽可见性） | `knowledge_space_service.py` | AC-01, AC-02, AC-12, AC-13, AC-14 | 无 | 🔲 |
+
+### Wave 3 — 前端（依赖 Wave 2 契约；分 Platform / Client）
+
+| # | 任务 | 分区 | 产物 | 覆盖 AC | 依赖 | 状态 |
+|---|---|---|---|---|---|---|
+| T7 | **A 频道 ArticleList 改造**：详情不再读 `sub_channel_unread_counts`；进入频道后独立调 `…/unread-counts` 填角标；失败降级 0/不显示。验证：预览弹窗无未读请求、in-channel 角标正常 | **Client** | `src/frontend/client/`：`ArticleList.tsx`, `channels.ts` + TS 类型 | AC-05 | T4 | 🔲 |
+| T8a | **C 助手列表无限滚动**：`useInfiniteQuery` + cursor 触底加载 + cursor 错误码 reset + 去「共 X 个」文案 | **Platform** | `src/frontend/platform/`：助手列表组件 + API 封装 | AC-12, AC-13 | T6a | 🔲 |
+| T8b | **C 工作台列表 + 文件搜索无限滚动**：`useInfiniteQuery` + cursor 触底 + 错误码 reset | **Client** | `src/frontend/client/`：工作台/文件搜索组件 + API 封装 | AC-12, AC-13 | T6b, T6c | 🔲 |
+| T9a | **D 侧栏移除 mount 预取**：`useKnowledgeSpaceActionPermissions` 渲染期批量 `checkPermission` 移除；`KnowledgeSpaceSidebar` 不再首屏预判 | **Client** | `src/frontend/client/`：`useKnowledgeSpacePermissions.ts`, `KnowledgeSpaceSidebar.tsx` | AC-16, AC-29 | 无 | 🔲 |
+| T9b | **D 菜单按需查权限**：`KnowledgeSpaceItem`/`KnowledgeSpaceCardItem` 菜单 `onOpenChange` 触发该空间 `checkPermission` + 组件级缓存 + 加载/失败 fail-closed + 超管短路。验证：菜单打开才查、按钮集合与改造前一致 | **Client** | `src/frontend/client/`：`KnowledgeSpaceItem.tsx`, `KnowledgeSpaceCardItem.tsx` | AC-17, AC-18, AC-19, AC-20 | T9a | 🔲 |
+
+> **横切等价 AC**：AC-01（A/B/C 对象集/permission_ids 等价）由 T4·T5·T6a·T6b·T6c 等价测试覆盖；AC-02（INV-7）由 T6c 覆盖；AC-03（fail-closed）由 T1·T5 覆盖；AC-19·AC-20（D 组按钮等价）由 T9b 覆盖。
+
+### Wave 4 — 验证
+
+| # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
+|---|---|---|---|---|---|
+| T10 | **静态扫描 + 性能基线**：按 AC-31 grep 断言（详情不再调 `_calculate_sub_channel_unread_counts`、广场无逐空间 `get_permission_level`、C 组无 `page=0,limit=0` 后切片、侧栏无 mount 期批量 `checkPermission`、E 组 key 含版本/哈希且写路径零失效调用）；用 `seed_load_test_org.sh` 造大用户量数据，压 `/channel/manager/{id}`、`/space/joined`、`/children` 深展开，记录 DB/FGA/ES 往返数 + P95 对比 design §7.1，落 `loadtest-report.md` | `loadtest-report.md` | AC-26, AC-27, AC-28, AC-29, AC-30, AC-31 | T1~T9b | 🔲 |
