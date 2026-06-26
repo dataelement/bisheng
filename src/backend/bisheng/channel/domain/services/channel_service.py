@@ -1093,6 +1093,15 @@ class ChannelService:
         )
 
     @staticmethod
+    async def _user_can_edit_channel(user_id: int, channel_id: str) -> bool:
+        return await PermissionService.check(
+            user_id=user_id,
+            relation="can_edit",
+            object_type="channel",
+            object_id=channel_id,
+        )
+
+    @staticmethod
     async def _user_can_read_channel(user_id: int, channel_id: str) -> bool:
         return await PermissionService.check(
             user_id=user_id,
@@ -1194,9 +1203,7 @@ class ChannelService:
 
         return ChannelSquarePageResponse(data=result_list, total=total)
 
-    async def get_recommended_channels(
-        self, login_user: UserPayload, limit: int = 12
-    ) -> ChannelSquarePageResponse:
+    async def get_recommended_channels(self, login_user: UserPayload, limit: int = 12) -> ChannelSquarePageResponse:
         """
         Home-page discovery recommendations: released PUBLIC channels sorted by
         content (article) count descending, for the empty-state carousel shown to
@@ -1208,9 +1215,7 @@ class ChannelService:
         ``total`` is the number of qualifying public channels (capped at the candidate
         limit) so the frontend can fall back to the empty illustration when < 3.
         """
-        rows = await self.channel_repository.find_public_recommend_channels(
-            user_id=login_user.user_id
-        )
+        rows = await self.channel_repository.find_public_recommend_channels(user_id=login_user.user_id)
 
         items = await self._build_square_items(rows)
 
@@ -1534,19 +1539,12 @@ class ChannelService:
         if not channel:
             raise ChannelNotFoundError()
 
-        # 2. Verify current user can edit channel settings
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
-        )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not a member of this channel")
-
-        current_relation = resolve_channel_relation(current_membership)
-        if current_relation not in {
-            ChannelRelationEnum.OWNER,
-            ChannelRelationEnum.MANAGER,
-            ChannelRelationEnum.EDITOR,
-        }:
+        # 2. Verify current user can edit channel settings. Super admins are always
+        # allowed; otherwise the ReBAC ``can_edit`` relation decides. ``can_edit`` is
+        # satisfied by owner / manager / editor (permission pyramid), and—unlike the
+        # membership table—also honours edit grants delivered through departments,
+        # user groups or direct OpenFGA tuples.
+        if not login_user.is_admin() and not await self._user_can_edit_channel(login_user.user_id, channel_id):
             raise ChannelPermissionDeniedError(
                 msg="Only the owner, manager, or editor can update the channel information"
             )
@@ -2005,8 +2003,8 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user may dismiss the channel: either the creator, or
-        #    a user explicitly granted the `delete_channel` fine-grained permission.
+        # 2. Verify current user may dismiss the channel: a super admin, the creator,
+        #    or a user granted the `delete_channel` fine-grained permission via ReBAC.
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
@@ -2015,7 +2013,7 @@ class ChannelService:
             and current_membership.status == MembershipStatusEnum.ACTIVE
             and current_membership.user_role == UserRoleEnum.CREATOR
         )
-        if not is_active_creator:
+        if not login_user.is_admin() and not is_active_creator:
             permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
             if "delete_channel" not in permission_ids:
                 raise ChannelPermissionDeniedError(
