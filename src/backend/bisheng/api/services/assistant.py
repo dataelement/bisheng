@@ -155,12 +155,16 @@ class AssistantService(BaseService, AssistantUtils):
             if is_admin:
                 kept = batch
             else:
+                # Coalesce once so the permission-map request and the keep-filter
+                # agree (a None permission_id must not fetch 'use_app' yet filter
+                # on `None in <set>`, which would drop every row).
+                required_permission_id = permission_id or "use_app"
                 permission_map = await ApplicationPermissionService.get_app_permission_map_async(
                     user,
                     [{"id": one.id, "flow_type": FlowType.ASSISTANT.value} for one in batch],
-                    ["use_app" if permission_id is None else permission_id, "edit_app"],
+                    [required_permission_id, "edit_app"],
                 )
-                kept = [one for one in batch if permission_id in permission_map.get(str(one.id), set())]
+                kept = [one for one in batch if required_permission_id in permission_map.get(str(one.id), set())]
                 editable_ids |= {str(app_id) for app_id, perms in permission_map.items() if "edit_app" in perms}
 
             for item in kept:
