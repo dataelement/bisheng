@@ -55,7 +55,7 @@ class Question(SQLModel, table=True):
     title: str = Field(index=True)
     description: str
     business_domain: str = Field(index=True)
-    status: int = Field(default=0, index=True)  # 0: 未解决, 1: 已解决, 2: 已关闭
+    status: int = Field(default=0, index=True)  # 0: 未解决, 1: 已解决, 2: 已关闭 3.待采纳
     attachments: Optional[str] = Field(default=None, description="附件列表")
     related_docs: Optional[str] = Field(default=None, description="关联文档 ID 列表")
     invited_experts: Optional[str] = Field(default=None, description="被邀请的专家 ID 列表")

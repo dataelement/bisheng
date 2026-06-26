@@ -136,25 +136,25 @@ async def delete_expert(
     except Exception as e:
         return resp_500(code=500, msg=str(e))
 
-@router.delete("/experts/{expert_name}")
+@router.get("/experts/name/{expert_name}")
 async def expertsinfo(
     expert_name: str,
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: ExpertService = Depends(get_expert_service),
 ):
-    """删除专家"""
+    """获取专家"""
    
     experinfo = await service.get_expertinfo(expert_name)
     return resp_200(data=experinfo)
   
 
-@router.get("/experts/{user_id}")
+@router.get("/experts/userid/{user_id}")
 async def expertsinfo_id(
     user_id: int,
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: ExpertService = Depends(get_expert_service),
 ):
-    """删除专家"""
+    """获取专家"""
    
     experinfo = await service.get_expertinfobyid(user_id)
     return resp_200(data=experinfo)
@@ -311,10 +311,10 @@ async def get_answers(
     return resp_200(data={"answers": answers, "total": total})
 
 
-@router.get("/answers/{question_id}")
+@router.get("/questions/{question_id}/answers")
 async def get_answersbyname(
     question_id: int = Path(..., ge=1),
-    expert_name: str = Query(...),
+    expert_name: Optional[str] = Query(None), 
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: AnswerService = Depends(get_answer_service),
 ):

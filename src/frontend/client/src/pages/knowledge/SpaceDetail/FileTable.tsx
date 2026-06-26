@@ -8,8 +8,6 @@ import {
 import {
     Download,
     Edit,
-    FileImageIcon,
-    FileUserIcon,
     GitBranch,
     History,
     MoreVertical,
@@ -31,6 +29,7 @@ import {
 import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
 import { EditEncodingModal } from "./EditEncodingModal";
+import FileIconRenderer from "./FileIcon";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
@@ -121,6 +120,7 @@ function useResizableColumns({ includeBusinessDomain }: { includeBusinessDomain:
     });
 
     const dragging = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null);
+    const resizingInteractionUntilRef = useRef(0);
 
     const onResizeStart = useCallback((columnKey: ColumnKey, e: React.MouseEvent) => {
         e.preventDefault();
@@ -131,12 +131,14 @@ function useResizableColumns({ includeBusinessDomain }: { includeBusinessDomain:
             startX: e.clientX,
             startWidth: columnWidths[columnKey],
         };
+        resizingInteractionUntilRef.current = Date.now() + 300;
 
         // 拖拽时全局禁止选中、设置 cursor
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
 
         const onMouseMove = (ev: MouseEvent) => {
+            resizingInteractionUntilRef.current = Date.now() + 300;
             const d = dragging.current;
             if (!d) return;
             const delta = ev.clientX - d.startX;
@@ -150,6 +152,7 @@ function useResizableColumns({ includeBusinessDomain }: { includeBusinessDomain:
         };
 
         const onMouseUp = () => {
+            resizingInteractionUntilRef.current = Date.now() + 300;
             dragging.current = null;
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
@@ -161,6 +164,10 @@ function useResizableColumns({ includeBusinessDomain }: { includeBusinessDomain:
         document.addEventListener("mouseup", onMouseUp);
     }, [columnWidths]);
 
+    const isResizingInteraction = useCallback(() => (
+        dragging.current !== null || Date.now() < resizingInteractionUntilRef.current
+    ), []);
+
     const totalWidth = useMemo(
         () => Object.entries(columnWidths).reduce((sum, [key, width]) => {
             if (key === "businessDomain" && !includeBusinessDomain) return sum;
@@ -169,7 +176,7 @@ function useResizableColumns({ includeBusinessDomain }: { includeBusinessDomain:
         [columnWidths, includeBusinessDomain]
     );
 
-    return { columnWidths, onResizeStart, totalWidth };
+    return { columnWidths, onResizeStart, totalWidth, isResizingInteraction };
 }
 
 // ============================================================
@@ -292,9 +299,16 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
 // 拖拽手柄
 // ============================================================
 function ResizeHandle({ columnKey, onResizeStart }: { columnKey: ColumnKey; onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void }) {
+    const stopResizeClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
     return (
         <div
             className="group/handle absolute right-0 top-0 bottom-0 z-10 flex w-2 cursor-col-resize items-center justify-center translate-x-1/2"
+            onClick={stopResizeClick}
+            onDoubleClick={stopResizeClick}
             onMouseDown={(e) => onResizeStart(columnKey, e)}
         >
             {/* 高亮线与列分界线对齐：手柄跨在相邻两列边界上，避免命中区偏在分割线左侧 */}
@@ -328,6 +342,7 @@ const SortableHeader = ({
     width,
     columnKey,
     onResizeStart,
+    isResizingInteraction,
     stickyLeft,
     showShadow,
     /** 表头内容与排序图标整体右对齐（与数字列单元格一致） */
@@ -344,6 +359,7 @@ const SortableHeader = ({
     width: number;
     columnKey: ColumnKey;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
+    isResizingInteraction?: () => boolean;
     stickyLeft?: number;
     showShadow?: boolean;
     headerAlignEnd?: boolean;
@@ -380,7 +396,14 @@ const SortableHeader = ({
                 maxWidth: width,
                 ...(isSticky ? { left: stickyLeft } : {}),
             }}
-            onClick={() => onSort(sortKey)}
+            onClick={(event) => {
+                if (isResizingInteraction?.()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+                onSort(sortKey);
+            }}
         >
             <div
                 className={cn(
@@ -414,6 +437,7 @@ const SortableHeader = ({
 function FileTableHeader({
     columnWidths,
     onResizeStart,
+    isResizingInteraction,
     showLeftShadow,
     showRightShadow,
     sortBy,
@@ -429,6 +453,7 @@ function FileTableHeader({
 }: {
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
+    isResizingInteraction: () => boolean;
     showLeftShadow: boolean;
     showRightShadow: boolean;
     sortBy: SortType | undefined;
@@ -474,6 +499,7 @@ function FileTableHeader({
                     width={columnWidths.name}
                     columnKey="name"
                     onResizeStart={onResizeStart}
+                    isResizingInteraction={isResizingInteraction}
                     stickyLeft={columnWidths.checkbox}
                     showShadow={showLeftShadow}
                     leadingBorder={false}
@@ -488,6 +514,7 @@ function FileTableHeader({
                         width={columnWidths.fileType}
                         columnKey="fileType"
                         onResizeStart={onResizeStart}
+                        isResizingInteraction={isResizingInteraction}
                     >
                         {localize("com_knowledge.type")}</SortableHeader>
                 )}
@@ -500,6 +527,7 @@ function FileTableHeader({
                     width={columnWidths.size}
                     columnKey="size"
                     onResizeStart={onResizeStart}
+                    isResizingInteraction={isResizingInteraction}
                     headerAlignEnd
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
@@ -570,6 +598,7 @@ function FileTableHeader({
                     width={columnWidths.updateTime}
                     columnKey="updateTime"
                     onResizeStart={onResizeStart}
+                    isResizingInteraction={isResizingInteraction}
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
@@ -643,7 +672,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
     const showEncodingClassification = shougangEnabled && enableEncodingClassification;
-    const { columnWidths, onResizeStart, totalWidth } = useResizableColumns({
+    const { columnWidths, onResizeStart, totalWidth, isResizingInteraction } = useResizableColumns({
         includeBusinessDomain: showEncodingClassification,
     });
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -766,7 +795,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     scrollRef.current = el;
                     hScrollRevealRef(el);
                 }}
-                className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-scroll"
+                className="max-w-full overflow-x-auto overflow-y-visible pb-2 [scrollbar-color:#c9cdd4_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c9cdd4] [&::-webkit-scrollbar-track]:bg-transparent"
             >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"
@@ -779,6 +808,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     <FileTableHeader
                         columnWidths={columnWidths}
                         onResizeStart={onResizeStart}
+                        isResizingInteraction={isResizingInteraction}
                         showLeftShadow={showLeftShadow}
                         showRightShadow={showRightShadow}
                         sortBy={sortBy}
@@ -1170,19 +1200,7 @@ function FileRow({
             >
                 <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
                     <div className="flex size-[14px] shrink-0 items-center justify-center rounded-sm bg-white">
-                        {isFolder
-                            ? (
-                                <img
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/folder-close.svg`}
-                                    alt=""
-                                    data-testid={`portal-folder-icon-${file.id}`}
-                                    className="size-[14px] object-contain"
-                                />
-                            )
-                            : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
-                                ? <FileImageIcon className="size-[14px]" data-testid={`legacy-file-icon-${file.name.split('.').pop()?.toLowerCase() || "file"}`} />
-                                : <FileUserIcon className="size-[14px]" data-testid={`legacy-file-icon-${file.name.split('.').pop()?.toLowerCase() || "file"}`} />)
-                        }
+                        <FileIconRenderer file={file} isFolder={isFolder} className="size-[14px]" showThumbnail={false} />
                     </div>
                     {isRenaming ? (
                         <input

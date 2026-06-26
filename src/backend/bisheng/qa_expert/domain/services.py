@@ -196,6 +196,8 @@ class QuestionService:
         await self.repository.update(question_id, view_count=question.view_count)
         return question
 
+
+
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
         """采纳最佳回答"""
         question = await self.repository.get_by_id(question_id)

@@ -467,10 +467,10 @@ export function CreateKnowledgeSpaceDrawer({
                 side="right"
                 hideClose
                 className={cn(
-                    "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
+                    "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-4 sm:max-w-[1000px]"
                 )}
             >
-                <SheetHeader className="sticky top-0 z-10 mx-6 bg-white pb-4 pt-6 touch-mobile:mx-0">
+                <SheetHeader className="sticky top-0 z-10 mx-0 bg-white pb-4 pt-6">
                     <div className="flex items-center justify-between gap-3">
                         <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                             {mode === "edit" ? localize("com_knowledge.edit_space") : localize("com_knowledge.create_knowledge_space")}
@@ -520,7 +520,7 @@ export function CreateKnowledgeSpaceDrawer({
                     </div>
                 ) : (
                     <div className="scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                        <div className="mx-auto w-full max-w-[800px] space-y-7 overflow-visible px-6 py-5 touch-mobile:max-w-none touch-mobile:px-0">
+                        <div className="mx-auto w-full max-w-[800px] space-y-7 overflow-visible px-0 py-5 touch-mobile:max-w-none">
                             {/* 空间层级 */}
                             <div className="space-y-3">
                                 <Label className="text-sm text-[#1D2129] font-medium">
@@ -956,7 +956,7 @@ export function CreateKnowledgeSpaceDrawer({
                 )}
 
                 {!showSuccess && (
-                    <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                    <div className="sticky bottom-0 z-10 mt-auto mx-0 flex justify-end gap-3 bg-white px-0 pb-5 pt-10 touch-mobile:gap-2 touch-mobile:pt-4">
                         <div className="mx-auto flex w-full max-w-[800px] justify-end gap-3 touch-mobile:max-w-none">
                             <Button
                                 variant="secondary"

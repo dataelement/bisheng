@@ -1,6 +1,5 @@
 import type { MutableRefObject } from "react";
 import {
-    ChevronDown,
     ChevronRight,
     LogOut,
     MoreHorizontal,
@@ -10,6 +9,7 @@ import {
     Settings,
     UsersRound,
     X,
+    ChevronDown
 } from "lucide-react";
 import {
     DropdownMenu,
@@ -238,7 +238,6 @@ export function SpaceSidebar({
                             />
                         </span>
                         <span>我的知识库</span>
-                        <ChevronDown size={13} style={{ marginLeft: "auto" }} />
                     </div>
                     <div className={s.spaceList}>
                         {groups.map((group) => {

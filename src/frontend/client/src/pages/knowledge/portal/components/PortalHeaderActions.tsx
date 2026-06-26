@@ -40,7 +40,8 @@ export function PortalHeaderActions({
                 title={canUpload ? "上传" : "无上传权限"}
                 aria-label="上传"
             >
-                <Upload size={14} />
+                {/* <Upload size={14} /> */}
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/upload.png`} alt="" className="size-[14px]" />
             </button>
             <button
                 type="button"
@@ -50,7 +51,8 @@ export function PortalHeaderActions({
                 title={canUpload ? "网页链接" : "无上传权限"}
                 aria-label="网页链接"
             >
-                <Globe2 size={14} />
+                {/* <Globe2 size={14} /> */}
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/web-link.png`} alt="" className="size-[14px]" />
             </button>
             <button
                 type="button"
@@ -59,7 +61,8 @@ export function PortalHeaderActions({
                 title="在线创建文档"
                 aria-label="在线创建文档"
             >
-                <SquarePen size={14} />
+                {/* <SquarePen size={14} /> */}
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/create-doc.png`} alt="" className="size-[14px]" />
             </button>
             <button
                 type="button"
@@ -69,7 +72,9 @@ export function PortalHeaderActions({
                 title={canCreateFolder ? "新建文件夹" : "无创建权限"}
                 aria-label="新建文件夹"
             >
-                <FolderPlus size={14} />
+                
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/new-folder.png`} alt="" className="size-[14px]" />
+                {/* <FolderPlus size={14} /> */}
             </button>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
