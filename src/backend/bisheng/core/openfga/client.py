@@ -122,15 +122,23 @@ class FGAClient:
 
     # ── Core permission methods ──────────────────────────────────
 
-    async def check(self, user: str, relation: str, object: str) -> bool:
+    async def check(self, user: str, relation: str, object: str, consistency: str | None = None) -> bool:
         """Check if user has relation on object.
 
         Returns True/False. Raises FGAConnectionError on network failure.
+
+        ``consistency`` maps to OpenFGA's request-level consistency preference
+        (e.g. ``"HIGHER_CONSISTENCY"``). It defaults to the server default
+        (``MINIMIZE_LATENCY``, eventually consistent); pass
+        ``"HIGHER_CONSISTENCY"`` for read-after-write reads that must observe a
+        tuple written moments earlier.
         """
-        body = {
+        body: dict[str, Any] = {
             "tuple_key": {"user": user, "relation": relation, "object": object},
             "authorization_model_id": self._model_id,
         }
+        if consistency:
+            body["consistency"] = consistency
         data = await self._post(f"/stores/{self._store_id}/check", body)
         return data.get("allowed", False)
 
