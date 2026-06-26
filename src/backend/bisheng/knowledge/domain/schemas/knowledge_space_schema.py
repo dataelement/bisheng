@@ -192,6 +192,7 @@ class ShougangPortalPersonalSpaceItemResp(BaseModel):
     description: str = Field(default="", description="Knowledge Space description")
     file_count: int = Field(default=0, description="Successful file count")
     updated_at: str = Field(default="", description="Last update time")
+    is_favorite: bool = Field(default=False, description="是否为『我的收藏』固定库")
 
 
 class ShougangPortalPersonalSpacesResp(BaseModel):

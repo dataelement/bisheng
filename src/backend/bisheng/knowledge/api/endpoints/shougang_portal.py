@@ -13,6 +13,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalDomainFileCountResp,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
+    ShougangPortalFavoriteFilesResp,
+    ShougangPortalFavoriteRemoveReq,
+    ShougangPortalFavoriteRemoveResp,
+    ShougangPortalFavoriteStatusReq,
+    ShougangPortalFavoriteStatusResp,
     ShougangPortalFileSearchReq,
     ShougangPortalFileSearchResp,
     ShougangPortalHomeReq,
@@ -64,6 +69,40 @@ async def create_shougang_portal_favorite(
         return resp_200(ShougangPortalFavoriteCreateResp(**raw).model_dump(mode='json'))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
+
+
+@router.post('/favorites/remove')
+async def remove_shougang_portal_favorite(
+        req: ShougangPortalFavoriteRemoveReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        result = await svc.remove_shougang_portal_favorite(req)
+        raw = result.model_dump() if hasattr(result, 'model_dump') else result
+        return resp_200(ShougangPortalFavoriteRemoveResp(**raw).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.post('/favorites/status')
+async def get_shougang_portal_favorite_status(
+        req: ShougangPortalFavoriteStatusReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_shougang_portal_favorite_status(req)
+    raw = result.model_dump() if hasattr(result, 'model_dump') else result
+    return resp_200(ShougangPortalFavoriteStatusResp(**raw).model_dump(mode='json'))
+
+
+@router.get('/favorites/files')
+async def list_shougang_portal_favorites(
+        page: int = 1,
+        page_size: int = 20,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.list_shougang_portal_favorites(page=page, page_size=page_size)
+    raw = result.model_dump() if hasattr(result, 'model_dump') else result
+    return resp_200(ShougangPortalFavoriteFilesResp(**raw).model_dump(mode='json'))
 
 
 @router.post('/share-links')

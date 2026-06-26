@@ -56,21 +56,61 @@ class _FakeKnowledgeSpaceService:
         return {
             "data": [
                 {
+                    "id": 200,
+                    "name": "我的收藏",
+                    "description": "",
+                    "file_count": 0,
+                    "updated_at": "",
+                    "is_favorite": True,
+                },
+                {
                     "id": 7,
                     "name": "个人沉淀库",
                     "description": "个人知识空间",
                     "file_count": 3,
                     "updated_at": "2026-05-15T09:30:00",
-                }
+                    "is_favorite": False,
+                },
             ],
-            "total": 1,
+            "total": 2,
         }
 
     async def create_shougang_portal_favorite(self, req):
         return {
-            "file_id": 99,
-            "space_id": req.target_space_id,
+            "favorite_file_id": 99,
+            "space_id": 200,
+            "source_space_id": req.source_space_id,
+            "source_file_id": req.source_file_id,
             "title": "热轧1580产线精轧机振动纹治理实践",
+        }
+
+    async def remove_shougang_portal_favorite(self, req):
+        return {"removed": True}
+
+    async def get_shougang_portal_favorite_status(self, req):
+        return {
+            "data": [
+                {"space_id": it.space_id, "file_id": it.file_id, "favorited": True}
+                for it in req.items
+            ]
+        }
+
+    async def list_shougang_portal_favorites(self, page=1, page_size=20):
+        return {
+            "data": [
+                {
+                    "favorite_file_id": 9,
+                    "source_space_id": 1,
+                    "source_file_id": 2,
+                    "title": "doc",
+                    "file_name": "doc.pdf",
+                    "status": "invalid",
+                    "updated_at": "",
+                }
+            ],
+            "total": 1,
+            "page": page,
+            "page_size": page_size,
         }
 
     async def create_shougang_portal_share_link(self, req):
@@ -238,8 +278,9 @@ async def test_shougang_portal_personal_spaces_returns_current_user_spaces(monke
             sys.modules[endpoint_module_name] = previous_endpoint_module
 
     assert response.status_code == 200
-    assert response.data["total"] == 1
-    assert response.data["data"][0]["id"] == 7
+    assert response.data["total"] == 2
+    assert response.data["data"][0]["is_favorite"] is True
+    assert response.data["data"][0]["name"] == "我的收藏"
 
 
 @pytest.mark.asyncio
@@ -252,7 +293,6 @@ async def test_shougang_portal_create_favorite_delegates_to_service(monkeypatch:
         req = endpoint.ShougangPortalFavoriteCreateReq(
             source_space_id=12,
             source_file_id=1580,
-            target_space_id=7,
         )
         response = await endpoint.create_shougang_portal_favorite(req, svc=_FakeKnowledgeSpaceService())
     finally:
@@ -263,10 +303,70 @@ async def test_shougang_portal_create_favorite_delegates_to_service(monkeypatch:
 
     assert response.status_code == 200
     assert response.data == {
-        "file_id": 99,
-        "space_id": 7,
+        "favorite_file_id": 99,
+        "space_id": 200,
+        "source_space_id": 12,
+        "source_file_id": 1580,
         "title": "热轧1580产线精轧机振动纹治理实践",
     }
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_remove_favorite_delegates(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        req = endpoint.ShougangPortalFavoriteRemoveReq(source_space_id=1, source_file_id=2)
+        response = await endpoint.remove_shougang_portal_favorite(req, svc=_FakeKnowledgeSpaceService())
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert response.data["removed"] is True
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_favorite_status_delegates(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        req = endpoint.ShougangPortalFavoriteStatusReq(items=[{"space_id": 1, "file_id": 2}])
+        response = await endpoint.get_shougang_portal_favorite_status(req, svc=_FakeKnowledgeSpaceService())
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert response.data["data"][0]["favorited"] is True
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_list_favorites_delegates(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        response = await endpoint.list_shougang_portal_favorites(
+            page=1, page_size=20, svc=_FakeKnowledgeSpaceService())
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert response.data["total"] == 1
+    assert response.data["data"][0]["status"] == "invalid"
 
 
 @pytest.mark.asyncio

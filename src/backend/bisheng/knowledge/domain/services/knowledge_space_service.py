@@ -2196,12 +2196,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def get_shougang_portal_personal_spaces(self) -> Dict:
         grouped = await self.get_grouped_spaces()
+        fav_space_id: Optional[int] = None
+        try:
+            fav = await self._ensure_favorite_space()
+            fav_space_id = int(fav.id)
+        except Exception as exc:  # best-effort：收藏库懒创建失败不应阻断个人库列表
+            logger.warning("ensure favorite space failed in personal-spaces: {}", exc)
         items: List[ShougangPortalPersonalSpaceItemResp] = []
         for space in getattr(grouped, 'personal_spaces', []) or []:
             if getattr(space, 'space_level', KnowledgeSpaceLevelEnum.PERSONAL) != KnowledgeSpaceLevelEnum.PERSONAL:
                 continue
+            is_fav = bool(getattr(space, 'is_favorite', False)) or (
+                fav_space_id is not None and int(space.id) == fav_space_id)
             permission_ids = await self._get_effective_permission_ids('knowledge_space', int(space.id))
-            if 'upload_file' not in permission_ids:
+            if 'upload_file' not in permission_ids and not is_fav:
                 continue
             items.append(
                 ShougangPortalPersonalSpaceItemResp(
@@ -2210,8 +2218,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     description=str(space.description or ''),
                     file_count=int(getattr(space, 'file_num', 0) or 0),
                     updated_at=self._serialize_datetime(getattr(space, 'update_time', None)),
+                    is_favorite=is_fav,
                 )
             )
+        # 收藏库若刚建、尚未出现在 grouped 里，补进列表
+        if fav_space_id is not None and not any(it.id == fav_space_id for it in items):
+            fav_row = await KnowledgeDao.aquery_by_id(fav_space_id)
+            if fav_row:
+                items.append(
+                    ShougangPortalPersonalSpaceItemResp(
+                        id=fav_space_id,
+                        name=str(fav_row.name or '我的收藏'),
+                        description=str(fav_row.description or ''),
+                        file_count=0,
+                        updated_at=self._serialize_datetime(getattr(fav_row, 'update_time', None)),
+                        is_favorite=True,
+                    )
+                )
+        items.sort(key=lambda x: (not x.is_favorite))  # 收藏库排首位
         data = [item.model_dump(mode='json') for item in items]
         return {"data": data, "total": len(data)}
 
