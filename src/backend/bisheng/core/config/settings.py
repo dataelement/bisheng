@@ -440,6 +440,19 @@ class VersionManagementConf(BaseModel):
         le=1.0,
         description="Similarity threshold (1 - hamming/64) to flag a file as 'similar'. Range [0, 1].",
     )
+    enable_tfidf_refine: bool = Field(
+        default=True,
+        description="Re-score simhash-matched candidates with a TF-IDF cosine over actual chunk "
+                    "text, to drop false positives (simhash ~100% on template-only matches). "
+                    "Falls back to pure simhash when ES text is unavailable.",
+    )
+    tfidf_similarity_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="TF-IDF cosine threshold for the refine pass: candidates below this are "
+                    "dropped even if their simhash cleared simhash_similarity_threshold. Range [0, 1].",
+    )
 
 
 class KnowledgeConf(BaseModel):

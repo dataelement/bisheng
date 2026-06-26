@@ -67,7 +67,7 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
                         </TooltipContent>
                     </Tooltip>
                     <span className="shrink-0 rounded bg-[#FFF3E8] px-1.5 py-0.5 text-[12px] text-[#F76F44]">
-                        {localize("com_knowledge.version.similarity_label")} {(entry.similarity * 100).toFixed(0)}%
+                        {localize("com_knowledge.version.similarity_label")} {((entry.refined_similarity ?? entry.similarity) * 100).toFixed(0)}%
                     </span>
                 </div>
                 <p className="text-[12px] text-[#86909c] mb-0.5">{versionLine}</p>

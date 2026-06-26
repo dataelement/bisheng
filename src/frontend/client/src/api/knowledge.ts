@@ -2370,7 +2370,8 @@ export interface SimilarCandidateEntry {
     title: string;
     doc_code?: string;
     current_primary_version_no: number;
-    similarity: number;
+    similarity: number; // raw simhash similarity
+    refined_similarity?: number; // TF-IDF cosine; preferred for display when present
     primary_uploader_name?: string;
     primary_upload_time?: string;
 }

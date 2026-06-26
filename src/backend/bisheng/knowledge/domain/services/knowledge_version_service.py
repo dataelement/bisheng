@@ -521,10 +521,11 @@ class KnowledgeVersionService:
                 continue
             scored.append((sim, c))
 
-        scored.sort(key=lambda x: x[0], reverse=True)
+        # TF-IDF refine: drop simhash false positives + re-rank by content cosine.
+        refined = await self._refine_candidates_by_tfidf(kf, scored)
 
         out: list[SimilarCandidateEntry] = []
-        for sim, c in scored:
+        for sim, refined_sim, c in refined:
             if len(out) >= limit:
                 break
             v = await self.version_repo.find_by_knowledge_file_id(c.id)
@@ -542,6 +543,7 @@ class KnowledgeVersionService:
                 doc_code=getattr(c, "file_encoding", None),
                 current_primary_version_no=v.version_no,
                 similarity=sim,
+                refined_similarity=refined_sim,
                 primary_uploader_name=getattr(c, "user_name", None),
                 primary_upload_time=getattr(c, "create_time", None),
             ))
@@ -639,6 +641,178 @@ class KnowledgeVersionService:
             vmc = getattr(conf, "version_management", None)
             threshold = vmc.simhash_similarity_threshold if vmc else 0.85
         return _similarity(source_file.simhash, candidate_file.simhash) >= threshold
+
+    async def _fetch_chunk_texts(self, knowledge, file_ids: list[int]) -> dict[int, str]:
+        """Pull each file's chunk text from ES, concatenated, keyed by file_id.
+
+        One batched ES query over ``metadata.document_id`` (= knowledge_file.id).
+        Returns ``{}`` on any failure (missing index, ES down) so callers can
+        degrade to pure simhash. Files with no chunks simply won't appear.
+        """
+        if not knowledge or not file_ids:
+            return {}
+        from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+        from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+
+        parts: dict[int, list[str]] = {}
+        try:
+            es_client = await KnowledgeRag.init_knowledge_es_vectorstore(
+                knowledge=knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+            )
+            if not await es_client.client.indices.exists(index=knowledge.index_name):
+                return {}
+            # 10k chunks is far above any real document; caps the TF-IDF corpus.
+            search_body = {
+                "size": 10000,
+                "query": {"terms": {"metadata.document_id": file_ids}},
+                "_source": ["text", "metadata.document_id"],
+            }
+            es_res = await es_client.client.search(index=knowledge.index_name, body=search_body)
+            for hit in es_res["hits"]["hits"]:
+                src = hit.get("_source", {})
+                fid = (src.get("metadata") or {}).get("document_id")
+                try:
+                    fid = int(fid)
+                except (TypeError, ValueError):
+                    continue
+                parts.setdefault(fid, []).append(src.get("text") or "")
+        except Exception as e:  # noqa: BLE001 — degrade to pure simhash on any ES error
+            logger.warning(f"act=tfidf_fetch_chunk_texts knowledge_id={getattr(knowledge, 'id', None)} error={e}")
+            return {}
+        return {fid: "\n".join(chunks) for fid, chunks in parts.items()}
+
+    # Redis token-cache: key folds in simhash so a re-parsed file (new content
+    # -> new simhash) misses the stale entry; TTL bounds memory.
+    _TFIDF_TOKEN_CACHE_PREFIX = "kf:tfidf:tokens:"
+    _TFIDF_TOKEN_CACHE_TTL = 7 * 24 * 3600  # 7 days
+
+    async def _tokenize_files_cached(
+        self,
+        items: list[tuple[KnowledgeFile, str]],
+    ) -> list[list[str]]:
+        """Tokenize each file's text, memoized in Redis keyed by (file_id, simhash).
+
+        Returns token lists in input order. Files without a simhash bypass the
+        cache; empty results (likely an ES gap) are not cached. Any Redis failure
+        degrades to local tokenization — never fails the recommendation.
+        """
+        from bisheng.common.utils.tfidf_utils import tokenize
+        from bisheng.core.cache.redis_manager import get_redis_client
+
+        keys: list[str | None] = []
+        for f, _ in items:
+            sh = getattr(f, "simhash", None)
+            keys.append(f"{self._TFIDF_TOKEN_CACHE_PREFIX}{f.id}:{sh}" if sh else None)
+
+        results: list[list[str] | None] = [None] * len(items)
+
+        redis_client = None
+        try:
+            redis_client = await get_redis_client()
+        except Exception as e:  # noqa: BLE001 — cache is best-effort
+            logger.warning(f"act=tfidf_token_cache redis_unavailable error={e}")
+
+        # 1) Batch read. Per-key aget on purpose: amget() drops misses, which
+        # would break positional alignment with the input list.
+        if redis_client is not None:
+            async def _read(k: str | None):
+                if k is None:
+                    return None
+                try:
+                    return await redis_client.aget(k)
+                except Exception:  # noqa: BLE001
+                    return None
+
+            for i, val in enumerate(await asyncio.gather(*[_read(k) for k in keys])):
+                if isinstance(val, list):
+                    results[i] = val
+
+        # 2) Tokenize misses locally.
+        to_write: dict[str, list[str]] = {}
+        for i, (_, text) in enumerate(items):
+            if results[i] is None:
+                toks = tokenize(text)
+                results[i] = toks
+                if keys[i] is not None and toks:
+                    to_write[keys[i]] = toks
+
+        # 3) Batch write back (best-effort).
+        if redis_client is not None and to_write:
+            try:
+                await redis_client.amset(to_write, expiration=self._TFIDF_TOKEN_CACHE_TTL)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"act=tfidf_token_cache mset_failed error={e}")
+
+        return results  # type: ignore[return-value]  # every slot is filled above
+
+    async def _refine_candidates_by_tfidf(
+        self,
+        current_file: KnowledgeFile,
+        scored: list[tuple[float, KnowledgeFile]],
+    ) -> list[tuple[float, float | None, KnowledgeFile]]:
+        """Re-score simhash-matched candidates with a TF-IDF cosine over chunk text.
+
+        SimHash can report ~100% on documents that merely share a template; this
+        re-scores against the actual terms to drop those false positives.
+
+        Returns ``(simhash_sim, refined_sim_or_None, candidate)`` tuples:
+        - When refine is enabled and text is available: candidates below the
+          TF-IDF threshold are dropped, survivors sorted by TF-IDF cosine desc.
+        - When refine is disabled, ES is unavailable, or the current file has no
+          text: degrades to pure simhash — original order, ``refined_sim=None``.
+        - Individual candidates with no ES text keep ``refined_sim=None`` and are
+          ordered after the refined ones (never dropped on an ES gap alone).
+        """
+        degraded = [(sim, None, c) for sim, c in scored]
+        if not scored:
+            return degraded
+
+        conf = await bisheng_settings.async_get_knowledge()
+        vmc = getattr(conf, "version_management", None)
+        if vmc is not None and not getattr(vmc, "enable_tfidf_refine", True):
+            return degraded
+        tfidf_threshold: float = getattr(vmc, "tfidf_similarity_threshold", 0.3) if vmc else 0.3
+
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        knowledge = await KnowledgeDao.aquery_by_id(current_file.knowledge_id)
+        if knowledge is None:
+            return degraded
+
+        file_ids = [current_file.id] + [c.id for _, c in scored]
+        texts = await self._fetch_chunk_texts(knowledge, file_ids)
+
+        query_text = texts.get(current_file.id, "")
+        if not query_text.strip():
+            # Can't refine without the current file's text — keep pure simhash.
+            return degraded
+
+        from bisheng.common.utils.tfidf_utils import tfidf_cosine_scores_from_tokens
+
+        candidate_texts = [texts.get(c.id, "") for _, c in scored]
+        # Tokenize once, memoized in Redis on a (file_id, simhash) fingerprint.
+        # Candidates recur across recommendation requests, so this skips the hot
+        # jieba step on repeats; a re-parsed file gets a new simhash -> cache miss.
+        all_tokens = await self._tokenize_files_cached(
+            [(current_file, query_text)] + list(zip((c for _, c in scored), candidate_texts))
+        )
+        query_tokens, candidate_tokens = all_tokens[0], all_tokens[1:]
+        cosines = tfidf_cosine_scores_from_tokens(query_tokens, candidate_tokens)
+
+        refined: list[tuple[float, float | None, KnowledgeFile]] = []
+        unscored: list[tuple[float, float | None, KnowledgeFile]] = []
+        for (sim, c), text, cos in zip(scored, candidate_texts, cosines):
+            if not text.strip():
+                # ES gap for this candidate — can't refine; keep, order last.
+                unscored.append((sim, None, c))
+                continue
+            if cos < tfidf_threshold:
+                continue  # filtered: simhash matched but content is unrelated
+            refined.append((sim, cos, c))
+
+        refined.sort(key=lambda x: x[1], reverse=True)
+        # Degraded (un-refinable) candidates fall after refined ones, by simhash.
+        unscored.sort(key=lambda x: x[0], reverse=True)
+        return refined + unscored
 
     async def search_shougang_publish_version_sources(
         self,
@@ -922,12 +1096,14 @@ class KnowledgeVersionService:
                 continue
             scored.append((sim, c))
 
-        # Sort desc by similarity, take top N
-        scored.sort(key=lambda x: x[0], reverse=True)
-        scored = scored[:limit]
+        # TF-IDF refine: drop simhash false positives + re-rank by content cosine.
+        # Done on the full set (before limit) so filtered slots are backfilled.
+        refined = await self._refine_candidates_by_tfidf(kf, scored)
 
         out: list[SimilarCandidateEntry] = []
-        for sim, c in scored:
+        for sim, refined_sim, c in refined:
+            if len(out) >= limit:
+                break
             v = await self.version_repo.find_by_knowledge_file_id(c.id)
             if v is None:
                 continue  # orphaned file — no version row
@@ -939,6 +1115,7 @@ class KnowledgeVersionService:
                 doc_code=getattr(c, "file_encoding", None),
                 current_primary_version_no=v.version_no,
                 similarity=sim,
+                refined_similarity=refined_sim,
                 primary_uploader_name=getattr(c, "user_name", None),
                 primary_upload_time=getattr(c, "create_time", None),
             ))

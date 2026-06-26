@@ -26,6 +26,8 @@ knowledges: # 知识库相关配置
   version_management:
     enabled: false
     simhash_similarity_threshold: 0.85
+    enable_tfidf_refine: true
+    tfidf_similarity_threshold: 0.3
 
 llm_request:
   # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值

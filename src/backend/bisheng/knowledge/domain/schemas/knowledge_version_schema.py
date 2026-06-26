@@ -80,7 +80,8 @@ class SimilarCandidateEntry(BaseModel):
     title: str
     doc_code: Optional[str] = None
     current_primary_version_no: int
-    similarity: float
+    similarity: float  # raw simhash similarity (1 - hamming/64), kept for tuning/debugging
+    refined_similarity: Optional[float] = None  # TF-IDF cosine over chunk text; None when refine skipped
     primary_uploader_name: Optional[str] = None
     primary_upload_time: Optional[datetime] = None
 

@@ -128,6 +128,8 @@ export type BishengConfig = {
     version_management?: {
       enabled: boolean;
       simhash_similarity_threshold?: number;
+      enable_tfidf_refine?: boolean;
+      tfidf_similarity_threshold?: number;
     };
   };
 };
