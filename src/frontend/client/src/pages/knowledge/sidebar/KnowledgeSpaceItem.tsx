@@ -33,6 +33,8 @@ interface KnowledgeSpaceItemProps {
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
     onManageMembers?: (space: KnowledgeSpace) => void;
+    /** F040: lazily resolve this space's action permissions when its menu opens. */
+    onMenuOpen?: () => void;
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
@@ -54,6 +56,7 @@ export default function KnowledgeSpaceItem({
     onPin,
     onSettings,
     onManageMembers,
+    onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
@@ -178,7 +181,7 @@ export default function KnowledgeSpaceItem({
                         right padding so the button can reach its intended offset from the edge. */}
                 {!hideMoreMenu && (
                 <div className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start">
-                    <DropdownMenu onOpenChange={setMenuOpen}>
+                    <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`

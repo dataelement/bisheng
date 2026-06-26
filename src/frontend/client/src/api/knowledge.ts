@@ -1309,11 +1309,14 @@ export async function searchSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
-}): Promise<{ data: KnowledgeFile[]; total: number }> {
+}): Promise<{ data: KnowledgeFile[]; has_more: boolean }> {
     const { space_id, ...queryParams } = params;
-    if (!space_id) return { data: [], total: 0 };
+    if (!space_id) return { data: [], has_more: false };
 
-    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; total: number }>>(
+    // F040: the backend batch-scans the keyword-search candidate set and returns
+    // `has_more` directly instead of an exact post-filter `total` (which would
+    // require materialising every match). Pagination is driven off `has_more`.
+    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; has_more: boolean }>>(
         `/api/v1/knowledge/space/${space_id}/search`,
         {
             params: {
@@ -1334,7 +1337,7 @@ export async function searchSpaceChildrenApi(params: {
     const list = extractList<RawSpaceChild>(payload);
     return {
         data: list.map(raw => mapChild(raw, space_id)),
-        total: Number(payload?.total ?? list.length),
+        has_more: Boolean(payload?.has_more),
     };
 }
 

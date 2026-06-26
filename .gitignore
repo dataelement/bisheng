@@ -290,3 +290,4 @@ src/backend/scripts/migrate_dm.yaml
 
 # Git worktrees (claude code)
 .worktrees/
+.claude/worktrees/

@@ -165,6 +165,10 @@ _PERMISSION_LEVEL_TO_RELATION = {
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
 _CHILD_PERMISSION_CHECK_CONCURRENCY = 8
+# F040: keyword-search batch-scan window. A batch shrunk by ReBAC visibility
+# filtering is refilled from the next OFFSET window, so this only bounds per-round
+# DB fetch + visibility evaluation, not the page size.
+_SEARCH_SCAN_BATCH_SIZE = 100
 
 
 class KnowledgeSpaceService(KnowledgeUtils):
@@ -333,11 +337,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             permission_levels = {space_id: level for space_id, level in zip(permission_space_ids, levels)}
         if required_permission_id and permission_id_space_ids:
+            # F040 (B): build the ReBAC binding index once and share an OpenFGA tuple
+            # cache across all spaces in this page, instead of rebuilding the index +
+            # re-reading tuples per space (the per-space N+1 on /space/joined etc.).
+            # The membership / public-space merge stays inside _get_effective_permission_ids,
+            # so the filtered result is identical to the per-space path.
+            shared_bindings = await self._get_relation_bindings()
+            shared_ctx = {
+                "binding_index": FineGrainedPermissionService.build_binding_index(shared_bindings),
+                "tuple_cache": {},
+                "tuple_department_paths": {},
+            }
             permission_ids = await asyncio.gather(
                 *[
                     self._get_effective_permission_ids(
                         "knowledge_space",
                         space_id,
+                        shared=shared_ctx,
                     )
                     for space_id in permission_id_space_ids
                 ]
@@ -1033,6 +1049,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         object_id: int,
         *,
         space_id: int | None = None,
+        shared: dict | None = None,
     ) -> set[str]:
         # F036: request-scoped memo. The /children entry does the same `view_space` evaluation
         # twice (read-permission + view_space checks) and the no-parent branch repeats it; this
@@ -1054,6 +1071,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         binding_department_paths = await self._get_binding_department_paths(bindings)
         models = await self._get_relation_models_map()
         lineage_binding_can_override = object_type in {"folder", "knowledge_file"}
+        # F040 (B): when evaluating a *batch* of spaces (e.g. _format_accessible_spaces),
+        # the caller passes a shared context so the binding index is built once and the
+        # OpenFGA tuple reads are memoized across spaces, instead of rebuilt per space.
+        # Omitted → get_effective_permission_ids_async derives them per call (unchanged).
+        shared_kwargs = {}
+        if shared is not None:
+            shared_kwargs = {
+                "binding_index": shared.get("binding_index"),
+                "tuple_cache": shared.get("tuple_cache"),
+                "tuple_department_paths": shared.get("tuple_department_paths"),
+            }
         (
             effective_permissions,
             matched_lineage_binding,
@@ -1068,6 +1096,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             lineage=lineage,
             nearest_binding_wins=lineage_binding_can_override,
             return_match_metadata=True,
+            **shared_kwargs,
         )
         for lineage_type, lineage_id in lineage:
             if lineage_type == "knowledge_space":
@@ -1906,10 +1935,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """F030: keyword search over a space's files, adapted to the cursor contract.
 
         The v2 file list keeps a single ``PageInfiniteCursorData`` shape whether or
-        not a keyword is supplied. ``search_space_children`` is offset-based and
-        already computes ``total``; we reuse that ``total`` to derive ``has_more``
-        (no page-size inflation, so offsets stay aligned across pages) via the
-        F027 AD-15 pseudo-cursor (key=``[page_num]``). ``total`` is **not** exposed.
+        not a keyword is supplied. ``search_space_children`` batch-scans the
+        candidate set and returns ``has_more`` directly (F040 — it no longer
+        materialises every match to compute a total), so we forward that
+        ``has_more`` via the F027 AD-15 pseudo-cursor (key=``[page_num]``).
+        ``total`` is **not** exposed.
         """
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
@@ -1933,8 +1963,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_status=file_status,
         )
         rows = result.get("data", [])
-        total = result.get("total", 0)
-        has_more = page_num * page_size < total
+        has_more = bool(result.get("has_more"))
         next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
         return PageInfiniteCursorData(
             data=rows,
@@ -2000,12 +2029,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # upload path. A custom permission template may grant upload_file
             # under a viewer-tier relation that can_read/can_edit can't express,
             # so the coarse list_objects relation alone is not a valid proxy.
-            uploadable = []
-            for s in spaces:
-                perms = await self._get_effective_permission_ids("knowledge_space", s.id)
-                if "upload_file" in perms:
-                    uploadable.append(s)
-            spaces = uploadable
+            # F040 (B/AC-09): evaluate candidates in parallel instead of a serial loop.
+            perms_per_space = await asyncio.gather(
+                *[self._get_effective_permission_ids("knowledge_space", s.id) for s in spaces]
+            )
+            spaces = [s for s, perms in zip(spaces, perms_per_space) if "upload_file" in perms]
             spaces.sort(
                 key=lambda s: s.update_time or datetime.min,
                 reverse=True,
@@ -2680,13 +2708,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
 
-    @staticmethod
-    def _paginate_items(items: list[KnowledgeFile], page: int, page_size: int) -> list[KnowledgeFile]:
-        if not page or not page_size:
-            return items
-        start = (page - 1) * page_size
-        return items[start : start + page_size]
-
     async def _scan_visible_child_items(
         self,
         *,
@@ -2758,6 +2779,66 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 break
 
         return visible_page_items, False
+
+    async def _scan_visible_search_items(
+        self,
+        *,
+        space_id: int,
+        file_name: str | None,
+        filter_files: list[int] | None,
+        extra_file_ids: list[int] | None,
+        file_status: list[int] | None,
+        file_level_path: str | None,
+        order_field: str,
+        order_sort: str,
+        exclude_file_ids: list[int] | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[KnowledgeFile], bool]:
+        """F040 batch-scan for keyword search: fetch the candidate set in
+        successive OFFSET windows (``id``-tie-broken for a stable order across
+        batches), fold each window through the SAME ReBAC visibility filter, and
+        accumulate until we have ``page * page_size + 1`` visible items (the +1
+        probes ``has_more``) or the candidates are exhausted.
+
+        Returns ``(page_slice, has_more)`` where ``page_slice`` is the requested
+        page's visible items. This bounds the DB fetch + visibility evaluation to
+        what the page needs, instead of materialising every keyword match and
+        filtering all of it just to slice one page. The shared
+        ``permission_context`` keeps the binding index from being rebuilt per
+        batch (same idea as ``_scan_visible_child_items``).
+        """
+        needed = page * page_size + 1
+        permission_context = await self._build_child_permission_context(space_id)
+        visible: list[KnowledgeFile] = []
+        batch_num = 0
+
+        while len(visible) < needed:
+            batch_num += 1
+            batch = await KnowledgeFileDao.aget_file_by_filters(
+                space_id,
+                file_name=file_name,
+                file_ids=filter_files,
+                extra_file_ids=extra_file_ids,
+                status=file_status,
+                file_level_path=file_level_path,
+                order_by="file_type",
+                order_field=order_field,
+                order_sort=order_sort,
+                exclude_file_ids=exclude_file_ids,
+                page=batch_num,
+                page_size=_SEARCH_SCAN_BATCH_SIZE,
+                id_tiebreaker=True,
+            )
+            if not batch:
+                break
+            visible.extend(await self._filter_visible_child_items(batch, space_id=space_id, context=permission_context))
+            if len(batch) < _SEARCH_SCAN_BATCH_SIZE:
+                break
+
+        has_more = len(visible) > page * page_size
+        page_slice = visible[(page - 1) * page_size : page * page_size]
+        return page_slice, has_more
 
     async def list_space_children(
         self,
@@ -2867,19 +2948,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
             children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
             if not children_ids:
-                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
             filter_files = [one.id for one in children_ids]
 
         if tag_ids:
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
             if not resources:
-                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
             if filter_files:
                 filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
             else:
                 filter_files = [int(one.resource_id) for one in resources]
             if not filter_files:
-                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
 
         extra_file_ids = []
         if keyword:
@@ -2920,27 +3001,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.version_repo is not None:
             exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
 
-        res = await KnowledgeFileDao.aget_file_by_filters(
-            space_id,
+        # F040: batch-scan the candidate set with early stop instead of fetching
+        # every keyword match, filtering all, then Python-slicing. A broad keyword
+        # (filename LIKE) or large ES hit set could otherwise materialise thousands
+        # of rows + run ReBAC over all of them just to show one page.
+        page_items, has_more = await self._scan_visible_search_items(
+            space_id=space_id,
             file_name=keyword,
-            file_ids=filter_files,
+            filter_files=filter_files,
             extra_file_ids=extra_file_ids,
-            status=file_status,
+            file_status=file_status,
             file_level_path=file_level_path,
-            order_by="file_type",
             order_field=order_field,
             order_sort=order_sort,
             exclude_file_ids=exclude_file_ids,
+            page=page,
+            page_size=page_size,
         )
-        visible_items = await self._filter_visible_child_items(res, space_id=space_id)
-        total = len(visible_items)
-        page_items = self._paginate_items(visible_items, page, page_size)
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
         data = await self._handle_file_folder_extra_info(page_items)
-        return {"total": total, "page": page, "page_size": page_size, "data": data}
+        # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
+        # count requires materialising every match, which is exactly what the
+        # batch-scan avoids. Both consumers (client useFileManager, F030
+        # asearch_space_children_cursor) drive next-page off `has_more`.
+        return {"page": page, "page_size": page_size, "data": data, "has_more": has_more}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
 

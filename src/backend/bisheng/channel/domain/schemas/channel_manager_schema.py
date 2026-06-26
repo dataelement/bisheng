@@ -1,223 +1,248 @@
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from bisheng.channel.domain.models.channel import ChannelVisibilityEnum, ChannelFilterRules
+from bisheng.channel.domain.models.channel import ChannelFilterRules, ChannelVisibilityEnum
 
 
 class SubscriptionStatusEnum(str, Enum):
     """Subscription Status Enum"""
-    SUBSCRIBED = 'subscribed'
-    PENDING = 'pending'
-    REJECTED = 'rejected'
-    NOT_SUBSCRIBED = 'not_subscribed'
+
+    SUBSCRIBED = "subscribed"
+    PENDING = "pending"
+    REJECTED = "rejected"
+    NOT_SUBSCRIBED = "not_subscribed"
 
 
 class SubscribeChannelRequest(BaseModel):
     """Subscribe Channel Request"""
-    channel_id: str = Field(..., description='Channel ID')
+
+    channel_id: str = Field(..., description="Channel ID")
 
 
 class KnowledgeSyncSpaceItem(BaseModel):
     """One knowledge-space / folder binding inside the sync config."""
-    knowledge_space_id: str = Field(..., description='Knowledge Space ID')
-    knowledge_space_name: Optional[str] = Field(None, description='Knowledge Space display name')
-    folder_id: Optional[str] = Field(None, description='Target folder ID; NULL = space root')
-    folder_path: Optional[str] = Field(None, description='Full folder display path, parent/child/target')
+
+    knowledge_space_id: str = Field(..., description="Knowledge Space ID")
+    knowledge_space_name: str | None = Field(None, description="Knowledge Space display name")
+    folder_id: str | None = Field(None, description="Target folder ID; NULL = space root")
+    folder_path: str | None = Field(None, description="Full folder display path, parent/child/target")
 
 
 class KnowledgeSyncMainConfig(BaseModel):
-    enabled: bool = Field(default=False, description='Whether main-channel sync is enabled')
-    spaces: List[KnowledgeSyncSpaceItem] = Field(default_factory=list, description='Bound knowledge spaces')
+    enabled: bool = Field(default=False, description="Whether main-channel sync is enabled")
+    spaces: list[KnowledgeSyncSpaceItem] = Field(default_factory=list, description="Bound knowledge spaces")
 
 
 class KnowledgeSyncSubConfig(BaseModel):
-    sub_channel_name: str = Field(..., description='Sub-channel name (matches ChannelFilterRules.name)')
-    enabled: bool = Field(default=False, description='Whether sync is enabled for this sub-channel')
-    spaces: List[KnowledgeSyncSpaceItem] = Field(default_factory=list, description='Bound knowledge spaces')
+    sub_channel_name: str = Field(..., description="Sub-channel name (matches ChannelFilterRules.name)")
+    enabled: bool = Field(default=False, description="Whether sync is enabled for this sub-channel")
+    spaces: list[KnowledgeSyncSpaceItem] = Field(default_factory=list, description="Bound knowledge spaces")
 
 
 class KnowledgeSyncConfig(BaseModel):
     """Bundled channel ➜ knowledge-space sync config, saved atomically with the channel."""
+
     main: KnowledgeSyncMainConfig = Field(default_factory=KnowledgeSyncMainConfig)
-    subs: List[KnowledgeSyncSubConfig] = Field(default_factory=list)
+    subs: list[KnowledgeSyncSubConfig] = Field(default_factory=list)
 
 
 class CreateChannelRequest(BaseModel):
-    name: str = Field(..., description='Channel Name')
-    source_list: List[str] = Field(default_factory=list, description='Data Source List')
-    visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
-    description: Optional[str] = Field(None, description='Channel Description/Brief')
-    filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
-    is_released: bool = Field(default=False, description='Whether the channel is released')
-    knowledge_sync: Optional[KnowledgeSyncConfig] = Field(None, description='Knowledge space sync configuration')
+    name: str = Field(..., description="Channel Name")
+    source_list: list[str] = Field(default_factory=list, description="Data Source List")
+    visibility: ChannelVisibilityEnum = Field(..., description="Channel Visibility")
+    description: str | None = Field(None, description="Channel Description/Brief")
+    filter_rules: list[ChannelFilterRules] | None = Field(default_factory=list, description="Filter Conditions")
+    is_released: bool = Field(default=False, description="Whether the channel is released")
+    knowledge_sync: KnowledgeSyncConfig | None = Field(None, description="Knowledge space sync configuration")
 
 
 class UpdateChannelRequest(BaseModel):
-    name: Optional[str] = Field(None, description='Channel Name')
-    description: Optional[str] = Field(None, description='Channel Description/Brief')
-    source_list: Optional[List[str]] = Field(default=None, description='Data Source List')
-    visibility: Optional[ChannelVisibilityEnum] = Field(None, description='Channel Visibility')
-    filter_rules: Optional[List[ChannelFilterRules]] = Field(default=None, description='Filter Conditions')
-    is_released: Optional[bool] = Field(None, description='Whether the channel is released')
-    knowledge_sync: Optional[KnowledgeSyncConfig] = Field(None, description='Knowledge space sync configuration; None = leave untouched')
+    name: str | None = Field(None, description="Channel Name")
+    description: str | None = Field(None, description="Channel Description/Brief")
+    source_list: list[str] | None = Field(default=None, description="Data Source List")
+    visibility: ChannelVisibilityEnum | None = Field(None, description="Channel Visibility")
+    filter_rules: list[ChannelFilterRules] | None = Field(default=None, description="Filter Conditions")
+    is_released: bool | None = Field(None, description="Whether the channel is released")
+    knowledge_sync: KnowledgeSyncConfig | None = Field(
+        None, description="Knowledge space sync configuration; None = leave untouched"
+    )
 
 
 class AddInformationSourceRequest(BaseModel):
-    url: str = Field(..., description='URL of the information source to add')
+    url: str = Field(..., description="URL of the information source to add")
 
 
 class CrawlWebsiteRequest(BaseModel):
-    url: str = Field(..., description='URL of the website to crawl')
+    url: str = Field(..., description="URL of the website to crawl")
 
 
 class QueryTypeEnum(str, Enum):
     """Get My Channels Query Type Enum"""
-    CREATED = 'created'
-    FOLLOWED = 'followed'
+
+    CREATED = "created"
+    FOLLOWED = "followed"
 
 
 class SortByEnum(str, Enum):
     """Get My Channels Sort By Enum"""
-    LATEST_UPDATE = 'latest_update'
-    LATEST_ADDED = 'latest_added'
-    CHANNEL_NAME = 'channel_name'
+
+    LATEST_UPDATE = "latest_update"
+    LATEST_ADDED = "latest_added"
+    CHANNEL_NAME = "channel_name"
 
 
 class MyChannelQueryRequest(BaseModel):
     """Get My Channels Query Request"""
-    query_type: QueryTypeEnum = Field(..., description='Get My Channels query type: created / followed')
-    sort_by: SortByEnum = Field(default=SortByEnum.LATEST_UPDATE,
-                                description='Get My Channels sort by: latest_update / latest_added / channel_name')
+
+    query_type: QueryTypeEnum = Field(..., description="Get My Channels query type: created / followed")
+    sort_by: SortByEnum = Field(
+        default=SortByEnum.LATEST_UPDATE,
+        description="Get My Channels sort by: latest_update / latest_added / channel_name",
+    )
 
 
 class SetPinRequest(BaseModel):
     """Set Channel Pin Request"""
-    channel_id: str = Field(..., description='Channel ID')
-    is_pinned: bool = Field(..., description='Whether to pin the channel')
+
+    channel_id: str = Field(..., description="Channel ID")
+    is_pinned: bool = Field(..., description="Whether to pin the channel")
 
 
 class ChannelItemResponse(BaseModel):
     """Channel List Item Response"""
-    id: str = Field(..., description='Channel ID')
-    name: str = Field(..., description='Channel Name')
-    source_list: List[str] = Field(default_factory=list, description='Data Source List')
-    visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
-    is_released: bool = Field(default=False, description='Whether the channel is released')
-    latest_article_update_time: Optional[datetime] = Field(None, description='Channel Latest Article Update Time')
-    create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
-    user_role: str = Field(..., description='User Role in Channel: creator / admin / member')
-    relation: Optional[str] = Field(None, description='Channel relation: owner / manager / editor / viewer')
-    permission_ids: list[str] = Field(default_factory=list, description='Effective channel permission IDs')
-    is_pinned: bool = Field(default=False, description='Whether the channel is pinned by the user')
-    subscribed_at: Optional[datetime] = Field(None,
-                                              description='The time when the user subscribed to the channel, null if not subscribed')
-    unread_count: int = Field(default=0, description='Number of unread articles in this channel')
+
+    id: str = Field(..., description="Channel ID")
+    name: str = Field(..., description="Channel Name")
+    source_list: list[str] = Field(default_factory=list, description="Data Source List")
+    visibility: ChannelVisibilityEnum = Field(..., description="Channel Visibility")
+    is_released: bool = Field(default=False, description="Whether the channel is released")
+    latest_article_update_time: datetime | None = Field(None, description="Channel Latest Article Update Time")
+    create_time: datetime | None = Field(None, description="Channel Creation Time")
+    user_role: str = Field(..., description="User Role in Channel: creator / admin / member")
+    relation: str | None = Field(None, description="Channel relation: owner / manager / editor / viewer")
+    permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
+    is_pinned: bool = Field(default=False, description="Whether the channel is pinned by the user")
+    subscribed_at: datetime | None = Field(
+        None, description="The time when the user subscribed to the channel, null if not subscribed"
+    )
+    unread_count: int = Field(default=0, description="Number of unread articles in this channel")
 
 
 class ChannelInfoSourceResponse(BaseModel):
     """Channel Info Source Item Response"""
-    id: str = Field(..., description='Channel Information Source ID')
-    source_name: str = Field(..., description='Information Source Name')
-    source_icon: Optional[str] = Field(None, description='Information Source Icon URL')
-    source_type: str = Field(..., description='Information Source Type')
-    description: Optional[str] = Field(None, description='Information Source Description')
+
+    id: str = Field(..., description="Channel Information Source ID")
+    source_name: str = Field(..., description="Information Source Name")
+    source_icon: str | None = Field(None, description="Information Source Icon URL")
+    source_type: str = Field(..., description="Information Source Type")
+    description: str | None = Field(None, description="Information Source Description")
 
 
 class ChannelDetailResponse(BaseModel):
     """Channel Detail Response"""
-    id: str = Field(..., description='Channel ID')
-    name: str = Field(..., description='Channel Name')
-    description: Optional[str] = Field(None, description='Channel Description/Brief')
-    source_infos: List[ChannelInfoSourceResponse] = Field(default_factory=list, description='Data Source List')
-    visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
-    filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
-    is_released: bool = Field(default=False, description='Whether the channel is released')
-    latest_article_update_time: Optional[datetime] = Field(None, description='Channel Latest Article Update Time')
-    create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
-    creator_name: str = Field(..., description='Channel Creator Name')
-    subscriber_count: int = Field(default=0, description='Number of subscribers')
-    article_count: int = Field(default=0, description='Total number of articles in the main channel')
-    sub_channel_unread_counts: Dict[str, int] = Field(
-        default_factory=dict,
-        description='Unread article count per sub-channel (keyed by sub-channel name)',
+
+    id: str = Field(..., description="Channel ID")
+    name: str = Field(..., description="Channel Name")
+    description: str | None = Field(None, description="Channel Description/Brief")
+    source_infos: list[ChannelInfoSourceResponse] = Field(default_factory=list, description="Data Source List")
+    visibility: ChannelVisibilityEnum = Field(..., description="Channel Visibility")
+    filter_rules: list[ChannelFilterRules] | None = Field(default_factory=list, description="Filter Conditions")
+    is_released: bool = Field(default=False, description="Whether the channel is released")
+    latest_article_update_time: datetime | None = Field(None, description="Channel Latest Article Update Time")
+    create_time: datetime | None = Field(None, description="Channel Creation Time")
+    creator_name: str = Field(..., description="Channel Creator Name")
+    subscriber_count: int = Field(default=0, description="Number of subscribers")
+    article_count: int = Field(default=0, description="Total number of articles in the main channel")
+    # F040: per-sub-channel unread counts moved to GET /channel/manager/{id}/unread-counts
+    # (lazy, in-channel only) — the dominant per-user ES cost no longer rides on detail.
+    subscription_status: SubscriptionStatusEnum = Field(..., description="Current user subscription status")
+    relation: str | None = Field(
+        None, description="Current user channel relation: owner / manager / editor / viewer"
     )
-    subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
-    relation: Optional[str] = Field(None, description='Current user channel relation: owner / manager / editor / viewer')
-    permission_ids: list[str] = Field(default_factory=list, description='Effective channel permission IDs')
-    knowledge_sync: Optional[KnowledgeSyncConfig] = Field(
+    permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
+    knowledge_sync: KnowledgeSyncConfig | None = Field(
         None,
-        description='Knowledge space sync configuration; only populated for creators',
+        description="Knowledge space sync configuration; only populated for creators",
     )
 
 
 class ChannelMemberResponse(BaseModel):
     """Channel Member Response"""
-    user_id: int = Field(..., description='User ID')
-    user_name: str = Field(..., description='User Name')
-    user_avatar: Optional[str] = Field(None, description='User Avatar URL')
-    user_role: str = Field(..., description='User Role in Channel: creator / admin / member')
-    relation: Optional[str] = Field(None, description='Channel relation: owner / manager / editor / viewer')
-    user_groups: List[dict] = Field(default_factory=list,
-                                    description='User Groups the member belongs to, each group is represented as a dict with group details')
+
+    user_id: int = Field(..., description="User ID")
+    user_name: str = Field(..., description="User Name")
+    user_avatar: str | None = Field(None, description="User Avatar URL")
+    user_role: str = Field(..., description="User Role in Channel: creator / admin / member")
+    relation: str | None = Field(None, description="Channel relation: owner / manager / editor / viewer")
+    user_groups: list[dict] = Field(
+        default_factory=list,
+        description="User Groups the member belongs to, each group is represented as a dict with group details",
+    )
 
 
 class ChannelMemberPageResponse(BaseModel):
     """Channel Member Page Response"""
-    data: List[ChannelMemberResponse] = Field(default_factory=list,
-                                              description='List of channel members in the current page')
-    total: int = Field(..., description='Total number of channel members')
+
+    data: list[ChannelMemberResponse] = Field(
+        default_factory=list, description="List of channel members in the current page"
+    )
+    total: int = Field(..., description="Total number of channel members")
 
 
 class UpdateMemberRoleRequest(BaseModel):
     """Update Channel Member Role Request"""
-    channel_id: str = Field(..., description='Channel ID')
-    user_id: int = Field(..., description='Target User ID')
-    role: Literal['admin', 'member'] = Field(..., description='New Role to Assign: admin / member')
+
+    channel_id: str = Field(..., description="Channel ID")
+    user_id: int = Field(..., description="Target User ID")
+    role: Literal["admin", "member"] = Field(..., description="New Role to Assign: admin / member")
 
 
 class RemoveMemberRequest(BaseModel):
     """Remove Channel Member Request"""
-    channel_id: str = Field(..., description='Channel ID')
-    user_id: int = Field(..., description='Target User ID to Remove')
+
+    channel_id: str = Field(..., description="Channel ID")
+    user_id: int = Field(..., description="Target User ID to Remove")
 
 
 class ChannelSquareItemResponse(BaseModel):
     """Channel Square List Item Response"""
-    id: str = Field(..., description='Channel ID')
-    name: str = Field(..., description='Channel Name')
-    description: Optional[str] = Field(None, description='Channel Description/Brief')
-    visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
-    latest_article_update_time: Optional[datetime] = Field(None, description='Latest Article Update Time')
-    create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
-    update_time: Optional[datetime] = Field(None, description='Channel Update Time')
-    subscription_status: SubscriptionStatusEnum = Field(...,
-                                                        description='Current user subscription status')
-    subscriber_count: int = Field(default=0, description='Number of subscribers')
-    article_count: int = Field(default=0, description='Number of articles matching the main channel filters')
-    source_infos: List[ChannelInfoSourceResponse] = Field(default_factory=list,
-                                                          description='Top 5 data sources for the channel')
+
+    id: str = Field(..., description="Channel ID")
+    name: str = Field(..., description="Channel Name")
+    description: str | None = Field(None, description="Channel Description/Brief")
+    visibility: ChannelVisibilityEnum = Field(..., description="Channel Visibility")
+    latest_article_update_time: datetime | None = Field(None, description="Latest Article Update Time")
+    create_time: datetime | None = Field(None, description="Channel Creation Time")
+    update_time: datetime | None = Field(None, description="Channel Update Time")
+    subscription_status: SubscriptionStatusEnum = Field(..., description="Current user subscription status")
+    subscriber_count: int = Field(default=0, description="Number of subscribers")
+    article_count: int = Field(default=0, description="Number of articles matching the main channel filters")
+    source_infos: list[ChannelInfoSourceResponse] = Field(
+        default_factory=list, description="Top 5 data sources for the channel"
+    )
 
 
 class AddArticlesToKnowledgeSpaceRequest(BaseModel):
     """Add Channel Articles to Knowledge Space Request"""
-    knowledge_id: int = Field(..., description='Knowledge Space ID')
-    article_ids: List[str] = Field(..., min_length=1, description='Article ID list to add')
-    parent_id: Optional[int] = Field(None, description='Parent folder ID in the knowledge space')
+
+    knowledge_id: int = Field(..., description="Knowledge Space ID")
+    article_ids: list[str] = Field(..., min_length=1, description="Article ID list to add")
+    parent_id: int | None = Field(None, description="Parent folder ID in the knowledge space")
     # Internal flag used by the Celery sync worker: when True, articles missing
     # from ES are skipped instead of aborting, and duplicate file names in the
     # target space are treated as success (the article is already there).
     # User-facing endpoints leave this False so the UI can surface real errors.
     skip_missing_and_duplicates: bool = Field(
         default=False,
-        description='Internal: skip missing articles and duplicate files instead of raising',
+        description="Internal: skip missing articles and duplicate files instead of raising",
     )
 
 
 class ChannelSquarePageResponse(BaseModel):
     """Channel Square Page Response"""
-    data: List[ChannelSquareItemResponse] = Field(default_factory=list,
-                                                  description='List of channel square items')
-    total: int = Field(..., description='Total number of matching channels')
+
+    data: list[ChannelSquareItemResponse] = Field(default_factory=list, description="List of channel square items")
+    total: int = Field(..., description="Total number of matching channels")

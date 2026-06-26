@@ -198,8 +198,6 @@ export interface ChannelDetailResponse {
     relation?: ChannelRelation | null;
     permission_ids?: ChannelPermissionId[];
     article_count: number;
-    /** Unread article count per sub-channel, keyed by sub-channel name. */
-    sub_channel_unread_counts?: Record<string, number>;
     filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
         id: string;
@@ -467,6 +465,16 @@ export async function getArticleDetailApi(articleId: string, channelId: string):
 export async function getChannelDetailApi(channelId: string): Promise<ChannelDetailResponse> {
     const res: any = await request.get(`/api/v1/channel/manager/${channelId}`);
     return res?.data ?? res;
+}
+
+/**
+ * 获取频道各子频道未读数量（F040：从详情接口拆出，预览/详情路径不再承担逐用户 ES 成本）。
+ * Fetch per-sub-channel unread counts for the current user, keyed by sub-channel name.
+ * Lazily called only inside the in-channel view to fill unread badges.
+ */
+export async function getChannelUnreadCountsApi(channelId: string): Promise<Record<string, number>> {
+    const res: any = await request.get(`/api/v1/channel/manager/${channelId}/unread-counts`);
+    return res?.data ?? res ?? {};
 }
 
 /**
