@@ -130,6 +130,13 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceCreateOptionUserGroup,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
+    ShougangPortalFavoriteRemoveReq,
+    ShougangPortalFavoriteRemoveResp,
+    ShougangPortalFavoriteStatusReq,
+    ShougangPortalFavoriteStatusResp,
+    ShougangPortalFavoriteStatusResultItem,
+    ShougangPortalFavoriteFileItem,
+    ShougangPortalFavoriteFilesResp,
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
@@ -2289,6 +2296,56 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return ShougangPortalFavoriteCreateResp(
             favorite_file_id=int(ref_file.id), space_id=int(fav_space.id),
             source_space_id=req.source_space_id, source_file_id=req.source_file_id, title=title)
+
+    async def remove_shougang_portal_favorite(
+        self, req: ShougangPortalFavoriteRemoveReq) -> ShougangPortalFavoriteRemoveResp:
+        fav_space = await self._find_favorite_space()
+        if not fav_space:
+            return ShougangPortalFavoriteRemoveResp(removed=False)
+        ref = await self._find_favorite_reference(
+            int(fav_space.id), req.source_space_id, req.source_file_id)
+        if not ref:
+            return ShougangPortalFavoriteRemoveResp(removed=False)
+        await KnowledgeFileDao.adelete_batch([int(ref.id)])
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(int(fav_space.id))
+        return ShougangPortalFavoriteRemoveResp(removed=True)
+
+    async def get_shougang_portal_favorite_status(
+        self, req: ShougangPortalFavoriteStatusReq) -> ShougangPortalFavoriteStatusResp:
+        fav_space = await self._find_favorite_space()
+        favored: set[tuple[int, int]] = set()
+        if fav_space:
+            rows, _ = await KnowledgeFileDao.aget_references_by_knowledge_id(int(fav_space.id))
+            for row in rows:
+                meta = (row.user_metadata or {}).get('favorite_reference') or {}
+                favored.add((int(meta.get('source_space_id') or 0), int(meta.get('source_file_id') or 0)))
+        data = [
+            ShougangPortalFavoriteStatusResultItem(
+                space_id=it.space_id, file_id=it.file_id,
+                favorited=(it.space_id, it.file_id) in favored)
+            for it in req.items
+        ]
+        return ShougangPortalFavoriteStatusResp(data=data)
+
+    async def list_shougang_portal_favorites(
+        self, page: int = 1, page_size: int = 20) -> ShougangPortalFavoriteFilesResp:
+        fav_space = await self._find_favorite_space()
+        if not fav_space:
+            return ShougangPortalFavoriteFilesResp(data=[], total=0, page=page, page_size=page_size)
+        rows, total = await KnowledgeFileDao.aget_references_by_knowledge_id(
+            int(fav_space.id), page=page, page_size=page_size)
+        data: list[ShougangPortalFavoriteFileItem] = []
+        for ref in rows:
+            meta = (ref.user_metadata or {}).get('favorite_reference') or {}
+            src_space = int(meta.get('source_space_id') or 0)
+            src_file = int(meta.get('source_file_id') or 0)
+            alive = (await KnowledgeFileDao.query_by_id(src_file)) is not None if src_file else False
+            data.append(ShougangPortalFavoriteFileItem(
+                favorite_file_id=int(ref.id), source_space_id=src_space, source_file_id=src_file,
+                title=Path(ref.file_name or '').stem, file_name=str(ref.file_name or ''),
+                status='valid' if alive else 'invalid',
+                updated_at=self._serialize_datetime(getattr(ref, 'update_time', None))))
+        return ShougangPortalFavoriteFilesResp(data=data, total=total, page=page, page_size=page_size)
 
     @staticmethod
     def _enum_value(value) -> str:
