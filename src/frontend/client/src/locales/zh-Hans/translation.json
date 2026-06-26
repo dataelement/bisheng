@@ -1437,6 +1437,12 @@
     "19402": "当前角色配额已用尽，请联系管理员调整配置",
     "19403": "当前企业存储配额已耗尽（{{used_gb}}/{{quota_gb}} GB），请联系平台方进行配额扩容"
   },
+  "com_app": {
+    "center_title": "应用中心",
+    "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
+    "explore_more": "探索更多应用",
+    "recent_apps_hint": "最近使用过的应用都在这里～"
+  },
   "com_knowledge": {
     "add_new": "新增",
     "ai_assistant": "AI 助手",

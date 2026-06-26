@@ -1510,6 +1510,12 @@
     "19052": "Maximum limit for subscribing channels reached (up to 20 channels)",
     "19053": "Knowledge space LLM is not configured. Please configure it in workbench settings first"
   },
+  "com_app": {
+    "center_title": "App Center",
+    "empty_go_explore": "No apps used yet. Head to the app marketplace",
+    "explore_more": "Explore more apps",
+    "recent_apps_hint": "Your recently used apps are all here～"
+  },
   "com_knowledge": {
     "add_new": "Add",
     "ai_assistant": "AI Assistant",
