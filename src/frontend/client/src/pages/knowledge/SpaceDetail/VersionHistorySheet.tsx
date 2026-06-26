@@ -52,25 +52,25 @@ const STATUS_CONFIG: Record<
     [FileStatus.PROCESSING]: {
         labelKey: "com_knowledge.parsing_status",
         color: "text-blue-500",
-        bg: "bg-[#e8f3ff]",
+        bg: "bg-blue-50",
         dot: "bg-blue-500",
     },
     [FileStatus.WAITING]: {
         labelKey: "com_knowledge.queueing_status",
         color: "text-blue-500",
-        bg: "bg-[#e8f3ff]",
+        bg: "bg-blue-50",
         dot: "bg-blue-500",
     },
     [FileStatus.REBUILDING]: {
         labelKey: "com_knowledge.rebuilding_status",
         color: "text-blue-500",
-        bg: "bg-[#e8f3ff]",
+        bg: "bg-blue-50",
         dot: "bg-blue-500",
     },
     [FileStatus.UPLOADING]: {
         labelKey: "com_knowledge.uploading_status",
         color: "text-blue-500",
-        bg: "bg-[#e8f3ff]",
+        bg: "bg-blue-50",
         dot: "bg-blue-500",
     },
     [FileStatus.FAILED]: {
@@ -201,7 +201,7 @@ function VersionTableRow({
                 <div className="flex items-center gap-2">
                     <span className="font-medium">V{version.version_no}</span>
                     {version.is_primary && (
-                        <span className="inline-flex items-center rounded bg-[#E8F3FF] px-1.5 py-0.5 text-[11px] font-medium text-blue-500">
+                        <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-500">
                             {localize("com_knowledge.version.history_primary_badge")}
                         </span>
                     )}

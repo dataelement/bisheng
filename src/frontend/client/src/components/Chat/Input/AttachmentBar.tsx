@@ -123,7 +123,7 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
 
 const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => (
     <CardShell
-        icon={<Sparkles className="size-4 text-[#165DFF]" />}
+        icon={<Sparkles className="size-4 text-blue-500" />}
         label={skill?.display_name || skill?.name || ""}
         onRemove={onRemove}
     />

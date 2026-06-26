@@ -209,7 +209,7 @@ function TreeNode({
         <div className="w-full min-w-0 max-w-full">
             <div
                 className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
-                    ${isSelected ? "bg-[#EEF2FF] text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
+                    ${isSelected ? "bg-blue-50 text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
                     transitionProperty: 'background-color',

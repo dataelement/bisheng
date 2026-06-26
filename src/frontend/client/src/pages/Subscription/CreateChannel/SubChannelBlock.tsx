@@ -118,7 +118,7 @@ export function SubChannelBlock({
                         }}
                     >
                         <span className="text-[14px] text-[#1D2129] truncate">{data.name}</span>
-                        <ChannelEditIcon className="w-4 h-4 opacity-0 group-hover:opacity-100 flex-shrink-0" />
+                        <ChannelEditIcon className="w-4 h-4 text-blue-500 opacity-0 group-hover:opacity-100 flex-shrink-0" />
                     </div>
                 )}
                 <button

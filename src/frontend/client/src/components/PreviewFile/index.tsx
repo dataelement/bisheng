@@ -85,7 +85,7 @@ export default function FileViewPanne({ file }) {
                 {file.chunks.map((chunk, i) =>
                     <div key={i}
                         onClick={() => handleJump(i, chunk)}
-                        className={`flag h-[38px] leading-[38px] px-6 pl-4 border-2 border-l-0 border-r-0 border-[rgba(53,126,249,.60)] bg-[rgba(255,255,255,0.2)]  text-blue-600 ${currentIndex === i && 'font-bold active'} cursor-pointer relative`}
+                        className={`flag h-[38px] leading-[38px] px-6 pl-4 border-2 border-l-0 border-r-0 border-[rgb(var(--brand-500)/0.6)] bg-[rgba(255,255,255,0.2)]  text-blue-600 ${currentIndex === i && 'font-bold active'} cursor-pointer relative`}
                     >
                         <span>{chunk.score}</span>
                     </div>
