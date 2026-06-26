@@ -2207,6 +2207,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
         data = [item.model_dump(mode='json') for item in items]
         return {"data": data, "total": len(data)}
 
+    FAVORITE_SPACE_NAME = "我的收藏"
+
+    async def _find_favorite_space(self) -> Optional[Knowledge]:
+        return await KnowledgeDao.aget_user_favorite_space(self.login_user.user_id)
+
+    async def _create_favorite_space(self) -> Knowledge:
+        space = await self.create_knowledge_space(
+            name=self.FAVORITE_SPACE_NAME,
+            description="系统默认收藏知识库",
+            space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+            skip_user_limit=True,
+        )
+        space.is_favorite = True
+        await KnowledgeDao.async_update_space(space)
+        return space
+
+    async def _ensure_favorite_space(self) -> Knowledge:
+        """懒创建、幂等：已存在返回既有；否则创建；并发兜底回查。"""
+        existing = await self._find_favorite_space()
+        if existing:
+            return existing
+        try:
+            return await self._create_favorite_space()
+        except Exception:
+            again = await self._find_favorite_space()
+            if again:
+                return again
+            raise
+
     def _copy_shougang_portal_favorite_file(
         self,
         source_file: KnowledgeFile,

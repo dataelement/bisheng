@@ -226,6 +226,19 @@ class KnowledgeDao(KnowledgeBase):
             return result.scalars().first()
 
     @classmethod
+    async def aget_user_favorite_space(cls, user_id: int) -> Optional[Knowledge]:
+        """当前用户固定的『我的收藏』个人知识库（is_favorite=True），取第一条。"""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Knowledge).where(
+                    Knowledge.user_id == user_id,
+                    Knowledge.is_favorite == True,  # noqa: E712 – SQL boolean comparison
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                )
+            )
+            return result.first()
+
+    @classmethod
     def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
         with get_sync_db_session() as session:
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
