@@ -5,7 +5,7 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
-import { Check, Database, Paperclip, X } from "lucide-react";
+import { Database, Paperclip } from "lucide-react";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState, runtimeKnowledgeSelectionState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
@@ -21,12 +21,12 @@ import {
 } from "./userSelectedKnowledge";
 
 const getRuntimeKnowledgeLabel = (selection?: RuntimeKnowledgeSelection | null) => {
-    if (!selection) return "选择知识库";
+    if (!selection) return "选择知识空间";
     if (selection.mode === "source" && selection.whole_source?.source_name) {
         return selection.whole_source.source_name;
     }
     const count = selection.effective_file_count ?? selection.items?.length ?? 0;
-    return count > 0 ? `已选 ${count} 个范围` : "选择知识库";
+    return count > 0 ? `已选 ${count} 个范围` : "选择知识空间";
 };
 
 const isPortalWorkflowEmbedRequest = () => {
@@ -65,12 +65,15 @@ export default function ChatInput({ readOnly, v, portalWorkflowMode = false }) {
         [chatState?.flow],
     );
     const hasActiveInputForm = Boolean(inputForm);
-    const showRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
+    const canShowRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
         requiresRuntimeKnowledge,
         inputDisabled,
         hasInputForm: hasActiveInputForm,
         readOnly,
 	    });
+    const showRuntimeKnowledgePicker = requiresRuntimeKnowledge && (
+        (canShowRuntimeKnowledgePicker && runtimeKnowledgePanelOpen) || Boolean(runtimeKnowledgeInputForm)
+    );
     const runtimeKnowledgeSelectionError = requiresRuntimeKnowledge
         ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection)
         : "";
@@ -131,48 +134,27 @@ export default function ChatInput({ readOnly, v, portalWorkflowMode = false }) {
     };
 
     const renderRuntimeKnowledgePickerPanel = (variant: "portal" | "default" = "default") => (
-        <div className={variant === "portal" ? "mb-2 rounded-lg border border-[#dbe7fb] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.12)]" : ""}>
-            {runtimeKnowledgeInputForm && (
-                <div className="mb-2 text-xs font-medium text-[#1a3fa8]">
-                    请选择知识范围后继续执行 workflow
-                </div>
-            )}
+        <div className={`absolute right-4 z-30 w-[min(560px,calc(100%-2rem))] ${variant === "portal" ? "bottom-[116px]" : "bottom-[108px]"}`}>
             <UserSelectedKnowledgePicker
                 disabled={runtimeKnowledgePickerDisabled}
                 value={runtimeKnowledgeSelection}
                 onChange={setRuntimeKnowledgeSelection}
+                showConfirm={variant === "portal" || Boolean(runtimeKnowledgeInputForm)}
+                confirmDisabled={Boolean(runtimeKnowledgeSelectionError)}
+                confirmLabel="确认"
+                onConfirm={handleConfirmRuntimeKnowledge}
+                onCancel={() => setRuntimeKnowledgePanelOpen(false)}
             />
-            {(variant === "portal" || runtimeKnowledgeInputForm) && <div className="mt-2 flex items-center justify-end gap-2">
-                {!runtimeKnowledgeInputForm && (
-                    <button
-                        type="button"
-                        className="inline-flex h-8 items-center gap-1 rounded-md border border-[#d8e0f0] px-3 text-xs font-medium text-[#5a6a88] transition-colors hover:bg-[#eef2fc] hover:text-[#1a3fa8]"
-                        onClick={() => setRuntimeKnowledgePanelOpen(false)}
-                    >
-                        <X size={14} />
-                        取消
-                    </button>
-                )}
-                <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-1 rounded-md bg-[#2d6ef5] px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={Boolean(runtimeKnowledgeSelectionError)}
-                    onClick={handleConfirmRuntimeKnowledge}
-                >
-                    <Check size={14} />
-                    确认
-                </button>
-            </div>}
         </div>
     );
 
     if (effectivePortalWorkflowMode) {
         return (
             <div className="z-10 w-full shrink-0 bg-[#fff] dark:bg-[#1B1B1B]">
-                <div className="mx-auto w-full max-w-[690px] px-4 pb-3">
+                <div className="relative mx-auto w-full max-w-[690px] px-4 pb-3">
                     {isDragging && <DragDropOverlay />}
 
-                    {runtimeKnowledgePanelOpen && requiresRuntimeKnowledge && renderRuntimeKnowledgePickerPanel("portal")}
+                    {showRuntimeKnowledgePicker && renderRuntimeKnowledgePickerPanel("portal")}
 
                     <div className="rounded-lg border border-[#c8d8f0] bg-white shadow-[0_2px_8px_rgba(26,63,168,0.06)] transition-all focus-within:border-[#2d6ef5] focus-within:shadow-[0_0_0_3px_rgba(45,110,245,0.10),0_2px_8px_rgba(26,63,168,0.06)]">
                         {showUpload && (
@@ -282,7 +264,7 @@ export default function ChatInput({ readOnly, v, portalWorkflowMode = false }) {
 
     return (
         <div className="z-10 w-full shrink-0 bg-[#fff] dark:bg-[#1B1B1B]">
-            <div className="mx-auto w-full max-w-[800px] px-4 pt-1">
+            <div className="relative mx-auto w-full max-w-[800px] px-4 pt-1">
                 {/* drag upload overlay */}
                 {isDragging && <DragDropOverlay />}
 

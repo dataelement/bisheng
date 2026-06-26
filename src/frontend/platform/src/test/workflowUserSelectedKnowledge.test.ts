@@ -30,11 +30,11 @@ describe("workflow user-selected knowledge helpers", () => {
   });
 
   it("validates required source, mutually exclusive modes, and file limit", () => {
-    expect(validateRuntimeKnowledgeSelection(null)).toBe("请选择知识库或知识空间。");
+    expect(validateRuntimeKnowledgeSelection(null)).toBe("请选择知识空间。");
     expect(
       validateRuntimeKnowledgeSelection({
         mode: "source",
-        whole_source: { source_type: "knowledge", source_id: 1, source_name: "kb" },
+        whole_source: { source_type: "space", source_id: 1, source_name: "space" },
         items: [],
         effective_file_count: null,
       }),
@@ -42,7 +42,7 @@ describe("workflow user-selected knowledge helpers", () => {
     expect(
       validateRuntimeKnowledgeSelection({
         mode: "source",
-        whole_source: { source_type: "knowledge", source_id: 1, source_name: "kb" },
+        whole_source: { source_type: "space", source_id: 1, source_name: "space" },
         items: [{ source_type: "space", source_id: 2, source_name: "space", ref_type: "file", id: 3, name: "doc" }],
         effective_file_count: 1,
       }),
@@ -52,12 +52,23 @@ describe("workflow user-selected knowledge helpers", () => {
         mode: "items",
         whole_source: null,
         items: [
-          { source_type: "knowledge", source_id: 1, source_name: "kb", ref_type: "file", id: 2, name: "doc" },
+          { source_type: "knowledge" as any, source_id: 1, source_name: "kb", ref_type: "file", id: 2, name: "doc" },
           { source_type: "space", source_id: 3, source_name: "space", ref_type: "file", id: 4, name: "space-doc" },
         ],
         effective_file_count: 2,
       }),
-    ).toBe("文件或文件夹范围不能同时选择知识库和知识空间。");
+    ).toBe("自选知识节点仅支持知识空间。");
+    expect(
+      validateRuntimeKnowledgeSelection({
+        mode: "items",
+        whole_source: null,
+        items: [
+          { source_type: "space", source_id: 1, source_name: "space-a", ref_type: "file", id: 2, name: "doc" },
+          { source_type: "space", source_id: 3, source_name: "space-b", ref_type: "file", id: 4, name: "space-doc" },
+        ],
+        effective_file_count: 2,
+      }),
+    ).toBe("一次只能选择一个知识空间。");
     expect(
       validateRuntimeKnowledgeSelection({
         mode: "items",

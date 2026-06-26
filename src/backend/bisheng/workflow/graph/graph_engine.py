@@ -35,7 +35,7 @@ RUNTIME_KNOWLEDGE_INPUT_SCHEMA = {
     "tab": "runtime_knowledge",
     "value": [],
     "required": True,
-    "placeholder": "请选择知识库或知识空间",
+    "placeholder": "请选择知识空间",
 }
 
 

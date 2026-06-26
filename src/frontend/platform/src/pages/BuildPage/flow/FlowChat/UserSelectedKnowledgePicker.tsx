@@ -1,4 +1,3 @@
-import { readFileByLibDatabase, readFileLibDatabase } from "@/controllers/API";
 import {
     getAuthorizedKnowledgeSpaceOptionsApi,
     getKnowledgeSpaceChildrenApi,
@@ -6,16 +5,14 @@ import {
     KnowledgeSpaceChild,
     KnowledgeSpaceSummary,
 } from "@/controllers/API/knowledgeSpace";
-import { ChevronRight, Database, FileText, Folder, Loader2, Search } from "lucide-react";
+import { Check, ChevronRight, Database, FileText, Folder, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
     MAX_RUNTIME_KNOWLEDGE_FILES,
     RuntimeKnowledgeItem,
     RuntimeKnowledgeSelection,
     RuntimeKnowledgeSource,
-    RuntimeKnowledgeSourceType,
 } from "./userSelectedKnowledge";
-import { Button } from "@/components/bs-ui/button";
 
 interface UserSelectedKnowledgePickerProps {
     disabled?: boolean;
@@ -25,6 +22,7 @@ interface UserSelectedKnowledgePickerProps {
     confirmDisabled?: boolean;
     confirmLabel?: string;
     onConfirm?: () => void;
+    onCancel?: () => void;
 }
 
 interface SourceItem extends RuntimeKnowledgeSource {
@@ -57,22 +55,6 @@ function isSuccessFile(item: ScopeItem): boolean {
     return !item.isFolder && (item.status === 2 || item.status === "2" || item.status === "success" || item.status === undefined);
 }
 
-function normalizeKnowledgeFile(raw: any, source: SourceItem): ScopeItem {
-    const fileType = raw.file_type ?? raw.fileType;
-    const isFolder = raw.type === "folder" || Number(fileType) === 0;
-    return {
-        source_type: source.source_type,
-        source_id: source.source_id,
-        source_name: source.source_name,
-        ref_type: isFolder ? "folder" : "file",
-        id: toId(raw.id),
-        name: raw.file_name || raw.name || "",
-        isFolder,
-        status: raw.status,
-        fileLevelPath: raw.file_level_path ?? raw.fileLevelPath ?? "",
-    };
-}
-
 function normalizeSpaceChild(raw: KnowledgeSpaceChild, source: SourceItem): ScopeItem {
     const fileType = raw.file_type;
     const isFolder = raw.type === "folder" || fileType === 0 || fileType === "0";
@@ -87,15 +69,6 @@ function normalizeSpaceChild(raw: KnowledgeSpaceChild, source: SourceItem): Scop
         status: raw.status,
         successFileCount: Number(raw.visible_success_file_num ?? raw.success_file_num ?? 0),
     };
-}
-
-function knowledgeParentKey(item: ScopeItem): string {
-    const parts = String(item.fileLevelPath || "").split("/").filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : "root";
-}
-
-function knowledgeFolderPrefix(item: ScopeItem): string {
-    return `${item.fileLevelPath || ""}/${item.id}`;
 }
 
 function sortScopeItems(items: ScopeItem[]): ScopeItem[] {
@@ -113,16 +86,11 @@ export default function UserSelectedKnowledgePicker({
     confirmDisabled = false,
     confirmLabel = "确认",
     onConfirm,
+    onCancel,
 }: UserSelectedKnowledgePickerProps) {
     const [keyword, setKeyword] = useState("");
-    const [knowledgeList, setKnowledgeList] = useState<SourceItem[]>([]);
     const [spaceList, setSpaceList] = useState<SourceItem[]>([]);
-    const [activeTab, setActiveTab] = useState<RuntimeKnowledgeSourceType>(
-        value?.mode === "source"
-            ? value.whole_source?.source_type || "knowledge"
-            : value?.items?.[0]?.source_type || "knowledge",
-    );
-    const [sourceLoading, setSourceLoading] = useState({ knowledge: false, space: false });
+    const [sourceLoading, setSourceLoading] = useState(false);
     const [childrenByKey, setChildrenByKey] = useState<Record<string, ScopeItem[]>>({});
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [childrenLoading, setChildrenLoading] = useState<Record<string, boolean>>({});
@@ -143,28 +111,18 @@ export default function UserSelectedKnowledgePicker({
 
     useEffect(() => {
         let canceled = false;
-        setSourceLoading({ knowledge: true, space: true });
-        readFileLibDatabase({ pageSize: 80, name: keyword, type: 0, permissionId: "use_kb" })
-            .then((res) => {
-                if (canceled) return;
-                setKnowledgeList((res.data || []).map((item) => ({
-                    source_type: "knowledge" as RuntimeKnowledgeSourceType,
-                    source_id: toId(item.id),
-                    source_name: item.name || "",
-                })));
-            })
-            .finally(() => !canceled && setSourceLoading((prev) => ({ ...prev, knowledge: false })));
+        setSourceLoading(true);
         getAuthorizedKnowledgeSpaceOptionsApi({ page: 1, page_size: 80, keyword, order_by: "name" })
             .then((res) => {
                 if (canceled) return;
                 setSpaceList((res.data || []).map((item: KnowledgeSpaceSummary) => ({
-                    source_type: "space" as RuntimeKnowledgeSourceType,
+                    source_type: "space",
                     source_id: toId(item.id),
                     source_name: item.name || "",
                     level: item.space_level || item.space_kind || "personal",
                 })));
             })
-            .finally(() => !canceled && setSourceLoading((prev) => ({ ...prev, space: false })));
+            .finally(() => !canceled && setSourceLoading(false));
         return () => {
             canceled = true;
         };
@@ -220,13 +178,6 @@ export default function UserSelectedKnowledgePicker({
         setSelectedItems([]);
     };
 
-    const handleChangeTab = (tab: RuntimeKnowledgeSourceType) => {
-        if (disabled || tab === activeTab) return;
-        setActiveTab(tab);
-        setWholeSource(null);
-        setSelectedItems([]);
-    };
-
     const handleToggleItem = (item: ScopeItem) => {
         if (disabled || (!item.isFolder && !isSuccessFile(item))) return;
         const runtimeItem: RuntimeKnowledgeItem = {
@@ -240,44 +191,14 @@ export default function UserSelectedKnowledgePicker({
         setWholeSource(null);
         setSelectedItems((prev) => {
             const key = itemKey(runtimeItem);
+            const existingSourceId = prev[0]?.source_id;
+            if (existingSourceId && Number(existingSourceId) !== Number(runtimeItem.source_id)) {
+                return [runtimeItem];
+            }
             return prev.some((one) => itemKey(one) === key)
                 ? prev.filter((one) => itemKey(one) !== key)
                 : [...prev, runtimeItem];
         });
-    };
-
-    const loadKnowledgeChildren = (source: SourceItem) => {
-        const rootKey = childrenKey(source, null);
-        if (childrenByKey[rootKey] || childrenLoading[rootKey]) return;
-        setChildrenLoading((prev) => ({ ...prev, [rootKey]: true }));
-        readFileByLibDatabase({ id: source.source_id, page: 1, pageSize: 1000 } as any)
-            .then((res) => {
-                const items = (res.data || [])
-                    .map((raw) => normalizeKnowledgeFile(raw, source))
-                    .filter((item) => item.isFolder || isSuccessFile(item));
-                const nextChildren: Record<string, ScopeItem[]> = {};
-                items.forEach((item) => {
-                    const parent = knowledgeParentKey(item);
-                    const key = parent === "root" ? rootKey : childrenKey(source, Number(parent));
-                    nextChildren[key] = nextChildren[key] || [];
-                    nextChildren[key].push(item);
-                });
-                const nextStats: Record<string, number> = {};
-                items.filter((item) => item.isFolder).forEach((folder) => {
-                    const prefix = knowledgeFolderPrefix(folder);
-                    nextStats[itemKey(folder)] = items.filter((item) =>
-                        !item.isFolder
-                        && isSuccessFile(item)
-                        && (item.fileLevelPath === prefix || String(item.fileLevelPath || "").startsWith(`${prefix}/`))
-                    ).length;
-                });
-                Object.keys(nextChildren).forEach((key) => {
-                    nextChildren[key] = sortScopeItems(nextChildren[key]);
-                });
-                setChildrenByKey((prev) => ({ ...prev, ...nextChildren, [rootKey]: nextChildren[rootKey] || [] }));
-                setFolderStats((prev) => ({ ...prev, ...nextStats }));
-            })
-            .finally(() => setChildrenLoading((prev) => ({ ...prev, [rootKey]: false })));
     };
 
     const loadSpaceChildren = (source: SourceItem, parentId: number | null) => {
@@ -325,11 +246,7 @@ export default function UserSelectedKnowledgePicker({
         const next = !expanded[key];
         setExpanded((prev) => ({ ...prev, [key]: next }));
         if (!next) return;
-        if (source.source_type === "knowledge") {
-            loadKnowledgeChildren(source);
-        } else {
-            loadSpaceChildren(source, null);
-        }
+        loadSpaceChildren(source, null);
     };
 
     const handleToggleExpandFolder = (item: ScopeItem) => {
@@ -346,10 +263,10 @@ export default function UserSelectedKnowledgePicker({
         const items = childrenByKey[key] || [];
         const loading = childrenLoading[key];
         if (loading) {
-            return <div className="flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />加载中...</div>;
+            return <div className="flex items-center gap-2 px-3 py-2 text-xs text-[#8a9ab8]"><Loader2 className="h-4 w-4 animate-spin" />加载中...</div>;
         }
         if (!items.length) {
-            return <div className="px-2 py-2 text-sm text-muted-foreground">暂无可选文件</div>;
+            return <div className="px-3 py-2 text-xs text-[#8a9ab8]">暂无可选文件</div>;
         }
         return items.map((item) => {
             const key = itemKey(item);
@@ -357,16 +274,19 @@ export default function UserSelectedKnowledgePicker({
             const expandedFolder = expanded[key];
             return (
                 <div key={key}>
-                    <div className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted ${selected ? "bg-primary/10 text-primary" : ""}`} style={{ paddingLeft: 10 + depth * 18 }}>
+                    <div
+                        className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors hover:bg-[#f3f7ff] ${selected ? "bg-[#eef5ff] text-[#1f65f2]" : "text-[#344563]"}`}
+                        style={{ paddingLeft: 14 + depth * 18 }}
+                    >
                         {item.isFolder ? (
-                            <button type="button" className="flex h-5 w-5 items-center justify-center" onClick={() => handleToggleExpandFolder(item)}>
+                            <button type="button" className="flex h-5 w-5 items-center justify-center text-[#6f86aa]" onClick={() => handleToggleExpandFolder(item)}>
                                 <ChevronRight className={`h-4 w-4 ${expandedFolder ? "rotate-90" : ""}`} />
                             </button>
                         ) : <span className="h-5 w-5" />}
-                        <input type="checkbox" checked={selected} disabled={disabled} onChange={() => handleToggleItem(item)} />
-                        {item.isFolder ? <Folder className="h-4 w-4 shrink-0" /> : <FileText className="h-4 w-4 shrink-0" />}
+                        <input type="checkbox" className="h-4 w-4 rounded border-[#9db5d8] text-[#2d6ef5]" checked={selected} disabled={disabled} onChange={() => handleToggleItem(item)} />
+                        {item.isFolder ? <Folder className="h-4 w-4 shrink-0 text-[#6f86aa]" /> : <FileText className="h-4 w-4 shrink-0 text-[#6f86aa]" />}
                         <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => handleToggleItem(item)}>{item.name}</button>
-                        {item.isFolder && <span className="text-xs text-muted-foreground">{folderStats[key] ?? item.successFileCount ?? 0}</span>}
+                        {item.isFolder && <span className="text-[11px] text-[#8a9ab8]">{folderStats[key] ?? item.successFileCount ?? 0}</span>}
                     </div>
                     {item.isFolder && expandedFolder && renderScopeItems(item, item.id, depth + 1)}
                 </div>
@@ -377,97 +297,79 @@ export default function UserSelectedKnowledgePicker({
     const renderSource = (source: SourceItem) => {
         const key = sourceKey(source);
         const selected = isSameSource(wholeSource, source);
+        const hasSelectedScope = selectedItems.some((item) => Number(item.source_id) === Number(source.source_id));
         return (
-            <div key={key} className="border-b last:border-b-0">
-                <div className={`flex items-center gap-2 px-2 py-2 text-sm hover:bg-muted ${selected ? "bg-primary/10 text-primary" : ""}`}>
-                    <button type="button" className="flex h-5 w-5 items-center justify-center" onClick={() => handleToggleExpandSource(source)}>
+            <div key={key} className="rounded-xl border border-[#dbe5f5] bg-white transition-colors hover:border-[#b9d2f6] hover:bg-[#f8fbff]">
+                <div className={`flex items-center gap-3 px-3 py-3 ${selected || hasSelectedScope ? "rounded-xl border border-[#6ca2ff] bg-[#f7fbff]" : ""}`}>
+                    <input type="checkbox" className="h-5 w-5 rounded border-[#8fb4f6] text-[#2d6ef5]" checked={selected} disabled={disabled} onChange={() => handleToggleWholeSource(source)} />
+                    <Database className="h-4 w-4 shrink-0 text-[#2d6ef5]" />
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => handleToggleExpandSource(source)}>
+                        <span className="block truncate text-sm font-semibold text-[#1d2b46]">{source.source_name}</span>
+                        <span className="mt-1 flex items-center gap-1 text-xs text-[#7e8fa8]">
+                            <ChevronRight className={`h-3 w-3 ${expanded[key] ? "rotate-90" : ""}`} />
+                            展开目录（可多选子项）
+                        </span>
+                    </button>
+                    <button type="button" className="flex h-7 w-7 items-center justify-center rounded-md text-[#6f86aa] hover:bg-[#edf4ff]" onClick={() => handleToggleExpandSource(source)}>
                         {childrenLoading[childrenKey(source, null)] ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className={`h-4 w-4 ${expanded[key] ? "rotate-90" : ""}`} />}
                     </button>
-                    <input type="checkbox" checked={selected} disabled={disabled} onChange={() => handleToggleWholeSource(source)} />
-                    <Database className="h-4 w-4 shrink-0" />
-                    <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => handleToggleExpandSource(source)}>
-                        {source.source_name}
-                    </button>
                 </div>
-                {expanded[key] && renderScopeItems(source, null, 1)}
+                {expanded[key] && <div className="border-t border-[#edf2fa] py-1">{renderScopeItems(source, null, 1)}</div>}
             </div>
         );
     };
 
     const overLimit = effectiveFileCount > MAX_RUNTIME_KNOWLEDGE_FILES;
-    const selectedText = wholeSource ? "整库/整空间" : `${effectiveFileCount} / ${MAX_RUNTIME_KNOWLEDGE_FILES}`;
+    const selectedText = wholeSource ? "整空间" : `${effectiveFileCount} / ${MAX_RUNTIME_KNOWLEDGE_FILES}`;
 
     return (
-        <div className="mb-2 rounded-md border bg-background p-2 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
+        <div className="w-full rounded-2xl border border-[#dbe7fb] bg-white p-4 shadow-[0_18px_44px_rgba(15,23,42,0.14)]">
+            <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                    <div className="text-sm font-medium">自选知识范围</div>
-                    <div className="text-xs text-muted-foreground">整库限选 1 个，文件最多 20 个</div>
+                    <div className="text-sm font-semibold text-[#1d2b46]">自选知识范围</div>
+                    <div className="mt-1 text-xs text-[#6f86aa]">选择 1 个知识空间，可限定文件/文件夹，文件最多 20 个</div>
                 </div>
-                <div className={`text-xs ${overLimit ? "text-red-500" : "text-muted-foreground"}`}>已选范围：{selectedText}</div>
+                <div className="flex shrink-0 items-center gap-2">
+                    <div className={`text-xs ${overLimit ? "text-red-500" : "text-[#6f86aa]"}`}>{wholeSource || selectedItems.length ? `已选范围：${selectedText}` : "未选择"}</div>
+                    {onCancel && (
+                        <button type="button" className="flex h-6 w-6 items-center justify-center rounded-md text-[#8a9ab8] hover:bg-[#eef4ff] hover:text-[#2d6ef5]" onClick={onCancel} aria-label="关闭">
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
             </div>
-            <div className="relative mb-2">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a9ab8]" />
                 <input
-                    className="h-9 w-full rounded-md border bg-background pl-8 pr-2 text-sm outline-none"
+                    className="h-9 w-full rounded-md border border-[#d8e4f5] bg-[#fbfdff] pl-9 pr-2 text-sm outline-none placeholder:text-[#8a9ab8] focus:border-[#7fb0ff]"
                     value={keyword}
                     disabled={disabled}
-                    placeholder="文件名搜索"
+                    placeholder="搜索知识空间名称"
                     onChange={(event) => setKeyword(event.target.value)}
                 />
             </div>
-            <div role="tablist" aria-label="知识来源类型" className="mb-2 grid grid-cols-2 rounded-md bg-muted p-1">
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === "knowledge"}
-                    className={`h-8 rounded text-sm font-medium ${activeTab === "knowledge" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-                    disabled={disabled}
-                    onClick={() => handleChangeTab("knowledge")}
-                >
-                    文档知识库
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === "space"}
-                    className={`h-8 rounded text-sm font-medium ${activeTab === "space" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-                    disabled={disabled}
-                    onClick={() => handleChangeTab("space")}
-                >
-                    知识空间
-                </button>
-            </div>
-            <div className="max-h-80 overflow-auto rounded border">
-                {activeTab === "knowledge" ? (
-                    <>
-                        {sourceLoading.knowledge && <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />加载中...</div>}
-                        {!sourceLoading.knowledge && knowledgeList.map(renderSource)}
-                        {!sourceLoading.knowledge && !knowledgeList.length && <div className="p-2 text-sm text-muted-foreground">暂无匹配的知识库</div>}
-                    </>
-                ) : (
-                    <>
-                        {sourceLoading.space && <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />加载中...</div>}
-                        {!sourceLoading.space && Object.keys(groupedSpaces).map((level) => (
-                            <div key={level}>
-                                <div className="px-2 py-1 text-xs text-muted-foreground">{SPACE_LEVEL_LABELS[level] || level}</div>
-                                {groupedSpaces[level].map(renderSource)}
-                            </div>
-                        ))}
-                        {!sourceLoading.space && !spaceList.length && <div className="p-2 text-sm text-muted-foreground">暂无匹配的知识空间</div>}
-                    </>
-                )}
+            <div className="max-h-[360px] min-h-[220px] space-y-2 overflow-auto rounded-xl border border-[#edf2fa] bg-white p-2">
+                {sourceLoading && <div className="flex items-center gap-2 p-3 text-sm text-[#8a9ab8]"><Loader2 className="h-4 w-4 animate-spin" />加载中...</div>}
+                {!sourceLoading && Object.keys(groupedSpaces).map((level) => (
+                    <div key={level} className="space-y-2">
+                        <div className="px-1 text-xs text-[#8a9ab8]">{SPACE_LEVEL_LABELS[level] || level}</div>
+                        <div className="space-y-2">{groupedSpaces[level].map(renderSource)}</div>
+                    </div>
+                ))}
+                {!sourceLoading && !spaceList.length && <div className="p-3 text-sm text-[#8a9ab8]">暂无匹配的知识空间</div>}
             </div>
             {showConfirm && (
-                <div className="mt-2 flex justify-end">
-                    <Button
-                        type="button"
-                        size="sm"
-                        disabled={disabled || confirmDisabled}
-                        onClick={onConfirm}
-                    >
+                <div className="mt-3 flex justify-end gap-2">
+                    {onCancel && (
+                        <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md border border-[#d8e0f0] px-3 text-xs font-medium text-[#5a6a88] hover:bg-[#eef4ff] hover:text-[#2d6ef5]" onClick={onCancel}>
+                            <X size={14} />
+                            取消
+                        </button>
+                    )}
+                    <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md bg-[#2d6ef5] px-3 text-xs font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" disabled={disabled || confirmDisabled} onClick={onConfirm}>
+                        <Check size={14} />
                         {confirmLabel}
-                    </Button>
+                    </button>
                 </div>
             )}
         </div>
