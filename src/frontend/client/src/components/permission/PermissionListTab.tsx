@@ -587,9 +587,9 @@ export function PermissionListTab({
                     key={`${entry.subject_type}-${entry.subject_id}-${index}`}
                     className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
                   >
-                    <div className="flex w-[200px] shrink-0 items-center gap-2">
+                    <div className="flex w-[200px] min-w-0 shrink items-center gap-2">
                       {entry.subject_type === "user" ? (
-                        <Avatar className="h-8 w-8">
+                        <Avatar className="h-8 w-8 shrink-0">
                           <AvatarName
                             name={displayName}
                             className="text-[14px] font-bold leading-[14px]"
@@ -661,7 +661,7 @@ export function PermissionListTab({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
-                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
+                        <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
                           {getPermissionLabel(entry)}
                         </span>
                       )}
