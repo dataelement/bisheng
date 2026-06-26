@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -28,6 +29,17 @@ def _request(*fields: SgDepartmentFieldItem, mdm_id: int = 42, uuid: str = "batc
     )
 
 
+def _enter_dao_patches(stack: ExitStack, **overrides):
+    defaults = {
+        "DepartmentDao.aget_by_source_external_id": AsyncMock(return_value=None),
+        "DepartmentDao.aget_by_external_id": AsyncMock(return_value=None),
+        "DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(return_value=[]),
+    }
+    defaults.update(overrides)
+    for target, mock in defaults.items():
+        stack.enter_context(patch(f"{MODULE}.{target}", mock))
+
+
 @pytest.mark.asyncio
 class TestSgDepartmentsSyncService:
     async def test_root_department_upsert_success(self):
@@ -38,16 +50,20 @@ class TestSgDepartmentsSyncService:
         payload = _request(
             SgDepartmentFieldItem(uuid="u1", code="D1", remark="Engineering", state="0"),
         )
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aupsert_by_external_id",
-                new_callable=AsyncMock,
-            ) as upsert,
-            patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
-                new_callable=AsyncMock,
-            ) as archive,
-        ):
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            upsert = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
+            archive = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
         assert response.esb.code == "0"
@@ -76,24 +92,43 @@ class TestSgDepartmentsSyncService:
             ),
         )
         parent = _dept(dept_id=10, path="/1/10/")
+        child = SimpleNamespace(id=11, path="/1/10/11/", parent_id=10, sort_order=0)
 
         async def _upsert(**kwargs):
             if kwargs["external_id"] == "P1":
                 return parent
-            return _dept(dept_id=11, path="/1/10/11/")
+            return child
 
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aget_by_external_id",
-                new_callable=AsyncMock,
-                side_effect=lambda ext, _tid: parent if ext == "P1" else None,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDao.aupsert_by_external_id",
-                new_callable=AsyncMock,
-                side_effect=_upsert,
-            ),
-        ):
+        async def _get_by_source(_src, ext):
+            if ext == "P1":
+                return parent
+            if ext == "C1":
+                return child
+            return None
+
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "DepartmentDao.aget_by_source_external_id": AsyncMock(
+                        side_effect=_get_by_source,
+                    ),
+                },
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda ext, _tid: parent if ext == "P1" else None,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=_upsert,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
         assert response.esb.code == "0"
@@ -109,16 +144,20 @@ class TestSgDepartmentsSyncService:
         payload = _request(
             SgDepartmentFieldItem(uuid="u1", code="D1", remark="Active", state="01"),
         )
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aupsert_by_external_id",
-                new_callable=AsyncMock,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
-                new_callable=AsyncMock,
-            ) as archive,
-        ):
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
+            archive = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
         assert response.esb.code == "0"
@@ -132,16 +171,20 @@ class TestSgDepartmentsSyncService:
         payload = _request(
             SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="00"),
         )
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aupsert_by_external_id",
-                new_callable=AsyncMock,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
-                new_callable=AsyncMock,
-            ) as archive,
-        ):
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
+            archive = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
         assert response.esb.code == "0"
@@ -155,16 +198,20 @@ class TestSgDepartmentsSyncService:
         payload = _request(
             SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="1"),
         )
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aupsert_by_external_id",
-                new_callable=AsyncMock,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
-                new_callable=AsyncMock,
-            ) as archive,
-        ):
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
+            archive = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
         assert response.esb.code == "0"
@@ -199,7 +246,7 @@ class TestSgDepartmentsSyncService:
         assert info.status == "1"
         assert "state must be 0/01(enabled) or 1/00(disabled)" in info.error_text
 
-    async def test_parent_not_found_marks_row_failed(self):
+    async def test_child_inserted_before_parent_exists(self):
         from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
             SgDepartmentsSyncService,
         )
@@ -213,14 +260,79 @@ class TestSgDepartmentsSyncService:
                 state="0",
             ),
         )
-        with patch(
-            f"{MODULE}.DepartmentDao.aget_by_external_id",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    return_value=None,
+                )
+            )
+            upsert = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
-        assert response.esb.code == "1"
+        assert response.esb.code == "0"
         info = response.esb.data.data_infos.data_info[0]
-        assert info.status == "1"
-        assert "parent external_id=MISSING not found" in info.error_text
+        assert info.status == "0"
+        upsert.assert_awaited_once()
+        assert upsert.await_args.kwargs["sync_parent_external_id"] == "MISSING"
+        assert upsert.await_args.kwargs["parent_id"] is None
+
+    async def test_child_relinked_when_parent_arrives_in_later_batch(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        parent = _dept(dept_id=10, path="/1/10/")
+        child = SimpleNamespace(
+            id=11,
+            external_id="C1",
+            name="Child",
+            parent_id=None,
+            path="/11/",
+            sort_order=0,
+            sync_parent_external_id="P1",
+        )
+        payload = _request(
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+        )
+
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "DepartmentDao.aget_by_source_external_id": AsyncMock(
+                        side_effect=lambda _src, ext: parent if ext == "P1" else None,
+                    ),
+                    "DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(
+                        return_value=[child],
+                    ),
+                },
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda ext, _tid: parent if ext == "P1" else None,
+                )
+            )
+            upsert = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    return_value=parent,
+                )
+            )
+            response = await SgDepartmentsSyncService.execute(payload)
+
+        assert response.esb.code == "0"
+        relink_calls = [call for call in upsert.await_args_list if call.kwargs.get("external_id") == "C1"]
+        assert len(relink_calls) == 1
+        assert relink_calls[0].kwargs["parent_id"] == 10
+        assert relink_calls[0].kwargs["sync_parent_external_id"] is None

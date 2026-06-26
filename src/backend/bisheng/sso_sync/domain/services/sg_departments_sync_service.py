@@ -49,7 +49,6 @@ class SgDepartmentsSyncService:
     ) -> SgDepartmentSyncResponse:
         normalized: list[_NormalizedItem] = []
         info_map: dict[int, SgDataInfoItem] = {}
-        unresolved: set[int] = set()
 
         for idx, item in enumerate(payload.fields):
             try:
@@ -61,12 +60,11 @@ class SgDepartmentsSyncService:
                     index=idx,
                     payload=item,
                     code=code,
-                    parent_code=(item.pid or "").strip(),
+                    parent_code=cls._normalize_parent_code(item.pid),
                     name=(item.remark or "").strip() or code,
                     status=status,
                 )
                 normalized.append(normalized_item)
-                unresolved.add(idx)
             except Exception as exc:
                 info_map[idx] = cls._failed_info(
                     item=item,
@@ -75,48 +73,41 @@ class SgDepartmentsSyncService:
                     message=str(exc),
                 )
 
-        max_round = len(normalized) + 1
+        parent_cache: dict[str, Department] = {}
         with bypass_tenant_filter():
             token = set_current_tenant_id(ROOT_TENANT_ID)
             try:
-                for _ in range(max_round):
-                    progressed = False
-                    for row in normalized:
-                        if row.index not in unresolved:
-                            continue
-                        if row.parent_code and cls._parent_still_pending(
-                            row.parent_code,
-                            normalized,
-                            unresolved,
-                        ):
-                            continue
-                        info_map[row.index] = await cls._apply_one(row, payload.mdm_id)
-                        unresolved.remove(row.index)
-                        progressed = True
-                    if not unresolved or not progressed:
-                        break
+                for row in normalized:
+                    if row.index in info_map:
+                        continue
+                    info_map[row.index] = await cls._apply_one(
+                        row,
+                        payload.mdm_id,
+                        parent_cache,
+                    )
+                    fresh = await DepartmentDao.aget_by_source_external_id(
+                        cls.SOURCE,
+                        row.code,
+                    )
+                    if fresh is not None:
+                        parent_cache[row.code] = fresh
+
+                await cls._relink_batch_children(normalized, payload.mdm_id, parent_cache)
+
+                for row in normalized:
+                    info = info_map.get(row.index)
+                    if info is None or info.status != "0":
+                        continue
+                    await cls._relink_db_children_waiting_for_parent(
+                        row.code,
+                        payload.mdm_id,
+                    )
             finally:
                 current_tenant_id.reset(token)
 
-        if unresolved:
-            idx_to_row = {row.index: row for row in normalized}
-            for idx in sorted(unresolved):
-                row = idx_to_row[idx]
-                msg = (
-                    f"parent external_id={row.parent_code} not found or unresolved"
-                    if row.parent_code
-                    else "item unresolved"
-                )
-                info_map[idx] = cls._failed_info(
-                    item=row.payload,
-                    code=row.code,
-                    mdm_id=payload.mdm_id,
-                    message=msg,
-                )
-
         ordered_infos = [info_map[i] for i in sorted(info_map.keys())]
         all_success = all(one.status == "0" for one in ordered_infos)
-        response = SgDepartmentSyncResponse(
+        return SgDepartmentSyncResponse(
             ESB=SgEsbPayload(
                 CODE="0" if all_success else "1",
                 DESC="success" if all_success else "partial_failure",
@@ -126,26 +117,19 @@ class SgDepartmentsSyncService:
                 ),
             ),
         )
-        return response
 
     @classmethod
     async def _apply_one(
         cls,
         row: _NormalizedItem,
         mdm_id: int,
+        parent_cache: dict[str, Department],
     ) -> SgDataInfoItem:
         try:
-            parent: Department | None = None
-            if row.parent_code:
-                parent = await DepartmentDao.aget_by_external_id(
-                    row.parent_code,
-                    ROOT_TENANT_ID,
-                )
-                if parent is None:
-                    raise ValueError(
-                        f"parent external_id={row.parent_code} not found",
-                    )
-
+            parent, pending_parent_code = await cls._resolve_parent(
+                row.parent_code,
+                parent_cache,
+            )
             ts = int(time.time())
             parent_id = int(parent.id) if parent is not None and parent.id is not None else None
             parent_path = parent.path if parent is not None else ""
@@ -158,6 +142,7 @@ class SgDepartmentsSyncService:
                 sort_order=0,
                 last_sync_ts=ts,
                 tenant_id=ROOT_TENANT_ID,
+                sync_parent_external_id=pending_parent_code,
             )
             if row.status == 1:
                 await DepartmentDao.aarchive_by_external_id(
@@ -185,6 +170,113 @@ class SgDepartmentsSyncService:
                 message=str(exc),
             )
 
+    @classmethod
+    async def _relink_batch_children(
+        cls,
+        normalized: list[_NormalizedItem],
+        mdm_id: int,
+        parent_cache: dict[str, Department],
+    ) -> None:
+        max_round = len(normalized) + 1
+        for _ in range(max_round):
+            progressed = False
+            for row in normalized:
+                if not row.parent_code:
+                    continue
+                parent = parent_cache.get(row.parent_code)
+                if parent is None:
+                    parent = await DepartmentDao.aget_by_external_id(
+                        row.parent_code,
+                        ROOT_TENANT_ID,
+                    )
+                if parent is None:
+                    continue
+                parent_cache[row.parent_code] = parent
+                child = await DepartmentDao.aget_by_source_external_id(
+                    cls.SOURCE,
+                    row.code,
+                )
+                if child is None:
+                    continue
+                if cls._needs_relink(child, parent):
+                    await cls._relink_child_to_parent(child, parent, mdm_id)
+                    progressed = True
+            if not progressed:
+                break
+
+    @classmethod
+    async def _relink_db_children_waiting_for_parent(
+        cls,
+        parent_code: str,
+        mdm_id: int,
+    ) -> None:
+        parent = await DepartmentDao.aget_by_external_id(
+            parent_code,
+            ROOT_TENANT_ID,
+        )
+        if parent is None or parent.id is None:
+            return
+        children = await DepartmentDao.alist_by_sync_parent_external_id(
+            cls.SOURCE,
+            parent_code,
+            ROOT_TENANT_ID,
+        )
+        for child in children:
+            if cls._needs_relink(child, parent):
+                await cls._relink_child_to_parent(child, parent, mdm_id)
+
+    @classmethod
+    async def _resolve_parent(
+        cls,
+        parent_code: str,
+        parent_cache: dict[str, Department],
+    ) -> tuple[Department | None, str | None]:
+        if not parent_code:
+            return None, None
+        parent = parent_cache.get(parent_code)
+        if parent is None:
+            parent = await DepartmentDao.aget_by_external_id(
+                parent_code,
+                ROOT_TENANT_ID,
+            )
+        if parent is not None:
+            parent_cache[parent_code] = parent
+            return parent, None
+        return None, parent_code
+
+    @staticmethod
+    def _needs_relink(child: Department, parent: Department) -> bool:
+        if getattr(child, "sync_parent_external_id", None):
+            return True
+        return (getattr(child, "parent_id", None) or 0) != (getattr(parent, "id", None) or 0)
+
+    @classmethod
+    async def _relink_child_to_parent(
+        cls,
+        child: Department,
+        parent: Department,
+        mdm_id: int,
+    ) -> None:
+        ts = int(time.time())
+        await DepartmentDao.aupsert_by_external_id(
+            source=cls.SOURCE,
+            external_id=str(child.external_id),
+            name=child.name,
+            parent_id=int(parent.id),
+            path=parent.path or "",
+            sort_order=child.sort_order or 0,
+            last_sync_ts=ts,
+            tenant_id=ROOT_TENANT_ID,
+            sync_parent_external_id=None,
+        )
+
+    @staticmethod
+    def _normalize_parent_code(value: str) -> str:
+        raw = (value or "").strip()
+        if not raw or raw == "0":
+            return ""
+        return raw
+
     @staticmethod
     def _parse_status(value: str) -> int:
         raw = (value or "").strip()
@@ -195,17 +287,6 @@ class SgDepartmentsSyncService:
         raise ValueError(
             "state must be 0/01(enabled) or 1/00(disabled)",
         )
-
-    @staticmethod
-    def _parent_still_pending(
-        parent_code: str,
-        normalized: list[_NormalizedItem],
-        unresolved: set[int],
-    ) -> bool:
-        for row in normalized:
-            if row.code == parent_code and row.index in unresolved:
-                return True
-        return False
 
     @staticmethod
     def _failed_info(
