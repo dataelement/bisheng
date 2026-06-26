@@ -200,15 +200,66 @@ class ShougangPortalPersonalSpacesResp(BaseModel):
 
 
 class ShougangPortalFavoriteCreateReq(BaseModel):
-    source_space_id: int = Field(..., gt=0, description="Source knowledge space ID")
-    source_file_id: int = Field(..., gt=0, description="Source file ID")
-    target_space_id: int = Field(..., gt=0, description="Target personal knowledge space ID")
+    source_space_id: int = Field(..., gt=0)
+    source_file_id: int = Field(..., gt=0)
 
 
 class ShougangPortalFavoriteCreateResp(BaseModel):
-    file_id: int = Field(..., description="Copied file ID")
-    space_id: int = Field(..., description="Target knowledge space ID")
-    title: str = Field(default="", description="Copied document title")
+    favorite_file_id: int
+    space_id: int
+    source_space_id: int
+    source_file_id: int
+    title: str = ""
+
+
+class ShougangPortalFavoriteRemoveReq(BaseModel):
+    source_space_id: int = Field(..., gt=0)
+    source_file_id: int = Field(..., gt=0)
+
+
+class ShougangPortalFavoriteRemoveResp(BaseModel):
+    removed: bool = False
+
+
+class ShougangPortalFavoriteStatusItem(BaseModel):
+    space_id: int = Field(..., gt=0)
+    file_id: int = Field(..., gt=0)
+
+
+class ShougangPortalFavoriteStatusReq(BaseModel):
+    items: list[ShougangPortalFavoriteStatusItem] = Field(default_factory=list)
+
+
+class ShougangPortalFavoriteStatusResultItem(BaseModel):
+    space_id: int
+    file_id: int
+    favorited: bool = False
+
+
+class ShougangPortalFavoriteStatusResp(BaseModel):
+    data: list[ShougangPortalFavoriteStatusResultItem] = Field(default_factory=list)
+
+
+class ShougangPortalFavoriteFileItem(BaseModel):
+    favorite_file_id: int
+    source_space_id: int
+    source_file_id: int
+    title: str = ""
+    file_name: str = ""
+    status: Literal["valid", "invalid"] = "valid"
+    updated_at: str = ""
+
+
+class ShougangPortalFavoriteFilesResp(BaseModel):
+    data: list[ShougangPortalFavoriteFileItem] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class ShougangPortalFavoriteSpaceResp(BaseModel):
+    space_id: int
+    name: str = "我的收藏"
 
 
 class ShougangPortalShareType(str, Enum):
