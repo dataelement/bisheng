@@ -333,11 +333,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             permission_levels = {space_id: level for space_id, level in zip(permission_space_ids, levels)}
         if required_permission_id and permission_id_space_ids:
+            # F040 (B): build the ReBAC binding index once and share an OpenFGA tuple
+            # cache across all spaces in this page, instead of rebuilding the index +
+            # re-reading tuples per space (the per-space N+1 on /space/joined etc.).
+            # The membership / public-space merge stays inside _get_effective_permission_ids,
+            # so the filtered result is identical to the per-space path.
+            shared_bindings = await self._get_relation_bindings()
+            shared_ctx = {
+                "binding_index": FineGrainedPermissionService.build_binding_index(shared_bindings),
+                "tuple_cache": {},
+                "tuple_department_paths": {},
+            }
             permission_ids = await asyncio.gather(
                 *[
                     self._get_effective_permission_ids(
                         "knowledge_space",
                         space_id,
+                        shared=shared_ctx,
                     )
                     for space_id in permission_id_space_ids
                 ]
@@ -1033,6 +1045,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         object_id: int,
         *,
         space_id: int | None = None,
+        shared: dict | None = None,
     ) -> set[str]:
         # F036: request-scoped memo. The /children entry does the same `view_space` evaluation
         # twice (read-permission + view_space checks) and the no-parent branch repeats it; this
@@ -1054,6 +1067,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         binding_department_paths = await self._get_binding_department_paths(bindings)
         models = await self._get_relation_models_map()
         lineage_binding_can_override = object_type in {"folder", "knowledge_file"}
+        # F040 (B): when evaluating a *batch* of spaces (e.g. _format_accessible_spaces),
+        # the caller passes a shared context so the binding index is built once and the
+        # OpenFGA tuple reads are memoized across spaces, instead of rebuilt per space.
+        # Omitted → get_effective_permission_ids_async derives them per call (unchanged).
+        shared_kwargs = {}
+        if shared is not None:
+            shared_kwargs = {
+                "binding_index": shared.get("binding_index"),
+                "tuple_cache": shared.get("tuple_cache"),
+                "tuple_department_paths": shared.get("tuple_department_paths"),
+            }
         (
             effective_permissions,
             matched_lineage_binding,
@@ -1068,6 +1092,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             lineage=lineage,
             nearest_binding_wins=lineage_binding_can_override,
             return_match_metadata=True,
+            **shared_kwargs,
         )
         for lineage_type, lineage_id in lineage:
             if lineage_type == "knowledge_space":
@@ -2000,12 +2025,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # upload path. A custom permission template may grant upload_file
             # under a viewer-tier relation that can_read/can_edit can't express,
             # so the coarse list_objects relation alone is not a valid proxy.
-            uploadable = []
-            for s in spaces:
-                perms = await self._get_effective_permission_ids("knowledge_space", s.id)
-                if "upload_file" in perms:
-                    uploadable.append(s)
-            spaces = uploadable
+            # F040 (B/AC-09): evaluate candidates in parallel instead of a serial loop.
+            perms_per_space = await asyncio.gather(
+                *[self._get_effective_permission_ids("knowledge_space", s.id) for s in spaces]
+            )
+            spaces = [s for s, perms in zip(spaces, perms_per_space) if "upload_file" in perms]
             spaces.sort(
                 key=lambda s: s.update_time or datetime.min,
                 reverse=True,
