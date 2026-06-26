@@ -166,9 +166,24 @@ class PermissionService:
             return allowed
 
         except FGAConnectionError as e:
-            # L5: Fail-closed (AD-03)
-            logger.error("OpenFGA unreachable during check, denying access: %s", e)
-            return False
+            # OpenFGA unreachable. Originally a hard fail-closed (return False),
+            # but that diverged from the two other "FGA unavailable" paths — the
+            # `fga is None` branch above and list_accessible_ids — which both fall
+            # back to the owner / implicit level (DB truth, independent of FGA).
+            # The divergence let an owner SEE a resource in lists yet be denied on
+            # access during an outage. Align all three on the owner/implicit
+            # fallback. Deliberately NOT cached (degraded, outage-only result).
+            logger.error("OpenFGA unreachable during check, falling back to owner/implicit: %s", e)
+            implicit_level = await cls._get_implicit_permission_level_after_gate(
+                user_id,
+                object_type,
+                object_id,
+            )
+            return cls._permission_level_satisfies_relation(
+                implicit_level,
+                relation,
+                object_type,
+            )
         except Exception as e:
             logger.error("Unexpected error during permission check: %s", e)
             return False
