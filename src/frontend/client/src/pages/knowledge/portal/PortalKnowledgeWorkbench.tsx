@@ -783,6 +783,9 @@ export default function PortalKnowledgeWorkbench() {
             const type = event.data?.type;
             if (type === "shougang-portal:open-my-upload" || type === "shougang-portal:open-my-uploads") {
                 setUploadedFilesOpen(true);
+            } else if (type === "shougang-portal:open-document-chat") {
+                setActivePanel(null);
+                setAiDrawerOpen(true);
             }
         };
         window.addEventListener("message", handlePortalMessage);
