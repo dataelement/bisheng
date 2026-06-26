@@ -422,7 +422,7 @@ export default function KnowledgeSpaceTagSection({
 
                         <div className="max-h-[180px] overflow-y-auto rounded-md border bg-background">
                             <table className="w-full table-fixed border-collapse">
-                                <thead className="bg-muted/40">
+                                <thead className="sticky top-0 z-10 bg-background">
                                     <tr className="text-left text-sm text-muted-foreground">
                                         <th className="w-[28%] px-4 py-3 font-medium">
                                             {t("build.tagName", "标签名称")}

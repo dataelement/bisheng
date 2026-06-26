@@ -135,7 +135,7 @@ export default function KnowledgeSpaceReviewTagSection({
                     <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                         <div className="max-h-[240px] overflow-y-auto rounded-md border bg-background">
                             <table className="w-full table-fixed border-collapse">
-                                <thead className="bg-muted/40">
+                                <thead className="sticky top-0 z-10 bg-background">
                                     <tr className="text-left text-sm text-muted-foreground">
                                         <th className="w-[20%] px-4 py-3 font-medium">
                                             {t("build.reviewTagName", "建议标签")}
