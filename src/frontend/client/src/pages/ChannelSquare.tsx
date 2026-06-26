@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
 import { Search } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
@@ -8,7 +8,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { cn } from "~/utils";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
@@ -71,11 +71,18 @@ function ChannelSquare({
   // before data arrives. Subsequent search/refresh reloads keep the existing
   // list (search filters client-side), so we don't re-enter the loading view.
   const [initialLoading, setInitialLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
+
+  // 卡片每行列数自适应，与应用广场保持一致：lg+ 3 列，md 2 列，窄屏 1 列
+  const isAtLeast768 = useMediaQuery("(min-width: 768px)");
+  const isAtLeast1024 = useMediaQuery("(min-width: 1024px)");
+  const squareCols = useMemo(() => {
+    if (isAtLeast1024) return 3;
+    if (isAtLeast768) return 2;
+    return 1;
+  }, [isAtLeast768, isAtLeast1024]);
 
   const tTitle = title || localize("com_subscription.explore_channel_plaza");
   const tSubtitle = subtitle || localize("com_subscription.explore_more_channel");
@@ -248,9 +255,10 @@ function ChannelSquare({
 
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
-      {/* H5 顶部栏：侧栏按钮。频道/广场 切换器为跨视图常驻单实例（见 Subscription/index）。 */}
+      {/* H5 顶部栏：侧栏按钮。频道/广场 切换器为跨视图常驻单实例（见 Subscription/index）。
+          底色与下方头部带一致（brand 5%）并跟随主题，让顶栏与广场头部连成一片（仅移动端·广场）。 */}
       {isH5 ? (
-        <div className="shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+        <div className="shrink-0 bg-blue-500/[0.05] pt-[calc(env(safe-area-inset-top,0px)+8px)]">
           <div className="relative flex h-11 items-center px-4">
             {onOpenMobileNav ? (
               <button
@@ -304,11 +312,7 @@ function ChannelSquare({
 
       {/* 频道列表区域 */}
       <div
-        ref={(el) => {
-          scrollRef.current = el;
-          scrollRevealRef(el);
-        }}
-        className="flex-1 flex flex-col overflow-y-auto scrollbar-on-scroll bg-white"
+        className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
         onScroll={handleListScroll}
       >
         <div className={cn("mx-auto mb-6 mt-6 w-full max-w-[480px]", isH5 && "px-4")}>
@@ -341,7 +345,10 @@ function ChannelSquare({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
+              <div
+                className="grid gap-3"
+                style={{ gridTemplateColumns: `repeat(${squareCols}, minmax(0, 1fr))` }}
+              >
                 {visibleChannels.map((channel) => (
                     <ChannelSquareCard
                       key={channel.id}

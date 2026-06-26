@@ -118,7 +118,7 @@ export function ChannelSquareTabs({
                 {/* Single blue bar that slides between the two tabs. */}
                 <span
                     aria-hidden
-                    className="pointer-events-none absolute -bottom-1.5 left-0 h-0.5 rounded-full bg-[#335CFF] motion-reduce:transition-none"
+                    className="pointer-events-none absolute -bottom-1.5 left-0 h-0.5 rounded-full bg-blue-500 motion-reduce:transition-none"
                     style={{
                         width: indicator.width,
                         transform: `translateX(${indicator.left}px)`,

@@ -553,7 +553,7 @@ export function ArticleList({
                                 className={cn(
                                     "shrink-0 rounded-[6px] border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
-                                        ? "border-primary bg-primary/20 text-primary"
+                                        ? "border-transparent bg-primary/20 text-primary"
                                         : "border-[#E5E6EB] bg-white text-gray-800",
                                     mobileDropdownOpen && "pointer-events-none opacity-20",
                                 )}
@@ -588,13 +588,13 @@ export function ArticleList({
                                             className={cn(
                                                 "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                                 !selectedSubChannelName
-                                                    ? "border-[#335CFF] text-[#335CFF]"
+                                                    ? "border-blue-500 text-blue-500"
                                                     : "border-transparent text-[#212121]",
                                             )}
                                         >
                                             <span>{localize("com_subscription.all")}</span>
                                             {channel.unreadCount > 0 && (
-                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-blue-500/5 px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                                                     {channel.unreadCount}
                                                 </span>
                                             )}
@@ -607,7 +607,7 @@ export function ArticleList({
                                                 className={cn(
                                                     "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                                     selectedSubChannelName === sub.name
-                                                        ? "border-[#335CFF] text-[#335CFF]"
+                                                        ? "border-blue-500 text-blue-500"
                                                         : "border-transparent text-[#212121]",
                                                 )}
                                             />

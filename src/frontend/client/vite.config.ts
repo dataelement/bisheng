@@ -410,6 +410,8 @@ export default defineConfig(({ command, mode }) => {
         '~': path.join(__dirname, 'src/'),
         '@': path.join(__dirname, 'src/'),
         $fonts: path.resolve(__dirname, 'public/fonts'),
+        // SUL-licensed nodebox is unused (only static/react-ts templates); stub it out of the bundle.
+        '@codesandbox/nodebox': path.resolve(__dirname, 'stubs/nodebox-stub.ts'),
       },
     },
   };

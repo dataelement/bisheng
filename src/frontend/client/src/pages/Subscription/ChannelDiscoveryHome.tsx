@@ -8,6 +8,7 @@ import { NotificationSeverity } from "~/common";
 import { getRecommendedChannelsApi, subscribeManagerChannelApi } from "~/api/channels";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn } from "~/utils";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { ChannelSquareCard } from "../ChannelSquareCard";
 import { SERIF_FONT_STACK } from "./ArticleList/ChannelSwitcher";
 
@@ -261,14 +262,14 @@ export function ChannelDiscoveryHome({
                 <button
                     type="button"
                     onClick={onGoSquare}
-                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors fine-pointer:hover:border-[#165DFF] fine-pointer:hover:text-[#165DFF]"
+                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors fine-pointer:hover:border-blue-500 fine-pointer:hover:text-blue-500"
                 >
                     {localize("com_subscription.go_to_square")}
                 </button>
                 <button
                     type="button"
                     onClick={onCreateChannel}
-                    className="h-8 rounded-md bg-[#165DFF] px-4 text-[14px] leading-[22px] text-white transition-colors fine-pointer:hover:bg-[#4080FF] active:bg-[#0E42D2]"
+                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors fine-pointer:hover:bg-blue-400 active:bg-blue-600"
                 >
                     {localize("com_subscription.create_channel")}
                 </button>
@@ -277,11 +278,7 @@ export function ChannelDiscoveryHome({
     );
 
     const renderEmptyIllustration = () => (
-        <img
-            className="size-[120px] object-contain opacity-90"
-            src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-            alt="empty"
-        />
+        <EmptyStateIllustration className="size-[120px] opacity-90" />
     );
 
     const renderCarousel = () => {

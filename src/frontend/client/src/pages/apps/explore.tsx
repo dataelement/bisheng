@@ -203,8 +203,9 @@ export default function ExplorePlaza() {
                 </div>
             </div>
 
-            {/* 智能体网格 */}
-            <main className="flex min-h-0 w-full max-w-[1000px] flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-on-scroll px-5 pb-5">
+            {/* 智能体网格：滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
+            <main className="flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scrollbar-os">
+                <div className="flex w-full max-w-[1000px] flex-1 flex-col px-5 pb-5">
                 <div
                     className="grid w-full items-start gap-4"
                     style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
@@ -244,6 +245,7 @@ export default function ExplorePlaza() {
                     {!loading && agents.length === 0 && (
                         <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_no_agents')}</p>
                     )}
+                </div>
                 </div>
             </main>
         </div>

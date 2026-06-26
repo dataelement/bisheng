@@ -10,7 +10,7 @@ import {
     subscribeSpaceApi,
     type KnowledgeSpace,
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -41,6 +41,15 @@ export default function KnowledgeSquare({
 }: KnowledgeSquareProps) {
     const { showToast } = useToastContext();
     const localize = useLocalize();
+
+    // 卡片每行列数自适应，与应用广场保持一致：lg+ 3 列，md 2 列，窄屏 1 列
+    const isAtLeast768 = useMediaQuery("(min-width: 768px)");
+    const isAtLeast1024 = useMediaQuery("(min-width: 1024px)");
+    const squareCols = useMemo(() => {
+        if (isAtLeast1024) return 3;
+        if (isAtLeast768) return 2;
+        return 1;
+    }, [isAtLeast768, isAtLeast1024]);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [page, setPage] = useState(1);
@@ -267,11 +276,10 @@ export default function KnowledgeSquare({
 
             <div
                 ref={scrollRef}
-                // Native scrollbar (no custom ::-webkit-scrollbar styling) so it
-                // follows the OS preference — always-show or show-on-scroll-only.
-                // A styled webkit scrollbar would be treated as legacy/always-present
-                // and ignore the "show on scroll only" system setting.
-                className="flex-1 flex flex-col overflow-y-auto bg-white"
+                // `scrollbar-os` opts out of the global custom ::-webkit-scrollbar so the
+                // native OS scrollbar setting (always-show vs show-on-scroll-only) is respected.
+                // Without it, the global :not(.scrollbar-os) rule forces an always-present bar.
+                className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
             >
                 {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
                     the search icon so it stays aligned with the input after the padding inset. */}
@@ -300,7 +308,10 @@ export default function KnowledgeSquare({
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
+                            <div
+                                className="grid gap-3"
+                                style={{ gridTemplateColumns: `repeat(${squareCols}, minmax(0, 1fr))` }}
+                            >
                                 {visibleSpaces.map((space) => (
                                     <KnowledgeSquareCard
                                         key={space.id}
