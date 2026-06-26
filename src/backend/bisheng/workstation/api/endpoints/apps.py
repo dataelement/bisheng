@@ -2,11 +2,8 @@ from fastapi import APIRouter, Body
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponseModel, UsedAppPin, resp_200
-from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
-from bisheng.common.errcode.flow import AppInvalidCursorError
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
-from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
@@ -55,17 +52,11 @@ async def get_recommended_apps(login_user=LoginUserDep):
 async def get_frequently_used_chat(
     login_user=LoginUserDep,
     user_link_type: str | None = "app",
-    page_size: int | None = 8,
-    cursor: str | None = None,
+    page: int | None = 1,
+    limit: int | None = 8,
 ):
-    """List the user's favourite apps (F040/F027 pseudo-cursor envelope)."""
-    result = await WorkFlowService.aget_frequently_used_flows_cursor(
-        login_user,
-        user_link_type,
-        cursor=cursor,
-        page_size=page_size,
-    )
-    return resp_200(data=result)
+    data, _ = await WorkFlowService.get_frequently_used_flows(login_user, user_link_type, page, limit)
+    return resp_200(data=data)
 
 
 @router.post("/app/frequently_used")
@@ -98,30 +89,20 @@ async def get_uncategorized_chat(
 
 
 @router.get("/app/used")
-async def get_used_apps(login_user=LoginUserDep, page_size: int = 20, cursor: str | None = None):
-    """List the apps the user has recently used (F040/F027 pseudo-cursor).
+async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20):
+    """List the apps the user has recently used (pinned-first, then by last-used).
 
-    The candidate set is the user's own used-app history (bounded per-user),
-    ordered pinned-first then by last-used time — a custom order a keyset cursor
-    over ``update_time`` can't express, so this uses the F027 AD-15 pseudo-cursor
-    (key=``[page_num]``, **no total**, INV-6). The page is sliced BEFORE the
-    tag / logo / can_share enrichment, so that per-page work is bounded by
-    ``page_size`` instead of the whole history. Response shape:
-    ``PageInfiniteCursorData`` (``{data, page_size, has_more, next_cursor}``).
+    The candidate set is the user's own used-app history — bounded per-user, so it
+    stays on the offset ``{list, total}`` contract (INV-6 exemption: per-user
+    bounded, no deep pagination). F040 keeps the enrich-AFTER-paginate win though:
+    the page is sliced first and only then decorated with tags / logo / can_share,
+    so that per-request enrichment is bounded by ``limit`` rather than the whole
+    history (the previous code enriched every used app before slicing).
     """
-    context = "used_apps|sort=pinned_recency"
-    try:
-        decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
-    except CursorDecodeError as exc:
-        raise AppInvalidCursorError(exception=exc)
-    page_num = decoded[0] if decoded else 1
-    if not isinstance(page_num, int) or page_num < 1:
-        raise AppInvalidCursorError()
-
     flow_types = [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value]
     used_apps = await MessageSessionDao.get_user_used_apps(user_id=login_user.user_id, flow_types=flow_types)
     if not used_apps:
-        return resp_200(data=PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None))
+        return resp_200(data={"list": [], "total": 0})
 
     flow_ids = [app[0] for app in used_apps]
     last_used_time_map = {app[0]: app[1] for app in used_apps}
@@ -139,12 +120,10 @@ async def get_used_apps(login_user=LoginUserDep, page_size: int = 20, cursor: st
 
     apps.sort(key=sort_key)
 
-    # Pseudo-cursor slice (with +1 probe) BEFORE enrichment — only the page is
-    # decorated with tags / logo / can_share.
-    start_index = (page_num - 1) * page_size
-    page_items = apps[start_index : start_index + page_size + 1]
-    has_more = len(page_items) > page_size
-    page_items = page_items[:page_size]
+    total = len(apps)
+    # Slice BEFORE enrichment so tags / logo / can_share only decorate the page.
+    start_index = (page - 1) * limit
+    page_items = apps[start_index : start_index + limit]
 
     page_flow_ids = [app["id"] for app in page_items]
     resource_tag_dict = TagDao.get_tags_by_resource(None, page_flow_ids)
@@ -173,15 +152,7 @@ async def get_used_apps(login_user=LoginUserDep, page_size: int = 20, cursor: st
         for j, app_i in enumerate(share_idx):
             result[app_i]["can_share"] = bool(flags[j])
 
-    next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
-    return resp_200(
-        data=PageInfiniteCursorData(
-            data=result,
-            page_size=page_size,
-            has_more=has_more,
-            next_cursor=next_cursor,
-        )
-    )
+    return resp_200(data={"list": result, "total": total})
 
 
 @router.post("/app/used/pin")

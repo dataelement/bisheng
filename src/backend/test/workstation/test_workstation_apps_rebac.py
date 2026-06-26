@@ -200,7 +200,7 @@ async def test_get_used_apps_does_not_use_relation_visibility_helper():
         patch.object(module.FlowDao, "aget_all_apps", new_callable=AsyncMock, return_value=([], 0), create=True),
         patch.object(module.TagDao, "get_tags_by_resource", return_value={}, create=True),
     ):
-        await module.get_used_apps(login_user=login_user, page_size=20)
+        await module.get_used_apps(login_user=login_user, page=1, limit=20)
 
     login_user.aget_merged_rebac_app_resource_ids.assert_not_awaited()
 
@@ -234,11 +234,10 @@ async def test_get_used_apps_filters_by_view_app_permission():
         patch.object(module.TagDao, "get_tags_by_resource", return_value={}, create=True),
         patch.object(module, "batch_user_may_share_app", new_callable=AsyncMock, return_value=[False]),
     ):
-        result = await module.get_used_apps(login_user=login_user, page_size=20)
+        result = await module.get_used_apps(login_user=login_user, page=1, limit=20)
 
-    envelope = result["data"]
-    assert [one["id"] for one in envelope.data] == ["wf-1"]
-    assert envelope.has_more is False
+    assert result["data"]["total"] == 1
+    assert [one["id"] for one in result["data"]["list"]] == ["wf-1"]
 
 
 @pytest.mark.asyncio
