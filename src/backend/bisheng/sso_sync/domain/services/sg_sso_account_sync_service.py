@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import uuid
+from dataclasses import dataclass
 
 from bisheng.sso_sync.domain.schemas.sg_payloads import (
     SgSsoAccountSyncRequest,
@@ -30,7 +30,8 @@ class SgSsoAccountSyncService:
 
     @classmethod
     async def execute(
-        cls, payload: SgSsoAccountSyncRequest,
+        cls,
+        payload: SgSsoAccountSyncRequest,
     ) -> SgSsoAccountSyncResponse:
         results: list[SgSsoAccountSyncResultItem] = []
 
@@ -39,9 +40,9 @@ class SgSsoAccountSyncService:
                 row = cls._normalize_row(raw)
                 user = await cls._resolve_target_user(row)
                 if user is None:
-                    raise ValueError('user not found by PersonNO or Guid')
+                    raise ValueError("user not found by PersonNO or Guid")
 
-                target_guid = row.guid or await cls._generate_unique_guid()
+                target_guid = await cls._resolve_target_guid(row, user)
                 await cls._assert_guid_bindable(target_guid, user)
 
                 user.user_name = row.user_name
@@ -50,20 +51,20 @@ class SgSsoAccountSyncService:
 
                 results.append(
                     SgSsoAccountSyncResultItem(
-                        Result='0',
+                        Result="0",
                         UserName=user.user_name,
-                        Description='success',
-                        Guid=user.guid or '',
+                        Description="success",
+                        Guid=user.guid or "",
                     )
                 )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning('SG SSO account sync row failed: %s', exc)
+            except Exception as exc:
+                logger.warning("SG SSO account sync row failed: %s", exc)
                 results.append(
                     SgSsoAccountSyncResultItem(
-                        Result='1',
-                        UserName=(raw.user_name or '').strip(),
+                        Result="1",
+                        UserName=(raw.user_name or "").strip(),
                         Description=str(exc),
-                        Guid=(raw.guid or '').strip(),
+                        Guid=(raw.guid or "").strip(),
                     )
                 )
 
@@ -80,13 +81,13 @@ class SgSsoAccountSyncService:
 
     @staticmethod
     def _normalize_row(raw: SgSsoRowItem) -> _NormalizedRow:
-        person_no = (raw.person_no or '').strip()
+        person_no = (raw.person_no or "").strip()
         if not person_no:
-            raise ValueError('PersonNO is required')
-        user_name = (raw.user_name or '').strip()
+            raise ValueError("PersonNO is required")
+        user_name = (raw.user_name or "").strip()
         if not user_name:
-            raise ValueError('UserName is required')
-        guid = (raw.guid or '').strip()
+            raise ValueError("UserName is required")
+        guid = (raw.guid or "").strip()
         return _NormalizedRow(
             row=raw,
             person_no=person_no,
@@ -95,13 +96,22 @@ class SgSsoAccountSyncService:
         )
 
     @classmethod
+    async def _resolve_target_guid(cls, row: _NormalizedRow, user: User) -> str:
+        if row.guid:
+            return row.guid
+        existing = (user.guid or "").strip()
+        if existing:
+            return existing
+        return await cls._generate_unique_guid()
+
+    @classmethod
     async def _generate_unique_guid(cls) -> str:
         for _ in range(8):
             candidate = str(uuid.uuid4())
             exists = await UserDao.aget_by_guid(candidate)
             if exists is None:
                 return candidate
-        raise ValueError('failed to generate unique guid')
+        raise ValueError("failed to generate unique guid")
 
     @classmethod
     async def _assert_guid_bindable(cls, guid: str, target_user: User) -> None:
@@ -110,5 +120,4 @@ class SgSsoAccountSyncService:
             return
         if int(owner.user_id or 0) == int(target_user.user_id or 0):
             return
-        raise ValueError('Guid already bound to another user')
-
+        raise ValueError("Guid already bound to another user")
