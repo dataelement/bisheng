@@ -19,6 +19,7 @@ import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
  * the overlay mid-handoff, leaving the approval dialog open but invisible.
  */
 const DIALOG_CLOSED_MESSAGE = "shougang-portal:dialog-closed";
+const DIALOG_READY_MESSAGE = "shougang-portal:dialog-ready";
 
 export default function PortalDialogsEmbed() {
   const {
@@ -37,6 +38,10 @@ export default function PortalDialogsEmbed() {
     return () => {
       document.body.style.background = previous;
     };
+  }, []);
+
+  useEffect(() => {
+    window.parent?.postMessage({ type: DIALOG_READY_MESSAGE }, "*");
   }, []);
 
   // Notify the parent to hide the overlay only when every dialog has closed,

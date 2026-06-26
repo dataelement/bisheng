@@ -43,6 +43,17 @@ function postFromParent(type: string) {
 }
 
 describe("PortalDialogsEmbed", () => {
+    it("notifies the parent when it is ready to receive portal messages", () => {
+        const postSpy = jest.spyOn(window.parent, "postMessage");
+        render(<PortalDialogsEmbed />);
+
+        expect(postSpy).toHaveBeenCalledWith(
+            { type: "shougang-portal:dialog-ready" },
+            "*",
+        );
+        postSpy.mockRestore();
+    });
+
     it("opens the approval center for the my-tasks message", () => {
         render(<PortalDialogsEmbed />);
         postFromParent("shougang-portal:open-approval-tasks");

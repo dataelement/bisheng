@@ -33,6 +33,7 @@ const FLOW_TYPE_WORKFLOW = 10;
 
 interface StandaloneSidebarOptions {
   forceNewChatOnLoad?: boolean;
+  initialChatId?: string;
 }
 
 /**
@@ -45,7 +46,7 @@ export function useStandaloneSidebar(
   options: StandaloneSidebarOptions = {},
 ) {
   const { mode, flowType, flowId, apiVersion } = ctx;
-  const { forceNewChatOnLoad = false } = options;
+  const { forceNewChatOnLoad = false, initialChatId = '' } = options;
   const localize = useLocalize();
   const navigate = useNavigate();
   const isGuest = mode === 'guest';
@@ -258,6 +259,12 @@ export function useStandaloneSidebar(
     if (initializedRef.current || !flowId) return;
     initializedRef.current = true;
 
+    if (initialChatId) {
+      setActiveChatId(initialChatId);
+      setHistoryLoaded(true);
+      return;
+    }
+
     if (forceNewChatOnLoad) {
       createNewChat();
       setHistoryLoaded(true);
@@ -271,7 +278,7 @@ export function useStandaloneSidebar(
       setHistoryLoaded(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flowId]);
+  }, [flowId, initialChatId]);
 
   // Persist draft conversation to localStorage/server once the user sends
   // their first message (detected by the presence of an `isSend` message in

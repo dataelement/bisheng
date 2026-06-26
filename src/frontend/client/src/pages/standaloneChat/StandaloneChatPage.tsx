@@ -19,6 +19,7 @@ interface StandaloneChatPageProps {
   flowType: 'workflow' | 'assistant';
   hideSidebar?: boolean;
   forceNewChatOnLoad?: boolean;
+  initialChatId?: string;
 }
 
 const FLOW_TYPE_MAP = {
@@ -46,8 +47,9 @@ export default function StandaloneChatPage({
   flowType,
   hideSidebar = false,
   forceNewChatOnLoad = false,
+  initialChatId = '',
 }: StandaloneChatPageProps) {
-  const pageProps = { mode, flowType, hideSidebar, forceNewChatOnLoad };
+  const pageProps = { mode, flowType, hideSidebar, forceNewChatOnLoad, initialChatId };
 
   // Guest mode: wrap in a lightweight AuthContext that provides "not authenticated"
   // values so child components (ChatView, MessageUser) that call useAuthContext()
@@ -85,6 +87,7 @@ function StandaloneChatInner({
   flowType,
   hideSidebar = false,
   forceNewChatOnLoad = false,
+  initialChatId = '',
 }: StandaloneChatPageProps) {
   const { flowId } = useParams<{ flowId: string }>();
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
@@ -106,7 +109,7 @@ function StandaloneChatInner({
 
   // Lifted to page level so both sidebar and chat panel share one instance
   // (single init, single draft registry, shared createNewChat for CTA).
-  const sidebar = useStandaloneSidebar(contextValue, { forceNewChatOnLoad });
+  const sidebar = useStandaloneSidebar(contextValue, { forceNewChatOnLoad, initialChatId });
   const { activeChatId, historyLoaded, createNewChat } = sidebar;
   const showSidebarControls = !hideSidebar;
 
