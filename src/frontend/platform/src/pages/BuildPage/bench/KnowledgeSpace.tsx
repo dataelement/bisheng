@@ -279,7 +279,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                     <DepartmentKnowledgeSpaceManagerDialog
                         open={managerOpen}
                         onOpenChange={setManagerOpen}
-                        onCreated={loadDepartmentSpaces}
+                        onChanged={loadDepartmentSpaces}
                     />
                 </>
             )}

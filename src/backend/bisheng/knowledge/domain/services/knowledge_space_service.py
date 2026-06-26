@@ -287,6 +287,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.department_name = department_name_map.get(binding.department_id)
             space.approval_enabled = binding.approval_enabled
             space.sensitive_check_enabled = binding.sensitive_check_enabled
+            space.is_hidden = binding.is_hidden
         return spaces
 
     async def _populate_root_file_counts(self, spaces: list[KnowledgeSpaceInfoResp]) -> None:
