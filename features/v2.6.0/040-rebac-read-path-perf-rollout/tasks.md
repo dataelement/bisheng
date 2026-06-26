@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | 🚧 进行中 | T0 ✅ / 15。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | T0·T2 ✅ / 15。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -35,7 +35,7 @@
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
 | T1 | **E 名册版本派生 key 缓存层**：新建缓存工具（per-tenant LRU + 轻量版本读 helper：`SELECT update_time` 不取 value 大列；主体串按 `(user_id, max(update_time) over user_group_link+user_department)`）+ fail-safe 回落；`_get_relation_bindings`/`_get_relation_models_map`/`_get_current_user_subject_strings`（`knowledge_space_service.py`）接入。先写等价测试（命中==实时构建、版本变即失效、tenant 隔离），后改实现。**无 DB schema 变更**（仅新增只读轻量查询） | 新 cache util + `knowledge_space_service.py` | AC-03, AC-21, AC-22, AC-23, AC-24, AC-25, AC-30 | 无 | 🔲 |
-| T2 | **A 频道详情上下文复用 + membership 去重**：`get_channel_detail`（`channel_service.py`）传 `context=_build_channel_permission_context(...)`；合并两处 `find_membership`。先写等价测试（permission_ids 不变），后改实现 | `channel_service.py` | AC-04, AC-06 | 无 | 🔲 |
+| T2 | **A 频道详情上下文复用 + membership 去重**：`get_channel_detail`（`channel_service.py`）传 `context=_build_channel_permission_context(...)`；合并两处 `find_membership`。先写等价测试（permission_ids 不变），后改实现 | `channel_service.py` | AC-04, AC-06 | 无 | ✅ |
 | T3 | **A 文章总数 Redis 短 TTL 缓存**：新建 `ArticleCountCache`（key `article:count:{tenant_id}:channel:{id}:main`，TTL 60–120s，miss/Redis 挂回落 ES 并回填）；`get_channel_detail`/`get_channel_square` 接入。先写测试（命中不查 ES、miss 回落） | 新 cache 模块 + `channel_service.py` | AC-07, AC-27 | 无 | 🔲 |
 
 ### Wave 2 — 后端拆分 / 批量 / cursor

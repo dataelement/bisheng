@@ -1690,14 +1690,29 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user permission
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
+        # 2. Verify current user permission.
+        # F040: a single ``include_inactive=True`` lookup serves both the
+        # ACTIVE-only permission gating (``current_membership``) and the displayed
+        # subscription status (``status_membership`` below), instead of two queries.
+        # ``_highest_membership`` returns the ACTIVE row when one exists, so deriving
+        # ``current_membership`` by status check is equivalent to the old ACTIVE-only
+        # query.
+        membership = await self.space_channel_member_repository.find_membership(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id,
+            include_inactive=True,
         )
+        current_membership = membership if membership and membership.status == MembershipStatusEnum.ACTIVE else None
+        # F040: build the F037 shared ReBAC context once and pass it in, instead of
+        # letting ``_get_channel_permission_ids`` re-derive bindings/models/subject
+        # strings inline on every detail request.
+        permission_context = await self._build_channel_permission_context(login_user)
         permission_ids = await self._get_channel_permission_ids(
             channel_id,
             login_user,
             current_membership,
+            context=permission_context,
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
@@ -1756,18 +1771,10 @@ class ChannelService:
 
         # Determine subscription status. ``current_membership`` is ACTIVE-only (it
         # gates permissions), but the subscribe button must also reflect PENDING /
-        # REJECTED applications — the same states the channel square shows. When the
-        # user has no active membership, fall back to an include_inactive lookup so a
-        # pending application reads as "applying" instead of "not subscribed".
-        status_membership = current_membership
-        if status_membership is None:
-            status_membership = await self.space_channel_member_repository.find_membership(
-                business_id=channel_id,
-                business_type=BusinessTypeEnum.CHANNEL,
-                user_id=login_user.user_id,
-                include_inactive=True,
-            )
-        subscription_status = self._resolve_membership_subscription_status(status_membership)
+        # REJECTED applications — the same states the channel square shows. F040: the
+        # ``include_inactive=True`` ``membership`` fetched above already carries that
+        # PENDING/REJECTED row, so reuse it directly (no second lookup).
+        subscription_status = self._resolve_membership_subscription_status(membership)
 
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.
