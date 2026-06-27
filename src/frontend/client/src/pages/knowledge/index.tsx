@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Plus } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState } from "recoil";
@@ -122,19 +123,19 @@ export default function Knowledge() {
     // sidebar owns auto-select, so activeSpace stays null until those lists load;
     // this lets the PC view show a loading state instead of flashing the "no
     // space, create one" empty state before auto-select can land.
-    const { isFetched: mineSpacesFetched } = useQuery({
+    const { isFetched: mineSpacesFetched, data: mineSpaces = [] } = useQuery({
         queryKey: ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
         queryFn: () => getMineSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
         enabled: knowledgePluginEnabled,
         placeholderData: (prev) => prev,
     });
-    const { isFetched: joinedSpacesFetched } = useQuery({
+    const { isFetched: joinedSpacesFetched, data: joinedSpaces = [] } = useQuery({
         queryKey: ["knowledgeSpaces", "joined", SpaceSortType.UPDATE_TIME],
         queryFn: () => getJoinedSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
         enabled: knowledgePluginEnabled,
         placeholderData: (prev) => prev,
     });
-    const { isFetched: departmentSpacesFetched } = useQuery({
+    const { isFetched: departmentSpacesFetched, data: departmentSpaces = [] } = useQuery({
         queryKey: ["knowledgeSpaces", "department", SpaceSortType.UPDATE_TIME],
         queryFn: () => getDepartmentSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
         enabled: knowledgePluginEnabled,
@@ -146,6 +147,13 @@ export default function Knowledge() {
     const spacesResolving =
         knowledgePluginGate === "loading" ||
         (knowledgePluginEnabled && (!mineSpacesFetched || !joinedSpacesFetched || !departmentSpacesFetched));
+
+    // No space in any section — drives the mobile full-page empty state.
+    const hasNoSpace =
+        !spacesResolving &&
+        mineSpaces.length === 0 &&
+        joinedSpaces.length === 0 &&
+        departmentSpaces.length === 0;
 
     useEffect(() => {
         if (!isH5) setSpaceListDrawerOpen(false);
@@ -771,18 +779,29 @@ export default function Knowledge() {
                                 }}
                             />
                         </div>
-                        {/* Fixed bottom go-to-square — same as the mobile homepage */}
-                        <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+                        {/* Fixed bottom actions — go-to-square (left) + create space (right) */}
+                        <div className="flex shrink-0 items-center gap-3 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
                             <Button
                                 variant="secondary"
                                 onClick={() => {
                                     setShowKnowledgeSquare(true);
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                className="h-8 flex-1 gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                             >
                                 <Outlined.BlocksAndArrows className="size-4" />
                                 {localize("com_knowledge.go_to_square")}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    handleCreateSpace();
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                                className="h-8 flex-1 gap-1 rounded-[6px] bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                            >
+                                <Plus className="size-4" />
+                                {localize("com_knowledge.create_knowledge_space")}
                             </Button>
                         </div>
                     </div>,
@@ -885,27 +904,57 @@ export default function Knowledge() {
                             <span className="size-5 shrink-0" aria-hidden />
                         </div>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                        <KnowledgeSpaceSidebar
-                            mobilePageMode
-                            onSpaceSelect={handleSpaceSelect}
-                            onCreateSpace={handleCreateSpace}
-                            onSpaceSettings={handleSpaceSettings}
-                            onManageMembers={(space) => openSpacePermissionDialog(space)}
-                            onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                        />
-                    </div>
-                    {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
-                    <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-                        <Button
-                            variant="secondary"
-                            onClick={() => setShowKnowledgeSquare(true)}
-                            className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
-                        >
-                            <Outlined.BlocksAndArrows className="size-4" />
-                            {localize("com_knowledge.go_to_square")}
-                        </Button>
-                    </div>
+                    {hasNoSpace ? (
+                        /* Empty state: no space in any section. Drop the section list +
+                           bottom bar and center an illustration with two actions
+                           (mirrors the subscription channel empty state). */
+                        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-16">
+                            <EmptyStateIllustration className="size-[120px] opacity-90" />
+                            <p className="mt-6 text-[14px] leading-6 text-[#999999]">
+                                {localize("com_knowledge.no_related_content_you_can")}
+                            </p>
+                            <div className="mt-5 flex items-center gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowKnowledgeSquare(true)}
+                                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors active:border-blue-500 active:text-blue-500"
+                                >
+                                    {localize("com_knowledge.go_to_square")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCreateSpace}
+                                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors active:bg-blue-600"
+                                >
+                                    {localize("com_knowledge.create_knowledge_space")}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="min-h-0 flex-1 overflow-hidden">
+                                <KnowledgeSpaceSidebar
+                                    mobilePageMode
+                                    onSpaceSelect={handleSpaceSelect}
+                                    onCreateSpace={handleCreateSpace}
+                                    onSpaceSettings={handleSpaceSettings}
+                                    onManageMembers={(space) => openSpacePermissionDialog(space)}
+                                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                                />
+                            </div>
+                            {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
+                            <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => setShowKnowledgeSquare(true)}
+                                    className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                >
+                                    <Outlined.BlocksAndArrows className="size-4" />
+                                    {localize("com_knowledge.go_to_square")}
+                                </Button>
+                            </div>
+                        </>
+                    )}
                 </div>
             ) : spacesResolving ? (
                 /* PC loading state — keep the loading view up until the space lists
@@ -914,16 +963,28 @@ export default function Knowledge() {
                     <LoadingIcon className="size-20 text-primary" />
                 </div>
             ) : (
-                /* PC empty state when no space is selected */
+                /* PC empty state when no space is selected — illustration + two actions */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
-                    <p className="text-[14px] font-normal leading-6 text-[#999999]">
-                        {localize("com_knowledge.no_related_content_please")}<span
-                            className="ml-1.5 cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
-                            onClick={handleCreateSpace}
-                        >
-                            {localize("com_knowledge.create_knowledge_space")}</span>
+                    <EmptyStateIllustration className="size-[120px] opacity-90" />
+                    <p className="mt-6 text-[14px] font-normal leading-6 text-[#999999]">
+                        {localize("com_knowledge.no_related_content_you_can")}
                     </p>
+                    <div className="mt-5 flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowKnowledgeSquare(true)}
+                            className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors hover:border-blue-500 hover:text-blue-500"
+                        >
+                            {localize("com_knowledge.go_to_square")}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCreateSpace}
+                            className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors hover:bg-blue-400 active:bg-blue-600"
+                        >
+                            {localize("com_knowledge.create_knowledge_space")}
+                        </button>
+                    </div>
                 </div>
             )}
 

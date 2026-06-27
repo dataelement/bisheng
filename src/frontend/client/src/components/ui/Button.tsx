@@ -14,6 +14,9 @@ const buttonVariants = cva(
         outline:
           'text-text-primary border border-border-light bg-background hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        // Brand-tinted secondary: light brand bg + dark brand text. The blue-* utilities
+        // are re-pointed to the --brand-* vars, so this follows the blue⇄green theme.
+        secondaryBrand: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
         // hardcoded text color because of WCAG contrast issues (text-white)
