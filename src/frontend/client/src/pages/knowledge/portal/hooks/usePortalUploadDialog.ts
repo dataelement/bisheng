@@ -21,7 +21,8 @@ import {
     DEFAULT_MAX_FILE_SIZE_MB,
     DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
-    filterFolderUploadFiles,
+    filterNestedFolderUploadFiles,
+    extractSortedDirPaths,
     getAllowedExtensions,
     getFileInputAccept,
     getMaxFileSizeBytesForFile,
@@ -315,12 +316,12 @@ export function usePortalUploadDialog({
         }
 
         const filesInRoot = allFiles.filter((file) => getRootFolderName(file.webkitRelativePath || "") === rootName);
-        const validFiles = filterFolderUploadFiles(filesInRoot, {
+        const validFiles = filterNestedFolderUploadFiles(filesInRoot, {
             allowedExtensions,
             limits: resolvedUploadSizeLimits,
         });
         if (!validFiles.length) {
-            showToast({ message: "文件夹根目录下没有可上传的支持文件", severity: NotificationSeverity.WARNING });
+            showToast({ message: "文件夹中没有可上传的支持文件", severity: NotificationSeverity.WARNING });
             return;
         }
 
@@ -638,25 +639,58 @@ export function usePortalUploadDialog({
                     return;
                 }
 
-                const createdFolder = await createFolderApi(activeSpace.id, {
-                    name: uploadLocalFolderName,
-                    parent_id: normalizedParentId === null ? null : String(normalizedParentId),
-                });
-                const createdFolderId = Number(createdFolder.id);
-                if (!Number.isFinite(createdFolderId)) {
-                    throw new Error("创建文件夹失败");
+                // Build nested folder structure (BFS order: parents before children)
+                const allValidFiles = uploadFiles.map((item) => item.file);
+                const dirPaths = extractSortedDirPaths(allValidFiles);
+                const folderIdMap = new Map<string, string>();
+
+                for (const dirPath of dirPaths) {
+                    const parts = dirPath.split("/");
+                    const name = parts[parts.length - 1];
+                    const parentPath = parts.slice(0, -1).join("/");
+                    const isRootLevel = parts.length === 1;
+
+                    if (!isRootLevel && !folderIdMap.has(parentPath)) continue;
+
+                    const parentFolderId = isRootLevel
+                        ? (normalizedParentId === null ? null : String(normalizedParentId))
+                        : (folderIdMap.get(parentPath) ?? null);
+
+                    try {
+                        const folder = await createFolderApi(activeSpace.id, { name, parent_id: parentFolderId });
+                        folderIdMap.set(dirPath, folder.id);
+                    } catch (err: unknown) {
+                        if (isRootLevel) throw new Error(`创建文件夹失败: ${err instanceof Error ? err.message : String(err)}`);
+                        // Non-root folder failures skip the subtree silently
+                    }
                 }
 
-                const uploadResults = await Promise.all(
-                    uploadFiles.map((item) => uploadFileToServerApi(activeSpace.id, item.file, item.file.name)),
-                );
-                const filePaths = uploadResults.map((item) => item.file_path);
-                const registeredFiles = await addFilesApi(activeSpace.id, {
-                    file_path: filePaths,
-                    parent_id: createdFolderId,
-                    ...uploadMetadataPayload,
-                });
-                await finishUploadedFiles(registeredFiles, uploadMetadataPayload);
+                // Group files by their parent directory and upload
+                const filesByDir = new Map<string, typeof uploadFiles>();
+                for (const item of uploadFiles) {
+                    const rel = item.file.webkitRelativePath;
+                    const parentPath = rel.split("/").slice(0, -1).join("/");
+                    const arr = filesByDir.get(parentPath) ?? [];
+                    arr.push(item);
+                    filesByDir.set(parentPath, arr);
+                }
+
+                const allRegistered: KnowledgeFile[] = [];
+                for (const [dirPath, dirItems] of filesByDir) {
+                    const parentFolderId = folderIdMap.get(dirPath);
+                    if (!parentFolderId) continue;
+                    const uploadResults = await Promise.all(
+                        dirItems.map((item) => uploadFileToServerApi(activeSpace.id, item.file, item.file.name)),
+                    );
+                    const filePaths = uploadResults.map((r) => r.file_path);
+                    const registered = await addFilesApi(activeSpace.id, {
+                        file_path: filePaths,
+                        parent_id: Number(parentFolderId),
+                        ...uploadMetadataPayload,
+                    });
+                    allRegistered.push(...registered);
+                }
+                await finishUploadedFiles(allRegistered, uploadMetadataPayload);
                 return;
             }
 

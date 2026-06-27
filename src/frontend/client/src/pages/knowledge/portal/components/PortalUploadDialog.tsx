@@ -249,7 +249,7 @@ export function PortalUploadDialog({
                                     {uploadLocalFolderName ? (
                                         <div className={s.uploadFolderNotice}>
                                             <strong>将创建文件夹：{uploadLocalFolderName}</strong>
-                                            <span>仅上传所选文件夹根目录下的支持文件，子目录文件不会上传。</span>
+                                            <span>将保留原有目录层级结构，支持多层嵌套子文件夹。</span>
                                         </div>
                                     ) : null}
                                     {uploadFiles.map((item) => (
