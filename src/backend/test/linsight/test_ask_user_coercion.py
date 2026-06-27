@@ -17,7 +17,14 @@ hard-failing the HITL flow. These tests pin that behavior deterministically.
 from unittest.mock import MagicMock, patch
 
 from bisheng.linsight.domain.services import agent_factory
-from bisheng.linsight.domain.services.agent_factory import _coerce_questions, ask_user
+from bisheng.linsight.domain.services.agent_factory import (
+    _EMPTY_QUESTIONS_RETRY_HINT,
+    _EMPTY_QUESTIONS_RETRY_MARKER,
+    _coerce_questions,
+    _empty_retry_count,
+    _salvage_options_only,
+    ask_user,
+)
 
 # The exact kwargs qwen3.7-max sent (and that strict validation rejected) in the
 # live session — `questions` is a JSON STRING, not a list.
@@ -142,16 +149,60 @@ async def test_ask_user_accepts_stringified_questions_and_parks():
     assert "Markdown" in tool_calls[1]["args"]["options"]
 
 
-async def test_ask_user_unparseable_questions_still_parks_with_reason_only():
-    """An unparseable `questions` must still park (reason-only), never hard-fail."""
+async def test_ask_user_empty_questions_nudges_once_before_parking():
+    """① self-heal: the FIRST call with unusable questions returns the corrective
+    hint as a normal tool result (so the agent loop continues and the model re-calls
+    WITH structure) and does NOT park yet. This is the fix for the live screenshot:
+    the model listed the questions in its reasoning but sent an empty `questions`."""
     captured = MagicMock(return_value="ok")
     with patch.object(agent_factory, "interrupt", captured):
-        await ask_user.ainvoke({"reason": "需要澄清", "questions": "garbage-not-json"})
+        result = await ask_user.ainvoke({"reason": "需要澄清", "questions": "garbage-not-json"})
+
+    captured.assert_not_called()  # no park yet — give the model a chance to fix
+    assert result == _EMPTY_QUESTIONS_RETRY_HINT
+    assert _EMPTY_QUESTIONS_RETRY_MARKER in result
+
+
+async def test_ask_user_empty_questions_parks_after_one_nudge():
+    """① cap: once we have already nudged THIS turn (a prior corrective ToolMessage
+    is in the history), a still-empty call degrades to a reason-only free-text park —
+    never an infinite retry. This is the 2026-06-22 no-infinite-retry guarantee."""
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    state = {
+        "messages": [
+            HumanMessage(content="帮我做个东西"),
+            AIMessage(content="", tool_calls=[{"id": "a", "name": "ask_user", "args": {}}]),
+            ToolMessage(content=_EMPTY_QUESTIONS_RETRY_HINT, tool_call_id="a"),
+        ]
+    }
+    captured = MagicMock(return_value="ok")
+    with patch.object(agent_factory, "interrupt", captured):
+        await ask_user.ainvoke({"reason": "需要澄清", "questions": "garbage-not-json", "state": state})
 
     captured.assert_called_once()
     payload = captured.call_args.args[0]
     assert payload["reason"] == "需要澄清"
     assert payload["params"]["tool_calls"] == []
+
+
+async def test_ask_user_options_only_salvaged_renders_options():
+    """② the model gave option lists but forgot the question text → keep the options
+    under a neutral placeholder title (a renderable, clickable card instead of a blank
+    free-text box, no wasted retry). The model's `reason` stays the card header, so
+    the body title must NOT repeat it — it uses the neutral placeholder instead."""
+    captured = MagicMock(return_value="ok")
+    questions = [{"options": ["北美", "全球", "仅中国"], "multiple": False}]
+    with patch.object(agent_factory, "interrupt", captured):
+        await ask_user.ainvoke({"reason": "请确认报告范围", "questions": questions})
+
+    captured.assert_called_once()
+    payload = captured.call_args.args[0]
+    assert payload["reason"] == "请确认报告范围"  # header keeps the reason
+    tool_calls = payload["params"]["tool_calls"]
+    assert len(tool_calls) == 1
+    assert tool_calls[0]["args"]["question"] == "请从以下选项中选择"  # neutral — no duplication
+    assert tool_calls[0]["args"]["options"] == ["北美", "全球", "仅中国"]
 
 
 async def test_ask_user_well_formed_list_unchanged():
@@ -164,3 +215,63 @@ async def test_ask_user_well_formed_list_unchanged():
     tool_calls = captured.call_args.args[0]["params"]["tool_calls"]
     assert len(tool_calls) == 1
     assert tool_calls[0]["args"]["options"] == ["a", "b"]
+
+
+# --- ② _salvage_options_only pure-function behavior -------------------------
+
+
+def test_salvage_options_only_picks_options_dicts():
+    """An options-only dict is recovered under the neutral placeholder title (NOT the
+    reason, which is already the card header — avoids on-screen duplication)."""
+    out = _salvage_options_only([{"options": ["a", "b"], "multiple": True}])
+    assert out == [{"question": "请从以下选项中选择", "options": ["a", "b"], "multiple": True}]
+
+
+def test_salvage_skips_question_bearing_and_pure_debris():
+    """Question-bearing items (already kept by _coerce_questions) and pure debris
+    (neither question nor options) are NOT salvaged."""
+    assert _salvage_options_only([{"question": "Q", "options": ["a"]}]) == []
+    assert _salvage_options_only([{"foo": "bar"}]) == []
+    assert _salvage_options_only([{"options": []}]) == []  # empty options dropped
+
+
+# --- ① _empty_retry_count pure-function behavior ----------------------------
+
+
+def test_empty_retry_count_none_and_no_marker():
+    """Missing / None / marker-free state allows the nudge (count 0)."""
+    assert _empty_retry_count(None) == 0
+    assert _empty_retry_count({}) == 0
+    assert _empty_retry_count({"messages": []}) == 0
+    assert _empty_retry_count({"messages": [{"type": "tool", "content": "ok"}]}) == 0
+
+
+def test_empty_retry_count_detects_prior_nudge():
+    """A prior corrective ToolMessage this turn counts as one nudge (caps the loop)."""
+    state = {"messages": [{"type": "tool", "content": _EMPTY_QUESTIONS_RETRY_HINT}]}
+    assert _empty_retry_count(state) == 1
+
+
+def test_empty_retry_count_resets_on_new_human_turn():
+    """A fresh user turn (human message) re-arms the nudge so each turn self-heals."""
+    state = {
+        "messages": [
+            {"type": "tool", "content": _EMPTY_QUESTIONS_RETRY_HINT},
+            {"type": "human", "content": "新一轮请求"},
+        ]
+    }
+    assert _empty_retry_count(state) == 0
+
+
+# --- ③ system prompt carries a concrete filled questions example ------------
+
+
+def test_system_prompt_contains_filled_questions_example():
+    """The ③ few-shot must survive in the rendered prompt (both KB variants) so the
+    model has a copy-pasteable structured-questions template to anchor on."""
+    from bisheng.linsight.domain.services.agent_factory import _build_linsight_system_prompt
+
+    for has_kb in (True, False):
+        prompt = _build_linsight_system_prompt(has_knowledge_base=has_kb)
+        assert "正确示例" in prompt
+        assert '"multiple": true' in prompt
