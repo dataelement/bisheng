@@ -2245,6 +2245,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _find_favorite_space(self) -> Optional[Knowledge]:
         return await KnowledgeDao.aget_user_favorite_space(self.login_user.user_id)
 
+    async def _adopt_existing_favorite_space(self) -> Optional[Knowledge]:
+        """收编：用户已有同名个人库（含本功能上线前手动创建的『我的收藏』）时，
+        将其标记为 is_favorite 复用，避免创建撞名(SpaceNameDuplicateError)。"""
+        space = await KnowledgeDao.async_get_personal_space_by_owner_name(
+            owner_id=self.login_user.user_id,
+            name=self.FAVORITE_SPACE_NAME,
+        )
+        if not space:
+            return None
+        if not getattr(space, 'is_favorite', False):
+            space.is_favorite = True
+            space = await KnowledgeDao.async_update_space(space)
+        return space
+
     async def _create_favorite_space(self) -> Knowledge:
         space = await self.create_knowledge_space(
             name=self.FAVORITE_SPACE_NAME,
@@ -2257,16 +2271,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return space
 
     async def _ensure_favorite_space(self) -> Knowledge:
-        """懒创建、幂等：已存在返回既有；否则创建；并发兜底回查。"""
+        """懒创建、幂等：已有收藏库→返回；有同名个人库→收编；否则创建；并发/撞名兜底回查+收编。"""
         existing = await self._find_favorite_space()
         if existing:
             return existing
+        adopted = await self._adopt_existing_favorite_space()
+        if adopted:
+            return adopted
         try:
             return await self._create_favorite_space()
         except Exception:
             again = await self._find_favorite_space()
             if again:
                 return again
+            adopted_again = await self._adopt_existing_favorite_space()
+            if adopted_again:
+                return adopted_again
             raise
 
     @staticmethod

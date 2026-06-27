@@ -30,11 +30,44 @@ async def test_ensure_favorite_space_creates_when_missing():
     created = Knowledge(id=101, name="我的收藏", user_id=7, type=3, is_favorite=True)
     with patch.object(KnowledgeSpaceService, "_find_favorite_space",
                       new=AsyncMock(return_value=None)), \
+         patch.object(KnowledgeSpaceService, "_adopt_existing_favorite_space",
+                      new=AsyncMock(return_value=None)), \
          patch.object(KnowledgeSpaceService, "_create_favorite_space",
                       new=AsyncMock(return_value=created)) as creator:
         space = await svc._ensure_favorite_space()
         assert space.id == 101
         creator.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_favorite_space_adopts_existing_named():
+    # 无 is_favorite 库, 但已有同名个人库(上线前手动建) -> 收编, 不创建(避免撞名)
+    svc = _make_service()
+    legacy = Knowledge(id=117, name="我的收藏", user_id=7, type=3, is_favorite=True)
+    with patch.object(KnowledgeSpaceService, "_find_favorite_space",
+                      new=AsyncMock(return_value=None)), \
+         patch.object(KnowledgeSpaceService, "_adopt_existing_favorite_space",
+                      new=AsyncMock(return_value=legacy)), \
+         patch.object(KnowledgeSpaceService, "_create_favorite_space",
+                      new=AsyncMock()) as creator:
+        space = await svc._ensure_favorite_space()
+        assert space.id == 117
+        creator.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_adopt_existing_favorite_space_sets_flag():
+    # 收编时把同名库标记为 is_favorite 并持久化
+    svc = _make_service()
+    legacy = Knowledge(id=117, name="我的收藏", user_id=7, type=3, is_favorite=False)
+    with patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name",
+               new=AsyncMock(return_value=legacy)), \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+               new=AsyncMock(side_effect=lambda s: s)) as updater:
+        space = await svc._adopt_existing_favorite_space()
+        assert space.id == 117
+        assert space.is_favorite is True
+        updater.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -44,6 +77,8 @@ async def test_ensure_favorite_space_concurrent_fallback():
     created = Knowledge(id=102, name="我的收藏", user_id=7, type=3, is_favorite=True)
     find = AsyncMock(side_effect=[None, created])  # 第一次没有，回查命中
     with patch.object(KnowledgeSpaceService, "_find_favorite_space", new=find), \
+         patch.object(KnowledgeSpaceService, "_adopt_existing_favorite_space",
+                      new=AsyncMock(return_value=None)), \
          patch.object(KnowledgeSpaceService, "_create_favorite_space",
                       new=AsyncMock(side_effect=Exception("dup"))):
         space = await svc._ensure_favorite_space()
