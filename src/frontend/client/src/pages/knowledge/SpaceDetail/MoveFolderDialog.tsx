@@ -178,7 +178,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                         disabled={!hasSelection}
                         onClick={handleConfirm}
                     >
-                        {localize("com_ui_confirm")}
+                        {localize("com_bschoose_confirm")}
                     </Button>
                 </DialogFooter>
             </DialogContent>
