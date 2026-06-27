@@ -367,6 +367,7 @@ export function useFileUpload({
 
                 // Create folders top-down; track dirPath → created folder id
                 const folderIdMap = new Map<string, string>();
+                const folderFailures: { path: string; name: string; reason: string }[] = [];
 
                 for (const dirPath of dirPaths) {
                     const parts = dirPath.split("/");
@@ -393,12 +394,18 @@ export function useFileUpload({
                             setFiles((prev) => [folder, ...prev]);
                             setTotal((prev) => prev + 1);
                         }
-                    } catch {
-                        // Dup name or depth exceeded — skip this subtree silently
+                    } catch (err: unknown) {
+                        const reason = err instanceof Error ? err.message : String(err);
+                        folderFailures.push({ path: dirPath, name, reason });
                     }
                 }
 
-                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+                if (folderFailures.length > 0) {
+                    const lines = folderFailures.map(({ path, reason }) =>
+                        `[${path}] ${reason}`
+                    );
+                    showToast({ message: localize("com_knowledge.create_folder_failed") + "\n" + lines.join("\n"), severity: NotificationSeverity.ERROR });
+                }
 
                 // Group valid files by their parent directory path
                 const filesByDir = new Map<string, File[]>();
@@ -456,6 +463,7 @@ export function useFileUpload({
                     showToast({ message: lines.join("\n"), severity: NotificationSeverity.ERROR });
                 }
 
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
                 await loadFiles(currentPage);
             } finally {
                 folderUploadInFlightRef.current = false;
