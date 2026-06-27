@@ -73,6 +73,8 @@ import {
 import { KnowledgeSpaceContent } from "../SpaceDetail";
 import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
+import { isFavoriteSpace } from "./favoriteView";
+import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
 import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
@@ -363,6 +365,7 @@ export default function PortalKnowledgeWorkbench() {
         [currentFolderId, treeNodes],
     );
     const isActiveSpacePersonal = getPortalSpaceLevel(activeSpace) === SpaceLevel.PERSONAL;
+    const isActiveSpaceFavorite = isFavoriteSpace(activeSpace);
     const statusFilterNumbers = useMemo(
         () => toStatusNumbers(statusFilter),
         [statusFilter],
@@ -1391,6 +1394,37 @@ export default function PortalKnowledgeWorkbench() {
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
     }, []);
 
+    // 从"我的收藏"只读面板打开有效源文件：切换到源知识库并以合成文件项触发现有预览流程。
+    const handleOpenSourceFile = useCallback(
+        (sourceSpaceId: string, sourceFileId: string, fileName?: string) => {
+            const srcSpace = selectableSpaces.find((space) => space.id === String(sourceSpaceId));
+            if (!srcSpace) {
+                showToast({
+                    message: "源文件不可访问，请确认您有访问源知识库的权限",
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
+            const displayName = (fileName || "").trim() || "源文件";
+            const syntheticFile: KnowledgeFile = {
+                id: String(sourceFileId),
+                name: displayName,
+                type: FileType.OTHER,
+                tags: [],
+                path: displayName,
+                spaceId: String(sourceSpaceId),
+                createdAt: "",
+                updatedAt: "",
+            };
+            setActiveSpace(srcSpace);
+            setActivePanel(null);
+            setAiDrawerOpen(false);
+            setSummaryExpanded(false);
+            setSelectedFile(syntheticFile);
+        },
+        [selectableSpaces, showToast],
+    );
+
     const handleToggleFileSelection = useCallback((file: KnowledgeFile, checked: boolean) => {
         const update = (prev: Set<string>) => {
             const next = new Set(prev);
@@ -1818,6 +1852,12 @@ export default function PortalKnowledgeWorkbench() {
                     {!selectedFile ? (
                         <main className={s.portalNativeWorkspace} data-testid="portal-file-workspace">
                             {activeSpace ? (
+                                isActiveSpaceFavorite ? (
+                                    <PortalFavoritesPanel
+                                        space={activeSpace}
+                                        onOpenSource={handleOpenSourceFile}
+                                    />
+                                ) : (
                                 <div ref={aiPane.splitContainerRef} className="flex h-full min-w-0 flex-1 overflow-hidden">
                                     {isH5 && aiPane.showAiAssistant ? (
                                         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
@@ -1914,6 +1954,7 @@ export default function PortalKnowledgeWorkbench() {
                                         </>
                                     )}
                                 </div>
+                                )
                             ) : spaceLoading ? (
                                 <div className={s.stateBox}>
                                     <div className={s.stateTitle}>正在加载知识库...</div>
