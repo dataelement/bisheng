@@ -6,7 +6,7 @@ import { cn } from "~/utils";
 import { getSpaceChildrenApi, KnowledgeFile, FileType } from "~/api/knowledge";
 
 interface BreadcrumbItem {
-    id: number | null;
+    id: string | null;
     name: string;
 }
 
@@ -24,26 +24,26 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
     const localize = useLocalize();
 
     // Currently browsed folder id (null = root)
-    const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+    const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
     // Breadcrumb trail
     const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([{ id: null, name: localize("com_knowledge.root_directory") }]);
     // Folder list at current level
     const [folders, setFolders] = useState<KnowledgeFile[]>([]);
     const [loading, setLoading] = useState(false);
-    // Selected target: undefined = not chosen; null = root; number = folder id
-    const [selected, setSelected] = useState<number | null | undefined>(undefined);
+    // Selected target: undefined = not chosen; null = root; string = folder id
+    const [selected, setSelected] = useState<string | null | undefined>(undefined);
 
-    const loadFolders = useCallback(async (parentId: number | null) => {
+    const loadFolders = useCallback(async (parentId: string | null) => {
         setLoading(true);
         try {
             const res = await getSpaceChildrenApi({
                 space_id: spaceId,
-                parent_id: parentId !== null ? String(parentId) : undefined,
+                parent_id: parentId ?? undefined,
                 page_size: 200,
             });
             // Only show folders, exclude the item being moved (to prevent moving into itself)
             const filteredFolders = res.data.filter(
-                (item) => item.type === FileType.FOLDER && String(item.id) !== movingItemId
+                (item) => item.type === FileType.FOLDER && item.id !== movingItemId
             );
             setFolders(filteredFolders);
         } catch {
@@ -65,7 +65,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
 
     const handleNavigateInto = (folder: KnowledgeFile) => {
         setCurrentFolderId(folder.id);
-        setBreadcrumb(prev => [...prev, { id: folder.id, name: folder.file_name || String(folder.id) }]);
+        setBreadcrumb(prev => [...prev, { id: folder.id, name: folder.name || folder.id }]);
         setSelected(undefined);
         loadFolders(folder.id);
     };
@@ -83,11 +83,11 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
 
     const handleConfirm = () => {
         if (selected === undefined) return;
-        onConfirm(selected);
+        // Backend expects integer folder id or null for root
+        onConfirm(selected !== null ? Number(selected) : null);
     };
 
     const isRootSelected = selected === null;
-    const isFolderSelected = typeof selected === "number";
     const hasSelection = selected !== undefined;
 
     return (
@@ -149,13 +149,13 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                                 onClick={() => setSelected(folder.id)}
                                 className={cn(
                                     "flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-[#e5e6eb] last:border-b-0 text-sm transition-colors group",
-                                    isFolderSelected && selected === folder.id
+                                    selected === folder.id
                                         ? "bg-[#e8f3ff] text-[#165dff]"
                                         : "hover:bg-[#f5f6fa] text-[#1d2129]"
                                 )}
                             >
                                 <Folder className="size-4 shrink-0 text-[#f7ba1e]" />
-                                <span className="flex-1 truncate">{folder.file_name}</span>
+                                <span className="flex-1 truncate">{folder.name}</span>
                                 {/* Navigate into sub-folder */}
                                 <button
                                     type="button"
