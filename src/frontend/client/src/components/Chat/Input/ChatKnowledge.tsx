@@ -549,8 +549,12 @@ export const ChatKnowledge = ({
       // otherwise open upward to avoid being clipped by the chat input area.
       const preferBottom = below >= 240 || below >= above;
       setMobileMenuSide(preferBottom ? 'bottom' : 'top');
+      // Fixed cap aligned with the desktop popup (MAX_SUB_HEIGHT = 256), but
+      // fall back to whatever space is actually available on the chosen side if
+      // 256 wouldn't fit — keeps the popup from being clipped against the
+      // viewport edge on smaller phones.
       const raw = (preferBottom ? below : above) - 8;
-      const capped = Math.min(Math.max(Math.floor(raw), 80), Math.floor(window.innerHeight * 0.72));
+      const capped = Math.min(MAX_SUB_HEIGHT, Math.max(80, Math.floor(raw)));
       setMobileDrillMaxH(capped);
     };
     run();
@@ -644,7 +648,10 @@ export const ChatKnowledge = ({
           variant === 'knowledge'
             ? 'w-[240px] overflow-hidden pt-2 px-2 pb-0'
             : 'w-[160px] p-2',
-          isMobile && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
+          // Mobile width override only applies to the knowledge variant — the
+          // "+" menu shows short action items and matches the desktop 160px
+          // width on phones too. (knowledge needs more room for search + list)
+          isMobile && variant === 'knowledge' && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
