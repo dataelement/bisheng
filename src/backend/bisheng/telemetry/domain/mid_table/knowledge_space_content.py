@@ -509,8 +509,10 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             for file_id in ids
         ]
         success, errors = helpers.bulk(self._es_client_sync, actions, raise_on_error=False)
-        if errors:
-            raise RuntimeError(f"Failed to delete {len(errors)} knowledge space content file telemetry records.")
+        # 404 on delete means the document was already absent — treat as success
+        real_errors = [e for e in errors if e.get("delete", {}).get("status") != 404]
+        if real_errors:
+            raise RuntimeError(f"Failed to delete {len(real_errors)} knowledge space content file telemetry records.")
         return int(success or 0)
 
     def delete_space_file_records_sync(self, space_ids: Iterable[int]) -> int:
