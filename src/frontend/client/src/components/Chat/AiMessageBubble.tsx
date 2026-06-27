@@ -264,12 +264,10 @@ function parseMessageText(text: string) {
  */
 function AgentTimeline({
     events,
-    isStreaming,
     finalTextIdx,
     messageId,
 }: {
     events: AgentEvent[];
-    isStreaming: boolean;
     /** Index in `blocks` of the trailing text block to skip (rendered by the
      * main bubble Markdown). -1 if no such block. */
     finalTextIdx: number;
@@ -277,12 +275,6 @@ function AgentTimeline({
     messageId: string;
 }) {
     const blocks: DisplayBlock[] = groupEventsForDisplay(events);
-    const lastGroupIdx = (() => {
-        for (let i = blocks.length - 1; i >= 0; i--) {
-            if (blocks[i].kind === "group") return i;
-        }
-        return -1;
-    })();
 
     return (
         <div className="flex w-full min-w-0 flex-col gap-3">
@@ -301,13 +293,7 @@ function AgentTimeline({
                         />
                     );
                 }
-                return (
-                    <DeepThinkingGroup
-                        key={`grp-${i}`}
-                        events={block.events}
-                        isStreaming={isStreaming && i === lastGroupIdx && finalTextIdx === -1}
-                    />
-                );
+                return <DeepThinkingGroup key={`grp-${i}`} events={block.events} />;
             })}
         </div>
     );
@@ -609,7 +595,6 @@ function AssistantBubble({
                     <div className="mb-3 w-full min-w-0">
                         <AgentTimeline
                             events={message.events || []}
-                            isStreaming={Boolean(isStreaming && isLatest)}
                             finalTextIdx={finalTextIdx}
                             messageId={message.messageId}
                         />

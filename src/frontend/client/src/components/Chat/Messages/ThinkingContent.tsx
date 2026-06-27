@@ -8,21 +8,15 @@
  */
 import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useState, type FC, type MouseEvent } from "react";
-import { useRecoilValue } from "recoil";
 import { cn } from "~/utils";
-import store from "~/store";
 
 export interface ThinkingContentProps {
     reasoning: string;
-    /** Whether to render the vertical timeline connector below the icon.
-     *  Set to true when something follows in the timeline (e.g., tool cards),
-     *  so the timeline is continuous even when this section is collapsed. */
-    showConnector?: boolean;
 }
 
-const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnector = false }) => {
-    const showThinkingDefault = useRecoilValue<boolean>(store.showThinking);
-    const [isExpanded, setIsExpanded] = useState(showThinkingDefault);
+const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning }) => {
+    // Collapsed by default — each timeline node is independently expandable.
+    const [isExpanded, setIsExpanded] = useState(false);
 
     const handleClick = useCallback((e: MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
@@ -32,14 +26,9 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnect
     if (!reasoning) return null;
 
     return (
-        <div className="flex w-full min-w-0 gap-1.5 animate-thinking-appear">
-            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
+        <div className="flex w-full min-w-0 gap-2 animate-thinking-appear">
+            <div className="flex shrink-0 items-start pt-[3px]">
                 <Outlined.CheckCircle size={16} className="shrink-0 text-[#999999]" />
-                {/* Rail line: keep the timeline continuous to the next node, and
-                    always flank this node's own expanded content. */}
-                {(showConnector || isExpanded) && (
-                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
-                )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
                 <button
