@@ -28,7 +28,7 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning }) => {
     return (
         <div className="flex w-full min-w-0 gap-2 animate-thinking-appear">
             <div className="flex shrink-0 items-start pt-[3px]">
-                <Outlined.CheckCircle size={16} className="shrink-0 text-[#999999]" />
+                <Outlined.CheckCircle size={16} className="shrink-0 text-[#1D2129]" />
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
                 <button

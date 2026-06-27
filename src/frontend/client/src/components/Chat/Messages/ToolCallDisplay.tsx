@@ -221,13 +221,13 @@ function normaliseKnowledgeResults(
 
 const variantStyles = {
     knowledge: {
-        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#999999]" />,
+        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#1D2129]" />,
     },
     web: {
-        icon: <Outlined.Earth size={16} className="shrink-0 text-[#999999]" />,
+        icon: <Outlined.Earth size={16} className="shrink-0 text-[#1D2129]" />,
     },
     tool: {
-        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#999999]" />,
+        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#1D2129]" />,
     },
 } as const;
 
