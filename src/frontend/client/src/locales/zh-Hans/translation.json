@@ -2079,5 +2079,6 @@
   "com_approval_task_badge_approved": "已同意",
   "com_approval_task_badge_rejected": "已拒绝",
   "com_approval_section_business_content": "业务内容",
-  "com_approval_search_placeholder": "搜索申请人、场景或文件"
+  "com_approval_search_placeholder": "搜索申请人、场景或文件",
+  "com_notifications_action_qa_expert_invited": "邀请你回答专家问答问题「{{target}}」"
 }

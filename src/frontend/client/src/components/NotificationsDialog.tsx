@@ -72,6 +72,7 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     knowledge_space_made_private: "com_notifications_action_knowledge_space_made_private",
     channel_dismissed: "com_notifications_action_channel_dismissed",
     knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
+    qa_expert_invited: "com_notifications_action_qa_expert_invited",
 };
 
 const APPROVAL_CENTER_ACTION_CODES = new Set([

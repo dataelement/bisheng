@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from bisheng.database.models.qa_expert import Expert, Question, Answer, Comment, QANotification
+from bisheng.tenant.domain.services.inbox_helper import send_inbox_notice
 from bisheng.qa_expert.domain.schemas import (
     ExpertCreateRequest,
     ExpertUpdateRequest,
@@ -160,14 +161,9 @@ class QuestionService:
         )
 
         question = await self.repository.create(question)
-
         # 发送邀请通知
-        # await self._send_invitation_notifications(
-        #     question.id,
-        #     user_id,
-        #     request.invited_experts,
-        # )
-
+        await self._send_expert_invitation_inbox_notice(question, user_id,user_name)
+    
         logger.info(f"Question created: {question.id} by user {user_id}")
         return question
 
@@ -195,7 +191,6 @@ class QuestionService:
         question.view_count += 1
         await self.repository.update(question_id, view_count=question.view_count)
         return question
-
 
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
@@ -291,6 +286,74 @@ class QuestionService:
 
         update_data = request.dict(exclude_unset=True)
         return await self.repository.update(question_id, **update_data)
+    
+    async def _send_expert_invitation_inbox_notice(
+        self,
+        question: Question,
+        sender_id: int,
+        sender_name: str,
+    ):
+        expert_ids = [
+            int(item)
+            for item in (question.invited_experts or "").split(";")
+            if item.strip().isdigit()
+        ]
+        if not expert_ids:
+            return
+
+        receiver_user_ids = []
+        for expert_id in expert_ids:
+            expert = await self.expert_repo.get_by_id(expert_id)
+            if expert and expert.user_id != sender_id:
+                receiver_user_ids.append(expert.user_id)
+
+        receiver_user_ids = list(set(receiver_user_ids))
+        if not receiver_user_ids:
+            return
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.services.message_service import MessageService
+
+        content = [
+            {
+                "type": "user",
+                "content": f"@{sender_name}",
+                "metadata": {"user_id": sender_id},
+            },
+            {
+                "type": "system_text",
+                "content": "qa_expert_invited",
+            },
+            {
+                "type": "business_url",
+                "content": f"--{question.title}",
+                "metadata": {
+                    "business_type": "qa_question",
+                    "data": {"question_id": str(question.id)},
+                },
+            },
+            {
+                "type": "tooltip_text",
+                "content": (question.description or "")[:50],
+            },
+        ]
+
+        async with get_async_db_session() as session:
+            service = MessageService(
+                message_repository=InboxMessageRepositoryImpl(session),
+                message_read_repository=InboxMessageReadRepositoryImpl(session),
+            )
+            await service.send_message(
+                content=content,
+                sender=sender_id,
+                message_type=MessageTypeEnum.NOTIFY,
+                receiver=receiver_user_ids,
+                status=MessageStatusEnum.APPROVED,
+                action_code="qa_expert_invited",
+            )
 
 
 # ==================== 回答服务 ====================

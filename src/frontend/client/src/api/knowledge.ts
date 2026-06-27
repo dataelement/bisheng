@@ -2586,3 +2586,4 @@ export async function removePortalFavoriteApi(params: {
     const payload: any = res?.data ?? {};
     return { removed: Boolean(payload.removed) };
 }
+
