@@ -75,15 +75,12 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
  */
 export const ALLOWED_EXTENSIONS = [
     "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
-    "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
-    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg",
-    "mp4", "mov", "avi", "mkv", "webm",
+    "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg",
 ] as const;
 
-/** Subset used when ETL4LM is NOT deployed — drops images. */
+/** Subset used when ETL4LM is NOT deployed — same set for this project. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
-    "pdf", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
-    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm",
+    "pdf", "txt", "docx", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg",
 ];
 
 /**
@@ -100,19 +97,11 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.ms-powerpoint", // ppt
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
-    "image/png", "image/jpeg", "image/bmp",
-    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a",
-    "audio/aac", "audio/flac", "audio/ogg",
-    "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/x-matroska", "video/webm",
-    "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
-    "application/vnd.wps-presentation", "application/kswps", // dps
-    "application/vnd.ms-excel", "application/kset", // et
+    "image/png", "image/jpeg",
 ] as const;
 
-/** MIME types when ETL4LM is NOT deployed (no images). */
-const ALLOWED_MIME_TYPES_NO_ETL4LM: readonly string[] = ALLOWED_MIME_TYPES.filter(
-    (m) => !m.startsWith("image/")
-);
+/** MIME types when ETL4LM is NOT deployed — same set for this project. */
+const ALLOWED_MIME_TYPES_NO_ETL4LM: readonly string[] = [...ALLOWED_MIME_TYPES];
 
 /** Accept attribute value for <input type="file"> — full set, prefer `getFileInputAccept()`. */
 export const FILE_INPUT_ACCEPT = ALLOWED_EXTENSIONS.map(e => `.${e}`).join(",");
@@ -138,10 +127,7 @@ export const DEFAULT_MAX_FILE_SIZE_MB = 200;
 /** Default maximum media file size in MB when env config is not available */
 export const DEFAULT_MEDIA_MAX_FILE_SIZE_MB = 1024;
 
-export const MEDIA_FILE_EXTENSIONS = [
-    "mp3", "wav", "m4a", "aac", "flac", "ogg",
-    "mp4", "mov", "avi", "mkv", "webm",
-] as const;
+export const MEDIA_FILE_EXTENSIONS: readonly string[] = [];
 
 export interface UploadSizeLimits {
     defaultMaxMB: number;

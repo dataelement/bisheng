@@ -307,20 +307,7 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {versionManagementEnabled && canManageMembers && pendingSimilarCount > 0 && onProcessSimilar && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md border border-[#F76F44] bg-[#FFF3E8] px-3 font-normal text-[#F76F44] hover:bg-[#FFE6D2] hover:text-[#F76F44]"
-                    onClick={onProcessSimilar}
-                >
-                    <FileSearch className="size-4" />
-                    {localize("com_knowledge.version.header_process_similar_label")}
-                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded bg-white px-1 text-xs text-[#F76F44]">
-                        {pendingSimilarCount}
-                    </span>
-                </Button>
-            )}
+            {null /* process-similar button hidden per project requirements */}
             {selectedCount > selectedThreshold && hasBatchActions && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
