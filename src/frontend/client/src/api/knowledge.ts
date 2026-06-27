@@ -187,6 +187,8 @@ export interface KnowledgeSpace {
     ownerType?: SpaceOwnerType;
     ownerId?: number;
     ownerName?: string;
+    /** 当前用户是否已收藏该空间（mapped from is_favorite） */
+    isFavorite: boolean;
 }
 
 export interface KnowledgeSpaceCreateOptions {
@@ -541,6 +543,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         ownerType: (raw as any).owner_type as SpaceOwnerType | undefined,
         ownerId: (raw as any).owner_id ?? undefined,
         ownerName: (raw as any).owner_name ?? undefined,
+        isFavorite: (raw as any).is_favorite ?? false,
     };
 }
 
@@ -2479,4 +2482,67 @@ export async function dismissSimilarApi(file_id: number): Promise<void> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { skip403Redirect: true } as any,
     );
+}
+
+/** 钢铁门户 - 我的收藏文件项 */
+export interface PortalFavoriteFile {
+    favoriteFileId: string;
+    sourceSpaceId: string;
+    sourceFileId: string;
+    title: string;
+    fileName: string;
+    status: "valid" | "invalid";
+    updatedAt: string;
+}
+
+function mapFavoriteFile(raw: any): PortalFavoriteFile {
+    return {
+        favoriteFileId: String(raw?.favorite_file_id ?? ""),
+        sourceSpaceId: String(raw?.source_space_id ?? ""),
+        sourceFileId: String(raw?.source_file_id ?? ""),
+        title: raw?.title ?? "",
+        fileName: raw?.file_name ?? "",
+        status: raw?.status === "invalid" ? "invalid" : "valid",
+        updatedAt: raw?.updated_at ?? "",
+    };
+}
+
+/**
+ * 获取当前用户的收藏文件列表。
+ * GET /api/v1/knowledge/shougang-portal/favorites/files
+ */
+export async function listPortalFavoritesApi(params?: {
+    page?: number;
+    pageSize?: number;
+}): Promise<{ data: PortalFavoriteFile[]; total: number }> {
+    const res = await request.get<ApiResponse<any>>(
+        `/api/v1/knowledge/shougang-portal/favorites/files`,
+        {
+            params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 20 },
+        },
+    );
+    const payload: any = res?.data ?? {};
+    return {
+        data: asArray<any>(payload.data).map(mapFavoriteFile),
+        total: payload.total ?? 0,
+    };
+}
+
+/**
+ * 取消收藏。
+ * POST /api/v1/knowledge/shougang-portal/favorites/remove
+ */
+export async function removePortalFavoriteApi(params: {
+    sourceSpaceId: string | number;
+    sourceFileId: string | number;
+}): Promise<{ removed: boolean }> {
+    const res = await request.post<ApiResponse<any>>(
+        `/api/v1/knowledge/shougang-portal/favorites/remove`,
+        {
+            source_space_id: Number(params.sourceSpaceId),
+            source_file_id: Number(params.sourceFileId),
+        },
+    );
+    const payload: any = res?.data ?? {};
+    return { removed: Boolean(payload.removed) };
 }
