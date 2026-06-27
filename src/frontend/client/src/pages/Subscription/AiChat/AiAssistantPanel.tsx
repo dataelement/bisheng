@@ -107,8 +107,10 @@ export function AiAssistantPanel({
     const confirm = useConfirm();
 
     const presetQuestions = [
-        localize("com_subscription.summarize_article_points"),
-        localize("com_subscription.main_conclusion")
+      
+        localize("com_subscription.ai_conclusion"),
+        localize("com_subscription.gz_article_points"),
+
     ];
 
     const handleSend = (text: string, files?: any[] | null) => {
@@ -139,7 +141,7 @@ export function AiAssistantPanel({
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>{localize("com_subscription.clear_chat")}</p>
+                    <p>{localize("com_subsccom_subscriptionription.clear_chat")}</p>
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>

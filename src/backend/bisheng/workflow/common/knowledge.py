@@ -437,8 +437,8 @@ class RagUtils(BaseNode):
         if selection.mode == "source":
             source = selection.whole_source
             if source is None:
-                raise ValueError("请选择知识库或知识空间。")
-            self._knowledge_type = source.source_type
+                raise ValueError("请选择知识空间。")
+            self._knowledge_type = "space"
             self._knowledge_value = [source.source_id]
         elif selection.mode == "items":
             self._knowledge_type = "runtime_items"
@@ -448,19 +448,15 @@ class RagUtils(BaseNode):
                 self._runtime_selected_file_ids_by_space,
             ) = self._resolve_runtime_item_scope(selection)
             self._knowledge_value = sorted(
-                set(self._runtime_selected_file_ids_by_knowledge or {})
-                | set(self._runtime_selected_file_ids_by_space or {})
+                set(self._runtime_selected_file_ids_by_space or {})
             )
         else:
             raise ValueError(f"Unsupported runtime knowledge selection mode: {selection.mode}")
 
-        if self._knowledge_type == "knowledge":
-            self._knowledge_auth = True
-            self._runtime_selected_file_ids_by_knowledge = self._resolve_runtime_knowledge_scope(selection)
-        elif self._knowledge_type == "space":
+        if self._knowledge_type == "space":
             self._runtime_selected_file_ids_by_space = self._resolve_runtime_space_scope(selection)
         elif self._knowledge_type == "runtime_items":
-            if not self._runtime_selected_file_ids_by_knowledge and not self._runtime_selected_file_ids_by_space:
+            if not self._runtime_selected_file_ids_by_space:
                 raise ValueError("请选择可用于问答的文件。")
         else:
             raise ValueError(f"Unsupported runtime knowledge type: {self._knowledge_type}")
@@ -556,15 +552,14 @@ class RagUtils(BaseNode):
         selection: RuntimeKnowledgeSelection,
     ) -> tuple[dict[int, list[int]] | None, dict[int, list[int]] | None]:
         knowledge_groups = selection.item_groups("knowledge")
+        if knowledge_groups:
+            raise ValueError("自选知识节点仅支持知识空间。")
         space_groups = selection.item_groups("space")
-        knowledge_file_ids = self._resolve_knowledge_item_groups(knowledge_groups) if knowledge_groups else None
         space_file_ids = self._resolve_runtime_space_scope(selection) if space_groups else None
-        total_files = sum(len(ids) for ids in (knowledge_file_ids or {}).values()) + sum(
-            len(ids) for ids in (space_file_ids or {}).values()
-        )
+        total_files = sum(len(ids) for ids in (space_file_ids or {}).values())
         if total_files > MAX_RUNTIME_KNOWLEDGE_FILES:
             raise ValueError(f"一次最多可选择{MAX_RUNTIME_KNOWLEDGE_FILES}个文件。")
-        return knowledge_file_ids, space_file_ids
+        return None, space_file_ids
 
     def _resolve_legacy_runtime_knowledge_scope(
         self,

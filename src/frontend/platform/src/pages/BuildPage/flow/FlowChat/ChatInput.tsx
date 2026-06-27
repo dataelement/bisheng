@@ -80,14 +80,14 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const [runtimeKnowledgePendingInput, setRuntimeKnowledgePendingInput] = useState<{ nodeId: string; messageId: string } | null>(null)
     const requiresRuntimeKnowledge = useMemo(() => hasUserSelectedKnowledgeNode(flow), [flow])
     const hasActiveInputForm = Boolean(inputForm)
-    const legacyShowRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
+    const canShowRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
         requiresRuntimeKnowledge,
         inputDisabled: inputLock.locked,
         hasInputForm: hasActiveInputForm,
     })
-    const showRuntimeKnowledgePicker = portalMode
-        ? requiresRuntimeKnowledge && runtimeKnowledgePickerOpen
-        : legacyShowRuntimeKnowledgePicker || (requiresRuntimeKnowledge && runtimeKnowledgePickerOpen)
+    const showRuntimeKnowledgePicker = requiresRuntimeKnowledge && (
+        (canShowRuntimeKnowledgePicker && runtimeKnowledgePickerOpen) || Boolean(runtimeKnowledgePendingInput)
+    )
     const runtimeKnowledgePickerDisabled = isRuntimeKnowledgePickerDisabled({
         inputDisabled: inputLock.locked,
         hasInputForm: hasActiveInputForm,
@@ -154,9 +154,9 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     }, [])
 
     const runtimeKnowledgeButtonText = useMemo(() => {
-        if (!runtimeKnowledgeSelection) return '选择知识库'
+        if (!runtimeKnowledgeSelection) return '选择知识空间'
         if (runtimeKnowledgeSelection.mode === 'source') {
-            return runtimeKnowledgeSelection.whole_source?.source_name || '已选择知识库'
+            return runtimeKnowledgeSelection.whole_source?.source_name || '已选择知识空间'
         }
         const count = runtimeKnowledgeSelection.effective_file_count ?? runtimeKnowledgeSelection.items.length
         return `已选 ${count} 个文件`
@@ -631,9 +631,9 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     if (portalMode) {
         return <div className="absolute bottom-0 z-10 w-full bg-transparent pb-5">
             {isDragging && <DragDropOverlay />}
-            <div className="mx-auto w-full max-w-[760px] px-4">
+            <div className="relative mx-auto w-full max-w-[760px] px-4">
                 {showRuntimeKnowledgePicker && (
-                    <div className="mb-3">
+                    <div className="absolute bottom-[120px] right-4 z-30 w-[min(560px,calc(100%-2rem))]">
                         <UserSelectedKnowledgePicker
                             disabled={effectiveRuntimeKnowledgePickerDisabled}
                             value={runtimeKnowledgeDraft}
@@ -641,6 +641,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                             showConfirm
                             confirmLabel="确认"
                             onConfirm={confirmRuntimeKnowledgeSelection}
+                            onCancel={() => setRuntimeKnowledgePickerOpen(false)}
                         />
                     </div>
                 )}
@@ -716,7 +717,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         {isDragging && <DragDropOverlay />}
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
             {showRuntimeKnowledgePicker && (
-                <div className="px-1 pb-2">
+                <div className="absolute bottom-[112px] right-4 z-30 w-[min(560px,calc(100%-2rem))]">
                     <UserSelectedKnowledgePicker
                         disabled={effectiveRuntimeKnowledgePickerDisabled}
                         value={runtimeKnowledgePendingInput ? runtimeKnowledgeDraft : runtimeKnowledgeSelection}
@@ -724,6 +725,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                         showConfirm={Boolean(runtimeKnowledgePendingInput)}
                         confirmLabel="确认"
                         onConfirm={confirmRuntimeKnowledgeSelection}
+                        onCancel={() => setRuntimeKnowledgePickerOpen(false)}
                     />
                 </div>
             )}

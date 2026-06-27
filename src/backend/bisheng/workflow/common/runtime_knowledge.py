@@ -7,7 +7,7 @@ RUNTIME_USER_SELECTED_KNOWLEDGE_KEY = "user_selected_knowledge"
 RUNTIME_KNOWLEDGE_SELECTION_FIELD = "__runtime_knowledge_selection"
 MAX_RUNTIME_KNOWLEDGE_FILES = 20
 
-RuntimeKnowledgeSourceType = Literal["knowledge", "space"]
+RuntimeKnowledgeSourceType = Literal["space"]
 RuntimeKnowledgeMode = Literal["source", "items"]
 RuntimeKnowledgeRefType = Literal["file", "folder"]
 
@@ -27,10 +27,17 @@ class RuntimeKnowledgeSource(BaseModel):
     source_id: int
     source_name: str = ""
 
+    @field_validator("source_type", mode="before")
+    @classmethod
+    def validate_source_type(cls, value: Any) -> str:
+        if value != "space":
+            raise ValueError("自选知识节点仅支持知识空间。")
+        return value
+
     @field_validator("source_id", mode="before")
     @classmethod
     def parse_source_id(cls, value: Any) -> int:
-        return _parse_positive_int(value, "knowledge source_id")
+        return _parse_positive_int(value, "knowledge space source_id")
 
 
 class RuntimeKnowledgeRef(BaseModel):
@@ -40,7 +47,7 @@ class RuntimeKnowledgeRef(BaseModel):
     @field_validator("id", mode="before")
     @classmethod
     def parse_id(cls, value: Any) -> int:
-        return _parse_positive_int(value, "knowledge scope id")
+        return _parse_positive_int(value, "knowledge space scope id")
 
 
 class RuntimeKnowledgeItem(RuntimeKnowledgeSource):
@@ -51,7 +58,7 @@ class RuntimeKnowledgeItem(RuntimeKnowledgeSource):
     @field_validator("id", mode="before")
     @classmethod
     def parse_id(cls, value: Any) -> int:
-        return _parse_positive_int(value, "knowledge scope id")
+        return _parse_positive_int(value, "knowledge space scope id")
 
 
 class RuntimeKnowledgeSelection(BaseModel):
@@ -132,7 +139,7 @@ class RuntimeKnowledgeSelection(BaseModel):
     def validate_scope(self) -> "RuntimeKnowledgeSelection":
         if self.mode == "source":
             if self.whole_source is None:
-                raise ValueError("请选择知识库或知识空间。")
+                raise ValueError("请选择知识空间。")
             if self.items:
                 raise ValueError("完整知识来源不能与文件或文件夹范围同时选择。")
             return self
@@ -140,9 +147,9 @@ class RuntimeKnowledgeSelection(BaseModel):
         if self.whole_source is not None:
             raise ValueError("文件或文件夹范围不能与完整知识来源同时选择。")
         if not self.items:
-            raise ValueError("请选择知识库或知识空间。")
-        if len({item.source_type for item in self.items}) > 1:
-            raise ValueError("文件或文件夹范围不能同时选择知识库和知识空间。")
+            raise ValueError("请选择知识空间。")
+        if len({item.source_id for item in self.items}) > 1:
+            raise ValueError("一次只能选择一个知识空间。")
         if (self.effective_file_count or 0) > MAX_RUNTIME_KNOWLEDGE_FILES:
             raise ValueError(f"一次最多可选择{MAX_RUNTIME_KNOWLEDGE_FILES}个文件。")
         return self
@@ -156,7 +163,7 @@ class RuntimeKnowledgeSelection(BaseModel):
     def folder_ids(self) -> list[int]:
         return [item.id for item in self.items if item.ref_type == "folder"]
 
-    def item_groups(self, source_type: RuntimeKnowledgeSourceType) -> dict[int, list[RuntimeKnowledgeItem]]:
+    def item_groups(self, source_type: str) -> dict[int, list[RuntimeKnowledgeItem]]:
         grouped: dict[int, list[RuntimeKnowledgeItem]] = {}
         for item in self.items:
             if item.source_type != source_type:
@@ -164,7 +171,7 @@ class RuntimeKnowledgeSelection(BaseModel):
             grouped.setdefault(item.source_id, []).append(item)
         return grouped
 
-    def source_ids(self, source_type: RuntimeKnowledgeSourceType) -> list[int]:
+    def source_ids(self, source_type: str) -> list[int]:
         if self.mode == "source":
             if self.whole_source and self.whole_source.source_type == source_type:
                 return [self.whole_source.source_id]
@@ -174,7 +181,7 @@ class RuntimeKnowledgeSelection(BaseModel):
 
 def parse_runtime_knowledge_selection(value: Any) -> RuntimeKnowledgeSelection:
     if value is None:
-        raise ValueError("请选择知识库或知识空间。")
+        raise ValueError("请选择知识空间。")
     if isinstance(value, RuntimeKnowledgeSelection):
         return value
     if not isinstance(value, dict):

@@ -3,7 +3,7 @@ export const USER_SELECTED_KNOWLEDGE_RETRIEVER_NODE = "user_selected_knowledge_r
 export const RUNTIME_KNOWLEDGE_SELECTION_FIELD = "__runtime_knowledge_selection";
 export const MAX_RUNTIME_KNOWLEDGE_FILES = 20;
 
-export type RuntimeKnowledgeSourceType = "knowledge" | "space";
+export type RuntimeKnowledgeSourceType = "space";
 export type RuntimeKnowledgeMode = "source" | "items";
 export type RuntimeKnowledgeRefType = "file" | "folder";
 
@@ -71,15 +71,18 @@ export function isRuntimeKnowledgePickerDisabled({
 }
 
 export function validateRuntimeKnowledgeSelection(selection?: RuntimeKnowledgeSelection | null): string {
-    if (!selection) return "请选择知识库或知识空间。";
+    if (!selection) return "请选择知识空间。";
     if (selection.mode === "source") {
-        if (!selection.whole_source?.source_id || !selection.whole_source.source_type) return "请选择知识库或知识空间。";
+        if (!selection.whole_source?.source_id || selection.whole_source.source_type !== "space") return "请选择知识空间。";
         if (selection.items?.length) return "完整知识来源不能与文件或文件夹范围同时选择。";
         return "";
     }
-    if (selection.mode !== "items" || !selection.items?.length) return "请选择知识库或知识空间。";
-    if (new Set(selection.items.map((item) => item.source_type)).size > 1) {
-        return "文件或文件夹范围不能同时选择知识库和知识空间。";
+    if (selection.mode !== "items" || !selection.items?.length) return "请选择知识空间。";
+    if (selection.items.some((item) => item.source_type !== "space")) {
+        return "自选知识节点仅支持知识空间。";
+    }
+    if (new Set(selection.items.map((item) => item.source_id)).size > 1) {
+        return "一次只能选择一个知识空间。";
     }
     if ((selection.effective_file_count ?? 0) > MAX_RUNTIME_KNOWLEDGE_FILES) {
         return `一次最多可选择${MAX_RUNTIME_KNOWLEDGE_FILES}个文件。`;

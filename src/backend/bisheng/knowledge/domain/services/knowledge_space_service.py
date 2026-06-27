@@ -306,6 +306,7 @@ class PortalSearchPerfContext:
     sort: str = ""
     tag_enabled: bool = False
     file_ext: str = ""
+    document_type: str = ""
     space_count: int = 0
     es_chunk_count: int = 0
     vector_chunk_count: int = 0
@@ -3109,6 +3110,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         perf.sort = req.sort
         perf.tag_enabled = bool(req.tag)
         perf.file_ext = str(req.file_ext or "")
+        perf.document_type = self._normalize_shougang_document_type_code(req.document_type)
         perf_token = _portal_search_perf_var.set(perf)
         fga_token = begin_fga_read_stats()
         try:
@@ -3126,6 +3128,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "sort": perf.sort,
                 "tag_enabled": perf.tag_enabled,
                 "file_ext": perf.file_ext,
+                "document_type": perf.document_type,
                 "space_count": perf.space_count,
                 "es_chunk_count": perf.es_chunk_count,
                 "vector_chunk_count": perf.vector_chunk_count,
@@ -3246,14 +3249,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             extra_file_ids=None,
             file_ext=req.file_ext,
             order_by='update_time',
-            order_sort='desc',
+            order_sort=self._shougang_portal_order_sort(req.sort),
         )
         if not files:
-            return self._build_shougang_portal_search_response([])
+            return self._build_shougang_portal_paged_response([], req.page, req.page_size)
+
+        files = self._filter_shougang_portal_files_by_document_type(files, req.document_type)
+        if not files:
+            return self._build_shougang_portal_paged_response([], req.page, req.page_size)
 
         visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
         if not visible_files:
-            return self._build_shougang_portal_search_response([])
+            return self._build_shougang_portal_paged_response([], req.page, req.page_size)
 
         space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
         enriched_items = await self._handle_file_folder_extra_info(visible_files)
@@ -3265,11 +3272,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item_id = int(item.get("id") or 0)
             item["folder_path"] = folder_path_map.get(item_id, "")
             item["source_path"] = source_path_map.get(item_id, "")
-            if self._is_shougang_portal_file_item(item, req.file_ext):
+            if self._is_shougang_portal_file_item(item, req.file_ext, req.document_type):
                 all_items.append(self._map_shougang_portal_file_item(space_id, item))
 
         sorted_items = self._sort_shougang_portal_file_items(all_items, req.sort, req.q)
-        return self._build_shougang_portal_search_response(sorted_items)
+        return self._build_shougang_portal_paged_response(sorted_items, req.page, req.page_size)
 
     async def _semantic_search_shougang_portal_files(
             self,
@@ -3285,6 +3292,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf.sort = req.sort
             perf.tag_enabled = bool(req.tag)
             perf.file_ext = str(req.file_ext or "")
+            perf.document_type = self._normalize_shougang_document_type_code(req.document_type)
         es_chunks, vector_chunks = await asyncio.gather(
             self._search_shougang_portal_es_chunks(
                 spaces=spaces,
@@ -3313,6 +3321,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces=spaces,
             tag_file_ids=tag_file_ids,
             file_ext=req.file_ext,
+            document_type=req.document_type,
             sort=req.sort,
         )
         if not visible_candidates:
@@ -3320,7 +3329,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if perf is not None:
             perf.visible_candidate_count = len(visible_candidates)
 
-        if req.sort != 'updated_at':
+        if not self._is_shougang_portal_updated_at_sort(req.sort):
             visible_candidates = await self._rerank_shougang_portal_file_candidates(
                 keyword=keyword,
                 candidates=visible_candidates,
@@ -3341,6 +3350,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_map=visible_file_map,
             spaces=spaces,
             file_ext=req.file_ext,
+            document_type=req.document_type,
         )
         return self._build_shougang_portal_search_response(items)
 
@@ -3351,14 +3361,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces: List[Knowledge],
             tag_file_ids: Optional[List[int]],
             file_ext: Optional[str],
+            document_type: Optional[str],
             sort: str,
     ) -> tuple[List[PortalFileCandidate], Dict[int, KnowledgeFile]]:
-        if sort == "updated_at":
+        if self._is_shougang_portal_updated_at_sort(sort):
             return await self._collect_visible_shougang_portal_updated_at_candidates(
                 ranked_candidates=ranked_candidates,
                 spaces=spaces,
                 tag_file_ids=tag_file_ids,
                 file_ext=file_ext,
+                document_type=document_type,
+                sort=sort,
             )
 
         visible_candidates: List[PortalFileCandidate] = []
@@ -3375,8 +3388,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 extra_file_ids=batch_file_ids,
                 file_ext=file_ext,
                 order_by='update_time',
-                order_sort='desc',
+                order_sort=self._shougang_portal_order_sort(sort),
             )
+            if not files:
+                continue
+            files = self._filter_shougang_portal_files_by_document_type(files, document_type)
             if not files:
                 continue
             visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
@@ -3398,6 +3414,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces: List[Knowledge],
             tag_file_ids: Optional[List[int]],
             file_ext: Optional[str],
+            document_type: Optional[str],
+            sort: str,
     ) -> tuple[List[PortalFileCandidate], Dict[int, KnowledgeFile]]:
         space_ids = [int(space.id) for space in spaces]
         candidate_file_ids = [candidate.file_id for candidate in ranked_candidates]
@@ -3409,15 +3427,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             extra_file_ids=candidate_file_ids,
             file_ext=file_ext,
             order_by='update_time',
-            order_sort='desc',
+            order_sort=self._shougang_portal_order_sort(sort),
         )
+        if not files:
+            return [], {}
+        files = self._filter_shougang_portal_files_by_document_type(files, document_type)
         if not files:
             return [], {}
         file_map = {int(file.id): file for file in files}
         ordered_candidates = sorted(
             [candidate for candidate in ranked_candidates if candidate.file_id in file_map],
             key=lambda candidate: self._get_shougang_portal_file_update_timestamp(file_map.get(candidate.file_id)),
-            reverse=True,
+            reverse=self._shougang_portal_order_sort(sort) == 'desc',
         )
         visible_candidates: List[PortalFileCandidate] = []
         visible_file_map: Dict[int, KnowledgeFile] = {}
@@ -3868,11 +3889,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             sort: str,
             file_map: Dict[int, KnowledgeFile],
     ) -> List[PortalFileCandidate]:
-        if sort == 'updated_at':
+        if self._is_shougang_portal_updated_at_sort(sort):
             return sorted(
                 candidates,
                 key=lambda candidate: self._get_shougang_portal_file_update_timestamp(file_map.get(candidate.file_id)),
-                reverse=True,
+                reverse=self._shougang_portal_order_sort(sort) == 'desc',
             )
         return sorted(
             candidates,
@@ -3929,6 +3950,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_map: Dict[int, KnowledgeFile],
             spaces: List[Knowledge],
             file_ext: Optional[str],
+            document_type: Optional[str],
     ) -> List[ShougangPortalFileItemResp]:
         ordered_files = [file_map[candidate.file_id] for candidate in candidates if candidate.file_id in file_map]
         if not ordered_files:
@@ -3943,7 +3965,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item_id = int(item.get("id") or 0)
             item["folder_path"] = folder_path_map.get(item_id, "")
             item["source_path"] = source_path_map.get(item_id, "")
-            if self._is_shougang_portal_file_item(item, file_ext):
+            if self._is_shougang_portal_file_item(item, file_ext, document_type):
                 item_map[item_id] = self._map_shougang_portal_file_item(space_id, item)
         return [item_map[candidate.file_id] for candidate in candidates if candidate.file_id in item_map]
 
@@ -3955,6 +3977,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "total": len(final_items),
             "page": 1,
             "page_size": PORTAL_SEARCH_FINAL_LIMIT,
+        }
+
+    @staticmethod
+    def _build_shougang_portal_paged_response(
+            items: List[ShougangPortalFileItemResp],
+            page: int,
+            page_size: int,
+    ) -> Dict:
+        safe_page = max(int(page or 1), 1)
+        safe_page_size = min(max(int(page_size or 20), 1), 100)
+        start = (safe_page - 1) * safe_page_size
+        page_items = items[start:start + safe_page_size]
+        return {
+            "data": [item.model_dump(mode='json') for item in page_items],
+            "total": len(items),
+            "page": safe_page,
+            "page_size": safe_page_size,
         }
 
     async def _get_shougang_portal_visible_search_spaces(
@@ -4229,11 +4268,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         return [int(tag.id) for tag in tags if tag.id is not None]
 
-    def _is_shougang_portal_file_item(self, item: Dict, file_ext: Optional[str]) -> bool:
+    def _is_shougang_portal_file_item(
+            self,
+            item: Dict,
+            file_ext: Optional[str],
+            document_type: Optional[str] = None,
+    ) -> bool:
         if int(item.get("file_type", -1)) != FileType.FILE.value:
             return False
         file_name = str(item.get("file_name") or "")
         if file_ext and self._get_file_ext(file_name) != file_ext.strip().lower().lstrip("."):
+            return False
+        normalized_document_type = self._normalize_shougang_document_type_code(document_type)
+        if normalized_document_type and self._get_shougang_document_type_code(item) != normalized_document_type:
             return False
         return True
 
@@ -4288,7 +4335,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         sort: str,
         keyword: Optional[str],
     ) -> List[ShougangPortalFileItemResp]:
-        if sort == 'updated_at' or not keyword:
+        if KnowledgeSpaceService._shougang_portal_order_sort(sort) == 'asc':
+            return sorted(items, key=lambda item: item.updated_at)
+        if KnowledgeSpaceService._is_shougang_portal_updated_at_sort(sort) or not keyword:
             return sorted(items, key=lambda item: item.updated_at, reverse=True)
         keyword_lower = keyword.lower()
 
@@ -4315,6 +4364,50 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return hit_score, item.updated_at
 
         return sorted(items, key=score, reverse=True)
+
+    @staticmethod
+    def _is_shougang_portal_updated_at_sort(sort: str) -> bool:
+        return sort in {'updated_at', 'updated_at_desc', 'updated_at_asc'}
+
+    @staticmethod
+    def _shougang_portal_order_sort(sort: str) -> str:
+        return 'asc' if sort == 'updated_at_asc' else 'desc'
+
+    @staticmethod
+    def _normalize_shougang_document_type_code(value: Any) -> str:
+        return str(value or '').strip().upper()
+
+    @classmethod
+    def _filter_shougang_portal_files_by_document_type(
+            cls,
+            files: List[KnowledgeFile],
+            document_type: Optional[str],
+    ) -> List[KnowledgeFile]:
+        normalized = cls._normalize_shougang_document_type_code(document_type)
+        if not normalized:
+            return files
+        return [
+            file
+            for file in files
+            if cls._get_shougang_document_type_code(file) == normalized
+        ]
+
+    @classmethod
+    def _get_shougang_document_type_code(cls, item: Any) -> str:
+        if isinstance(item, dict):
+            file_encoding = str(
+                item.get('file_encoding')
+                or item.get('fileEncoding')
+                or item.get('document_code')
+                or item.get('file_no')
+                or ''
+            )
+        else:
+            file_encoding = str(getattr(item, 'file_encoding', '') or '')
+        parts = [part.strip() for part in file_encoding.split('-')]
+        if len(parts) < 2:
+            return ''
+        return cls._normalize_shougang_document_type_code(parts[1])
 
     @staticmethod
     def _shougang_portal_tag_text(tag: Any) -> str:

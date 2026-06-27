@@ -1285,6 +1285,57 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
 
 
 @pytest.mark.asyncio
+async def test_shougang_portal_file_search_filters_document_type_before_pagination(service):
+    space = _make_space(space_id=12, user_id=7)
+    space.name = '报告知识库'
+    old_report = _make_file(file_id=1580, knowledge_id=12, file_name='质量分析报告.pdf')
+    old_report.file_encoding = 'SGGF-RPT-PP-202604-01201'
+    old_report.update_time = datetime(2026, 4, 13, 10, 30, 0)
+    standard = _make_file(file_id=1581, knowledge_id=12, file_name='点检标准.pdf')
+    standard.file_encoding = 'SGGF-STD-PP-202604-01202'
+    standard.update_time = datetime(2026, 4, 14, 10, 30, 0)
+    new_report = _make_file(file_id=1582, knowledge_id=12, file_name='设备运行报告.pdf')
+    new_report.file_encoding = 'SGGF-RPT-PP-202604-01203'
+    new_report.update_time = datetime(2026, 4, 15, 10, 30, 0)
+    files = [new_report, standard, old_report]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=files,
+    ) as mock_batch_files, patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        side_effect=lambda input_files: [{**file.model_dump(), 'tags': []} for file in input_files],
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                space_ids=[12],
+                document_type='rpt',
+                page=1,
+                page_size=1,
+                sort='updated_at_asc',
+            )
+        )
+
+    assert mock_batch_files.await_args.kwargs['order_sort'] == 'asc'
+    assert result['total'] == 2
+    assert result['page'] == 1
+    assert result['page_size'] == 1
+    assert [item['id'] for item in result['data']] == [1580]
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = '热轧知识库'

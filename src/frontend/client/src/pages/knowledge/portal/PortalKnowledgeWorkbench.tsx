@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -1820,9 +1820,16 @@ export default function PortalKnowledgeWorkbench() {
         return names.join("/");
     }, [activeGroup?.title, activeSpace?.name, selectedFile?.name, selectedFile?.path]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
+    const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+    }, []);
 
     return (
-        <div className={s.workbench}>
+        <div
+            className={s.workbench}
+            onDragOverCapture={handleWorkbenchDrag}
+            onDropCapture={handleWorkbenchDrag}
+        >
             {!aiDrawerOpen ? (
                 <>
                     <SpaceSidebar

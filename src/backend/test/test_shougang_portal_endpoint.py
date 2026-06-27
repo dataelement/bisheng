@@ -429,6 +429,7 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
             space_ids=[12, 18],
             space_level="department",
             file_ext="pdf",
+            document_type="RPT",
             sort="relevance",
             page=1,
             page_size=10,
@@ -443,6 +444,7 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
     assert response.status_code == 200
     assert fake_service.search_request.space_level == "department"
     assert fake_service.search_request.space_ids == [12, 18]
+    assert fake_service.search_request.document_type == "RPT"
     assert response.data["total"] == 1
     assert response.data["data"][0]["space_id"] == 12
 
