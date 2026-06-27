@@ -2079,6 +2079,46 @@ export async function renameFileApi(
  * Delete a single file
  * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/delete
  */
+export async function moveFileApi(
+    space_id: string,
+    file_id: string,
+    target_folder_id: number | null,
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "move-file",
+        { method: "POST", space_id, file_id, target_folder_id },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/files/${file_id}/move-folder`,
+                { target_folder_id }
+            ) as ApiResponse<unknown> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(res.status_message || res.message || res.msg || "move file failed");
+            }
+        }
+    );
+}
+
+export async function moveFolderApi(
+    space_id: string,
+    folder_id: string,
+    target_folder_id: number | null,
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "move-folder",
+        { method: "POST", space_id, folder_id, target_folder_id },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/folders/${folder_id}/move`,
+                { target_folder_id }
+            ) as ApiResponse<unknown> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(res.status_message || res.message || res.msg || "move folder failed");
+            }
+        }
+    );
+}
+
 export async function deleteFileApi(space_id: string, file_id: string): Promise<void> {
     return withKnowledgeMutationLog(
         "delete-file",

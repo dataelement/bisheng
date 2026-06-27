@@ -490,6 +490,10 @@ class FolderRenameReq(BaseModel):
     name: str = Field(..., description="New Folder Name")
 
 
+class MoveFolderReq(BaseModel):
+    target_folder_id: Optional[int] = Field(default=None, description="Target folder ID; null means root")
+
+
 class FileCreateReq(BaseModel):
     file_path: List[str] = Field(..., description="File Path")
     parent_id: Optional[int] = Field(None, description="Parent Folder ID")

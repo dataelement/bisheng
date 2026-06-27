@@ -8,6 +8,7 @@ import {
 import {
     Download,
     Edit,
+    FolderInput,
     GitBranch,
     History,
     MoreVertical,
@@ -652,6 +653,9 @@ interface FileTableProps {
     downloadEntryIds?: Set<string>;
     publishEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
+    onMove?: (file: KnowledgeFile) => void;
+    /** Entry IDs for which the current user has move permission (same as rename). */
+    moveEntryIds?: Set<string>;
     onPublishFile?: (file: KnowledgeFile) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
@@ -667,7 +671,7 @@ interface FileTableProps {
     onFileEncodingUpdated?: (fileId: string, newEncoding: string) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -866,6 +870,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onOpenVersionManagement={onOpenVersionManagement}
                                 onOpenVersionHistory={onOpenVersionHistory}
                                 canManageMembers={canManageMembers}
+                                canMove={Boolean(moveEntryIds?.has(file.id))}
+                                onMove={onMove ? () => onMove(file) : undefined}
                             />
                         ))}
                     </TableBody>
@@ -934,6 +940,8 @@ function FileRow({
     onOpenVersionManagement,
     onOpenVersionHistory,
     canManageMembers = false,
+    canMove = false,
+    onMove,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -954,6 +962,8 @@ function FileRow({
     canDelete?: boolean;
     canDownload?: boolean;
     canPublish?: boolean;
+    canMove?: boolean;
+    onMove?: () => void;
     onPublishFile?: (file: KnowledgeFile) => void;
     columnWidths: Record<ColumnKey, number>;
     showStatusColumn: boolean;
@@ -1007,7 +1017,7 @@ function FileRow({
     const canEditTags = isAdmin && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
-    const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
+    const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || canMove || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const fileTags = Array.isArray(file.tags) ? file.tags : [];
     const fileEncodingText = file.fileEncoding?.trim() || "";
@@ -1098,6 +1108,17 @@ function FileRow({
                             >
                                 <Edit className="mr-2 size-4" />
                                 {localize("com_knowledge.rename")}
+                            </DropdownMenuItem>
+                        )}
+                        {canMove && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMove?.();
+                                }}
+                            >
+                                <FolderInput className="mr-2 size-4" />
+                                {localize("com_knowledge.move")}
                             </DropdownMenuItem>
                         )}
                         {canRetry && (

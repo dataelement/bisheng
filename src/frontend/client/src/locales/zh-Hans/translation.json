@@ -777,6 +777,7 @@
   "com_ui_bulk_delete_error": "删除分享链接时失败",
   "com_ui_callback_url": "回调 URL",
   "com_ui_cancel": "取消",
+  "com_ui_loading": "加载中...",
   "com_ui_channel": "频道订阅",
   "com_ui_chart": "图表",
   "com_ui_chat": "对话",
@@ -1358,7 +1359,7 @@
     "create_tag_failed_abnormal": "创建标签失败：返回数据异常",
     "created_by_me": "我创建的",
     "creator_label": "创建人：",
-    "current_location": "当前位置",
+    "current_location": "当前位置，无需移动",
     "current_space": "当前知识库",
     "delete": "删除",
     "delete_failed": "删除失败",
@@ -1656,7 +1657,16 @@
       "section_dismiss": "不关联推荐文档",
       "section_dismiss_subtitle": "当前文件保持现有状态,不写入推荐的版本链。",
       "btn_close": "关闭"
-    }
+    },
+    "move": "移动",
+    "move_to": "移动到",
+    "move_success": "移动成功",
+    "move_failed": "移动失败",
+    "move_circular_error": "不能将文件夹移动到其自身或子文件夹中",
+    "move_duplicate_error": "目标位置已存在同名文件夹",
+    "select_target_location": "选择目标位置",
+    "root_directory": "根目录",
+    "no_sub_folders": "此处没有子文件夹"
   },
   "com_subscription": {
     "add": "加入",
@@ -2069,6 +2079,5 @@
   "com_approval_task_badge_approved": "已同意",
   "com_approval_task_badge_rejected": "已拒绝",
   "com_approval_section_business_content": "业务内容",
-  "com_approval_search_placeholder": "搜索申请人、场景或文件",
-  "com_ui_close": "关闭"
+  "com_approval_search_placeholder": "搜索申请人、场景或文件"
 }

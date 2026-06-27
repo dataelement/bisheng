@@ -8,6 +8,8 @@ import {
     createFolderApi,
     renameFolderApi,
     deleteFolderApi,
+    moveFileApi,
+    moveFolderApi,
     uploadFileToServerApi,
     addFilesApi,
     renameFileApi,
@@ -611,6 +613,30 @@ export function useFileUpload({
         [currentPage, loadFiles]
     );
 
+    // ─── Move file/folder ────────────────────────────────────────────────
+    const handleMoveFile = useCallback(
+        async (fileId: string, targetFolderId: number | null) => {
+            if (!activeSpace) return;
+            const target = files.find(f => f.id === fileId);
+            if (!target) return;
+            try {
+                if (target.type === FileType.FOLDER) {
+                    await moveFolderApi(activeSpace.id, fileId, targetFolderId);
+                } else {
+                    await moveFileApi(activeSpace.id, fileId, targetFolderId);
+                }
+                // Remove from current folder list and refresh tree.
+                setFiles(prev => prev.filter(f => f.id !== fileId));
+                setTotal(prev => Math.max(0, prev - 1));
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+                showToast({ message: localize("com_knowledge.move_success"), severity: NotificationSeverity.SUCCESS } as any);
+            } catch {
+                showToast({ message: localize("com_knowledge.move_failed"), severity: NotificationSeverity.ERROR });
+            }
+        },
+        [activeSpace, files, setFiles, setTotal, showToast, localize]
+    );
+
     return {
         uploadingFiles,
         creatingFolder,
@@ -621,6 +647,7 @@ export function useFileUpload({
         handleCancelCreateFolder,
         handleRenameFile,
         handleDeleteFile,
+        handleMoveFile,
         handleEditTags,
         handleDuplicateOverwrite,
         handleDuplicateSkip,

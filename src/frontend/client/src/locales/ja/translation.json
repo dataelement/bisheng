@@ -774,6 +774,7 @@
   "com_ui_bulk_delete_error": "共有リンクの削除に失敗しました",
   "com_ui_callback_url": "コールバック URL",
   "com_ui_cancel": "キャンセル",
+  "com_ui_loading": "読み込み中...",
   "com_ui_channel": "チャンネル",
   "com_ui_chart": "チャート",
   "com_ui_chat": "会話",
@@ -1355,7 +1356,7 @@
     "create_tag_failed_abnormal": "タグの作成に失敗しました: 異常な戻りデータ",
     "created_by_me": "私が作成",
     "creator_label": "作成者:",
-    "current_location": "現在位置",
+    "current_location": "現在の場所です。移動不要",
     "current_space": "現在のナレッジスペース",
     "delete": "削除",
     "delete_failed": "削除に失敗しました",
@@ -1652,7 +1653,16 @@
       "section_dismiss": "関連付けをスキップ",
       "section_dismiss_subtitle": "現在のファイルを独立ドキュメントとして保持し、バージョンチェーンに追加しません。",
       "btn_close": "閉じる"
-    }
+    },
+    "move": "移動",
+    "move_to": "移動先",
+    "move_success": "移動しました",
+    "move_failed": "移動に失敗しました",
+    "move_circular_error": "フォルダをそれ自体またはサブフォルダに移動することはできません",
+    "move_duplicate_error": "移動先に同名のフォルダが既に存在します",
+    "select_target_location": "移動先を選択",
+    "root_directory": "ルートディレクトリ",
+    "no_sub_folders": "サブフォルダはありません"
   },
   "com_subscription": {
     "add": "追加",
@@ -2035,6 +2045,5 @@
   "com_approval_task_badge_approved": "承認済み",
   "com_approval_task_badge_rejected": "却下",
   "com_approval_section_business_content": "業務内容",
-  "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
-  "com_ui_close": "閉じる"
+  "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索"
 }

@@ -430,3 +430,72 @@ class SpaceFileDao(KnowledgeFileDao):
         with get_sync_db_session() as session:
             session.execute(statement)
             session.commit()
+
+    @classmethod
+    @classmethod
+    async def max_level_under_prefix(cls, space_id: int, prefix: str) -> Optional[int]:
+        """Return the maximum ``level`` among all rows whose path starts with ``prefix``."""
+        statement = (
+            select(func.max(col(KnowledgeFile.level)))
+            .where(
+                KnowledgeFile.knowledge_id == space_id,
+                or_(
+                    col(KnowledgeFile.file_level_path) == prefix,
+                    col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                ),
+            )
+        )
+        async with get_async_db_session() as session:
+            result = await session.execute(statement)
+            return result.scalar_one_or_none()
+
+    @classmethod
+    async def update_descendants_path(
+        cls,
+        space_id: int,
+        old_prefix: str,
+        new_prefix: str,
+        level_diff: int,
+        folder: Optional["KnowledgeFile"] = None,
+    ) -> None:
+        """Bulk-update file_level_path and level for all descendants of a moved folder.
+
+        Replaces the ``old_prefix`` portion of file_level_path with ``new_prefix``
+        for every row whose path starts with ``old_prefix`` (exact match for direct
+        children, prefix+/ match for deeper descendants).
+
+        When ``folder`` is provided it is updated in the same transaction so that
+        the folder record and its descendants are always consistent.
+        """
+        if old_prefix == new_prefix:
+            if folder is not None:
+                async with get_async_db_session() as session:
+                    session.add(folder)
+                    await session.commit()
+                    await session.refresh(folder)
+            return
+        old_prefix_len = len(old_prefix)
+        statement = (
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.knowledge_id == space_id,
+                or_(
+                    col(KnowledgeFile.file_level_path) == old_prefix,
+                    col(KnowledgeFile.file_level_path).like(f"{old_prefix}/%"),
+                ),
+            )
+            .values(
+                file_level_path=func.concat(
+                    new_prefix,
+                    func.substring(col(KnowledgeFile.file_level_path), old_prefix_len + 1),
+                ),
+                level=col(KnowledgeFile.level) + level_diff,
+            )
+        )
+        async with get_async_db_session() as session:
+            await session.execute(statement)
+            if folder is not None:
+                session.add(folder)
+            await session.commit()
+            if folder is not None:
+                await session.refresh(folder)

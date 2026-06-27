@@ -37,6 +37,11 @@ class SpaceFolderDuplicateError(BaseErrorCode):
     Msg: str = 'Folder name already exists in this directory'
 
 
+class SpaceFolderCircularMoveError(BaseErrorCode):
+    Code: int = 18013
+    Msg: str = 'Cannot move a folder into itself or its own subdirectory'
+
+
 class SpaceFileNotFoundError(BaseErrorCode):
     Code: int = 18020
     Msg: str = 'File does not exist'

@@ -1900,6 +1900,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onDownloadFile={() => undefined}
                                                     onRenameFile={(fileId, newName) => void fileUpload.handleRenameFile(fileId, newName)}
                                                     onDeleteFile={(fileId) => void fileUpload.handleDeleteFile(fileId)}
+                                                    onMoveFile={(fileId, targetFolderId) => void fileUpload.handleMoveFile(fileId, targetFolderId)}
                                                     onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
                                                     onRetryFile={() => void reloadFiles()}
                                                     currentPath={currentPath}

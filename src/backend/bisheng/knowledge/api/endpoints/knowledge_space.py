@@ -24,6 +24,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileRenameReq,
     FileEncodingUpdateReq,
     MoveFileFolderReq,
+    MoveFolderReq,
     UploadFolderRecommendationReq,
     BatchDeleteReq,
     BatchDownloadReq,
@@ -501,6 +502,17 @@ async def rename_folder_by_post(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     folder = await svc.rename_folder(folder_id, req.name)
+    return resp_200(folder)
+
+
+@router.post("/{space_id}/folders/{folder_id}/move")
+async def move_folder(
+    space_id: int,
+    folder_id: int,
+    req: MoveFolderReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    folder = await svc.move_folder(space_id, folder_id, req.target_folder_id)
     return resp_200(folder)
 
 

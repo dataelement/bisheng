@@ -44,6 +44,7 @@ import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
+import { MoveFolderDialog } from "./MoveFolderDialog";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
@@ -81,6 +82,7 @@ interface KnowledgeSpaceContentProps {
     onDeleteFile: (fileId: string) => void;
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
+    onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
     currentPath: Array<{ id?: string; name: string }>;
     currentFolderId?: string;
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
@@ -127,6 +129,7 @@ export function KnowledgeSpaceContent({
     onDeleteFile,
     onEditTags,
     onRetryFile,
+    onMoveFile,
     currentPath,
     currentFolderId,
     onDragStateChange,
@@ -339,6 +342,7 @@ export function KnowledgeSpaceContent({
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
+    const [movingFile, setMovingFile] = useState<KnowledgeFile | null>(null);
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -1323,6 +1327,8 @@ export function KnowledgeSpaceContent({
                                     downloadEntryIds={downloadEntryIds}
                                     publishEntryIds={publishEntryIds}
                                     onManagePermission={hideFilePermissionActions ? undefined : handleManagePermission}
+                                    onMove={onMoveFile ? (file) => setMovingFile(file) : undefined}
+                                    moveEntryIds={renameEntryIds}
                                     onPublishFile={setPublishingFile}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
@@ -1392,6 +1398,21 @@ export function KnowledgeSpaceContent({
                     if (!open) setPublishingFile(null);
                 }}
             />
+
+            {/* Move file/folder dialog */}
+            {movingFile && (
+                <MoveFolderDialog
+                    open={Boolean(movingFile)}
+                    spaceId={String(space.id)}
+                    movingItemId={movingFile.id}
+                    movingItemType={movingFile.type === FileType.FOLDER ? "folder" : "file"}
+                    onConfirm={(targetFolderId) => {
+                        onMoveFile?.(movingFile.id, targetFolderId);
+                        setMovingFile(null);
+                    }}
+                    onCancel={() => setMovingFile(null)}
+                />
+            )}
 
             {/* Edit Tags Modal */}
             <EditTagsModal

@@ -31,6 +31,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError,
     SpaceFolderDepthError,
     SpaceFolderDuplicateError,
+    SpaceFolderCircularMoveError,
     SpaceFileNotFoundError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
@@ -6607,6 +6608,94 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self.update_folder_update_time(next_file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         return KnowledgeSpaceFileResponse(**updated_file.model_dump())
+
+    async def move_folder(
+        self,
+        space_id: int,
+        folder_id: int,
+        target_folder_id: Optional[int],
+    ) -> KnowledgeSpaceFileResponse:
+        """Move a folder (and all its descendants) to a new location within the same space."""
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
+        folder = self._ensure_space_folder(folder, space_id)
+        await self._require_permission_id("folder", folder_id, "rename_file", space_id=space_id)
+
+        old_folder_path = folder.file_level_path or ""
+        old_level = folder.level or 0
+        # The path prefix shared by all descendants of this folder.
+        old_prefix = f"{old_folder_path}/{folder_id}" if old_folder_path else f"/{folder_id}"
+
+        old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_folder_path, space_id)
+
+        if target_folder_id is None:
+            await self._require_permission_id("knowledge_space", space_id, "upload_file")
+            new_parent_path = ""
+            new_level = 0
+            new_parent_type = "knowledge_space"
+            new_parent_id_val = space_id
+        else:
+            if target_folder_id == folder_id:
+                raise SpaceFolderCircularMoveError()
+            target = await KnowledgeFileDao.query_by_id(target_folder_id)
+            target = self._ensure_space_folder(target, space_id)
+            await self._require_permission_id("folder", target_folder_id, "upload_file", space_id=space_id)
+
+            # Reject moves into the folder's own subtree.
+            target_path = target.file_level_path or ""
+            if target_path == old_prefix or target_path.startswith(f"{old_prefix}/"):
+                raise SpaceFolderCircularMoveError()
+
+            new_parent_path = f"{target_path}/{target_folder_id}" if target_path else f"/{target_folder_id}"
+            new_level = (target.level or 0) + 1
+            new_parent_type = "folder"
+            new_parent_id_val = target_folder_id
+
+        # Check for duplicate folder name in destination.
+        duplicate_count = await SpaceFileDao.count_folder_by_name(
+            space_id, folder.file_name, new_parent_path, exclude_id=folder_id
+        )
+        if duplicate_count > 0:
+            raise SpaceFolderDuplicateError()
+
+        new_prefix = f"{new_parent_path}/{folder_id}" if new_parent_path else f"/{folder_id}"
+        level_diff = new_level - old_level
+
+        # Check that moving the subtree won't exceed the 10-level depth limit.
+        # Find the deepest level among all descendants and apply the level_diff.
+        if level_diff != 0:
+            max_descendant_level = await SpaceFileDao.max_level_under_prefix(space_id, old_prefix)
+            if max_descendant_level is not None and max_descendant_level + level_diff > 10:
+                raise SpaceFolderDepthError()
+
+        # Update folder record and all descendants in a single transaction.
+        folder.file_level_path = new_parent_path
+        folder.level = new_level
+        folder.updater_id = self.login_user.user_id
+        folder.updater_name = self.login_user.user_name
+        await SpaceFileDao.update_descendants_path(
+            space_id=space_id,
+            old_prefix=old_prefix,
+            new_prefix=new_prefix,
+            level_diff=level_diff,
+            folder=folder,
+        )
+        updated_folder = folder
+
+        # Update OpenFGA parent tuple for the folder itself only.
+        await self._replace_resource_parent_tuple(
+            object_type="folder",
+            object_id=folder_id,
+            old_parent_type=old_parent_type,
+            old_parent_id=old_parent_id,
+            new_parent_type=new_parent_type,
+            new_parent_id=new_parent_id_val,
+        )
+
+        await self.update_folder_update_time(old_folder_path)
+        if new_parent_path != old_folder_path:
+            await self.update_folder_update_time(new_parent_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        return KnowledgeSpaceFileResponse(**updated_folder.model_dump())
 
     # ──────────────────────────── Files ───────────────────────────────────────
 

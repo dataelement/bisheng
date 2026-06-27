@@ -1431,7 +1431,7 @@
     "create_tag_failed_abnormal": "Failed to create tag: abnormal return data",
     "created_by_me": "Created by me",
     "creator_label": "Creator:",
-    "current_location": "Current location",
+    "current_location": "Current location, no need to move",
     "current_space": "Current space",
     "delete": "Delete",
     "delete_failed": "Delete failed",
@@ -1729,7 +1729,16 @@
       "section_dismiss": "Skip linking",
       "section_dismiss_subtitle": "Keep the current file as a standalone document; do not add it to a version chain.",
       "btn_close": "Close"
-    }
+    },
+    "move": "Move",
+    "move_to": "Move to",
+    "move_success": "Moved successfully",
+    "move_failed": "Move failed",
+    "move_circular_error": "Cannot move a folder into itself or its subfolder",
+    "move_duplicate_error": "A folder with the same name already exists at the target location",
+    "select_target_location": "Select target location",
+    "root_directory": "Root directory",
+    "no_sub_folders": "No sub-folders here"
   },
   "com_subscription": {
     "add": "Add",
@@ -2138,6 +2147,5 @@
   "com_approval_task_badge_approved": "Approved",
   "com_approval_task_badge_rejected": "Rejected",
   "com_approval_section_business_content": "Business Content",
-  "com_approval_search_placeholder": "Search applicant, scenario or file",
-  "com_ui_close": "Close"
+  "com_approval_search_placeholder": "Search applicant, scenario or file"
 }
