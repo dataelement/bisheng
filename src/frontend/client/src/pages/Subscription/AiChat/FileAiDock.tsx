@@ -387,7 +387,10 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
             <div
                 className={cn(
                     // z-40 sits above the file table's sticky header (z-30) so the expanded dialog isn't covered.
-                    "absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                    // pointer-events-none keeps the gradient backdrop visually masking the content while
+                    // letting clicks fall through to whatever is behind it (e.g. the PDF page thumbnails);
+                    // the chat card below re-enables pointer events on its own box so it stays interactive.
+                    "pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
                     !open && "pt-10",
                     // White fade backdrop. On mobile it hides while the input is focused (grey keyboard
                     // overlay carries through); on desktop keep it consistent regardless of focus.
@@ -398,7 +401,9 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
             >
                 <div
                     className={cn(
-                        "relative mx-auto flex w-full max-w-[800px] flex-col",
+                        // pointer-events-auto restores interactivity on the card itself (its parent
+                        // backdrop is pointer-events-none so the content behind stays clickable).
+                        "pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}

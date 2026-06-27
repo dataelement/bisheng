@@ -18,10 +18,13 @@ export function ThinkingRow({ step }: { step: MergedStep }) {
     // fall back to the localized label when the output is empty.
     const title = firstLine(step.output) || localize('com_linsight_thinking');
     // Unified icon system (§1.3): running → Accent Loading spinner; done → Muted
-    // Bulb. Single source (bisheng-icons Outlined.*), 16px, color by state.
-    const icon = step.running
-        ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
-        : <Outlined.Bulb size={16} style={{ color: MUTED }} />;
+    // Bulb. Open-aware: the spinner shows only while COLLAPSED + running; once
+    // expanded the node reverts to its own glyph (the live state then reads from
+    // the streaming body / nested running child), matching DeepStepGroup.
+    const icon = (open: boolean) =>
+        step.running && !open
+            ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
+            : <Outlined.Bulb size={16} style={{ color: MUTED }} />;
     return (
         <StepRow icon={icon} title={title} running={step.running}>
             <p className={cn(detailTextCls, 'max-h-60 overflow-y-auto')} style={{ color: BODY }}>{step.output}</p>
