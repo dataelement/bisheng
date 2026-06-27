@@ -51,7 +51,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-const MAX_SUB_HEIGHT = 240;
+const MAX_SUB_HEIGHT = 256;
 const BOTTOM_GAP = 8;
 /** 移动端：碰撞检测余量；底部勿过大，否则 flip/shift 会把整块菜单顶到视口上方导致裁切 */
 const MOBILE_MENU_COLLISION = {
@@ -186,11 +186,39 @@ const KnowledgeListPanel = ({
   emptyText: string;
 }) => {
   const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+  // Direct ref to the scroll container so we can read scroll metrics for the
+  // edge-shadow indicators (useScrollRevealRef is callback-only and only
+  // toggles a `data-scrolling` attribute).
+  const scrollNodeRef = useRef<HTMLDivElement | null>(null);
+  const setScrollRefs = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollNodeRef.current = node;
+      listScrollRevealRef(node);
+    },
+    [listScrollRevealRef],
+  );
+
+  // Edge shadows: visible only when there is content above / below the current
+  // viewport. Shadows fade out at the top/bottom boundary.
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+  const updateScrollIndicators = useCallback(() => {
+    const el = scrollNodeRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    setCanScrollUp(scrollTop > 0);
+    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 1);
+  }, []);
+  useEffect(() => {
+    updateScrollIndicators();
+  }, [items, updateScrollIndicators]);
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
       onLoadMore();
     }
+    updateScrollIndicators();
   };
 
   return (
@@ -208,12 +236,33 @@ const KnowledgeListPanel = ({
         />
       </div>
 
-      {/* 滚动列表 */}
-      <div
-        ref={listScrollRevealRef}
-        className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1"
-        onScroll={handleScroll}
-      >
+      {/* 滚动列表 — wrapped in a relative container so the top/bottom edge
+          shadows can be absolutely positioned over the scroll viewport. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* Top edge fade — solid popup-white fades to transparent so list
+            content visually dissolves into the menu surface. */}
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute left-0 right-0 top-0 h-3 z-10 transition-opacity duration-150",
+            "bg-gradient-to-b from-white to-transparent",
+            canScrollUp ? "opacity-100" : "opacity-0",
+          )}
+        />
+        {/* Bottom edge fade — same idea, mirrored. */}
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute bottom-0 left-0 right-0 h-3 z-10 transition-opacity duration-150",
+            "bg-gradient-to-t from-white to-transparent",
+            canScrollDown ? "opacity-100" : "opacity-0",
+          )}
+        />
+        <div
+          ref={setScrollRefs}
+          className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1 pb-2"
+          onScroll={handleScroll}
+        >
         {items.map((item) => {
           // 判断是否选中 — coerce both sides to string: list items arrive from
           // API as numeric ids, while selected items may be strings (defaults
@@ -248,6 +297,7 @@ const KnowledgeListPanel = ({
         {!isFetching && items.length === 0 && (
           <div className="text-center text-[12px] text-slate-400 py-10">{emptyText}</div>
         )}
+        </div>
       </div>
     </div>
   );
@@ -538,7 +588,7 @@ export const ChatKnowledge = ({
                       aria-hidden
                       className={cn(
                         "block size-4",
-                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-600" : "bg-[#4E5969]"
+                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-[#999999]"
                       )}
                       style={{
                         WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
@@ -592,7 +642,7 @@ export const ChatKnowledge = ({
           // directly, so it needs the wider list layout; the "+" menu stays
           // compact for its short action items.
           variant === 'knowledge'
-            ? 'w-[240px] overflow-hidden p-2'
+            ? 'w-[240px] overflow-hidden pt-2 px-2 pb-0'
             : 'w-[160px] p-2',
           isMobile && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
           isMobile &&
@@ -693,7 +743,7 @@ export const ChatKnowledge = ({
             <DropdownMenuSubContent
               alignOffset={orgLayout.alignOffset}
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white p-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
