@@ -846,6 +846,7 @@ export default function Knowledge() {
                             onOpenSystemMenu={() => setSystemMenuOpen(true)}
                             onToggleSpaceList={() => setSpaceListDrawerOpen((o) => !o)}
                             spaceListOpen={spaceListDrawerOpen}
+                            onEditSpace={() => handleSpaceSettings(activeSpace)}
                             onDeleteSpace={() => handleDeleteActiveSpace(activeSpace)}
                             onOpenSearch={() => setKnowledgeSearchMode(true)}
                             searchMode={knowledgeSearchMode}
