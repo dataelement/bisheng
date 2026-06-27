@@ -3,7 +3,7 @@ import { ChevronRight, Folder, Home, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { getKnowledgeSpaceChildrenApi, KnowledgeSpaceChild, FileType } from "~/api/knowledge";
+import { getSpaceChildrenApi, KnowledgeFile, FileType } from "~/api/knowledge";
 
 interface BreadcrumbItem {
     id: number | null;
@@ -28,7 +28,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
     // Breadcrumb trail
     const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([{ id: null, name: localize("com_knowledge.root_directory") }]);
     // Folder list at current level
-    const [folders, setFolders] = useState<KnowledgeSpaceChild[]>([]);
+    const [folders, setFolders] = useState<KnowledgeFile[]>([]);
     const [loading, setLoading] = useState(false);
     // Selected target: undefined = not chosen; null = root; number = folder id
     const [selected, setSelected] = useState<number | null | undefined>(undefined);
@@ -36,9 +36,9 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
     const loadFolders = useCallback(async (parentId: number | null) => {
         setLoading(true);
         try {
-            const res = await getKnowledgeSpaceChildrenApi({
+            const res = await getSpaceChildrenApi({
                 space_id: spaceId,
-                parent_id: parentId ?? undefined,
+                parent_id: parentId !== null ? String(parentId) : undefined,
                 page_size: 200,
             });
             // Only show folders, exclude the item being moved (to prevent moving into itself)
@@ -63,9 +63,9 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         }
     }, [open]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleNavigateInto = (folder: KnowledgeSpaceChild) => {
+    const handleNavigateInto = (folder: KnowledgeFile) => {
         setCurrentFolderId(folder.id);
-        setBreadcrumb(prev => [...prev, { id: folder.id, name: folder.file_name || folder.name || String(folder.id) }]);
+        setBreadcrumb(prev => [...prev, { id: folder.id, name: folder.file_name || String(folder.id) }]);
         setSelected(undefined);
         loadFolders(folder.id);
     };
@@ -155,7 +155,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                                 )}
                             >
                                 <Folder className="size-4 shrink-0 text-[#f7ba1e]" />
-                                <span className="flex-1 truncate">{folder.file_name || folder.name}</span>
+                                <span className="flex-1 truncate">{folder.file_name}</span>
                                 {/* Navigate into sub-folder */}
                                 <button
                                     type="button"
