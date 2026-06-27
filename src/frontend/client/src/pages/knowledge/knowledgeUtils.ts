@@ -294,6 +294,47 @@ export function filterFolderUploadFiles(
 }
 
 /**
+ * Like filterFolderUploadFiles but keeps files at ANY nesting depth.
+ * Also drops files inside hidden directories (any path segment starting with ".").
+ */
+export function filterNestedFolderUploadFiles(
+    files: File[],
+    options: { allowedExtensions: readonly string[]; limits: UploadSizeLimits },
+): File[] {
+    return files.filter((file) => {
+        const rel = file.webkitRelativePath || file.name;
+        // Drop files in hidden directories or with hidden names
+        if (rel.split("/").some(isHiddenName)) return false;
+        if (file.size > getMaxFileSizeBytesForFile(file.name, options.limits)) return false;
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (!ext || !options.allowedExtensions.includes(ext)) return false;
+        return true;
+    });
+}
+
+/**
+ * Extract all unique directory paths from files with webkitRelativePath,
+ * sorted ascending by depth so parent dirs are always before children.
+ *
+ * Example: ["A/B/c.pdf", "A/d.pdf"] → ["A", "A/B"]
+ */
+export function extractSortedDirPaths(files: File[]): string[] {
+    const paths = new Set<string>();
+    for (const file of files) {
+        const rel = file.webkitRelativePath || file.name;
+        const parts = rel.split("/");
+        for (let i = 1; i < parts.length; i++) {
+            paths.add(parts.slice(0, i).join("/"));
+        }
+    }
+    return Array.from(paths).sort((a, b) => {
+        const da = a.split("/").length;
+        const db = b.split("/").length;
+        return da !== db ? da - db : a.localeCompare(b);
+    });
+}
+
+/**
  * Validate a single file for upload eligibility (size + extension).
  * Returns an error message string, or null if valid.
  */
