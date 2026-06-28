@@ -74,7 +74,7 @@ class PortalTelemetryEventService:
                 "bool": {
                     "must": [
                         {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value}},
-                        {"term": {"file_id": file_id}},
+                        {"term": {"event_data.portal_document_read_file_id": file_id}},
                     ]
                 }
             },
