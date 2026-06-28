@@ -2625,3 +2625,25 @@ export async function getFileStatsApi(
     );
     return res?.data ?? { views: 0, downloads: 0 };
 }
+
+export async function recordPortalDownloadEventApi(
+    spaceId: string | number,
+    fileId: string | number,
+): Promise<void> {
+    try {
+        await request.post(
+            `/api/v1/knowledge/shougang-portal/telemetry/events`,
+            {
+                event_type: "portal_document_download",
+                source_app: "shougang_portal",
+                scene: "document_download",
+                entry_point: "knowledge_space",
+                resource_type: "document",
+                space_id: spaceId,
+                file_id: fileId,
+            },
+        );
+    } catch {
+        // best-effort
+    }
+}
