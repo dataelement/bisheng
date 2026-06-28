@@ -1041,7 +1041,7 @@ export function NotificationsDialog({
                             <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-4" : "px-5")}>
                                 {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
                                 <div className={cn("flex flex-col", isNarrowMobileLayout ? "gap-3" : "gap-4")}>
-                                    <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[20px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
+                                    <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[16px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
                                         {localize("com_notifications_title")}
                                     </h2>
                                     <div className={cn("flex gap-4", isNarrowMobileLayout ? "flex-col" : "flex-row items-center justify-between")}>

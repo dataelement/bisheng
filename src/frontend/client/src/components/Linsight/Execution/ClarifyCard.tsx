@@ -228,7 +228,10 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         disabled={disabled || submitted}
                                         onClick={() => handleSelect(q, option)}
                                         className={cn(
-                                            'flex h-9 w-full items-center gap-2 rounded-lg px-4 text-left text-sm transition-all duration-200 select-none border-0',
+                                            // items-start + py (no fixed height): the row grows with
+                                            // wrapped content and the leading number aligns to the
+                                            // FIRST line of text, not the vertical center.
+                                            'flex w-full items-start gap-2 rounded-lg px-4 py-2 text-left text-sm transition-all duration-200 select-none border-0',
                                             active
                                                 ? 'bg-[#EEE] text-[#212121] font-medium'
                                                 : 'text-[#1A1A1A] hover:bg-gray-50/80',
