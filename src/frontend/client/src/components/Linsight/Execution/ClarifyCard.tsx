@@ -16,12 +16,24 @@ import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
 import { composeClarifyAnswer, parseClarifyRequest } from './stepUtils';
+import { ClarifyFallbackCard } from './ClarifyFallbackCard';
 
 interface ClarifyCardProps {
     data: ExecStepEventData;
     disabled?: boolean;
     /** submit the merged answer; rides the existing user-input API upstream */
     onSubmit: (taskId: string, answer: string) => void;
+}
+
+/**
+ * Dispatcher: route to the ima-style fallback when the ask_user payload yields no
+ * parseable questions (the parse-failure degrade — previously a bare textarea), or
+ * to the unchanged interactive card otherwise. Only ONE hook (useMemo) runs here
+ * unconditionally so the Rules of Hooks hold; each child owns its own hooks.
+ */
+export function ClarifyCard(props: ClarifyCardProps) {
+    const hasQuestions = useMemo(() => parseClarifyRequest(props.data).questions.length > 0, [props.data]);
+    return hasQuestions ? <ClarifyCardInteractive {...props} /> : <ClarifyFallbackCard {...props} />;
 }
 
 const CUSTOM_KEY = '__custom__';
@@ -38,7 +50,9 @@ const parseOption = (text: string) => {
     return { title: text, desc: '' };
 };
 
-export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardProps) {
+// Interactive structured card (one question per page, clickable options). Unchanged
+// from the original ClarifyCard — only reached when there ARE parseable questions.
+function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCardProps) {
     const localize = useLocalize();
     const request = useMemo(() => parseClarifyRequest(data), [data]);
     const { questions } = request;
