@@ -1815,10 +1815,9 @@ export default function PortalKnowledgeWorkbench() {
             "全部知识库",
             activeGroup?.title,
             activeSpace?.name,
-            selectedFile?.path || selectedFile?.name,
         ].filter(Boolean);
         return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name, selectedFile?.name, selectedFile?.path]);
+    }, [activeGroup?.title, activeSpace?.name]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
