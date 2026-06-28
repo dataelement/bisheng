@@ -1248,8 +1248,15 @@ class DepartmentService:
     ) -> dict:
         """Search members by username across visible org tree (primary department only).
 
-        数据范围与左侧部门树一致：先取 :meth:`aget_tree` 的可见节点 id 集合，仅返回主属部门
-        落在该集合内的用户（系统超管 / 租户管理员 / 部门管理员子树与树接口相同）。
+        数据范围与左侧部门树一致（系统超管 / 租户管理员 / 部门管理员子树与树接口相同），
+        但不再物化整棵树：可见性直接由部门 ``path`` 前缀在 SQL 里裁剪。
+
+        - 系统超管：可见全部活跃部门，``admin_paths is None`` 表示无需过滤——既跳过
+          :meth:`aget_tree`（超管下会把全部 3w+ 部门加载进内存），也去掉等价于恒真的
+          ``Department.id.in_(全部活跃部门)`` 过滤（达梦 async 驱动序列化数万 bind param
+          耗时极高，是该接口的主瓶颈）。
+        - 非超管：仅取管理员部门 / 租户挂载点的 ``path`` 前缀（通常 <10 个），在 SQL 里以
+          ``or_(Department.path LIKE p%)`` 裁剪子树，语义与 :meth:`aget_tree` 完全一致。
         """
         kw = (keyword or "").strip()
         if not kw:
@@ -1257,19 +1264,21 @@ class DepartmentService:
         page = max(1, page)
         limit = max(1, min(limit, 50))
 
-        tree = await cls.aget_tree(login_user)
-
-        def _collect_visible_ids(nodes: list[DepartmentTreeNode]) -> set[int]:
-            out: set[int] = set()
-            for n in nodes:
-                out.add(int(n.id))
-                if n.children:
-                    out |= _collect_visible_ids(n.children)
-            return out
-
-        visible_ids = _collect_visible_ids(tree)
-        if not visible_ids:
-            return {"data": [], "total": 0}
+        # 可见性裁剪：``admin_paths is None`` = 系统超管（不加过滤）。非超管时与
+        # :meth:`aget_tree` 的 admin 路径集合构造逐项一致（dept-admin 子树 ∪ 租户挂载子树）。
+        admin_paths: set[str] | None = None
+        if not _is_admin(login_user):
+            admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+            is_tenant_admin = await _is_tenant_admin(login_user)
+            if not admin_depts and not is_tenant_admin:
+                raise DepartmentPermissionDeniedError()
+            admin_paths = {d.path for d in admin_depts if d.path}
+            if is_tenant_admin:
+                tenant_root_path = await _aget_user_tenant_root_path(login_user)
+                if tenant_root_path:
+                    admin_paths.add(tenant_root_path)
+            if not admin_paths:
+                return {"data": [], "total": 0}
 
         async with get_async_db_session() as session:
             from bisheng.user.domain.models.user import User
@@ -1315,7 +1324,7 @@ class DepartmentService:
             # 3) ``COUNT(*) OVER()`` 在分页查询里一次拿到命中总数，省掉原先把整套
             #    JOIN+分组再跑一遍的独立 COUNT 子查询。
             def _scoped(stmt):
-                return (
+                stmt = (
                     stmt.join(
                         UserDepartment,
                         (UserDepartment.user_id == User.user_id) & (UserDepartment.is_primary == 1),
@@ -1323,10 +1332,15 @@ class DepartmentService:
                     .join(Department, Department.id == UserDepartment.department_id)
                     .where(
                         Department.status == "active",
-                        col(Department.id).in_(visible_ids),
                         User.user_name.like(f"{kw}%"),
                     )
                 )
+                # 非超管：把可见子树裁剪下推为 ``path`` 前缀谓词。Department 已 JOIN，无需子查询；
+                # ``path LIKE p%`` 等价于 aget_tree 的 ``path.startswith(p)``（path 以本部门 id 收尾，
+                # 故同时覆盖管理员部门自身与其后代）。admin_paths 通常 <10 个，绑定参数极少。
+                if admin_paths is not None:
+                    stmt = stmt.where(or_(*[Department.path.like(f"{p}%") for p in admin_paths]))
+                return stmt
 
             page_stmt = (
                 _scoped(
