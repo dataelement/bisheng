@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
-from datetime import datetime, timedelta
 
 from loguru import logger
 
@@ -23,6 +23,7 @@ from bisheng.worker.knowledge.lua_scripts import (
     DISPATCH_ONE,
     DROP_DISPATCH,
     ENQUEUE_FILE,
+    REFRESH_LOCK,
     RELEASE_LOCK,
     ROLLBACK_DISPATCH,
 )
@@ -106,6 +107,10 @@ def _inflight_total_key(queue: str) -> str:
     return f"{PREFIX}inflight_total:{queue}"
 
 
+def _parse_lock_key(file_id: str) -> str:
+    return f"{PREFIX}parse_lock:{file_id}"
+
+
 class FileScheduler:
     """Sync facade over the Lua scripts for fair-dispatch file scheduling."""
 
@@ -131,6 +136,7 @@ class FileScheduler:
         self._drop = self._conn.register_script(DROP_DISPATCH)
         self._complete = self._conn.register_script(COMPLETE_FILE)
         self._release_lock_script = self._conn.register_script(RELEASE_LOCK)
+        self._refresh_lock_script = self._conn.register_script(REFRESH_LOCK)
 
     def enqueue_file(
         self,
@@ -308,6 +314,39 @@ class FileScheduler:
     def release_dispatch_lock(self, token: str) -> None:
         self._release_lock_script(keys=[DISPATCH_LOCK_KEY], args=[token])
 
+    # -- Per-file parse lock ------------------------------------------------
+    # Guarantees a single concurrent parse per file. The dispatch path's
+    # in-flight set can't enforce this because duplicate parse tasks also reach
+    # the worker OUT of band: acks_late broker redelivery after an OOM kill, and
+    # reconcile re-enqueue of a file that is still parsing. The parse task itself
+    # must therefore hold this lock for its whole run.
+
+    def acquire_parse_lock(self, *, file_id: str, ttl_seconds: int) -> str | None:
+        """Try to claim the parse slot for ``file_id``. Returns a token on
+        success, or ``None`` when another worker already holds it (caller must
+        then skip parsing — it's a duplicate)."""
+        token = uuid.uuid4().hex
+        if self._conn.set(_parse_lock_key(file_id), token, nx=True, ex=ttl_seconds):
+            return token
+        return None
+
+    def refresh_parse_lock(self, *, file_id: str, token: str, ttl_seconds: int) -> bool:
+        """Extend the lock TTL, but only if this worker still owns it. Returns
+        True if refreshed, False if the lock is gone or now held by someone else."""
+        result = self._refresh_lock_script(keys=[_parse_lock_key(file_id)], args=[token, ttl_seconds])
+        return bool(result)
+
+    def release_parse_lock(self, *, file_id: str, token: str) -> None:
+        """Release the parse lock, but only if this worker still owns it (a stale
+        token must not delete a lock a later worker re-acquired)."""
+        self._release_lock_script(keys=[_parse_lock_key(file_id)], args=[token])
+
+    def parse_lock_alive(self, *, file_id: str) -> bool:
+        """True while some worker is actively parsing ``file_id`` (heartbeat keeps
+        the lock present). Reconcile uses this to tell a long-but-healthy parse
+        apart from a dead worker."""
+        return bool(self._conn.exists(_parse_lock_key(file_id)))
+
 
 # ---------------------------------------------------------------------------
 # Fair-dispatch helpers and Celery trigger task
@@ -327,6 +366,37 @@ def _parse_apply_async(*, args, queue):
     from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
 
     parse_knowledge_file_celery.apply_async(args=args, queue=queue)
+
+
+def start_parse_heartbeat(scheduler: FileScheduler, *, file_id: str, token: str, conf) -> callable:
+    """Keep a parse lock alive for the whole (possibly multi-hour) parse.
+
+    Spawns a daemon thread that re-EXPIREs ``parse_lock:<file_id>`` every
+    ~ttl/3 until stopped. Returns a stopper callable to invoke in the parse
+    task's ``finally``. Best-effort: if the worker dies the thread dies with it
+    and the lock self-clears within one TTL, letting reconcile recover the file.
+    """
+    ttl = int(conf.parse_lock_ttl_seconds)
+    interval = max(5, ttl // 3)
+    stop = threading.Event()
+
+    def _beat() -> None:
+        # wait-first: the lock already has a full TTL from acquire, so refresh
+        # only when it's about to age, and exit promptly once stopped.
+        while not stop.wait(interval):
+            try:
+                scheduler.refresh_parse_lock(file_id=file_id, token=token, ttl_seconds=ttl)
+            except Exception:
+                logger.exception("parse heartbeat refresh failed for file_id={}", file_id)
+
+    thread = threading.Thread(target=_beat, name=f"parse-hb-{file_id}", daemon=True)
+    thread.start()
+
+    def _stop() -> None:
+        stop.set()
+        thread.join(timeout=2)
+
+    return _stop
 
 
 def _recover_payload(
@@ -564,7 +634,6 @@ def reconcile_file_scheduler_task() -> None:
     if not _fair_scheduler_enabled():
         return
     conf = _fair_scheduler_conf()
-    inflight_ttl = timedelta(seconds=conf.inflight_ttl_seconds)
     sched = FileScheduler()
 
     for user_id in sched.inflight_users():
@@ -607,23 +676,37 @@ def reconcile_file_scheduler_task() -> None:
                 continue
 
             if status == KnowledgeFileStatus.PROCESSING.value:
-                # Case 3: worker may be dead — timeout-based recovery
-                if datetime.now() - row.update_time > inflight_ttl:
-                    sched.complete_file(user_id=user_id, file_id=file_id)
-                    with bypass_tenant_filter():
-                        KnowledgeFileDao.update_file_status(
-                            [int(file_id)],
-                            KnowledgeFileStatus.WAITING,
-                        )
-                    sched.enqueue_file(
-                        user_id=user_id,
-                        file_id=file_id,
-                        preview_cache_key="",
-                        callback_url="",
-                        file_ext=_extract_ext(row.file_name),
-                        tenant_id=getattr(row, "tenant_id", None),
+                # Case 3: the parse lock is the authoritative liveness signal. A
+                # heartbeat refreshes it for the whole parse, so:
+                #   - lock ALIVE  → a long-but-healthy parse. Never re-enqueue it,
+                #     however long it runs — that would dispatch a concurrent
+                #     duplicate parse of the same file (the task-storm OOM bug).
+                #   - lock DEAD   → the holding worker crashed/exited and the lock
+                #     self-expired once its heartbeat stopped. No one is parsing
+                #     this file, so recover it NOW. We deliberately do NOT wait out
+                #     inflight_ttl here: a crashed file's queue used to stay blocked
+                #     for ~2h; lock liveness lets us recover within one lock-TTL
+                #     window plus a reconcile tick instead.
+                if sched.parse_lock_alive(file_id=file_id):
+                    continue
+                sched.complete_file(user_id=user_id, file_id=file_id)
+                with bypass_tenant_filter():
+                    KnowledgeFileDao.update_file_status(
+                        [int(file_id)],
+                        KnowledgeFileStatus.WAITING,
                     )
-                    logger.error("reconcile: timed-out file_id={} re-enqueued", file_id)
+                sched.enqueue_file(
+                    user_id=user_id,
+                    file_id=file_id,
+                    preview_cache_key="",
+                    callback_url="",
+                    file_ext=_extract_ext(row.file_name),
+                    tenant_id=getattr(row, "tenant_id", None),
+                )
+                logger.error(
+                    "reconcile: parse lock dead for stuck PROCESSING file_id={}; re-enqueued",
+                    file_id,
+                )
 
     # Case 5: orphaned / ghost queue entries (payload lost while still queued).
     # The dispatch round self-heals these too, but a fully-jammed queue may never

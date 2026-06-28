@@ -23,6 +23,16 @@ def test_knowledge_file_worker_conf_defaults():
         "knowledge_celery": 20,
         "ocr_celery": 5,
     }
+    # Per-file parse lock TTL: held for the whole parse (heartbeat-refreshed) so a
+    # file is never parsed twice at once. Default 10 min — long enough to outlast
+    # a refresh interval, short enough that a dead worker frees the file promptly.
+    assert conf.fair_scheduler.parse_lock_ttl_seconds == 600
+
+
+def test_fair_scheduler_parse_lock_ttl_minimum():
+    """parse_lock_ttl_seconds must be at least 30 (ge=30)."""
+    with pytest.raises(ValueError):
+        FairSchedulerConf(parse_lock_ttl_seconds=29)
 
 
 def test_fair_scheduler_payload_ttl_minimum_one_hour():
