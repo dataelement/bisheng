@@ -1514,7 +1514,10 @@
     "center_title": "App Center",
     "empty_go_explore": "No apps used yet. Head to the app marketplace",
     "explore_more": "Explore more apps",
-    "recent_apps_hint": "Your recently used apps are all here～"
+    "recent_apps_hint": "Your recently used apps are all here～",
+    "service_maintenance_title": "System under maintenance",
+    "service_maintenance": "We're performing emergency maintenance; service will be back soon.",
+    "refresh": "Refresh to retry"
   },
   "com_knowledge": {
     "add_new": "Add",

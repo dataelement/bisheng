@@ -1438,7 +1438,10 @@
     "center_title": "アプリセンター",
     "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
     "explore_more": "さらにアプリを探す",
-    "recent_apps_hint": "最近使用したアプリはすべてここにあります～"
+    "recent_apps_hint": "最近使用したアプリはすべてここにあります～",
+    "service_maintenance_title": "システムメンテナンス中",
+    "service_maintenance": "緊急メンテナンスを実施中です。まもなく復旧します。",
+    "refresh": "再読み込み"
   },
   "com_knowledge": {
     "add_new": "新規追加",

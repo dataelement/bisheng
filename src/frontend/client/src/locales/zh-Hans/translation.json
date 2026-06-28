@@ -1441,7 +1441,10 @@
     "center_title": "应用中心",
     "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
     "explore_more": "探索更多应用",
-    "recent_apps_hint": "最近使用过的应用都在这里～"
+    "recent_apps_hint": "最近使用过的应用都在这里～",
+    "service_maintenance_title": "系统维护中",
+    "service_maintenance": "我们正在进行紧急维护，服务将尽快恢复。",
+    "refresh": "刷新重试"
   },
   "com_knowledge": {
     "add_new": "新增",
