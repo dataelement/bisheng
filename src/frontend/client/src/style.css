@@ -124,6 +124,14 @@ html {
   --brand-800: 4 43 128;     /* #042B80 */
   --brand-900: 5 29 82;      /* #051D52 */
   --brand-main: 22 93 255;   /* #165DFF */
+
+  /* Illustration palette — empty-state SVG illustrations use --illus-* instead
+     of --brand-* so the green theme can render the illustrations' own vivid
+     green ramp (#19B476 / #BDE6D3 / #7CD0B1) rather than the darker UI brand
+     green (#187C54). Blue mode mirrors the brand blue (see .theme-green). */
+  --illus-100: 190 218 255;  /* #BEDAFF */
+  --illus-300: 106 161 255;  /* #6AA1FF */
+  --illus-500: 22 93 255;    /* #165DFF */
 }
 
 /* Green brand theme — toggled via `theme-green` class on <html>.
@@ -141,6 +149,12 @@ html {
   --brand-800: 10 56 38;     /* #0A3826 */
   --brand-900: 6 38 25;      /* #062619 */
   --brand-main: 24 124 84;   /* #187C54 */
+
+  /* Illustration palette — green mode keeps the source SVGs' vivid greens so the
+     illustrations match their original artwork (not the darker UI brand green). */
+  --illus-100: 189 230 211;  /* #BDE6D3 */
+  --illus-300: 124 208 177;  /* #7CD0B1 */
+  --illus-500: 25 180 118;   /* #19B476 */
 
   /* Brand-tinted surfaces driven by their own vars (not the blue palette). */
   --primary: 154 67% 29%;

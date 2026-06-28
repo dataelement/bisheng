@@ -9,14 +9,14 @@ import React from 'react';
  * (see BRAND-THEME-HANDOFF.md §3).
  *
  * Colour mapping (§5):
- *   #19B476 (main green)  → rgb(var(--brand-500))
- *   #BDE6D3 (light green) → rgb(var(--brand-100))
+ *   #19B476 (main green)  → rgb(var(--illus-500))
+ *   #BDE6D3 (light green) → rgb(var(--illus-100))
  *   white                 → kept as-is
  */
 export const NoPermissionIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
-    const fill100 = { fill: 'rgb(var(--brand-100))' } as React.CSSProperties;
-    const fill500 = { fill: 'rgb(var(--brand-500))' } as React.CSSProperties;
-    const stroke100 = { stroke: 'rgb(var(--brand-100))' } as React.CSSProperties;
+    const fill100 = { fill: 'rgb(var(--illus-100))' } as React.CSSProperties;
+    const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
+    const stroke100 = { stroke: 'rgb(var(--illus-100))' } as React.CSSProperties;
 
     return (
         <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
