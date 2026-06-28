@@ -408,7 +408,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                             <Button
                                 onClick={handleAddSource}
                                 disabled={status !== "success" || adding}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 border border-blue-500 text-white disabled:opacity-50 gap-2 touch-mobile:flex-1"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 border border-blue-500 text-white disabled:opacity-50 gap-2 touch-mobile:flex-1 btn-brand-primary"
                             >
                                 {adding && <Loader2 className="size-4 animate-spin" />}
                                 {localize("com_subscription.add_source")}
@@ -480,7 +480,7 @@ export function CrawlPreviewDialog({ open, onOpenChange, url, initialPreview }: 
                     <div className="flex justify-end">
                         <Button
                             onClick={() => onOpenChange(false)}
-                            className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 text-white"
+                            className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 text-white btn-brand-primary"
                         >
                             {localize("com_subscription.ok")}
                         </Button>

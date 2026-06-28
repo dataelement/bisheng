@@ -924,7 +924,7 @@ export default function Knowledge() {
                                 <button
                                     type="button"
                                     onClick={handleCreateSpace}
-                                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors active:bg-blue-600"
+                                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors active:bg-blue-600 btn-brand-primary"
                                 >
                                     {localize("com_knowledge.create_knowledge_space")}
                                 </button>
@@ -980,7 +980,7 @@ export default function Knowledge() {
                         <button
                             type="button"
                             onClick={handleCreateSpace}
-                            className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors hover:bg-blue-400 active:bg-blue-600"
+                            className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors hover:bg-blue-400 active:bg-blue-600 btn-brand-primary"
                         >
                             {localize("com_knowledge.create_knowledge_space")}
                         </button>

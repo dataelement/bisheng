@@ -565,7 +565,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                         {localize("com_approval_action_reject")}
                       </button>
                       <button type="button" disabled={actionLoading}
-                        className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-blue-500 px-4 text-[14px] font-normal text-white hover:bg-blue-600 disabled:opacity-60 md:flex-none"
+                        className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-blue-500 px-4 text-[14px] font-normal text-white hover:bg-blue-600 disabled:opacity-60 md:flex-none btn-brand-primary"
                         onClick={() => runTaskDecision("approve")}>
                         {localize("com_approval_action_approve")}
                       </button>

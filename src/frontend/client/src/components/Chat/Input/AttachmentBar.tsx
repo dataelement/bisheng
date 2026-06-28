@@ -91,7 +91,8 @@ const CardShell = ({
             <button
                 type="button"
                 onClick={onRemove}
-                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex"
+                // Hover-reveal on desktop; always visible on touch (no hover there).
+                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex touch-mobile:flex"
                 aria-label="Remove"
             >
                 <X className="size-3" />

@@ -9,9 +9,7 @@
  */
 import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useEffect, useState, type FC, type MouseEvent } from "react";
-import { useRecoilValue } from "recoil";
 import { cn, formatSeconds } from "~/utils";
-import store from "~/store";
 
 export interface ThinkingContentProps {
     reasoning: string;
@@ -28,8 +26,9 @@ export interface ThinkingContentProps {
 
 const ThinkingContent: FC<ThinkingContentProps> = memo(
     ({ reasoning, isStreaming = false, startedAt, endedAt, durationMs }) => {
-        const showThinkingDefault = useRecoilValue<boolean>(store.showThinking);
-        const [isExpanded, setIsExpanded] = useState(showThinkingDefault);
+        // Always default collapsed — even while reasoning is still streaming —
+        // so the answer body stays the focus; the user expands to read.
+        const [isExpanded, setIsExpanded] = useState(false);
 
         // Live-tick while streaming so the header counter advances every 100ms.
         const [tick, setTick] = useState(0);

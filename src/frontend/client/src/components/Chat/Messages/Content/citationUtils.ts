@@ -213,9 +213,9 @@ export function getCitationClassName(type?: string) {
     case 'websearch':
       return 'bg-[#F7F3FF] text-[#7224D9] transition-colors duration-150 hover:bg-[#EDE4FF] data-[state=open]:bg-[#EDE4FF]';
     case 'knowledgesearch':
-      return 'bg-[#F5F8FF] text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
+      return 'bg-blue-50 text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
     default:
-      return 'bg-[#F5F8FF] text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
+      return 'bg-blue-50 text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
   }
 }
 

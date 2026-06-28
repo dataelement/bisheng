@@ -69,7 +69,7 @@ function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; t
     <div
       className={cn(
         'inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px]',
-        isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-[#F5F8FF] text-blue-600',
+        isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-blue-50 text-blue-600',
       )}
     >
       {isWeb ? '网页' : '文档'}

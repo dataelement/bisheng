@@ -11,7 +11,7 @@ const enum ThumbsState {
 }
 
 // Shared action-icon button — matches ExportSelectionButton (size-6 hit area,
-// 14px bisheng-icons Outlined glyph, #818181 idle / #1677ff active) so the
+// 14px bisheng-icons Outlined glyph, #818181 idle / brand-500 active) so the
 // whole workflow action row reads as one consistent set.
 const ACTION_BTN =
     "flex size-6 items-center justify-center rounded-[6px] transition-colors hover:bg-[#F7F7F7]";
@@ -51,7 +51,7 @@ export default function MessageButtons({ id, text, onCopy, data, onUnlike, child
             aria-label="复制"
         >
             {copied
-                ? <Outlined.Copied size={14} className="text-[#1677ff]" />
+                ? <Outlined.Copied size={14} className="text-blue-500" />
                 : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
         <button
@@ -64,7 +64,7 @@ export default function MessageButtons({ id, text, onCopy, data, onUnlike, child
         >
             <Outlined.ThumbsUp
                 size={14}
-                className={cn(state === ThumbsState.ThumbsUp ? 'text-[#1677ff]' : 'text-[#818181]')}
+                className={cn(state === ThumbsState.ThumbsUp ? 'text-blue-500' : 'text-[#818181]')}
             />
         </button>
         <button
@@ -77,7 +77,7 @@ export default function MessageButtons({ id, text, onCopy, data, onUnlike, child
         >
             <Outlined.ThumbsDown
                 size={14}
-                className={cn(state === ThumbsState.ThumbsDown ? 'text-[#1677ff]' : 'text-[#818181]')}
+                className={cn(state === ThumbsState.ThumbsDown ? 'text-blue-500' : 'text-[#818181]')}
             />
         </button>
     </div>

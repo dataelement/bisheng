@@ -580,7 +580,9 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    // `group` lets the chevron pick up the Radix-emitted
+                    // `data-state` to mirror the Tools-select rotation.
+                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -606,7 +608,7 @@ export const ChatKnowledge = ({
                   {/* Mobile: collapse to icon + chevron only to save horizontal
                       space in the input toolbar. */}
                   <span className="touch-mobile:hidden">{localize('com_ui_knowledge_space')}</span>
-                  <Outlined.Down size={16} className="text-[#999]" />
+                  <Outlined.Down size={16} className={cn("text-[#999] transition-transform duration-200", rootOpen && "rotate-180")} />
                 </button>
               ) : (
                 <button

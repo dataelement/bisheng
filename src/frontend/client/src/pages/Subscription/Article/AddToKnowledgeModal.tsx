@@ -889,7 +889,7 @@ export function AddToKnowledgeModal({
                         onClick={() => void handleConfirm()}
                         disabled={!selectedId || isConfirming}
                         className={cn(
-                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
+                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal btn-brand-primary",
                             isChannelSyncMobileFooter &&
                             "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
                             isChannelSyncMobileFooter && "flex-1",

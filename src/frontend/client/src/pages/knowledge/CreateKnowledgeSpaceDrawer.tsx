@@ -377,7 +377,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     {localize("com_subscription.goto_knowledge_space")}
                                 </Button>
                                 <Button
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400 btn-brand-primary"
                                     onClick={() => {
                                         onManageMembers?.();
                                         onOpenChange(false);
@@ -756,7 +756,7 @@ export function CreateKnowledgeSpaceDrawer({
                         </Button>
                         <Button
                             disabled={submitting}
-                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
+                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
                             onClick={handleConfirm}
                         >
                             {submitting

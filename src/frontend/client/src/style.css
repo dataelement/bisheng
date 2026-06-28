@@ -149,6 +149,32 @@ html {
   --search-input: hsla(152, 40%, 99%, 1);
 }
 
+/* Brand primary button — GREEN theme override only.
+   Design diverges the primary button in the green theme to a lime fill (#BAF020)
+   with green text/icon (#187C54). Add the `btn-brand-primary` class to any primary
+   button (the shared <Button variant="default"> and the hand-rolled bg-blue-500 ones).
+   Blue theme is intentionally NOT touched here — call sites keep their own
+   bg-blue-* / text-white, which still render unchanged when .theme-green is absent.
+   `:not(:disabled)` lets each button's own disabled styles win.
+   `!important` is required to beat the call sites' own bg-blue-500/active:bg-* and the
+   <Button> default `bg-primary` — those win on the default state otherwise. Hover/active
+   step to progressively darker limes so the state change is visible. */
+.theme-green .btn-brand-primary:not(:disabled) {
+  background-color: #baf020 !important; /* default: lime fill */
+  color: #187c54 !important; /* default: green text / icon */
+}
+.theme-green .btn-brand-primary:not(:disabled):hover {
+  background-color: #a7d81d !important; /* hover: slightly darker lime */
+}
+.theme-green .btn-brand-primary:not(:disabled):active {
+  background-color: #99c51a !important; /* active: deeper lime on press */
+}
+/* Force a direct-child icon green too — some send buttons pin `[&>svg]:text-white`,
+   which would otherwise beat the inherited button color on a lime fill. */
+.theme-green .btn-brand-primary:not(:disabled) > svg {
+  color: #187c54 !important;
+}
+
 .dark {
   --presentation: var(--gray-800);
   --text-primary: var(--gray-100);

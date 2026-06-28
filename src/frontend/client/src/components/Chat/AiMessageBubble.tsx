@@ -156,7 +156,7 @@ function CopyButton({ text }: { text: string }) {
             title="复制"
             aria-label="复制"
         >
-            {copied ? <Outlined.Copied size={14} className="text-[#1677ff]" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
+            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
     );
 }
