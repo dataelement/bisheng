@@ -114,6 +114,7 @@ blue: { 50:'rgb(var(--brand-50) / <alpha-value>)', ... 900:'rgb(var(--brand-900)
 | `ListWebLinkIllustration` | 列表网页链接 | |
 | `CrawlingIllustration` | 爬取中 | mask uid 已唯一化 |
 | `SuccessIllustration` | 成功态 | **跟随品牌主题**（用户已确认，非固定语义成功绿） |
+| `SystemMaintenanceIllustration` | 系统维护 | 数据库+扳手；无 mask；2026-06-24 新增，组件已建未接槽位 |
 
 **通用空状态已替换（2026-06-24）**：10 处通用 `assets/channel/empty.png` 的 `<img>` 已换成 `<EmptyStateIllustration className="size-[120px] mb-X opacity-90" />`（去掉对内联 SVG 无意义的 `object-contain`）：ChannelMemberManagementPanel、ChannelMemberDialog、KnowledgeSpaceMemberManagementPanel、KnowledgeSpaceMemberDialog、ChannelSquare、Subscription/index、knowledge/index、KnowledgeSquare、SpaceDetail/index、apps/AppEmptyState。
 
