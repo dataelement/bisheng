@@ -16,6 +16,7 @@ import {
     deleteFileApi,
     retryDuplicateFilesApi,
     listKnowledgeFolders,
+    checkSensitiveWordsApi,
     type UploadFileResponse,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -515,6 +516,11 @@ export function useFileUpload({
             if (creatingFolder && fileId === creatingFolder.id) {
                 const requestSpaceId = String(activeSpace.id);
                 try {
+                    const sensitiveCheck = await checkSensitiveWordsApi(activeSpace.id, [newName]);
+                    if (sensitiveCheck.has_violation) {
+                        showToast({ message: localize("com_knowledge.name_contains_sensitive_words"), severity: NotificationSeverity.ERROR });
+                        return;
+                    }
                     const created = await createFolderApi(activeSpace.id, {
                         name: newName,
                         parent_id: currentFolderId || null,
@@ -541,6 +547,11 @@ export function useFileUpload({
             if (!target) return;
 
             try {
+                const sensitiveCheck = await checkSensitiveWordsApi(activeSpace.id, [newName]);
+                if (sensitiveCheck.has_violation) {
+                    showToast({ message: localize("com_knowledge.name_contains_sensitive_words"), severity: NotificationSeverity.ERROR });
+                    return;
+                }
                 if (target.type === FileType.FOLDER) {
                     await renameFolderApi(activeSpace.id, fileId, newName);
                 } else {

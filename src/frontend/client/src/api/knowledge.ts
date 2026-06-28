@@ -2587,3 +2587,26 @@ export async function removePortalFavoriteApi(params: {
     return { removed: Boolean(payload.removed) };
 }
 
+
+// ─── Sensitive-word pre-check ─────────────────────────────────────────────────
+
+export interface SensitiveWordCheckResult {
+    has_violation: boolean;
+    violated_texts: string[];
+}
+
+/**
+ * Check a list of texts (names / file content) against the knowledge-space
+ * sensitive-word policy configured in bisheng admin.
+ * POST /api/v1/knowledge/space/{spaceId}/sensitive-word-check
+ */
+export async function checkSensitiveWordsApi(
+    spaceId: string | number,
+    texts: string[],
+): Promise<SensitiveWordCheckResult> {
+    const res = await request.post<ApiResponse<SensitiveWordCheckResult>>(
+        `/api/v1/knowledge/space/${spaceId}/sensitive-word-check`,
+        { texts },
+    );
+    return res?.data ?? { has_violation: false, violated_texts: [] };
+}

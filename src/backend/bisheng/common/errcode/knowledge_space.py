@@ -177,3 +177,18 @@ class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
 class FavoriteSpaceProtectedError(BaseErrorCode):
     Code: int = 18071
     Msg: str = '『我的收藏』为系统知识库，不可删除或修改'
+
+
+class SpaceNameSensitiveWordError(BaseErrorCode):
+    Code: int = 18072
+    Msg: str = '名称包含敏感词，请修改后重试'
+
+
+class SpaceFileNameSensitiveWordError(BaseErrorCode):
+    Code: int = 18073
+    Msg: str = '文件名包含敏感词，请修改后重试'
+
+
+class SpaceFileContentSensitiveWordError(BaseErrorCode):
+    Code: int = 18074
+    Msg: str = '文件内容包含敏感词，请修改后重试'

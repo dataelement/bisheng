@@ -1,6 +1,7 @@
 from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, Body, Query, Request
+from pydantic import BaseModel
 from loguru import logger
 from starlette.responses import StreamingResponse
 
@@ -887,3 +888,35 @@ async def chat_folder(
             yield ServerError(exception=e).to_sse_event_instance_str()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ──────────────────────────── Sensitive-word pre-check ───────────────────────
+
+
+class SensitiveWordCheckRequest(BaseModel):
+    texts: List[str]
+
+
+@router.post("/{space_id}/sensitive-word-check")
+async def check_sensitive_words(
+    space_id: int,
+    req: SensitiveWordCheckRequest,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    """Check a list of texts against the knowledge-space sensitive-word policy.
+    Returns which texts contain hits. Accessible to any authenticated user.
+    """
+    from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+    from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+
+    tenant_id = login_user.tenant_id
+    results = SensitiveWordPolicyService.check_texts(
+        tenant_id=tenant_id,
+        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        texts=req.texts,
+    )
+    violated: List[str] = []
+    for text, result in zip(req.texts, results):
+        if result.enabled and result.hits:
+            violated.append(text)
+    return resp_200({"has_violation": bool(violated), "violated_texts": violated})

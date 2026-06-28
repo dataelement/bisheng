@@ -1423,6 +1423,7 @@
     "create": "Create",
     "create_chat": "New chat",
     "create_folder_failed": "Failed to create folder",
+    "name_contains_sensitive_words": "Name contains sensitive words, please modify and retry",
     "create_knowledge_space": "Create knowledge space",
     "create_space_failed": "Failed to create knowledge space",
     "create_space_limit_reached": "You have reached the limit for creating knowledge spaces",

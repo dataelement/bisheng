@@ -11,6 +11,7 @@ import {
     recommendUploadFoldersApi,
     retryDuplicateFilesApi,
     uploadFileToServerApi,
+    checkSensitiveWordsApi,
     type KnowledgeSpace,
     type KnowledgeFile,
     type UploadFileRegistrationMetadata,
@@ -617,6 +618,45 @@ export function usePortalUploadDialog({
             { businessDomainCode, selectedTagValues: selectedUploadTagValues },
             fileCategoryCode,
         );
+
+        // Pre-upload sensitive-word check: filenames (batch)
+        const filenames = uploadFiles.map((item) => item.file.name);
+        const filenameCheck = await checkSensitiveWordsApi(activeSpace.id, filenames);
+        if (filenameCheck.has_violation) {
+            const violated = filenameCheck.violated_texts.slice(0, 3).join("、");
+            showToast({
+                message: `文件名包含敏感词（${violated}${filenameCheck.violated_texts.length > 3 ? "…" : ""}），请修改后重试`,
+                severity: NotificationSeverity.ERROR,
+            });
+            return;
+        }
+
+        // Pre-upload sensitive-word check: text file content (per file, report by filename)
+        const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "html", "htm"]);
+        const violatedContentFiles: string[] = [];
+        for (const item of uploadFiles) {
+            const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
+            if (TEXT_EXTENSIONS.has(ext)) {
+                try {
+                    const content = await item.file.text();
+                    const contentCheck = await checkSensitiveWordsApi(activeSpace.id, [content]);
+                    if (contentCheck.has_violation) {
+                        violatedContentFiles.push(item.file.name);
+                    }
+                } catch {
+                    // Skip content check on read error
+                }
+            }
+        }
+        if (violatedContentFiles.length > 0) {
+            const violated = violatedContentFiles.slice(0, 3).join("、");
+            showToast({
+                message: `文件内容包含敏感词（${violated}${violatedContentFiles.length > 3 ? "…" : ""}），请修改后重试`,
+                severity: NotificationSeverity.ERROR,
+            });
+            return;
+        }
+
         setUploadSubmitting(true);
         try {
             if (uploadLocalFolderName) {

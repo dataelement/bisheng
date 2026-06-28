@@ -1351,6 +1351,7 @@
     "create": "创建",
     "create_chat": "新建会话",
     "create_folder_failed": "新建文件夹失败",
+    "name_contains_sensitive_words": "名称包含敏感词，请修改后重试",
     "create_knowledge_space": "创建知识库",
     "create_space_failed": "创建知识库失败",
     "create_space_limit_reached": "您已达到创建知识库的上限",

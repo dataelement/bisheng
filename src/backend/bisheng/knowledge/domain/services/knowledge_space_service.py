@@ -49,6 +49,8 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNameDuplicateError,
     SpaceTenantMismatchError,
     FavoriteSpaceProtectedError,
+    SpaceNameSensitiveWordError,
+    SpaceFileNameSensitiveWordError,
 )
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
@@ -205,6 +207,8 @@ from bisheng.share_link.domain.repositories.implementations.share_link_repositor
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.knowledge import file_worker
+from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 
 if TYPE_CHECKING:
     from bisheng.message.domain.services.message_service import MessageService
@@ -1047,6 +1051,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @staticmethod
     def _dedupe_ids(resource_ids: List[int]) -> List[int]:
         return list(dict.fromkeys(resource_ids))
+
+    def _check_name_sensitive_words(self, name: str) -> None:
+        """Raise SpaceNameSensitiveWordError if name hits the knowledge-space sensitive-word policy."""
+        result = SensitiveWordPolicyService.check_text(
+            tenant_id=self.login_user.tenant_id,
+            business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+            text=name,
+        )
+        if result.enabled and result.hits:
+            raise SpaceNameSensitiveWordError()
+
+    def _check_filename_sensitive_words(self, filename: str) -> None:
+        """Raise SpaceFileNameSensitiveWordError if file name hits the sensitive-word policy."""
+        result = SensitiveWordPolicyService.check_text(
+            tenant_id=self.login_user.tenant_id,
+            business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+            text=filename,
+        )
+        if result.enabled and result.hits:
+            raise SpaceFileNameSensitiveWordError()
 
     @staticmethod
     def _ensure_space_folder(folder: Optional[KnowledgeFile], space_id: int) -> KnowledgeFile:
@@ -6071,6 +6095,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type = "folder"
             parent_resource_id = parent_id
 
+        self._check_name_sensitive_words(folder_name)
+
         if await SpaceFileDao.count_folder_by_name(knowledge_id, folder_name, file_level_path) > 0:
             raise SpaceFolderDuplicateError()
 
@@ -6108,6 +6134,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFolderNotFoundError()
         folder = self._ensure_space_folder(folder, folder.knowledge_id)
         await self._require_permission_id("folder", folder_id, "rename_folder", space_id=folder.knowledge_id)
+        self._check_name_sensitive_words(new_name)
 
         if (
             await SpaceFileDao.count_folder_by_name(
@@ -7111,6 +7138,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
 
+        # Check file names against sensitive words before processing any files.
+        for fp in file_path:
+            fname = fp.rsplit("/", 1)[-1] if "/" in fp else fp
+            self._check_filename_sensitive_words(fname)
+
         async def cleanup_created_files() -> None:
             created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
             if not created_file_ids:
@@ -7232,6 +7264,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         new_suffix = new_name.rsplit(".", 1)[-1] if "." in new_name else ""
         if old_suffix != new_suffix:
             raise SpaceFileExtensionError()
+        self._check_filename_sensitive_words(new_name)
 
         if await SpaceFileDao.count_file_by_name(file_record.knowledge_id, new_name, exclude_id=file_id) > 0:
             raise SpaceFileNameDuplicateError()
