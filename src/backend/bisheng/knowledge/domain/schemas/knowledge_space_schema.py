@@ -415,7 +415,7 @@ class ShougangPortalHomeResp(BaseModel):
 
 
 class ShougangPortalTelemetryEventReq(BaseModel):
-    event_type: Literal["portal_favorite", "portal_qa", "portal_document_read"]
+    event_type: Literal["portal_favorite", "portal_qa", "portal_document_read", "portal_document_download"]
     source_app: str = Field(..., min_length=1, max_length=64)
     scene: str = Field(..., min_length=1, max_length=128)
     entry_point: str = Field(..., min_length=1, max_length=128)

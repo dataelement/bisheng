@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import { getFileStatsApi } from "~/api/knowledge";
@@ -82,7 +82,6 @@ export function PortalInfoDrawer({
     const [encodingDraft, setEncodingDraft] = useState<EncodingDraft>({});
     const [savingEncoding, setSavingEncoding] = useState(false);
     const [fileStats, setFileStats] = useState<{ views: number; downloads: number } | null>(null);
-    const statsFileRef = useRef<number | null>(null);
 
     useEffect(() => {
         setEncodingDraft({});
@@ -90,8 +89,6 @@ export function PortalInfoDrawer({
 
     useEffect(() => {
         if (activePanel !== "usage" || !selectedFile || !activeSpace) return;
-        if (statsFileRef.current === selectedFile.id) return;
-        statsFileRef.current = selectedFile.id;
         setFileStats(null);
         getFileStatsApi(activeSpace.id, selectedFile.id)
             .then((stats) => setFileStats(stats))

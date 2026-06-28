@@ -39,7 +39,7 @@ class PortalTelemetryEventService:
         cls,
         event_type: BaseTelemetryTypeEnum,
         payload: dict[str, Any],
-    ) -> PortalFavoriteEventData | PortalQaEventData | PortalDocumentReadEventData:
+    ) -> PortalFavoriteEventData | PortalQaEventData | PortalDocumentReadEventData | PortalDocumentDownloadEventData:
         data_cls = cls._event_data_classes[event_type]
         return data_cls(**payload)
 
@@ -49,7 +49,7 @@ class PortalTelemetryEventService:
         *,
         user_id: int,
         event_type: BaseTelemetryTypeEnum,
-        event_data: PortalFavoriteEventData | PortalQaEventData | PortalDocumentReadEventData,
+        event_data: PortalFavoriteEventData | PortalQaEventData | PortalDocumentReadEventData | PortalDocumentDownloadEventData,
     ) -> None:
         try:
             telemetry_service.log_event_sync(
