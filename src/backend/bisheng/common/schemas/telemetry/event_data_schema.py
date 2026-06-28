@@ -188,3 +188,9 @@ class PortalDocumentReadEventData(PortalEventData):
     """Data model for Shougang portal document preview/read success events."""
 
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ
+
+
+class PortalDocumentDownloadEventData(PortalEventData):
+    """Data model for Shougang portal document download events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD

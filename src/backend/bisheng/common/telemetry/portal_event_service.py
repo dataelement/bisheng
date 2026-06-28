@@ -3,6 +3,7 @@ from typing import Any
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.schemas.telemetry.event_data_schema import (
+    PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
     PortalFavoriteEventData,
     PortalQaEventData,
@@ -30,6 +31,7 @@ class PortalTelemetryEventService:
         BaseTelemetryTypeEnum.PORTAL_FAVORITE: PortalFavoriteEventData,
         BaseTelemetryTypeEnum.PORTAL_QA: PortalQaEventData,
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ: PortalDocumentReadEventData,
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD: PortalDocumentDownloadEventData,
     }
 
     @classmethod
@@ -85,6 +87,28 @@ class PortalTelemetryEventService:
             return int(response.get("hits", {}).get("total", {}).get("value", 0))
         except Exception:
             logger.exception("Failed to count file views for file_id=%s", file_id)
+            return 0
+
+    @staticmethod
+    async def count_file_downloads(file_id: int) -> int:
+        """Return the total number of PORTAL_DOCUMENT_DOWNLOAD events for a specific file."""
+        body = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD.value}},
+                        {"term": {"event_data.portal_document_download_file_id": file_id}},
+                    ]
+                }
+            },
+        }
+        try:
+            es_client = await get_statistics_es_connection()
+            response = await es_client.search(index=telemetry_service.index_name, body=body)
+            return int(response.get("hits", {}).get("total", {}).get("value", 0))
+        except Exception:
+            logger.exception("Failed to count file downloads for file_id=%s", file_id)
             return 0
 
     @staticmethod

@@ -933,6 +933,10 @@ async def get_file_stats(
 ) -> Any:
     """Return view count for a specific file. Downloads are not tracked, always 0."""
     from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
+    import asyncio
 
-    views = await PortalTelemetryEventService.count_file_views(file_id)
-    return resp_200({"views": views, "downloads": 0})
+    views, downloads = await asyncio.gather(
+        PortalTelemetryEventService.count_file_views(file_id),
+        PortalTelemetryEventService.count_file_downloads(file_id),
+    )
+    return resp_200({"views": views, "downloads": downloads})
