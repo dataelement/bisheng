@@ -85,7 +85,6 @@ export function PortalPreviewWorkspace({
                     activeSpace={activeSpace}
                     selectedFile={selectedFile}
                     documentPath={documentPath}
-                    showPermissionPanel={!isPersonalSpace}
                     canEditEncoding={canEditEncoding}
                     fileCategoryOptions={fileCategoryOptions}
                     encodingPrefix={encodingPrefix}
@@ -107,7 +106,6 @@ export function PortalPreviewWorkspace({
             <ToolRail
                 activePanel={activePanel}
                 aiOpen={aiDrawerOpen}
-                showPermissionPanel={!isPersonalSpace}
                 onTogglePanel={() => {
                     onAiDrawerOpenChange(false);
                     onPanelChange(activePanel ? null : "properties");

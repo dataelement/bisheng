@@ -2610,3 +2610,18 @@ export async function checkSensitiveWordsApi(
     );
     return res?.data ?? { has_violation: false, violated_texts: [] };
 }
+
+export interface FileUsageStats {
+    views: number;
+    downloads: number;
+}
+
+export async function getFileStatsApi(
+    spaceId: string | number,
+    fileId: string | number,
+): Promise<FileUsageStats> {
+    const res = await request.get<ApiResponse<FileUsageStats>>(
+        `/api/v1/knowledge/space/${spaceId}/files/${fileId}/stats`,
+    );
+    return res?.data ?? { views: 0, downloads: 0 };
+}

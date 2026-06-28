@@ -1,4 +1,4 @@
-import { Bot, BriefcaseBusiness, Clock, FileText, Link2, LockKeyhole, PanelRight } from "lucide-react";
+import { Bot, BriefcaseBusiness, Clock, FileText, Link2, PanelRight } from "lucide-react";
 import type { PanelKey, PortalToolRailKey } from "../types";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -13,14 +13,12 @@ const TOOLBAR_ITEMS: Array<{
     { key: "time", title: "时间", icon: Clock, panelKey: "time" },
     { key: "source", title: "来源", icon: Link2, panelKey: "source" },
     { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
-    { key: "permission", title: "权限", icon: LockKeyhole, panelKey: "permission" },
     { key: "ai", title: "AI 对话", icon: Bot },
 ];
 
 interface ToolRailProps {
     activePanel: PanelKey | null;
     aiOpen: boolean;
-    showPermissionPanel?: boolean;
     onTogglePanel: () => void;
     onOpenAi: () => void;
     onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">) => void;
@@ -29,14 +27,11 @@ interface ToolRailProps {
 export function ToolRail({
     activePanel,
     aiOpen,
-    showPermissionPanel = true,
     onTogglePanel,
     onOpenAi,
     onOpenPanel,
 }: ToolRailProps) {
-    const toolbarItems = showPermissionPanel
-        ? TOOLBAR_ITEMS
-        : TOOLBAR_ITEMS.filter((item) => item.panelKey !== "permission");
+    const toolbarItems = TOOLBAR_ITEMS;
 
     return (
         <aside className={s.toolRail} data-testid="portal-tool-rail">

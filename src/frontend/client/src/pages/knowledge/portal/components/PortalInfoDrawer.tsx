@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
+import { getFileStatsApi } from "~/api/knowledge";
 import type { PanelKey, PortalFileCategoryOption } from "../types";
 import {
     BUSINESS_DOMAIN_OPTIONS,
@@ -19,15 +20,9 @@ const DETAIL_TABS: Array<{ key: Exclude<PanelKey, "share">; label: string }> = [
     { key: "time", label: "时间" },
     { key: "source", label: "来源" },
     { key: "usage", label: "使用" },
-    { key: "permission", label: "权限" },
 ];
 
 const DEFAULT_DEPARTMENT_NAME = "产品研发中心-数智组";
-const USAGE_STATS = {
-    downloads: 652,
-    views: 1216,
-    shares: 1000,
-};
 
 function formatDrawerDateTime(dateString?: string | null) {
     if (!dateString) return "-";
@@ -63,7 +58,6 @@ interface PortalInfoDrawerProps {
     activeSpace: KnowledgeSpace | null;
     selectedFile: KnowledgeFile | null;
     documentPath: string;
-    showPermissionPanel?: boolean;
     canEditEncoding?: boolean;
     fileCategoryOptions: PortalFileCategoryOption[];
     encodingPrefix: string;
@@ -77,7 +71,6 @@ export function PortalInfoDrawer({
     activePanel,
     activeSpace,
     selectedFile,
-    showPermissionPanel = true,
     canEditEncoding = false,
     fileCategoryOptions,
     encodingPrefix,
@@ -88,13 +81,25 @@ export function PortalInfoDrawer({
 }: PortalInfoDrawerProps) {
     const [encodingDraft, setEncodingDraft] = useState<EncodingDraft>({});
     const [savingEncoding, setSavingEncoding] = useState(false);
+    const [fileStats, setFileStats] = useState<{ views: number; downloads: number } | null>(null);
+    const statsFileRef = useRef<number | null>(null);
 
     useEffect(() => {
         setEncodingDraft({});
     }, [selectedFile?.id, selectedFile?.fileEncoding]);
 
+    useEffect(() => {
+        if (activePanel !== "usage" || !selectedFile || !activeSpace) return;
+        if (statsFileRef.current === selectedFile.id) return;
+        statsFileRef.current = selectedFile.id;
+        setFileStats(null);
+        getFileStatsApi(activeSpace.id, selectedFile.id)
+            .then((stats) => setFileStats(stats))
+            .catch(() => setFileStats({ views: 0, downloads: 0 }));
+    }, [activePanel, selectedFile?.id, activeSpace?.id]);
+
     if (!activePanel) return null;
-    if (!showPermissionPanel && activePanel === "permission") return null;
+    if (activePanel === "permission") return null;
 
     const panelTitleMap: Record<PanelKey, string> = {
         properties: "属性",
@@ -109,9 +114,7 @@ export function PortalInfoDrawer({
     const tags = selectedFile?.tags ?? [];
     const versionText = formatVersionText(selectedFile?.version_no);
     const operatorName = selectedFile?.user_name || "-";
-    const detailTabs = showPermissionPanel
-        ? DETAIL_TABS
-        : DETAIL_TABS.filter((tab) => tab.key !== "permission");
+    const detailTabs = DETAIL_TABS;
 
     const renderDetailItem = (label: string, value: string | number | null | undefined) => (
         <div className={s.detailItem}>
@@ -327,23 +330,8 @@ export function PortalInfoDrawer({
                         aria-labelledby="portal-drawer-tab-usage"
                         className={s.detailList}
                     >
-                        {renderDetailItem("下载次数", USAGE_STATS.downloads)}
-                        {renderDetailItem("浏览次数", USAGE_STATS.views)}
-                        {renderDetailItem("分享次数", USAGE_STATS.shares)}
-                    </div>
-                ) : null}
-
-                {activePanel === "permission" ? (
-                    <div
-                        id="portal-drawer-panel-permission"
-                        role="tabpanel"
-                        aria-labelledby="portal-drawer-tab-permission"
-                        className={s.detailList}
-                    >
-                        {renderDetailItem("当前用户角色", activeSpace?.role)}
-                        {renderDetailItem("知识库可见性", activeSpace?.visibility)}
-                        {renderDetailItem("权限范围", "继承当前知识库权限")}
-                        {renderDetailItem("说明", "细粒度权限管理请在知识库成员与权限设置中维护。")}
+                        {renderDetailItem("下载次数", fileStats ? fileStats.downloads : "-")}
+                        {renderDetailItem("浏览次数", fileStats ? fileStats.views : "-")}
                     </div>
                 ) : null}
 

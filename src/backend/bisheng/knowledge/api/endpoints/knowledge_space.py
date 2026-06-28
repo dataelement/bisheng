@@ -920,3 +920,19 @@ async def check_sensitive_words(
         if result.enabled and result.hits:
             violated.append(text)
     return resp_200({"has_violation": bool(violated), "violated_texts": violated})
+
+
+# ──────────────────────────── File usage stats ────────────────────────────────
+
+
+@router.get("/{space_id}/files/{file_id}/stats")
+async def get_file_stats(
+    space_id: int,
+    file_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    """Return view count for a specific file. Downloads are not tracked, always 0."""
+    from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
+
+    views = await PortalTelemetryEventService.count_file_views(file_id)
+    return resp_200({"views": views, "downloads": 0})
