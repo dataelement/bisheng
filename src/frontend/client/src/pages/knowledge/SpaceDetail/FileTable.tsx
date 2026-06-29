@@ -792,7 +792,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
 
     return (
-        <div className="relative max-w-full min-w-0 overflow-hidden" data-testid="portal-file-table">
+        <div className="relative max-w-full min-w-0 overflow-hidden px-2" data-testid="portal-file-table">
             {/* 横向滚动限制在容器内，不撑开整页 */}
             <div
                 ref={(el) => {

@@ -1369,7 +1369,7 @@ export function KnowledgeSpaceContent({
                     className={cn(
                         "flex w-full min-w-0 flex-shrink-0 flex-wrap items-center justify-between gap-y-1 py-3",
                         isH5 && "flex-nowrap justify-end",
-                        !isH5 && "border-t border-[#e5e6eb] bg-white",
+                        !isH5 && "bg-white",
                     )}
                 >
                     {!isH5 && (

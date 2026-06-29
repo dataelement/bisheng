@@ -591,7 +591,7 @@ export function KnowledgeSpaceHeader({
                 <div className="!mt-5 h-px bg-[#E6E6E6]" />
 
                 {/* Toolbar：宽屏一行（搜索 + 视图/筛选 + 右侧操作）；窄内容区（宽度小于 TOOLBAR_COMPACT_MAX_WIDTH）两行：仅搜索，其次为视图/筛选与新增/批量 */}
-                <div ref={toolbarMeasureRef} className="!mt-[15px] w-full min-w-0">
+                <div ref={toolbarMeasureRef} className="!mt-[15px] w-full min-w-0 px-2">
                     {toolbarCompact ? (
                         <div className="flex flex-col gap-3">
                             <div className="flex min-w-0 items-center gap-3">
