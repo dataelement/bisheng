@@ -1,11 +1,14 @@
 import importlib
 import importlib.util
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
+
+
 def _install_apps_endpoint_stubs() -> None:
     if 'bisheng.workstation.api' not in sys.modules:
         workstation_api_module = ModuleType('bisheng.workstation.api')
@@ -55,6 +58,7 @@ def _install_apps_endpoint_stubs() -> None:
 
         schemas_module.ChatList = _DummySchema
         schemas_module.FrequentlyUsedChat = _DummySchema
+        schemas_module.PortalAgentFavorite = _DummySchema
         schemas_module.UnifiedResponseModel = _DummySchema
         schemas_module.UsedAppPin = _DummySchema
         schemas_module.resp_200 = lambda data=None, message=None: {'data': data, 'message': message}
@@ -103,6 +107,7 @@ def _install_apps_endpoint_stubs() -> None:
 
     if 'bisheng.workstation.domain.services.constants' not in sys.modules:
         constants_module = ModuleType('bisheng.workstation.domain.services.constants')
+        constants_module.PORTAL_AGENT_FAVORITE_TYPE = 'portal_agent_favorite'
         constants_module.USED_APP_PIN_TYPE = 'used_app_pin'
         sys.modules['bisheng.workstation.domain.services.constants'] = constants_module
 
@@ -111,9 +116,10 @@ def _load_apps_endpoint_module():
     _install_apps_endpoint_stubs()
     module_name = 'bisheng.workstation.api.endpoints.apps'
     sys.modules.pop(module_name, None)
+    backend_root = Path(__file__).resolve().parents[1]
     spec = importlib.util.spec_from_file_location(
         module_name,
-        '/Users/zhou/Code/bisheng/src/backend/bisheng/workstation/api/endpoints/apps.py',
+        backend_root / 'bisheng/workstation/api/endpoints/apps.py',
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -254,3 +260,90 @@ async def test_pin_used_app_requires_use_app_permission():
         'wf-1',
         ['use_app'],
     )
+
+
+@pytest.mark.asyncio
+async def test_list_portal_agent_favorites_dedupes_workflow_ids():
+    module = _load_apps_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    links = [
+        SimpleNamespace(type_detail='wf-a'),
+        SimpleNamespace(type_detail='wf-a'),
+        SimpleNamespace(type_detail=''),
+        SimpleNamespace(type_detail='wf-b'),
+    ]
+
+    with patch.object(module.UserLinkDao, 'get_user_link', return_value=links, create=True) as mock_get:
+        result = await module.list_portal_agent_favorites(login_user=login_user)
+
+    mock_get.assert_called_once_with(7, [module.PORTAL_AGENT_FAVORITE_TYPE])
+    assert result['data'] == {'workflow_ids': ['wf-a', 'wf-b']}
+
+
+@pytest.mark.asyncio
+async def test_add_portal_agent_favorite_is_idempotent_without_unique_constraint():
+    module = _load_apps_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    app_info = SimpleNamespace(
+        id='wf-a',
+        flow_type=module.FlowType.WORKFLOW.value,
+        status=module.FlowStatus.ONLINE.value,
+    )
+
+    with patch.object(module.FlowDao, 'aget_flow_by_id', new_callable=AsyncMock, return_value=app_info, create=True), \
+         patch.object(module.ApplicationPermissionService, 'has_any_permission_async', new_callable=AsyncMock, return_value=True, create=True), \
+         patch.object(module.UserLinkDao, 'get_user_link', return_value=[SimpleNamespace(type_detail='wf-a')], create=True), \
+         patch.object(module.UserLinkDao, 'add_user_link', create=True) as mock_add:
+        result = await module.add_portal_agent_favorite(
+            login_user=login_user,
+            data=SimpleNamespace(workflow_id=' wf-a '),
+        )
+
+    mock_add.assert_not_called()
+    assert result['data'] == {'workflow_id': 'wf-a', 'favorited': True}
+
+
+@pytest.mark.asyncio
+async def test_add_portal_agent_favorite_writes_user_link_for_new_favorite():
+    module = _load_apps_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    app_info = SimpleNamespace(
+        id='wf-a',
+        flow_type=module.FlowType.WORKFLOW.value,
+        status=module.FlowStatus.ONLINE.value,
+    )
+
+    with patch.object(module.FlowDao, 'aget_flow_by_id', new_callable=AsyncMock, return_value=app_info, create=True), \
+         patch.object(module.ApplicationPermissionService, 'has_any_permission_async', new_callable=AsyncMock, return_value=True, create=True), \
+         patch.object(module.UserLinkDao, 'get_user_link', return_value=[], create=True), \
+         patch.object(module.UserLinkDao, 'add_user_link', return_value=(None, True), create=True) as mock_add:
+        result = await module.add_portal_agent_favorite(
+            login_user=login_user,
+            data=SimpleNamespace(workflow_id='wf-a'),
+        )
+
+    mock_add.assert_called_once_with(
+        user_id=7,
+        type=module.PORTAL_AGENT_FAVORITE_TYPE,
+        type_detail='wf-a',
+    )
+    assert result['data'] == {'workflow_id': 'wf-a', 'favorited': True}
+
+
+@pytest.mark.asyncio
+async def test_delete_portal_agent_favorite_uses_portal_agent_type():
+    module = _load_apps_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch.object(module.UserLinkDao, 'delete_user_link', create=True) as mock_delete:
+        result = await module.delete_portal_agent_favorite(
+            login_user=login_user,
+            workflow_id=' wf-a ',
+        )
+
+    mock_delete.assert_called_once_with(
+        user_id=7,
+        type=module.PORTAL_AGENT_FAVORITE_TYPE,
+        type_detail='wf-a',
+    )
+    assert result['data'] == {'workflow_id': 'wf-a', 'favorited': False}

@@ -3,7 +3,14 @@ from typing import Optional
 from fastapi import APIRouter, Body
 
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponseModel, UsedAppPin, resp_200
+from bisheng.api.v1.schemas import (
+    ChatList,
+    FrequentlyUsedChat,
+    PortalAgentFavorite,
+    UnifiedResponseModel,
+    UsedAppPin,
+    resp_200,
+)
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
@@ -13,8 +20,9 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
-from bisheng.workstation.domain.services.constants import USED_APP_PIN_TYPE
+from bisheng.workstation.domain.services.constants import PORTAL_AGENT_FAVORITE_TYPE, USED_APP_PIN_TYPE
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
 from ..dependencies import LoginUserDep
 
 router = APIRouter()
@@ -190,6 +198,61 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
 async def unpin_used_app(login_user=LoginUserDep, flow_id: str = Body(..., embed=True)):
     UserLinkDao.delete_user_link(user_id=login_user.user_id, type=USED_APP_PIN_TYPE, type_detail=flow_id)
     return resp_200(message='Unpinned successfully')
+
+
+@router.get('/app/portal-agent-favorites')
+async def list_portal_agent_favorites(login_user=LoginUserDep):
+    links = UserLinkDao.get_user_link(login_user.user_id, [PORTAL_AGENT_FAVORITE_TYPE])
+    workflow_ids = []
+    seen = set()
+    for link in links:
+        workflow_id = str(link.type_detail or '').strip()
+        if not workflow_id or workflow_id in seen:
+            continue
+        seen.add(workflow_id)
+        workflow_ids.append(workflow_id)
+    return resp_200(data={'workflow_ids': workflow_ids})
+
+
+@router.post('/app/portal-agent-favorites')
+async def add_portal_agent_favorite(login_user=LoginUserDep, data: PortalAgentFavorite = Body(...)):
+    workflow_id = data.workflow_id.strip()
+    app_info = await FlowDao.aget_flow_by_id(workflow_id)
+    if not app_info or app_info.flow_type != FlowType.WORKFLOW.value:
+        raise UsedAppNotFoundError(flow_id=workflow_id)
+    if app_info.status != FlowStatus.ONLINE.value:
+        raise UsedAppNotOnlineError(flow_id=workflow_id)
+
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'workflow',
+        workflow_id,
+        ['use_app'],
+    ):
+        return UnAuthorizedError.return_resp()
+
+    links = UserLinkDao.get_user_link(login_user.user_id, [PORTAL_AGENT_FAVORITE_TYPE])
+    if any(str(link.type_detail or '').strip() == workflow_id for link in links):
+        return resp_200(data={'workflow_id': workflow_id, 'favorited': True}, message='Already favorited')
+
+    UserLinkDao.add_user_link(
+        user_id=login_user.user_id,
+        type=PORTAL_AGENT_FAVORITE_TYPE,
+        type_detail=workflow_id,
+    )
+    return resp_200(data={'workflow_id': workflow_id, 'favorited': True}, message='Favorited successfully')
+
+
+@router.delete('/app/portal-agent-favorites')
+async def delete_portal_agent_favorite(login_user=LoginUserDep, workflow_id: str = Body(..., embed=True)):
+    safe_workflow_id = workflow_id.strip()
+    if safe_workflow_id:
+        UserLinkDao.delete_user_link(
+            user_id=login_user.user_id,
+            type=PORTAL_AGENT_FAVORITE_TYPE,
+            type_detail=safe_workflow_id,
+        )
+    return resp_200(data={'workflow_id': safe_workflow_id, 'favorited': False}, message='Unfavorited successfully')
 
 
 @router.get('/app/conversations', summary='Get conversations for a specific app', response_model=UnifiedResponseModel)

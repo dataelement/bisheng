@@ -642,6 +642,11 @@ class UsedAppPin(BaseModel):
     flow_id: str = Field(..., description='Application ID to pin/unpin')
 
 
+class PortalAgentFavorite(BaseModel):
+    """Schema for portal agent favorite operations"""
+    workflow_id: str = Field(..., description='Workflow ID to favorite/unfavorite')
+
+
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
     model_id: int = Field(..., description='embeddingModelsID')
