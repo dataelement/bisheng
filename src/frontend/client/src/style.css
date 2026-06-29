@@ -124,6 +124,7 @@ html {
   --brand-800: 4 43 128;     /* #042B80 */
   --brand-900: 5 29 82;      /* #051D52 */
   --brand-main: 22 93 255;   /* #165DFF */
+  --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent (e.g. pin) */
 
   /* Illustration palette — empty-state SVG illustrations use --illus-* instead
      of --brand-* so the green theme can render the illustrations' own vivid
@@ -149,6 +150,7 @@ html {
   --brand-800: 10 56 38;     /* #0A3826 */
   --brand-900: 6 38 25;      /* #062619 */
   --brand-main: 24 124 84;   /* #187C54 */
+  --brand-muted: 92 138 119; /* #5C8A77 — muted/low-sat brand accent (e.g. pin) */
 
   /* Illustration palette — green mode keeps the source SVGs' vivid greens so the
      illustrations match their original artwork (not the darker UI brand green). */

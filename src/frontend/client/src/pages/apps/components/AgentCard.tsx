@@ -96,7 +96,7 @@ export function AgentCard({
             >
               {showPin && isPinned ? (
                 <span
-                  className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#5C8A77]"
+                  className="inline-flex size-6 items-center justify-center rounded-[6px] text-[rgb(var(--brand-muted))]"
                   aria-label={localize('com_app_unpin_tooltip')}
                 >
                   <Outlined.Pin size={16} className="shrink-0" />
@@ -165,7 +165,7 @@ export function AgentCard({
                     <span className="relative inline-flex size-[18px] items-center justify-center">
                       <Outlined.Pin
                         size={18}
-                        className="absolute shrink-0 text-[#5C8A77] transition-opacity fine-pointer:group-hover/pin:opacity-0"
+                        className="absolute shrink-0 text-[rgb(var(--brand-muted))] transition-opacity fine-pointer:group-hover/pin:opacity-0"
                       />
                       <Outlined.PinOff
                         size={18}
