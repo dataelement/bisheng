@@ -1,7 +1,9 @@
 """Tests for scan_similar_for_file and get_similar_candidates_for_file."""
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock, AsyncMock
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -22,6 +24,7 @@ from bisheng.knowledge.domain.services.knowledge_version_service import Knowledg
 @pytest.fixture
 def enable_switch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = True
@@ -32,47 +35,64 @@ def enable_switch(monkeypatch):
 
 def _build_svc(session):
     return KnowledgeVersionService(
-        request=MagicMock(), login_user=MagicMock(),
+        request=MagicMock(),
+        login_user=MagicMock(),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
     )
 
 
-async def _seed_file_with_doc(session, fid, knowledge_id=1, simhash=None, similar_status=0,
-                               is_primary=True, file_encoding=None):
-    session.add(KnowledgeFile(id=fid, knowledge_id=knowledge_id, file_name=f"f{fid}.pdf",
-                              file_type=1, status=2, similar_status=similar_status,
-                              simhash=simhash, file_encoding=file_encoding))
+async def _seed_file_with_doc(
+    session, fid, knowledge_id=1, simhash=None, similar_status=0, is_primary=True, file_encoding=None
+):
+    session.add(
+        KnowledgeFile(
+            id=fid,
+            knowledge_id=knowledge_id,
+            file_name=f"f{fid}.pdf",
+            file_type=1,
+            status=2,
+            similar_status=similar_status,
+            simhash=simhash,
+            file_encoding=file_encoding,
+        )
+    )
     await session.commit()
     doc = KnowledgeDocument(knowledge_id=knowledge_id)
-    session.add(doc); await session.commit(); await session.refresh(doc)
-    v = KnowledgeDocumentVersion(document_id=doc.id, knowledge_file_id=fid,
-                                 version_no=1, is_primary=is_primary)
-    session.add(v); await session.commit()
+    session.add(doc)
+    await session.commit()
+    await session.refresh(doc)
+    v = KnowledgeDocumentVersion(document_id=doc.id, knowledge_file_id=fid, version_no=1, is_primary=is_primary)
+    session.add(v)
+    await session.commit()
     if is_primary:
         await session.refresh(v)
         doc.primary_version_id = v.id
-        session.add(doc); await session.commit()
+        session.add(doc)
+        await session.commit()
     return doc
 
 
 async def _seed_file_without_doc(session, fid, knowledge_id=1, file_name=None, file_encoding=None):
-    session.add(KnowledgeFile(
-        id=fid,
-        knowledge_id=knowledge_id,
-        file_name=file_name or f"f{fid}.pdf",
-        file_type=1,
-        status=2,
-        file_encoding=file_encoding,
-    ))
+    session.add(
+        KnowledgeFile(
+            id=fid,
+            knowledge_id=knowledge_id,
+            file_name=file_name or f"f{fid}.pdf",
+            file_type=1,
+            status=2,
+            file_encoding=file_encoding,
+        )
+    )
     await session.commit()
 
 
 @pytest.mark.asyncio
 async def test_scan_marks_status_1_when_candidate_above_threshold(enable_switch, async_db_session):
     """Two files with identical simhash → candidate similarity = 1.0 > 0.85 → similar_status=1."""
-    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1)); await async_db_session.commit()
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
     await _seed_file_with_doc(
         async_db_session, 100, simhash="aaaaaaaaaaaaaaaa", file_encoding="GF-ZD-SC-20260500000001"
     )
@@ -90,7 +110,8 @@ async def test_scan_marks_status_1_when_candidate_above_threshold(enable_switch,
 @pytest.mark.asyncio
 async def test_scan_leaves_status_0_when_no_candidate_above_threshold(enable_switch, async_db_session):
     """Completely different simhashes → similarity below threshold → similar_status stays 0."""
-    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1)); await async_db_session.commit()
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
     await _seed_file_with_doc(
         async_db_session, 100, simhash="0000000000000000", file_encoding="GF-ZD-SC-20260500000001"
     )
@@ -108,7 +129,8 @@ async def test_scan_leaves_status_0_when_no_candidate_above_threshold(enable_swi
 @pytest.mark.asyncio
 async def test_get_similar_candidates_returns_top_n_sorted(enable_switch, async_db_session):
     """get_similar_candidates_for_file returns candidates sorted by similarity desc."""
-    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1)); await async_db_session.commit()
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
     # File 100 hash = aaaa...; candidates with hamming distances 0, 1, 8, 32 from "a" base
     await _seed_file_with_doc(
         async_db_session, 100, simhash="aaaaaaaaaaaaaaaa", file_encoding="GF-ZD-SC-20260500000001"
@@ -138,7 +160,8 @@ async def test_get_similar_candidates_returns_top_n_sorted(enable_switch, async_
 @pytest.mark.asyncio
 async def test_get_similar_candidates_respects_limit(enable_switch, async_db_session):
     """limit caps the number of returned candidates."""
-    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1)); await async_db_session.commit()
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
     for fid in [100, 200, 201, 202, 203]:
         await _seed_file_with_doc(
             async_db_session, fid, simhash="aaaaaaaaaaaaaaaa", file_encoding=f"GF-ZD-SC-20260500000{fid}"
@@ -152,7 +175,8 @@ async def test_get_similar_candidates_respects_limit(enable_switch, async_db_ses
 @pytest.mark.asyncio
 async def test_scan_no_simhash_on_target_returns_zero(enable_switch, async_db_session):
     """If the file has no simhash, scan does nothing."""
-    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1)); await async_db_session.commit()
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
     await _seed_file_with_doc(async_db_session, 100, simhash=None, file_encoding="GF-ZD-SC-20260500000001")
 
     svc = _build_svc(async_db_session)
@@ -306,8 +330,6 @@ async def test_version_recommendations_require_first_three_encoding_segments(ena
 
 @pytest.mark.asyncio
 async def test_merge_rejects_document_without_shougang_similarity(enable_switch, async_db_session, monkeypatch):
-    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
-    await async_db_session.commit()
     source_doc = await _seed_file_with_doc(
         async_db_session,
         200,
@@ -334,6 +356,42 @@ async def test_merge_rejects_document_without_shougang_similarity(enable_switch,
             source_document_id=source_doc.id,
         )
     assert getattr(ctx.value, "status_code", None) == 409
+
+
+@pytest.mark.asyncio
+async def test_merge_force_allows_document_without_simhash(enable_switch, async_db_session, monkeypatch):
+    source_doc = await _seed_file_with_doc(
+        async_db_session,
+        200,
+        simhash=None,
+        file_encoding=None,
+    )
+    current_doc = await _seed_file_with_doc(
+        async_db_session,
+        100,
+        simhash=None,
+        file_encoding=None,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
+        "KnowledgeAuditTelemetryService.audit_link_file_version",
+        MagicMock(return_value=None),
+    )
+
+    svc = _build_svc(async_db_session)
+
+    result = await svc.merge_source_document_into_current(
+        current_knowledge_file_id=100,
+        source_document_id=source_doc.id,
+        force=True,
+    )
+
+    assert result.document_id == current_doc.id
+    assert result.new_version_no == 2
+    assert await svc.doc_repo.find_by_id(source_doc.id) is None
+    versions = await svc.version_repo.find_by_document_id(current_doc.id)
+    assert len(versions) == 2
+    assert any(version.knowledge_file_id == 200 and version.is_primary for version in versions)
 
 
 @pytest.mark.asyncio

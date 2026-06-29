@@ -268,6 +268,21 @@ PORTAL_SEARCH_ES_WEIGHT = 1.0
 PORTAL_SEARCH_VECTOR_WEIGHT = 1.0
 PORTAL_SEARCH_RERANK_MODEL_ID = ""
 PORTAL_SEARCH_RERANK_MODEL_ID_ENV = "BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID"
+PORTAL_SEARCH_TITLE_MATCH_STOPWORDS = (
+    "如何",
+    "怎么",
+    "怎样",
+    "什么",
+    "哪些",
+    "是否",
+    "有没有",
+    "关于",
+    "相关",
+    "文档",
+    "文件",
+    "资料",
+    "的",
+)
 _PORTAL_VISIBLE_SPACE_CACHE_TTL = 5.0
 _PORTAL_VISIBLE_SPACE_CACHE: Dict[tuple, tuple[float, List[Knowledge]]] = {}
 _PORTAL_VISIBLE_SPACE_CACHE_LOCK = asyncio.Lock()
@@ -301,6 +316,9 @@ class PortalFileCandidate:
     chunks: List[Any] = field(default_factory=list)
     fusion_score: float = 0.0
     rerank_score: Optional[float] = None
+    title_match_tier: int = 0
+    title_match_score: float = 0.0
+    title_match_reason: str = ""
 
 
 @dataclass
@@ -3375,6 +3393,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf.visible_candidate_count = len(visible_candidates)
 
         if not self._is_shougang_portal_updated_at_sort(req.sort):
+            self._score_shougang_portal_candidate_title_matches(
+                keyword=keyword,
+                candidates=visible_candidates,
+                file_map=visible_file_map,
+            )
             visible_candidates = await self._rerank_shougang_portal_file_candidates(
                 keyword=keyword,
                 candidates=visible_candidates,
@@ -3829,6 +3852,98 @@ class KnowledgeSpaceService(KnowledgeUtils):
             reverse=True,
         )
 
+    def _score_shougang_portal_candidate_title_matches(
+            self,
+            *,
+            keyword: str,
+            candidates: List[PortalFileCandidate],
+            file_map: Dict[int, KnowledgeFile],
+    ) -> None:
+        for candidate in candidates:
+            file = file_map.get(candidate.file_id)
+            tier, score, reason = self._compute_shougang_portal_title_match(
+                keyword,
+                str(getattr(file, "file_name", "") or ""),
+            )
+            candidate.title_match_tier = tier
+            candidate.title_match_score = score
+            candidate.title_match_reason = reason
+
+    @classmethod
+    def _compute_shougang_portal_title_match(
+            cls,
+            keyword: str,
+            file_name: str,
+    ) -> tuple[int, float, str]:
+        title_text = cls._strip_shougang_portal_file_extension(file_name)
+        query_compact = cls._compact_shougang_portal_title_match_text(keyword)
+        title_compact = cls._compact_shougang_portal_title_match_text(title_text)
+        if not query_compact or not title_compact:
+            return 0, 0.0, ""
+        if title_compact == query_compact:
+            return 4, 1.0, "exact"
+        if query_compact in title_compact:
+            return 3, 0.95, "query_phrase"
+
+        cleaned_query = cls._remove_shougang_portal_title_match_stopwords(query_compact)
+        if len(cleaned_query) >= 2 and cleaned_query != query_compact:
+            if title_compact == cleaned_query:
+                return 4, 1.0, "cleaned_exact"
+            if cleaned_query in title_compact:
+                return 3, 0.95, "cleaned_query_phrase"
+
+        if len(title_compact) >= 4 and title_compact in query_compact:
+            return 3, 0.9, "title_phrase"
+
+        query_units = cls._build_shougang_portal_title_match_units(cleaned_query or query_compact)
+        if not query_units:
+            return 0, 0.0, ""
+        matched_units = [unit for unit in query_units if unit in title_compact]
+        matched_count = len(matched_units)
+        coverage = matched_count / len(query_units)
+        if matched_count >= 3 and coverage >= 0.5:
+            return 2, round(min(0.89, coverage + matched_count / 1000), 6), (
+                f"unit_coverage:{matched_count}/{len(query_units)}"
+            )
+        if matched_count >= 2 and coverage >= 0.75:
+            return 2, round(min(0.89, coverage + matched_count / 1000), 6), (
+                f"unit_coverage:{matched_count}/{len(query_units)}"
+            )
+        return 0, 0.0, ""
+
+    @staticmethod
+    def _strip_shougang_portal_file_extension(file_name: str) -> str:
+        name = str(file_name or "").strip()
+        return Path(name).stem or name
+
+    @staticmethod
+    def _compact_shougang_portal_title_match_text(text: str) -> str:
+        return re.sub(r"[\W_]+", "", str(text or "").lower(), flags=re.UNICODE)
+
+    @staticmethod
+    def _remove_shougang_portal_title_match_stopwords(text: str) -> str:
+        cleaned = str(text or "")
+        for word in PORTAL_SEARCH_TITLE_MATCH_STOPWORDS:
+            if len(cleaned) > len(word):
+                cleaned = cleaned.replace(word, "")
+        return cleaned
+
+    @staticmethod
+    def _build_shougang_portal_title_match_units(text: str) -> List[str]:
+        units: List[str] = []
+        for segment in re.findall(r"[\u4e00-\u9fff]+|[a-z0-9]+", str(text or "").lower()):
+            if not segment:
+                continue
+            if re.fullmatch(r"[\u4e00-\u9fff]+", segment):
+                if len(segment) <= 2:
+                    units.append(segment)
+                    continue
+                units.extend(segment[index:index + 2] for index in range(len(segment) - 1))
+                continue
+            if len(segment) >= 2:
+                units.append(segment)
+        return list(dict.fromkeys(units))
+
     async def _rerank_shougang_portal_file_candidates(
             self,
             *,
@@ -3920,12 +4035,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 int(getattr(chunk, "rank", 10_000) or 10_000),
             ),
         )
+        file = file_map.get(candidate.file_id)
+        file_name = str(getattr(file, "file_name", "") or candidate.file_id)
+        title_text = self._strip_shougang_portal_file_extension(file_name)
         for chunk in chunks:
             content = str(getattr(chunk, "content", "") or "").strip()
             if content:
-                return content
-        file = file_map.get(candidate.file_id)
-        return str(getattr(file, "file_name", "") or candidate.file_id)
+                return f"文档名称: {title_text}\n相关内容: {content}" if title_text else content
+        return f"文档名称: {title_text}" if title_text else file_name
 
     def _sort_shougang_portal_semantic_candidates(
             self,
@@ -3943,6 +4060,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return sorted(
             candidates,
             key=lambda candidate: (
+                candidate.title_match_tier,
+                candidate.title_match_score,
                 candidate.rerank_score is not None,
                 candidate.rerank_score if candidate.rerank_score is not None else float("-inf"),
                 candidate.fusion_score,
@@ -3973,6 +4092,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "vector_score": candidate.vector_best_score,
                 "fusion_score": round(float(candidate.fusion_score or 0.0), 6),
                 "rerank_score": candidate.rerank_score,
+                "title_match_tier": candidate.title_match_tier,
+                "title_match_score": candidate.title_match_score,
+                "title_match_reason": candidate.title_match_reason,
             })
         perf.top_results = top_results
 

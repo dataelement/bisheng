@@ -9,19 +9,20 @@ Responsibilities (to be filled in by subsequent Plan 2 tasks):
 
 Switch off => all write methods raise 403; read methods stay available.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import HTTPException, Request
 from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -64,8 +65,10 @@ class KnowledgeVersionService:
     async def list_versions_for_file(self, knowledge_file_id: int):
         """Return the entire version chain that contains the given physical file."""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
-            VersionEntry, VersionListResponse,
+            VersionEntry,
+            VersionListResponse,
         )
+
         v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
         if v is None:
             raise HTTPException(status_code=404, detail="version chain not found for this file")
@@ -78,33 +81,44 @@ class KnowledgeVersionService:
 
         primary = next((vv for vv in versions if vv.is_primary), None)
         primary_kf = kf_by_id.get(primary.knowledge_file_id) if primary else None
-        title = primary_kf.file_name if primary_kf else (
-            kf_by_id[versions[0].knowledge_file_id].file_name if versions else ""
+        title = (
+            primary_kf.file_name
+            if primary_kf
+            else (kf_by_id[versions[0].knowledge_file_id].file_name if versions else "")
         )
         doc_code = getattr(primary_kf, "file_encoding", None) if primary_kf else None
 
         entries: list[VersionEntry] = []
         for vv in versions:
             kf = kf_by_id.get(vv.knowledge_file_id)
-            entries.append(VersionEntry(
-                version_id=vv.id, version_no=vv.version_no, is_primary=vv.is_primary,
-                knowledge_file_id=vv.knowledge_file_id,
-                original_file_name=kf.file_name if kf else "",
-                file_code=getattr(kf, "file_encoding", None) if kf else None,
-                uploader_name=kf.user_name if kf else None,
-                uploader_id=kf.user_id if kf else None,
-                upload_time=kf.create_time if kf else None,
-                status=kf.status if kf else None,
-            ))
+            entries.append(
+                VersionEntry(
+                    version_id=vv.id,
+                    version_no=vv.version_no,
+                    is_primary=vv.is_primary,
+                    knowledge_file_id=vv.knowledge_file_id,
+                    original_file_name=kf.file_name if kf else "",
+                    file_code=getattr(kf, "file_encoding", None) if kf else None,
+                    uploader_name=kf.user_name if kf else None,
+                    uploader_id=kf.user_id if kf else None,
+                    upload_time=kf.create_time if kf else None,
+                    status=kf.status if kf else None,
+                )
+            )
         return VersionListResponse(
-            document_id=doc.id, knowledge_id=doc.knowledge_id,
-            title=title, doc_code=doc_code,
+            document_id=doc.id,
+            knowledge_id=doc.knowledge_id,
+            title=title,
+            doc_code=doc_code,
             current_primary_version_no=primary.version_no if primary else None,
             versions=entries,
         )
 
     async def search_associable_documents(
-        self, knowledge_id: int, keyword: str, current_file_id: int,
+        self,
+        knowledge_id: int,
+        keyword: str,
+        current_file_id: int,
     ):
         """Search documents in a space that the current file could be associated into.
 
@@ -112,6 +126,7 @@ class KnowledgeVersionService:
         file_encoding (used as 文件编码). Excludes the document that current_file_id belongs to.
         """
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
+
         docs = await self.doc_repo.find_by_knowledge_id(knowledge_id)
 
         current_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
@@ -133,19 +148,24 @@ class KnowledgeVersionService:
             # and would just trip the link-time guard.
             if kf is None or kf.status != KnowledgeFileStatus.SUCCESS.value:
                 continue
-            haystack = " ".join([
-                kf.file_name or "",
-                getattr(kf, "file_encoding", "") or "",
-            ]).lower()
+            haystack = " ".join(
+                [
+                    kf.file_name or "",
+                    getattr(kf, "file_encoding", "") or "",
+                ]
+            ).lower()
             if keyword_lower and keyword_lower not in haystack:
                 continue
-            out.append(AssociableDocumentEntry(
-                document_id=doc.id, title=kf.file_name,
-                doc_code=getattr(kf, "file_encoding", None),
-                current_primary_version_no=primary_v.version_no,
-                primary_uploader_name=kf.user_name,
-                primary_upload_time=kf.create_time,
-            ))
+            out.append(
+                AssociableDocumentEntry(
+                    document_id=doc.id,
+                    title=kf.file_name,
+                    doc_code=getattr(kf, "file_encoding", None),
+                    current_primary_version_no=primary_v.version_no,
+                    primary_uploader_name=kf.user_name,
+                    primary_upload_time=kf.create_time,
+                )
+            )
         return out
 
     async def link_file_to_document(self, knowledge_file_id: int, target_document_id: int):
@@ -167,6 +187,7 @@ class KnowledgeVersionService:
             VersionLinkFileNotReadyError,
             VersionLinkSourceFileMissingError,
             VersionLinkSourceMultiVersionError,
+            VersionLinkTargetUnavailableError,
         )
 
         # ── Source guard ────────────────────────────────────────────────────
@@ -201,13 +222,8 @@ class KnowledgeVersionService:
         target_primary_v = await self.version_repo.find_by_id(target_doc.primary_version_id)
         if target_primary_v is None:
             raise VersionLinkTargetUnavailableError()
-        target_primary_kf = await self.knowledge_file_repo.find_by_id(
-            target_primary_v.knowledge_file_id
-        )
-        if (
-            target_primary_kf is None
-            or target_primary_kf.status != KnowledgeFileStatus.SUCCESS.value
-        ):
+        target_primary_kf = await self.knowledge_file_repo.find_by_id(target_primary_v.knowledge_file_id)
+        if target_primary_kf is None or target_primary_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkTargetUnavailableError()
 
         if target_doc.knowledge_id != current_kf.knowledge_id:
@@ -260,7 +276,11 @@ class KnowledgeVersionService:
 
         # Audit log
         KnowledgeAuditTelemetryService.audit_link_file_version(
-            self.login_user, self.request, current_kf.knowledge_id, current_kf.file_name, next_no,
+            self.login_user,
+            self.request,
+            current_kf.knowledge_id,
+            current_kf.file_name,
+            next_no,
         )
 
         return LinkResponse(document_id=target_document_id, new_version_no=next_no)
@@ -301,8 +321,11 @@ class KnowledgeVersionService:
                 await self.version_repo.update(old_primary)
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
-            self.login_user, self.request,
-            target_kf.knowledge_id, target_kf.file_name, target_version.version_no,
+            self.login_user,
+            self.request,
+            target_kf.knowledge_id,
+            target_kf.file_name,
+            target_version.version_no,
         )
         return SetPrimaryResponse(
             document_id=target_version.document_id,
@@ -314,14 +337,14 @@ class KnowledgeVersionService:
 
         Cleans Milvus/ES chunks and MinIO objects for the deleted file (best-effort).
         """
+        # Deferred import to avoid circular dependency (knowledge_imp imports KnowledgeVersionService
+        # at runtime, so top-level import would create a cycle).
+        from bisheng.api.services.knowledge_imp import delete_minio_files, delete_vector_files
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import DeleteVersionResponse
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
-        # Deferred import to avoid circular dependency (knowledge_imp imports KnowledgeVersionService
-        # at runtime, so top-level import would create a cycle).
-        from bisheng.api.services.knowledge_imp import delete_vector_files, delete_minio_files
 
         await self._require_version_management_enabled()
 
@@ -355,21 +378,28 @@ class KnowledgeVersionService:
             if knowledge is not None:
                 try:
                     await asyncio.to_thread(delete_vector_files, [kf.id], knowledge)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning(
                         "delete_version: vector cleanup failed for file_id={} knowledge_id={}: {}",
-                        kf.id, knowledge.id, exc,
+                        kf.id,
+                        knowledge.id,
+                        exc,
                     )
             try:
                 await asyncio.to_thread(delete_minio_files, kf)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "delete_version: MinIO cleanup failed for file_id={}: {}",
-                    kf.id, exc,
+                    kf.id,
+                    exc,
                 )
 
         KnowledgeAuditTelemetryService.audit_delete_file_version(
-            self.login_user, self.request, kf_knowledge_id or 0, kf_file_name, version_no,
+            self.login_user,
+            self.request,
+            kf_knowledge_id or 0,
+            kf_file_name,
+            version_no,
         )
         return DeleteVersionResponse(document_id=doc_id, deleted_version_no=version_no)
 
@@ -400,7 +430,8 @@ class KnowledgeVersionService:
 
         # Find all main-version files in the same space (excluding self)
         candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id, exclude_file_id=knowledge_file_id,
+            knowledge_id=kf.knowledge_id,
+            exclude_file_id=knowledge_file_id,
         )
 
         above_count = 0
@@ -426,7 +457,8 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import PendingSimilarFileEntry
 
         pending = await KnowledgeFileDao.aget_files_by_similar_status(
-            knowledge_id=knowledge_id, similar_status=1,
+            knowledge_id=knowledge_id,
+            similar_status=1,
         )
 
         out: list[PendingSimilarFileEntry] = []
@@ -447,13 +479,16 @@ class KnowledgeVersionService:
                 kf.similar_status = 0
                 await self.knowledge_file_repo.update(kf)
                 continue
-            out.append(PendingSimilarFileEntry(
-                knowledge_file_id=kf.id, file_name=kf.file_name,
-                file_code=getattr(kf, "file_encoding", None),
-                candidate_count=len(candidates),
-                current_primary_version_no=v.version_no if v else 1,
-                primary_uploader_name=kf.user_name,
-            ))
+            out.append(
+                PendingSimilarFileEntry(
+                    knowledge_file_id=kf.id,
+                    file_name=kf.file_name,
+                    file_code=getattr(kf, "file_encoding", None),
+                    candidate_count=len(candidates),
+                    current_primary_version_no=v.version_no if v else 1,
+                    primary_uploader_name=kf.user_name,
+                )
+            )
         return out
 
     async def dismiss_similar(self, knowledge_file_id: int):
@@ -474,7 +509,10 @@ class KnowledgeVersionService:
             await self.knowledge_file_repo.update(kf)
 
         KnowledgeAuditTelemetryService.audit_dismiss_similar_file(
-            self.login_user, self.request, kf.knowledge_id, kf.file_name,
+            self.login_user,
+            self.request,
+            kf.knowledge_id,
+            kf.file_name,
         )
         return DismissSimilarResponse(knowledge_file_id=kf.id, similar_status=2)
 
@@ -507,7 +545,8 @@ class KnowledgeVersionService:
         self_doc_id = self_v.document_id if self_v else None
 
         candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id, exclude_file_id=current_file_id,
+            knowledge_id=kf.knowledge_id,
+            exclude_file_id=current_file_id,
         )
 
         scored: list[tuple[float, KnowledgeFile]] = []
@@ -537,16 +576,18 @@ class KnowledgeVersionService:
             chain = await self.version_repo.find_by_document_id(v.document_id)
             if len(chain) != 1:
                 continue
-            out.append(SimilarCandidateEntry(
-                target_document_id=v.document_id,
-                title=c.file_name,
-                doc_code=getattr(c, "file_encoding", None),
-                current_primary_version_no=v.version_no,
-                similarity=sim,
-                refined_similarity=refined_sim,
-                primary_uploader_name=getattr(c, "user_name", None),
-                primary_upload_time=getattr(c, "create_time", None),
-            ))
+            out.append(
+                SimilarCandidateEntry(
+                    target_document_id=v.document_id,
+                    title=c.file_name,
+                    doc_code=getattr(c, "file_encoding", None),
+                    current_primary_version_no=v.version_no,
+                    similarity=sim,
+                    refined_similarity=refined_sim,
+                    primary_uploader_name=getattr(c, "user_name", None),
+                    primary_upload_time=getattr(c, "create_time", None),
+                )
+            )
         return out
 
     async def search_version_sources(
@@ -560,6 +601,7 @@ class KnowledgeVersionService:
         additionally excludes multi-version documents.
         """
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
+
         docs = await self.doc_repo.find_by_knowledge_id(knowledge_id)
 
         current_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
@@ -582,19 +624,24 @@ class KnowledgeVersionService:
             # and would just trip the link-time guard.
             if kf is None or kf.status != KnowledgeFileStatus.SUCCESS.value:
                 continue
-            haystack = " ".join([
-                kf.file_name or "",
-                getattr(kf, "file_encoding", "") or "",
-            ]).lower()
+            haystack = " ".join(
+                [
+                    kf.file_name or "",
+                    getattr(kf, "file_encoding", "") or "",
+                ]
+            ).lower()
             if keyword_lower and keyword_lower not in haystack:
                 continue
-            out.append(AssociableDocumentEntry(
-                document_id=doc.id, title=kf.file_name,
-                doc_code=getattr(kf, "file_encoding", None),
-                current_primary_version_no=primary_v.version_no,
-                primary_uploader_name=kf.user_name,
-                primary_upload_time=kf.create_time,
-            ))
+            out.append(
+                AssociableDocumentEntry(
+                    document_id=doc.id,
+                    title=kf.file_name,
+                    doc_code=getattr(kf, "file_encoding", None),
+                    current_primary_version_no=primary_v.version_no,
+                    primary_uploader_name=kf.user_name,
+                    primary_upload_time=kf.create_time,
+                )
+            )
         return out
 
     @staticmethod
@@ -610,15 +657,11 @@ class KnowledgeVersionService:
 
     @classmethod
     def _shougang_encoding_matches(cls, source_file: KnowledgeFile, candidate_file: KnowledgeFile) -> bool:
-        source_encoding_key = cls._shougang_encoding_first_three_segments(
-            getattr(source_file, "file_encoding", None)
-        )
+        source_encoding_key = cls._shougang_encoding_first_three_segments(getattr(source_file, "file_encoding", None))
         if source_encoding_key is None:
             return False
         return (
-            cls._shougang_encoding_first_three_segments(
-                getattr(candidate_file, "file_encoding", None)
-            )
+            cls._shougang_encoding_first_three_segments(getattr(candidate_file, "file_encoding", None))
             == source_encoding_key
         )
 
@@ -657,7 +700,8 @@ class KnowledgeVersionService:
         parts: dict[int, list[str]] = {}
         try:
             es_client = await KnowledgeRag.init_knowledge_es_vectorstore(
-                knowledge=knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+                knowledge=knowledge,
+                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
             )
             if not await es_client.client.indices.exists(index=knowledge.index_name):
                 return {}
@@ -676,7 +720,7 @@ class KnowledgeVersionService:
                 except (TypeError, ValueError):
                     continue
                 parts.setdefault(fid, []).append(src.get("text") or "")
-        except Exception as e:  # noqa: BLE001 — degrade to pure simhash on any ES error
+        except Exception as e:
             logger.warning(f"act=tfidf_fetch_chunk_texts knowledge_id={getattr(knowledge, 'id', None)} error={e}")
             return {}
         return {fid: "\n".join(chunks) for fid, chunks in parts.items()}
@@ -709,18 +753,19 @@ class KnowledgeVersionService:
         redis_client = None
         try:
             redis_client = await get_redis_client()
-        except Exception as e:  # noqa: BLE001 — cache is best-effort
+        except Exception as e:
             logger.warning(f"act=tfidf_token_cache redis_unavailable error={e}")
 
         # 1) Batch read. Per-key aget on purpose: amget() drops misses, which
         # would break positional alignment with the input list.
         if redis_client is not None:
+
             async def _read(k: str | None):
                 if k is None:
                     return None
                 try:
                     return await redis_client.aget(k)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return None
 
             for i, val in enumerate(await asyncio.gather(*[_read(k) for k in keys])):
@@ -740,7 +785,7 @@ class KnowledgeVersionService:
         if redis_client is not None and to_write:
             try:
                 await redis_client.amset(to_write, expiration=self._TFIDF_TOKEN_CACHE_TTL)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"act=tfidf_token_cache mset_failed error={e}")
 
         return results  # type: ignore[return-value]  # every slot is filled above
@@ -774,6 +819,7 @@ class KnowledgeVersionService:
         tfidf_threshold: float = getattr(vmc, "tfidf_similarity_threshold", 0.3) if vmc else 0.3
 
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
         knowledge = await KnowledgeDao.aquery_by_id(current_file.knowledge_id)
         if knowledge is None:
             return degraded
@@ -793,14 +839,17 @@ class KnowledgeVersionService:
         # Candidates recur across recommendation requests, so this skips the hot
         # jieba step on repeats; a re-parsed file gets a new simhash -> cache miss.
         all_tokens = await self._tokenize_files_cached(
-            [(current_file, query_text)] + list(zip((c for _, c in scored), candidate_texts))
+            [
+                (current_file, query_text),
+                *zip((c for _, c in scored), candidate_texts, strict=True),
+            ]
         )
         query_tokens, candidate_tokens = all_tokens[0], all_tokens[1:]
         cosines = tfidf_cosine_scores_from_tokens(query_tokens, candidate_tokens)
 
         refined: list[tuple[float, float | None, KnowledgeFile]] = []
         unscored: list[tuple[float, float | None, KnowledgeFile]] = []
-        for (sim, c), text, cos in zip(scored, candidate_texts, cosines):
+        for (sim, c), text, cos in zip(scored, candidate_texts, cosines, strict=True):
             if not text.strip():
                 # ES gap for this candidate — can't refine; keep, order last.
                 unscored.append((sim, None, c))
@@ -852,19 +901,24 @@ class KnowledgeVersionService:
             versioned_file_ids.add(int(kf.id))
             if can_view_file is not None and not await can_view_file(int(kf.id)):
                 continue
-            haystack = " ".join([
-                kf.file_name or "",
-                getattr(kf, "file_encoding", "") or "",
-            ]).lower()
+            haystack = " ".join(
+                [
+                    kf.file_name or "",
+                    getattr(kf, "file_encoding", "") or "",
+                ]
+            ).lower()
             if keyword_lower and keyword_lower not in haystack:
                 continue
-            out.append(ShougangFilePublishDocumentEntry(
-                document_id=doc.id, title=kf.file_name,
-                doc_code=getattr(kf, "file_encoding", None),
-                current_primary_version_no=primary_v.version_no,
-                primary_uploader_name=kf.user_name,
-                primary_upload_time=kf.create_time,
-            ))
+            out.append(
+                ShougangFilePublishDocumentEntry(
+                    document_id=doc.id,
+                    title=kf.file_name,
+                    doc_code=getattr(kf, "file_encoding", None),
+                    current_primary_version_no=primary_v.version_no,
+                    primary_uploader_name=kf.user_name,
+                    primary_upload_time=kf.create_time,
+                )
+            )
 
         if hasattr(self.knowledge_file_repo, "find_success_files_in_space"):
             files = await self.knowledge_file_repo.find_success_files_in_space(
@@ -887,21 +941,25 @@ class KnowledgeVersionService:
                 continue
             if can_view_file is not None and not await can_view_file(int(kf.id)):
                 continue
-            haystack = " ".join([
-                kf.file_name or "",
-                getattr(kf, "file_encoding", "") or "",
-            ]).lower()
+            haystack = " ".join(
+                [
+                    kf.file_name or "",
+                    getattr(kf, "file_encoding", "") or "",
+                ]
+            ).lower()
             if keyword_lower and keyword_lower not in haystack:
                 continue
-            out.append(ShougangFilePublishDocumentEntry(
-                document_id=None,
-                target_file_id=int(kf.id),
-                title=kf.file_name,
-                doc_code=getattr(kf, "file_encoding", None),
-                current_primary_version_no=1,
-                primary_uploader_name=kf.user_name,
-                primary_upload_time=kf.create_time,
-            ))
+            out.append(
+                ShougangFilePublishDocumentEntry(
+                    document_id=None,
+                    target_file_id=int(kf.id),
+                    title=kf.file_name,
+                    doc_code=getattr(kf, "file_encoding", None),
+                    current_primary_version_no=1,
+                    primary_uploader_name=kf.user_name,
+                    primary_upload_time=kf.create_time,
+                )
+            )
         return out
 
     async def ensure_shougang_publish_document_for_file(self, knowledge_file_id: int) -> int:
@@ -911,11 +969,7 @@ class KnowledgeVersionService:
         from bisheng.common.errcode.knowledge_space import VersionLinkTargetUnavailableError
 
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if (
-            kf is None
-            or kf.file_type != FileType.FILE.value
-            or kf.status != KnowledgeFileStatus.SUCCESS.value
-        ):
+        if kf is None or kf.file_type != FileType.FILE.value or kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkTargetUnavailableError()
 
         existing_version = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
@@ -925,17 +979,21 @@ class KnowledgeVersionService:
                 raise VersionLinkTargetUnavailableError()
             return int(existing_version.document_id)
 
-        doc = await self.doc_repo.save(KnowledgeDocument(
-            knowledge_id=int(kf.knowledge_id),
-            file_level_path=getattr(kf, "file_level_path", None),
-            level=getattr(kf, "level", 0),
-        ))
-        version = await self.version_repo.save(KnowledgeDocumentVersion(
-            document_id=int(doc.id),
-            knowledge_file_id=int(kf.id),
-            version_no=1,
-            is_primary=True,
-        ))
+        doc = await self.doc_repo.save(
+            KnowledgeDocument(
+                knowledge_id=int(kf.knowledge_id),
+                file_level_path=getattr(kf, "file_level_path", None),
+                level=getattr(kf, "level", 0),
+            )
+        )
+        version = await self.version_repo.save(
+            KnowledgeDocumentVersion(
+                document_id=int(doc.id),
+                knowledge_file_id=int(kf.id),
+                version_no=1,
+                is_primary=True,
+            )
+        )
         await self.doc_repo.update_primary_version_id(int(doc.id), int(version.id))
         return int(doc.id)
 
@@ -943,6 +1001,7 @@ class KnowledgeVersionService:
         self,
         current_knowledge_file_id: int,
         source_document_id: int,
+        force: bool = False,
     ):
         """Merge a single-version source document into the current file's document
         chain. The source's V1 file becomes the new primary version of the current
@@ -992,7 +1051,8 @@ class KnowledgeVersionService:
             raise VersionLinkSourceFileMissingError()
         if source_doc.knowledge_id != current_kf.knowledge_id:
             raise HTTPException(
-                status_code=409, detail="source document belongs to a different space",
+                status_code=409,
+                detail="source document belongs to a different space",
             )
 
         source_chain = await self.version_repo.find_by_document_id(source_document_id)
@@ -1010,7 +1070,7 @@ class KnowledgeVersionService:
         if source_kf.status != KnowledgeFileStatus.SUCCESS.value:
             # File still around but not finished parsing.
             raise VersionLinkFileNotReadyError()
-        if not await self._similarity_matches_threshold(current_kf, source_kf):
+        if not force and not await self._similarity_matches_threshold(current_kf, source_kf):
             raise HTTPException(status_code=409, detail="source document is not similar to current file")
 
         existing = await self.version_repo.find_by_document_id(target_doc_id)
@@ -1048,7 +1108,11 @@ class KnowledgeVersionService:
             await self.knowledge_file_repo.update(source_kf)
 
         KnowledgeAuditTelemetryService.audit_link_file_version(
-            self.login_user, self.request, current_kf.knowledge_id, source_kf.file_name, next_no,
+            self.login_user,
+            self.request,
+            current_kf.knowledge_id,
+            source_kf.file_name,
+            next_no,
         )
 
         return LinkResponse(document_id=target_doc_id, new_version_no=next_no)
@@ -1082,7 +1146,8 @@ class KnowledgeVersionService:
         self_doc_id = self_v.document_id if self_v else None
 
         candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id, exclude_file_id=knowledge_file_id,
+            knowledge_id=kf.knowledge_id,
+            exclude_file_id=knowledge_file_id,
         )
 
         scored: list[tuple[float, KnowledgeFile]] = []
@@ -1109,16 +1174,18 @@ class KnowledgeVersionService:
                 continue  # orphaned file — no version row
             if self_doc_id is not None and v.document_id == self_doc_id:
                 continue  # exclude the requester's own document
-            out.append(SimilarCandidateEntry(
-                target_document_id=v.document_id,
-                title=c.file_name,
-                doc_code=getattr(c, "file_encoding", None),
-                current_primary_version_no=v.version_no,
-                similarity=sim,
-                refined_similarity=refined_sim,
-                primary_uploader_name=getattr(c, "user_name", None),
-                primary_upload_time=getattr(c, "create_time", None),
-            ))
+            out.append(
+                SimilarCandidateEntry(
+                    target_document_id=v.document_id,
+                    title=c.file_name,
+                    doc_code=getattr(c, "file_encoding", None),
+                    current_primary_version_no=v.version_no,
+                    similarity=sim,
+                    refined_similarity=refined_sim,
+                    primary_uploader_name=getattr(c, "user_name", None),
+                    primary_upload_time=getattr(c, "create_time", None),
+                )
+            )
         return out
 
     async def get_similar_candidates_for_file_in_space(

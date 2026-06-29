@@ -343,7 +343,7 @@ class ShougangPortalFileSearchReq(BaseModel):
     space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
     file_ext: Optional[str] = Field(default=None, description="File extension filter")
     document_type: Optional[str] = Field(default=None, description="Document type code from file_encoding segment 2")
-    sort: str = Field(default="updated_at", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc")
+    sort: str = Field(default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc")
     rerank_model_id: Optional[str] = Field(default=None, description="Optional rerank model ID for this portal search request")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)

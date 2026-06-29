@@ -29,12 +29,18 @@ interface RelateDocumentPanelProps {
     className?: string;
 }
 
+interface LinkTarget {
+    document_id: number;
+    title: string;
+    force?: boolean;
+}
+
 // ─── Recommendation card ───────────────────────────────────────────────────────
 
 interface RecommendationCardProps {
     entry: SimilarCandidateEntry;
     disabled: boolean;
-    onLink: (doc: { document_id: number; title: string }) => void;
+    onLink: (doc: LinkTarget) => void;
 }
 
 function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps) {
@@ -96,7 +102,7 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
 interface SearchResultRowProps {
     entry: SearchableDocumentEntry;
     disabled: boolean;
-    onLink: (doc: { document_id: number; title: string }) => void;
+    onLink: (doc: LinkTarget) => void;
 }
 
 function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
@@ -115,7 +121,7 @@ function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
                 type="button"
                 size="sm"
                 disabled={disabled}
-                onClick={() => onLink({ document_id: entry.document_id, title: entry.title })}
+                onClick={() => onLink({ document_id: entry.document_id, title: entry.title, force: true })}
                 className="h-8 shrink-0 rounded-[6px] bg-[#165DFF] px-4 text-[12px] text-white hover:bg-[#4080FF]"
             >
                 <Link2 className="mr-1.5 size-4" />
@@ -155,10 +161,11 @@ export function RelateDocumentPanel({
     });
 
     const linkMutation = useMutation({
-        mutationFn: (source_document_id: number) =>
+        mutationFn: (target: { source_document_id: number; force?: boolean }) =>
             mergeIntoCurrentApi({
                 current_knowledge_file_id: fileId,
-                source_document_id,
+                source_document_id: target.source_document_id,
+                force: target.force,
             }),
         onSuccess: (response) => {
             showToast({
@@ -174,7 +181,7 @@ export function RelateDocumentPanel({
         onError: () => undefined,
     });
 
-    const handleLink = async (targetDoc: { document_id: number; title: string }) => {
+    const handleLink = async (targetDoc: LinkTarget) => {
         const ok = await confirm({
             title: localize("com_knowledge.version.confirm_link_title"),
             description: localize("com_knowledge.version.confirm_merge_description", {
@@ -183,7 +190,10 @@ export function RelateDocumentPanel({
             }),
         });
         if (ok) {
-            linkMutation.mutate(targetDoc.document_id);
+            linkMutation.mutate({
+                source_document_id: targetDoc.document_id,
+                force: targetDoc.force,
+            });
         }
     };
 

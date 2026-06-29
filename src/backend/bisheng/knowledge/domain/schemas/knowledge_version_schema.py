@@ -1,6 +1,6 @@
 """Schemas for the version management API."""
+
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -11,39 +11,39 @@ class VersionEntry(BaseModel):
     is_primary: bool
     knowledge_file_id: int
     original_file_name: str
-    file_code: Optional[str] = None  # = knowledgefile.file_encoding (Shougang feature)
-    uploader_name: Optional[str] = None
-    uploader_id: Optional[int] = None
-    upload_time: Optional[datetime] = None
-    status: Optional[int] = None  # knowledgefile.status
+    file_code: str | None = None  # = knowledgefile.file_encoding (Shougang feature)
+    uploader_name: str | None = None
+    uploader_id: int | None = None
+    upload_time: datetime | None = None
+    status: int | None = None  # knowledgefile.status
 
 
 class VersionListResponse(BaseModel):
     document_id: int
     knowledge_id: int
     title: str
-    doc_code: Optional[str] = None
-    current_primary_version_no: Optional[int] = None
-    versions: List[VersionEntry]
+    doc_code: str | None = None
+    current_primary_version_no: int | None = None
+    versions: list[VersionEntry]
 
 
 class AssociableDocumentEntry(BaseModel):
     document_id: int
     title: str
-    doc_code: Optional[str] = None
+    doc_code: str | None = None
     current_primary_version_no: int
-    primary_uploader_name: Optional[str] = None
-    primary_upload_time: Optional[datetime] = None
+    primary_uploader_name: str | None = None
+    primary_upload_time: datetime | None = None
 
 
 class ShougangFilePublishDocumentEntry(BaseModel):
-    document_id: Optional[int] = None
-    target_file_id: Optional[int] = None
+    document_id: int | None = None
+    target_file_id: int | None = None
     title: str
-    doc_code: Optional[str] = None
-    current_primary_version_no: Optional[int] = None
-    primary_uploader_name: Optional[str] = None
-    primary_upload_time: Optional[datetime] = None
+    doc_code: str | None = None
+    current_primary_version_no: int | None = None
+    primary_uploader_name: str | None = None
+    primary_upload_time: datetime | None = None
 
 
 class LinkRequest(BaseModel):
@@ -61,8 +61,10 @@ class MergeRequest(BaseModel):
     current file's document chain as its new primary version. Reverse semantics
     of LinkRequest — current document absorbs the source.
     """
+
     current_knowledge_file_id: int
     source_document_id: int
+    force: bool = False
 
 
 class SetPrimaryResponse(BaseModel):
@@ -78,21 +80,21 @@ class DeleteVersionResponse(BaseModel):
 class SimilarCandidateEntry(BaseModel):
     target_document_id: int
     title: str
-    doc_code: Optional[str] = None
+    doc_code: str | None = None
     current_primary_version_no: int
     similarity: float  # raw simhash similarity (1 - hamming/64), kept for tuning/debugging
-    refined_similarity: Optional[float] = None  # TF-IDF cosine over chunk text; None when refine skipped
-    primary_uploader_name: Optional[str] = None
-    primary_upload_time: Optional[datetime] = None
+    refined_similarity: float | None = None  # TF-IDF cosine over chunk text; None when refine skipped
+    primary_uploader_name: str | None = None
+    primary_upload_time: datetime | None = None
 
 
 class PendingSimilarFileEntry(BaseModel):
     knowledge_file_id: int
     file_name: str
-    file_code: Optional[str] = None  # knowledgefile.file_encoding
+    file_code: str | None = None  # knowledgefile.file_encoding
     candidate_count: int  # how many similar candidates currently >= threshold
     current_primary_version_no: int = 1
-    primary_uploader_name: Optional[str] = None
+    primary_uploader_name: str | None = None
 
 
 class DismissSimilarResponse(BaseModel):

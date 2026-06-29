@@ -2492,6 +2492,7 @@ export async function searchVersionSourcesApi(
 export interface MergeIntoCurrentPayload {
     current_knowledge_file_id: number;
     source_document_id: number;
+    force?: boolean;
 }
 
 /**

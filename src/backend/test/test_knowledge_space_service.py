@@ -1284,6 +1284,12 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
     assert result['data'][0]['tag_infos'] == [{'tag_name': '热轧', 'resource_type': ''}]
 
 
+def test_shougang_portal_file_search_request_defaults_to_relevance_sort():
+    req = ShougangPortalFileSearchReq(space_ids=[12])
+
+    assert req.sort == 'relevance'
+
+
 @pytest.mark.asyncio
 async def test_shougang_portal_file_search_filters_document_type_before_pagination(service):
     space = _make_space(space_id=12, user_id=7)
@@ -1557,7 +1563,7 @@ async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_p
     assert result['page'] == 1
     assert result['page_size'] == 50
     assert result['total'] == 2
-    assert [item['id'] for item in result['data']] == [1801, 1580]
+    assert [item['id'] for item in result['data']] == [1580, 1801]
 
 
 @pytest.mark.asyncio
@@ -1940,6 +1946,86 @@ async def test_shougang_portal_rerank_failure_falls_back_to_fusion_order(service
     assert result is candidates
     assert [candidate.file_id for candidate in result] == [6201, 6202]
     assert all(candidate.rerank_score is None for candidate in result)
+
+
+def test_shougang_portal_title_match_priority_beats_rerank_score(service):
+    title_match_candidate = PortalFileCandidate(
+        file_id=6301,
+        knowledge_id=12,
+        fusion_score=0.1,
+        rerank_score=0.2,
+    )
+    content_only_candidate = PortalFileCandidate(
+        file_id=6302,
+        knowledge_id=12,
+        fusion_score=0.9,
+        rerank_score=0.98,
+    )
+    file_map = {
+        6301: _make_file(file_id=6301, knowledge_id=12, file_name='热轧振动纹治理专题.pdf'),
+        6302: _make_file(file_id=6302, knowledge_id=12, file_name='热轧泛化资料.pdf'),
+    }
+    candidates = [content_only_candidate, title_match_candidate]
+
+    service._score_shougang_portal_candidate_title_matches(
+        keyword='热轧振动纹如何治理',
+        candidates=candidates,
+        file_map=file_map,
+    )
+    result = service._sort_shougang_portal_semantic_candidates(
+        candidates=candidates,
+        sort='relevance',
+        file_map=file_map,
+    )
+
+    assert [candidate.file_id for candidate in result] == [6301, 6302]
+    assert title_match_candidate.title_match_tier > content_only_candidate.title_match_tier
+
+
+def test_shougang_portal_title_match_does_not_affect_updated_at_sort(service):
+    old_title_match = _make_file(file_id=6401, knowledge_id=12, file_name='热轧振动纹治理专题.pdf')
+    new_content_only = _make_file(file_id=6402, knowledge_id=12, file_name='热轧泛化资料.pdf')
+    old_title_match.update_time = datetime(2024, 1, 1, 8, 0, 0)
+    new_content_only.update_time = datetime(2024, 2, 1, 8, 0, 0)
+    candidates = [
+        PortalFileCandidate(file_id=6401, knowledge_id=12, fusion_score=0.1),
+        PortalFileCandidate(file_id=6402, knowledge_id=12, fusion_score=0.9),
+    ]
+    file_map = {
+        6401: old_title_match,
+        6402: new_content_only,
+    }
+
+    service._score_shougang_portal_candidate_title_matches(
+        keyword='热轧振动纹如何治理',
+        candidates=candidates,
+        file_map=file_map,
+    )
+    result = service._sort_shougang_portal_semantic_candidates(
+        candidates=candidates,
+        sort='updated_at_desc',
+        file_map=file_map,
+    )
+
+    assert [candidate.file_id for candidate in result] == [6402, 6401]
+
+
+def test_shougang_portal_rerank_text_includes_file_name(service):
+    candidate = PortalFileCandidate(
+        file_id=6501,
+        knowledge_id=12,
+        chunks=[
+            SimpleNamespace(content='精轧机振动纹治理原因和处理步骤', rank=1),
+        ],
+    )
+    file_map = {
+        6501: _make_file(file_id=6501, knowledge_id=12, file_name='热轧振动纹治理专题.pdf'),
+    }
+
+    text = service._get_shougang_portal_candidate_rerank_text(candidate, file_map)
+
+    assert '文档名称: 热轧振动纹治理专题' in text
+    assert '相关内容: 精轧机振动纹治理原因和处理步骤' in text
 
 
 @pytest.mark.asyncio
