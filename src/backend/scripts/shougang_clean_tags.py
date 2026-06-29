@@ -37,47 +37,50 @@ if _BACKEND_ROOT not in sys.path:
 from sqlmodel import delete, func, select
 
 from bisheng.core.database import get_async_db_session
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.tag import Tag, TagLink
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 
 
 async def count_tags(business_types: list[str]) -> dict:
     """Return row counts before deletion."""
-    async with get_async_db_session() as session:
-        tag_count = await session.scalar(
-            select(func.count(Tag.id)).where(Tag.business_type.in_(business_types))
-        )
-        tag_link_count = await session.scalar(
-            select(func.count(TagLink.id)).join(
-                Tag, Tag.id == TagLink.tag_id
-            ).where(Tag.business_type.in_(business_types))
-        )
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            tag_count = await session.scalar(
+                select(func.count(Tag.id)).where(Tag.business_type.in_(business_types))
+            )
+            tag_link_count = await session.scalar(
+                select(func.count(TagLink.id)).join(
+                    Tag, Tag.id == TagLink.tag_id
+                ).where(Tag.business_type.in_(business_types))
+            )
     return {"tag": tag_count or 0, "tag_link": tag_link_count or 0}
 
 
 async def count_review_tags() -> dict:
-    async with get_async_db_session() as session:
-        rt_count = await session.scalar(select(func.count(ReviewTag.id)))
-        rtl_count = await session.scalar(select(func.count(ReviewTagLink.id)))
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            rt_count = await session.scalar(select(func.count(ReviewTag.id)))
+            rtl_count = await session.scalar(select(func.count(ReviewTagLink.id)))
     return {"review_tag": rt_count or 0, "review_tag_link": rtl_count or 0}
 
 
 async def delete_tags(business_types: list[str]) -> dict:
     """Delete tags and their links for the given business_types. Returns deleted counts."""
-    async with get_async_db_session() as session:
-        # Collect tag ids to delete first (needed for tag_link cascade)
-        tag_ids_rows = await session.exec(
-            select(Tag.id).where(Tag.business_type.in_(business_types))
-        )
-        tag_ids = [row for row in tag_ids_rows]
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            tag_ids_rows = await session.exec(
+                select(Tag.id).where(Tag.business_type.in_(business_types))
+            )
+            tag_ids = [row for row in tag_ids_rows]
 
-        link_result = await session.exec(
-            delete(TagLink).where(TagLink.tag_id.in_(tag_ids))
-        )
-        tag_result = await session.exec(
-            delete(Tag).where(Tag.id.in_(tag_ids))
-        )
-        await session.commit()
+            link_result = await session.exec(
+                delete(TagLink).where(TagLink.tag_id.in_(tag_ids))
+            )
+            tag_result = await session.exec(
+                delete(Tag).where(Tag.id.in_(tag_ids))
+            )
+            await session.commit()
 
     return {
         "tag": tag_result.rowcount if hasattr(tag_result, 'rowcount') else len(tag_ids),
@@ -87,17 +90,18 @@ async def delete_tags(business_types: list[str]) -> dict:
 
 async def delete_review_tags() -> dict:
     """Delete all review tags and their links."""
-    async with get_async_db_session() as session:
-        rt_ids_rows = await session.exec(select(ReviewTag.id))
-        rt_ids = [row for row in rt_ids_rows]
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            rt_ids_rows = await session.exec(select(ReviewTag.id))
+            rt_ids = [row for row in rt_ids_rows]
 
-        rtl_result = await session.exec(
-            delete(ReviewTagLink).where(ReviewTagLink.tag_id.in_(rt_ids))
-        )
-        rt_result = await session.exec(
-            delete(ReviewTag).where(ReviewTag.id.in_(rt_ids))
-        )
-        await session.commit()
+            rtl_result = await session.exec(
+                delete(ReviewTagLink).where(ReviewTagLink.tag_id.in_(rt_ids))
+            )
+            rt_result = await session.exec(
+                delete(ReviewTag).where(ReviewTag.id.in_(rt_ids))
+            )
+            await session.commit()
 
     return {
         "review_tag": rt_result.rowcount if hasattr(rt_result, 'rowcount') else len(rt_ids),
