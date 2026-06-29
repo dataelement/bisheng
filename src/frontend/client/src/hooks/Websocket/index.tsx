@@ -25,11 +25,18 @@ export const useLinsightWebSocket = (versionId) => {
 
     // 使用 ref 存储当前活跃版本 ID
     const activeVersionIdRef = useRef(versionId);
+    // Live mirror of task.running, read inside the (stable, []-deps) connect
+    // callback's onclose retry to avoid a stale closure and to gate reconnects.
+    const runningRef = useRef(false);
 
     // 同步最新活跃版本 ID
     useEffect(() => {
         activeVersionIdRef.current = versionId;
     }, [versionId]);
+
+    useEffect(() => {
+        runningRef.current = task.running;
+    }, [task.running]);
 
 
     const connect = useCallback((id: string, msg: any) => {
@@ -342,6 +349,12 @@ export const useLinsightWebSocket = (versionId) => {
                 delete connections[id];
                 if (maxRetryCountRef.current > 0) {
                     setTimeout(() => {
+                        // Guard against zombie reconnects: only relink if this
+                        // version is still the active one AND its task is still
+                        // running. A completed / parked / navigated-away session
+                        // must not be resurrected (the server closes it again,
+                        // which would just burn through the retry budget).
+                        if (activeVersionIdRef.current !== id || !runningRef.current) return;
                         connect(id, { type: 'relink' })
                         maxRetryCountRef.current--;
                     }, 1000);
@@ -411,28 +424,29 @@ export const useLinsightWebSocket = (versionId) => {
                         ? { ...s, is_completed: true, user_input: s.user_input || user_input, files: s.files || files }
                         : s
                 ),
-                tasks: prev.tasks.map(task => ({
-                    ...task,
-                    status: task_id === task.id ? "success" : task.status,
-                    history: task.history?.map(h => ({
-                        ...h,
-                        is_completed: true,
-                        user_input: h.user_input || user_input,
-                        files: h.files || files
-                    })),
-                    children: task.children
-                        ? task.children.map(child => ({
-                            ...child,
-                            status: task_id === child.id ? "success" : child.status,
-                            history: child.history?.map(h => ({
-                                ...h,
-                                is_completed: true,
-                                user_input: h.user_input || user_input,
-                                files: h.files || files
-                            })),
-                        }))
-                        : [],
-                })),
+                // Only stamp the answered task's OPEN clarify entry — mirrors the
+                // WS `user_input_completed` handler. The previous version blanket-
+                // marked every history entry of every task is_completed AND forced
+                // the answered task to "success", but answering a clarify RESUMES
+                // execution (≠ completion) and must not touch sibling tasks / steps.
+                // Status is left to the WS stream.
+                tasks: prev.tasks.map(task => {
+                    const stampOpenClarify = (h: any) =>
+                        h?.step_type === 'call_user_input' && !h.is_completed
+                            ? { ...h, is_completed: true, user_input: h.user_input || user_input, files: h.files || files }
+                            : h;
+                    if (task.id === task_id) {
+                        return { ...task, history: task.history?.map(stampOpenClarify) };
+                    }
+                    return {
+                        ...task,
+                        children: (task.children || []).map(child =>
+                            child.id === task_id
+                                ? { ...child, history: child.history?.map(stampOpenClarify) }
+                                : child
+                        ),
+                    };
+                }),
             }));
         }
     }, [versionId]);

@@ -193,6 +193,12 @@ customAxios.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Gateway/backend service exception → surface the global maintenance overlay.
+    // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
+    if (error.response.status === 500) {
+      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
+    }
+
     if (originalRequest.url?.includes('/api/auth/2fa') === true) {
       return Promise.reject(error);
     }

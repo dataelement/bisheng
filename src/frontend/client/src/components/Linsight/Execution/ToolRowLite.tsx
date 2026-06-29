@@ -77,8 +77,10 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
 
     const title = resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
-    // stepTypeIcon recolored to Ink via the descendant selector.
-    const icon = step.running
+    // stepTypeIcon recolored to Ink via the descendant selector. Open-aware:
+    // the spinner shows only while COLLAPSED + running; once expanded the node
+    // reverts to its own glyph (the running child below carries the live state).
+    const icon = step.running && !(hasDetails && open)
         ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
         : <span className={cn('flex', INK_GLYPH)}>{stepTypeIcon(step.name)}</span>;
 

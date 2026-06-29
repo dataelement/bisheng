@@ -16,12 +16,24 @@ import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
 import { composeClarifyAnswer, parseClarifyRequest } from './stepUtils';
+import { ClarifyFallbackCard } from './ClarifyFallbackCard';
 
 interface ClarifyCardProps {
     data: ExecStepEventData;
     disabled?: boolean;
     /** submit the merged answer; rides the existing user-input API upstream */
     onSubmit: (taskId: string, answer: string) => void;
+}
+
+/**
+ * Dispatcher: route to the ima-style fallback when the ask_user payload yields no
+ * parseable questions (the parse-failure degrade — previously a bare textarea), or
+ * to the unchanged interactive card otherwise. Only ONE hook (useMemo) runs here
+ * unconditionally so the Rules of Hooks hold; each child owns its own hooks.
+ */
+export function ClarifyCard(props: ClarifyCardProps) {
+    const hasQuestions = useMemo(() => parseClarifyRequest(props.data).questions.length > 0, [props.data]);
+    return hasQuestions ? <ClarifyCardInteractive {...props} /> : <ClarifyFallbackCard {...props} />;
 }
 
 const CUSTOM_KEY = '__custom__';
@@ -38,7 +50,9 @@ const parseOption = (text: string) => {
     return { title: text, desc: '' };
 };
 
-export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardProps) {
+// Interactive structured card (one question per page, clickable options). Unchanged
+// from the original ClarifyCard — only reached when there ARE parseable questions.
+function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCardProps) {
     const localize = useLocalize();
     const request = useMemo(() => parseClarifyRequest(data), [data]);
     const { questions } = request;
@@ -228,7 +242,10 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         disabled={disabled || submitted}
                                         onClick={() => handleSelect(q, option)}
                                         className={cn(
-                                            'flex h-9 w-full items-center gap-2 rounded-lg px-4 text-left text-sm transition-all duration-200 select-none border-0',
+                                            // items-start + py (no fixed height): the row grows with
+                                            // wrapped content and the leading number aligns to the
+                                            // FIRST line of text, not the vertical center.
+                                            'flex w-full items-start gap-2 rounded-lg px-4 py-2 text-left text-sm transition-all duration-200 select-none border-0',
                                             active
                                                 ? 'bg-[#EEE] text-[#212121] font-medium'
                                                 : 'text-[#1A1A1A] hover:bg-gray-50/80',

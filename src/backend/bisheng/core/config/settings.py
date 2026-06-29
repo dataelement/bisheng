@@ -284,6 +284,12 @@ class FairSchedulerConf(BaseModel):
     # share is proportional to its weight; default 1 means equal shares.
     per_user_pick_size: int = Field(default=1, ge=1)
     user_overrides: dict[str, int] = Field(default_factory=dict)
+    # DEPRECATED / no longer read. Crash recovery used to wait out this timeout
+    # before reconcile re-enqueued a stuck PROCESSING file; that could not tell a
+    # long-but-healthy parse from a dead worker. Recovery is now driven by the
+    # per-file parse lock's liveness (see ``parse_lock_ttl_seconds``): lock alive
+    # → healthy parse, leave it; lock dead → worker crashed, recover immediately.
+    # Kept only so existing config.yaml files don't fail to load.
     inflight_ttl_seconds: int = Field(default=7200, ge=60)
     # Payload TTL is only a leak backstop: payload is deleted on confirm/purge in
     # the normal lifecycle, so this just bounds how long an enqueued-but-never-
@@ -291,6 +297,13 @@ class FairSchedulerConf(BaseModel):
     # residency — otherwise a file still waiting in the FIFO loses its dispatch
     # context (the historical poison-pill / head-of-line-blocking bug). Default 7d.
     payload_ttl_seconds: int = Field(default=604800, ge=3600)
+    # Per-file parse lock TTL. A parse task holds ``parse_lock:<file_id>`` for its
+    # whole duration so a file is never parsed by two workers at once (duplicates
+    # arrive via acks_late broker redelivery or reconcile re-enqueue). A heartbeat
+    # refreshes it every ~ttl/3, so on worker death the lock self-clears within
+    # this window and recovery can re-dispatch. Keep it well above one refresh
+    # interval but small enough that a dead worker frees the file promptly.
+    parse_lock_ttl_seconds: int = Field(default=600, ge=30)
 
     @model_validator(mode="after")
     def validate(self):

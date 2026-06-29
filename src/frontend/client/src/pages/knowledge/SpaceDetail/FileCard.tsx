@@ -151,7 +151,9 @@ export function FileCard({
     const isFolder = file.type === FileType.FOLDER;
     // A folder still uploading its batch: shown only as a name with a translucent
     // "uploading" overlay, not clickable, not a drag source / drop target.
-    const isUploadingFolderPlaceholder = isFolder && isUploading;
+    // Inline-create placeholders (isCreating) are excluded — a freshly created
+    // folder is a normal folder with a highlighted rename input, no scrim/tag.
+    const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */

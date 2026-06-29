@@ -66,7 +66,12 @@ const AiModelSelect = memo(
                         </span>
                     </div>
                 </SelectTrigger>
-                <SelectContent auto className="bg-white w-[200px]">
+                {/* Width auto-fits the longest model displayName, bounded so it
+                    doesn't shrink absurdly narrow on 2-char names or balloon on
+                    very long ones. `auto` (see SelectContent) keeps the popup
+                    from being forced to the trigger's width. No flash on open:
+                    the model list is already in memory via `options`. */}
+                <SelectContent auto className="bg-white w-auto min-w-[140px] max-w-[280px]">
                     {uniqueOptions.map((opt) => (
                         <SelectItem key={opt.id + ""} value={opt.id + ""}>
                             {opt.displayName}

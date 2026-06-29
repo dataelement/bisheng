@@ -284,7 +284,7 @@ export function KnowledgeAiInput({
             {isStreaming ? (
                 <button
                     type="button"
-                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
+                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
                     onClick={onStop}
                     aria-label="Stop generating"
                 >
@@ -304,7 +304,7 @@ export function KnowledgeAiInput({
                     type="button"
                     onClick={handleSend}
                     disabled={disabled || !inputText.trim()}
-                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
+                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
                     aria-label="Send message"
                     data-testid="send-button"
                 >

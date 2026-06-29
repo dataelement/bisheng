@@ -91,7 +91,8 @@ const CardShell = ({
             <button
                 type="button"
                 onClick={onRemove}
-                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex"
+                // Hover-reveal on desktop; always visible on touch (no hover there).
+                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex touch-mobile:flex"
                 aria-label="Remove"
             >
                 <X className="size-3" />
@@ -123,7 +124,7 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
 
 const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => (
     <CardShell
-        icon={<Sparkles className="size-4 text-[#165DFF]" />}
+        icon={<Sparkles className="size-4 text-blue-500" />}
         label={skill?.display_name || skill?.name || ""}
         onRemove={onRemove}
     />

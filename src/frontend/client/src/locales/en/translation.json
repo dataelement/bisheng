@@ -423,6 +423,9 @@
   "com_linsight_clarify_skipped": "Skipped",
   "com_linsight_clarify_next": "Next",
   "com_linsight_clarify_submit": "Confirm",
+  "com_linsight_clarify_skip_start": "Skip & start",
+  "com_linsight_clarify_supplement": "Add details",
+  "com_linsight_clarify_skip_answer": "Skipped",
   "com_linsight_task_panel": "Tasks",
   "com_linsight_task_panel_done": "Tasks completed",
   "com_linsight_task_terminated": "Task terminated",
@@ -1515,7 +1518,10 @@
     "center_title": "App Center",
     "empty_go_explore": "No apps used yet. Head to the app marketplace",
     "explore_more": "Explore more apps",
-    "recent_apps_hint": "Your recently used apps are all here～"
+    "recent_apps_hint": "Your recently used apps are all here～",
+    "service_maintenance_title": "System under maintenance",
+    "service_maintenance": "We're performing emergency maintenance; service will be back soon.",
+    "refresh": "Refresh to retry"
   },
   "com_knowledge": {
     "add_new": "Add",
@@ -1624,6 +1630,7 @@
     "format_list": "pdf (including scans), ofd, txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp, wps, dps, et",
     "get_download_link_failed": "Failed to get download link",
     "go_to_square": "Go to square",
+    "go_to_knowledge_square": "Go to knowledge square",
     "history_chat": "History session",
     "html_preview": "HTML Preview",
     "image_preview": "Image Preview",
@@ -1696,6 +1703,7 @@
     "no_matched_tags": "No matching tags",
     "no_more_content": "No more content",
     "no_related_content_please": "No related content, please",
+    "no_related_content_you_can": "No related content, you can",
     "no_tags": "No tags",
     "no_auto_tag_library": "No tag library is available. Create one in the admin Platform build module first.",
     "load_tag_libraries_failed": "Failed to load tag libraries. Please try again later.",

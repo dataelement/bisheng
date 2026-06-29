@@ -86,7 +86,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
     const titleColor = isDestructive ? "text-[#f53f3f]" : "text-[#1d2129]"
     const confirmColor = isDestructive
         ? "bg-[#f53f3f] hover:bg-[#f53f3f]/90"
-        : "bg-primary hover:bg-primary/90"
+        : "btn-brand-primary bg-primary hover:bg-primary/90"
     const accentIcon = options.icon ?? (isDestructive
         ? <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />
         : <AlertCircle className="size-5 shrink-0 text-[#ff7d00]" />)

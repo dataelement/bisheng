@@ -30,51 +30,51 @@ class InMemoryOpenFGAClient:
     # ----- Write operations (unified interface matching FGAClient) -----
 
     async def write_tuples(
-        self, writes: list[dict] = None, deletes: list[dict] = None,
+        self,
+        writes: list[dict] = None,
+        deletes: list[dict] = None,
     ) -> None:
         """Write and/or delete authorization tuples.
 
         Each item must have keys: user, relation, object.
         Matches FGAClient.write_tuples() signature.
         """
-        for item in (writes or []):
-            self._tuples.add((item['object'], item['relation'], item['user']))
-        for item in (deletes or []):
-            self._tuples.discard((item['object'], item['relation'], item['user']))
+        for item in writes or []:
+            self._tuples.add((item["object"], item["relation"], item["user"]))
+        for item in deletes or []:
+            self._tuples.discard((item["object"], item["relation"], item["user"]))
 
     # ----- Check operations -----
 
-    async def check(self, user: str, relation: str, object: str) -> bool:
-        """Check if user has relation to object (direct match only)."""
+    async def check(self, user: str, relation: str, object: str, consistency: str | None = None) -> bool:
+        """Check if user has relation to object (direct match only).
+
+        ``consistency`` mirrors the real client's signature; the in-memory store
+        is always strongly consistent, so the value is accepted and ignored.
+        """
         return (object, relation, user) in self._tuples
 
     # ----- List operations -----
 
     async def list_objects(self, user: str, relation: str, type: str) -> list[str]:
         """List all objects of given type that user has relation to."""
-        prefix = f'{type}:'
-        return [
-            obj for obj, rel, usr in self._tuples
-            if usr == user and rel == relation and obj.startswith(prefix)
-        ]
+        prefix = f"{type}:"
+        return [obj for obj, rel, usr in self._tuples if usr == user and rel == relation and obj.startswith(prefix)]
 
     async def list_users(self, relation: str, object: str, user_type: str) -> list[str]:
         """List all users of given type that have relation to object."""
-        prefix = f'{user_type}:'
-        return [
-            usr for obj, rel, usr in self._tuples
-            if obj == object and rel == relation and usr.startswith(prefix)
-        ]
+        prefix = f"{user_type}:"
+        return [usr for obj, rel, usr in self._tuples if obj == object and rel == relation and usr.startswith(prefix)]
 
     async def batch_check(self, checks: list[dict]) -> list[bool]:
         """Batch check multiple tuples. Returns list of booleans in same order."""
-        return [
-            (c['object'], c['relation'], c['user']) in self._tuples
-            for c in checks
-        ]
+        return [(c["object"], c["relation"], c["user"]) in self._tuples for c in checks]
 
     async def read_tuples(
-        self, user: str = None, relation: str = None, object: str = None,
+        self,
+        user: str = None,
+        relation: str = None,
+        object: str = None,
     ) -> list[dict]:
         """Read tuples matching the given filter.
 
@@ -88,7 +88,7 @@ class InMemoryOpenFGAClient:
                 continue
             if object and obj != object:
                 continue
-            results.append({'user': usr, 'relation': rel, 'object': obj})
+            results.append({"user": usr, "relation": rel, "object": obj})
         return results
 
     async def health(self) -> bool:
@@ -104,7 +104,7 @@ class InMemoryOpenFGAClient:
     async def delete_tuples(self, deletes: list[dict]) -> None:
         """Delete tuples (old interface). Prefer write_tuples(deletes=...)."""
         for item in deletes:
-            self._tuples.discard((item['object'], item['relation'], item['user']))
+            self._tuples.discard((item["object"], item["relation"], item["user"]))
 
     # ----- Test assertion helpers -----
 
@@ -113,9 +113,9 @@ class InMemoryOpenFGAClient:
         triple = (object, relation, user)
         if triple not in self._tuples:
             raise AssertionError(
-                f'Tuple not found: ({object}, {relation}, {user})\n'
-                f'Existing tuples ({len(self._tuples)}):\n'
-                + '\n'.join(f'  ({o}, {r}, {u})' for o, r, u in sorted(self._tuples))
+                f"Tuple not found: ({object}, {relation}, {user})\n"
+                f"Existing tuples ({len(self._tuples)}):\n"
+                + "\n".join(f"  ({o}, {r}, {u})" for o, r, u in sorted(self._tuples))
             )
 
     def assert_tuple_count(self, expected: int) -> None:
@@ -123,9 +123,8 @@ class InMemoryOpenFGAClient:
         actual = len(self._tuples)
         if actual != expected:
             raise AssertionError(
-                f'Expected {expected} tuples, got {actual}\n'
-                f'Tuples:\n'
-                + '\n'.join(f'  ({o}, {r}, {u})' for o, r, u in sorted(self._tuples))
+                f"Expected {expected} tuples, got {actual}\n"
+                f"Tuples:\n" + "\n".join(f"  ({o}, {r}, {u})" for o, r, u in sorted(self._tuples))
             )
 
     def reset(self) -> None:

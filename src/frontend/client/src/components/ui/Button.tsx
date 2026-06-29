@@ -8,12 +8,17 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        // `btn-brand-primary` applies the green-theme lime override (see style.css).
+        // Blue theme keeps the shared --primary color; other primary-token usages unaffected.
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90 btn-brand-primary',
         destructive:
           'bg-surface-destructive text-destructive-foreground hover:bg-surface-destructive-hover',
         outline:
           'text-text-primary border border-border-light bg-background hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        // Brand-tinted secondary: light brand bg + dark brand text. The blue-* utilities
+        // are re-pointed to the --brand-* vars, so this follows the blue⇄green theme.
+        secondaryBrand: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
         // hardcoded text color because of WCAG contrast issues (text-white)

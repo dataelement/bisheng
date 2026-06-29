@@ -16,8 +16,11 @@ export const INK = '#1D2129';
 export const MUTED = '#8A8A8A';
 /** Faint (极弱): separators / placeholders — replaces the old invisible grey. */
 export const FAINT = '#BFBFBF';
-/** Accent (唯一强调蓝): RUNNING only — live dot/spinner/timer/scan ridge. */
-export const ACCENT = '#2D6BFF';
+/** Accent (唯一强调色): RUNNING only — live dot/spinner/timer/scan ridge.
+ *  Follows the brand theme (blue⇄green) via the `--brand-main` channels, so the
+ *  running spinners track the active theme instead of a fixed blue. Used in
+ *  inline `style={{ color: ACCENT }}` (modern space-separated rgb() syntax). */
+export const ACCENT = 'rgb(var(--brand-main))';
 /** Body (正文灰): expanded thinking body (one notch darker than old #818181). */
 export const BODY = '#5C5C5C';
 /** Surface (面板底): subagent monitor panel ground, file-card ground. */

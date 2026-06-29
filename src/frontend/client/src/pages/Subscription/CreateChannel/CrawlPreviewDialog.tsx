@@ -24,8 +24,8 @@ import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/
 import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
 import type { InformationSource } from "~/api/channels";
 import type { CrawlPreview } from "../hooks/useCrawlQueue";
-import { ChannelBookIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
-import { CrawlingIllustration } from "~/components/illustrations";
+import { ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { CrawlingIllustration, EmptyStateIllustration } from "~/components/illustrations";
 import { cn } from "~/utils";
 import { extractApiStatusCode } from "../errorUtils";
 import { crawlErrorMessageKey } from "./crawlErrorUtils";
@@ -161,7 +161,7 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
             {status === "error" && (
                 <div className="flex min-h-[270px] flex-1 flex-col justify-between rounded border border-[#E5E6EB] px-6 py-8">
                     <div className="flex flex-1 flex-col items-center justify-center text-center">
-                        <ChannelBookIcon className="mb-5 w-[100px] h-[100px]" />
+                        <EmptyStateIllustration className="mb-5 size-[100px]" />
                         <p className="text-[14px] leading-6 text-[#4E5969]">
                             {localize(crawlErrorMessageKey(errorCode))}
                         </p>
@@ -408,7 +408,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                             <Button
                                 onClick={handleAddSource}
                                 disabled={status !== "success" || adding}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 border border-blue-500 text-white disabled:opacity-50 gap-2 touch-mobile:flex-1"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 border border-blue-500 text-white disabled:opacity-50 gap-2 touch-mobile:flex-1 btn-brand-primary"
                             >
                                 {adding && <Loader2 className="size-4 animate-spin" />}
                                 {localize("com_subscription.add_source")}
@@ -480,7 +480,7 @@ export function CrawlPreviewDialog({ open, onOpenChange, url, initialPreview }: 
                     <div className="flex justify-end">
                         <Button
                             onClick={() => onOpenChange(false)}
-                            className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 text-white"
+                            className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 text-white btn-brand-primary"
                         >
                             {localize("com_subscription.ok")}
                         </Button>

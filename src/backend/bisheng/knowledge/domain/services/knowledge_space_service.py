@@ -2534,6 +2534,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Returns the same list for convenience.
         """
         if not self.version_repo:
+            # version_repo is injected by the DI factory for the list/search paths
+            # that render version columns. Reaching _enrich_with_version_info without
+            # it means this instance was built bypassing that injection, so files
+            # would silently render as single-version. Surface the misconfiguration
+            # instead of masking it (no-op when version_repo is correctly injected).
+            logger.warning(
+                "KnowledgeSpaceService.version_repo not injected; skipping version enrichment "
+                "({} items would render as single-version)",
+                len(items),
+            )
             return items
 
         file_items = [it for it in items if it.file_type != FileType.DIR.value]
@@ -3009,6 +3019,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     }
                 }
             es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            # Bound the terms aggregation by the space's file count. Without an
+            # explicit size the ES terms agg defaults to 10 buckets, so a keyword
+            # matching the BODY of more than 10 files would silently surface only
+            # the top 10 (file-name matches are unaffected — they go through
+            # file_name=keyword below). Ceil defensively so a huge space cannot
+            # trigger a pathological aggregation; sum_other_doc_count flags the
+            # rare truncation past the ceiling.
+            file_count = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id) or 0
+            terms_size = min(max(file_count, 1), 10000)
             es_result = await es_vector.client.search(
                 index=space.index_name,
                 body={
@@ -3017,16 +3036,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "document_ids": {
                             "terms": {
                                 "field": "metadata.document_id",
+                                "size": terms_size,
                             }
                         }
                     },
                     "size": 0,
                 },
             )
-            aggregations = es_result.get("aggregations")
-            if aggregations:
-                for one in aggregations.get("document_ids", {}).get("buckets", []):
-                    extra_file_ids.append(one["key"])
+            document_ids_agg = (es_result.get("aggregations") or {}).get("document_ids", {})
+            for one in document_ids_agg.get("buckets", []):
+                extra_file_ids.append(one["key"])
+            other_doc_count = document_ids_agg.get("sum_other_doc_count", 0)
+            if other_doc_count:
+                logger.warning(
+                    "keyword search in space {} truncated content matches: {} docs beyond terms size {}",
+                    space_id,
+                    other_doc_count,
+                    terms_size,
+                )
             if filter_files:
                 extra_file_ids = list(set(filter_files) & set(extra_file_ids))
 

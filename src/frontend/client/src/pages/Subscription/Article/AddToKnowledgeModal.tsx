@@ -209,7 +209,7 @@ function TreeNode({
         <div className="w-full min-w-0 max-w-full">
             <div
                 className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
-                    ${isSelected ? "bg-[#EEF2FF] text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
+                    ${isSelected ? "bg-blue-50 text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
                     transitionProperty: 'background-color',
@@ -889,7 +889,7 @@ export function AddToKnowledgeModal({
                         onClick={() => void handleConfirm()}
                         disabled={!selectedId || isConfirming}
                         className={cn(
-                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
+                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal btn-brand-primary",
                             isChannelSyncMobileFooter &&
                             "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
                             isChannelSyncMobileFooter && "flex-1",

@@ -91,7 +91,7 @@ export function FileListRow({
         <div
             className={cn(
                 "flex items-center px-4 py-3 border-b border-[#e5e6eb] hover:bg-[#f7f8fa] transition-colors cursor-pointer",
-                isSelected && "bg-[#e8f3ff]",
+                isSelected && "bg-blue-50",
                 hovered && "bg-[#f7f8fa]"
             )}
             onMouseEnter={() => setHovered(true)}

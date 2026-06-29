@@ -368,7 +368,7 @@ export function CreateKnowledgeSpaceDrawer({
                             <div className="flex gap-3">
                                 <Button
                                     variant="secondary"
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-[#E8F3FF]"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-blue-50"
                                     onClick={() => {
                                         onViewSpace?.();
                                         onOpenChange(false);
@@ -377,7 +377,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     {localize("com_subscription.goto_knowledge_space")}
                                 </Button>
                                 <Button
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400 btn-brand-primary"
                                     onClick={() => {
                                         onManageMembers?.();
                                         onOpenChange(false);
@@ -616,13 +616,13 @@ export function CreateKnowledgeSpaceDrawer({
                                             <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
                                                 <TabsTrigger
                                                     value="library"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-blue-500"
+                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-blue-50 data-[state=active]:text-blue-500"
                                                 >
                                                     {localize("com_knowledge.auto_tag_mode_library")}
                                                 </TabsTrigger>
                                                 <TabsTrigger
                                                     value="custom"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-blue-500"
+                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-blue-50 data-[state=active]:text-blue-500"
                                                 >
                                                     {localize("com_knowledge.auto_tag_mode_custom")}
                                                 </TabsTrigger>
@@ -681,7 +681,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                                 ).map((tag, idx) => (
                                                                     <span
                                                                         key={`${tag}-${idx}`}
-                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-blue-500"
+                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[12px] text-blue-500"
                                                                     >
                                                                         {tag}
                                                                     </span>
@@ -756,7 +756,7 @@ export function CreateKnowledgeSpaceDrawer({
                         </Button>
                         <Button
                             disabled={submitting}
-                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
+                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
                             onClick={handleConfirm}
                         >
                             {submitting

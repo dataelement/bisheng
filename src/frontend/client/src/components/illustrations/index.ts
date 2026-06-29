@@ -12,3 +12,5 @@ export { ArticleQAIllustration } from './ArticleQAIllustration';
 export { NoPermissionIllustration } from './NoPermissionIllustration';
 export { CrawlingIllustration } from './CrawlingIllustration';
 export { EmptyStateIllustration } from './EmptyStateIllustration';
+export { SystemMaintenanceIllustration } from './SystemMaintenanceIllustration';
+export { KnowledgeSpaceIcon } from './KnowledgeSpaceIcon';

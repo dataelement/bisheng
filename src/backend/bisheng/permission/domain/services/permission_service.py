@@ -64,11 +64,19 @@ class PermissionService:
         object_type: str,
         object_id: str,
         login_user=None,
+        consistency: str | None = None,
     ) -> bool:
         """Five-level permission check.
 
         Returns True if user has the given relation on the resource.
+
+        ``consistency`` forwards an OpenFGA consistency preference (e.g.
+        ``"HIGHER_CONSISTENCY"``) to the L5 check. When set, the L2 cache is
+        bypassed for both read and write so a strong-consistency read is never
+        served from — or polluted into — a possibly-stale cache. Use it for
+        read-after-write checks (e.g. post-authorize notification snapshots).
         """
+        strong_consistency = bool(consistency)
         # L1: Super admin shortcircuit
         if login_user and login_user.is_admin():
             return True
@@ -93,7 +101,7 @@ class PermissionService:
         # L2: Cache lookup (skip for UNCACHEABLE_RELATIONS). This happens after
         # tenant gating so visibility / tenant-admin changes cannot be bypassed
         # by a stale cached allow.
-        if relation not in UNCACHEABLE_RELATIONS:
+        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
             from bisheng.permission.domain.services.permission_cache import PermissionCache
 
             cached = await PermissionCache.get_check(user_id, relation, object_type, object_id)
@@ -120,6 +128,7 @@ class PermissionService:
                 user=f"user:{user_id}",
                 relation=relation,
                 object=f"{object_type}:{object_id}",
+                consistency=consistency,
             )
 
             if not allowed:
@@ -128,6 +137,7 @@ class PermissionService:
                         user=f"user:{user_id}",
                         relation=relation,
                         object=f"{legacy_type}:{object_id}",
+                        consistency=consistency,
                     )
                     if allowed:
                         break
@@ -145,8 +155,10 @@ class PermissionService:
                     object_type,
                 )
 
-            # Write to cache
-            if relation not in UNCACHEABLE_RELATIONS:
+            # Write to cache (skip strong-consistency reads: their result reflects
+            # a just-applied write and must not become a stale entry served to
+            # default-consistency callers).
+            if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
                 from bisheng.permission.domain.services.permission_cache import PermissionCache
 
                 await PermissionCache.set_check(user_id, relation, object_type, object_id, allowed)
@@ -154,9 +166,24 @@ class PermissionService:
             return allowed
 
         except FGAConnectionError as e:
-            # L5: Fail-closed (AD-03)
-            logger.error("OpenFGA unreachable during check, denying access: %s", e)
-            return False
+            # OpenFGA unreachable. Originally a hard fail-closed (return False),
+            # but that diverged from the two other "FGA unavailable" paths — the
+            # `fga is None` branch above and list_accessible_ids — which both fall
+            # back to the owner / implicit level (DB truth, independent of FGA).
+            # The divergence let an owner SEE a resource in lists yet be denied on
+            # access during an outage. Align all three on the owner/implicit
+            # fallback. Deliberately NOT cached (degraded, outage-only result).
+            logger.error("OpenFGA unreachable during check, falling back to owner/implicit: %s", e)
+            implicit_level = await cls._get_implicit_permission_level_after_gate(
+                user_id,
+                object_type,
+                object_id,
+            )
+            return cls._permission_level_satisfies_relation(
+                implicit_level,
+                relation,
+                object_type,
+            )
         except Exception as e:
             logger.error("Unexpected error during permission check: %s", e)
             return False

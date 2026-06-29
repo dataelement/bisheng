@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 _SUPPORTED_RESOURCE_TYPES = {"channel", "knowledge_space"}
 _ADMIN_RELATIONS = {"owner", "manager"}
 _READ_ACCESS_RELATIONS = {"owner", "manager", "editor", "viewer"}
+# OpenFGA checks default to MINIMIZE_LATENCY (eventually consistent). The
+# "after" snapshots run milliseconds after the authorize write, so they must
+# force HIGHER_CONSISTENCY to observe the just-applied grant/revoke — otherwise
+# a stale read makes the before->after transition vanish and the in-site
+# notification is silently dropped.
+_STRONG_CONSISTENCY = "HIGHER_CONSISTENCY"
 # Cap on in-flight OpenFGA permission checks when snapshotting a department's
 # members. Keeps a large department from firing thousands of simultaneous checks
 # while still collapsing the per-member latency from O(N) serial to ~O(N/cap).
@@ -92,6 +98,7 @@ class ResourcePermissionNotificationService:
                 context.grant_user_ids | context.revoke_user_ids,
                 context.resource_type,
                 context.resource_id,
+                consistency=_STRONG_CONSISTENCY,
             )
 
             assigned_user_ids = [
@@ -110,6 +117,7 @@ class ResourcePermissionNotificationService:
                 context.read_revoke_user_ids,
                 context.resource_type,
                 context.resource_id,
+                consistency=_STRONG_CONSISTENCY,
             )
             removed_member_user_ids = [
                 user_id
@@ -165,7 +173,9 @@ class ResourcePermissionNotificationService:
         return user_ids
 
     @staticmethod
-    async def _snapshot_access(checker, user_ids, resource_type: str, resource_id: str) -> dict[int, bool]:
+    async def _snapshot_access(
+        checker, user_ids, resource_type: str, resource_id: str, consistency: str | None = None
+    ) -> dict[int, bool]:
         """Concurrently evaluate ``checker`` for each user id (bounded fan-out).
 
         ``checker`` is ``_can_read`` / ``_can_manage``. Semantics are identical to
@@ -181,28 +191,37 @@ class ResourcePermissionNotificationService:
 
         async def _one(user_id: int) -> tuple[int, bool]:
             async with semaphore:
-                allowed = await checker(user_id=user_id, resource_type=resource_type, resource_id=resource_id)
+                allowed = await checker(
+                    user_id=user_id,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    consistency=consistency,
+                )
             return user_id, allowed
 
         results = await asyncio.gather(*(_one(uid) for uid in ids))
         return dict(results)
 
     @staticmethod
-    async def _can_manage(*, user_id: int, resource_type: str, resource_id: str) -> bool:
+    async def _can_manage(
+        *, user_id: int, resource_type: str, resource_id: str, consistency: str | None = None
+    ) -> bool:
         return await PermissionService.check(
             user_id=user_id,
             relation="can_manage",
             object_type=resource_type,
             object_id=resource_id,
+            consistency=consistency,
         )
 
     @staticmethod
-    async def _can_read(*, user_id: int, resource_type: str, resource_id: str) -> bool:
+    async def _can_read(*, user_id: int, resource_type: str, resource_id: str, consistency: str | None = None) -> bool:
         return await PermissionService.check(
             user_id=user_id,
             relation="can_read",
             object_type=resource_type,
             object_id=resource_id,
+            consistency=consistency,
         )
 
     @staticmethod

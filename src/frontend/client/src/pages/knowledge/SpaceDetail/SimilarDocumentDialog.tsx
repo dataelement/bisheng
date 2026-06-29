@@ -147,7 +147,7 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
                 onClick={() =>
                     onLink({ document_id: entry.target_document_id, title: entry.title })
                 }
-                className="h-8 shrink-0 rounded-[6px] bg-blue-500 px-4 text-[12px] text-white hover:bg-blue-400"
+                className="h-8 shrink-0 rounded-[6px] bg-blue-500 px-4 text-[12px] text-white hover:bg-blue-400 btn-brand-primary"
             >
                 <Link2 className="mr-1.5 size-4" />
                 {localize("com_knowledge.version.btn_link_as_new_version")}
@@ -181,7 +181,7 @@ function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
                 size="sm"
                 disabled={disabled}
                 onClick={() => onLink({ document_id: entry.document_id, title: entry.title })}
-                className="h-7 shrink-0 rounded-[6px] bg-blue-500 px-3 text-xs text-white hover:bg-blue-400"
+                className="h-7 shrink-0 rounded-[6px] bg-blue-500 px-3 text-xs text-white hover:bg-blue-400 btn-brand-primary"
             >
                 <Link2 className="mr-1.5 size-3" />
                 {localize("com_knowledge.version.btn_link_as_new_version")}

@@ -163,7 +163,7 @@ export default function FilePreview({
                         {allowDownload && (
                             <button
                                 onClick={handleDownload}
-                                className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
+                                className="btn-brand-primary px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
                             >
                                 {localize("com_knowledge.download_file")}</button>
                         )}

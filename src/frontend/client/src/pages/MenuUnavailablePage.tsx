@@ -111,7 +111,7 @@ export default function MenuUnavailablePage() {
           <button
             type="button"
             disabled={applied}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 btn-brand-primary"
             onClick={() => setShowDialog(true)}
           >
             {applied
@@ -150,7 +150,7 @@ export default function MenuUnavailablePage() {
                 type="button"
                 disabled={submitting}
                 onClick={() => void handleSubmit()}
-                className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-60"
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-60 btn-brand-primary"
               >
                 {submitting ? localize('com_menu_unavailable_apply_submitting') : localize('com_ui_submit')}
               </button>

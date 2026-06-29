@@ -892,6 +892,15 @@ export function activeFlowNode(history: ExecStepEventData[] | null | undefined):
 
 // ── clarify / user_input parsing ─────────────────────────────────────────────
 
+/**
+ * Sent verbatim as `user_input` when the user taps 跳过，开始任务 on the fallback
+ * clarify card (ClarifyFallbackCard). A fixed Chinese control instruction (NOT
+ * localized) so (a) the multilingual agent reliably proceeds with default
+ * assumptions and (b) IntentRow can detect "skipped" by exact match regardless of
+ * UI locale. The backend resumes opaquely (Command(resume=user_input)).
+ */
+export const CLARIFY_SKIP_SIGNAL = '跳过澄清，请基于合理的默认假设直接开始执行任务。';
+
 /** One question page parsed from `user_input.data.params.tool_calls[].args`. */
 export interface ClarifyQuestion {
     id: string;

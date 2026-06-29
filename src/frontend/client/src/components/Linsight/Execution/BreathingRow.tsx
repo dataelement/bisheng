@@ -35,7 +35,7 @@ export function BreathingRow({ state }: BreathingRowProps) {
         // Match the task panel's "working" treatment: blue spinning loader +
         // shimmer text (same gradient as the panel's running task name).
         <div className="flex items-center gap-2 py-1.5 text-sm">
-            <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+            <Outlined.Loading size={16} className="shrink-0 animate-spin text-blue-main" />
             <span className="bg-[linear-gradient(90deg,#cccccc_0%,#6b6b6b_50%,#cccccc_100%)] bg-[length:200%_100%] bg-clip-text text-transparent animate-text-shimmer">
                 {localize(STATE_I18N[state])}
             </span>

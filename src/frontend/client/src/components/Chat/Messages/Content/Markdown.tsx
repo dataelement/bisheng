@@ -8,6 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeSlug from 'rehype-slug';
 import remarkDirective from 'remark-directive';
 import remarkGfm from 'remark-gfm';
+import { rehypeBr } from '~/utils/rehypeBr';
 import remarkMath from 'remark-math';
 import supersub from 'remark-supersub';
 import type { Pluggable } from 'unified';
@@ -766,6 +767,8 @@ const Markdown = memo(({
       // links have a target to scroll to (github-slugger convention matches the
       // anchors LLMs emit).
       rehypeSlug,
+      // Turn literal <br> into real line breaks (e.g. inside table cells).
+      rehypeBr,
       [rehypeKatex, { output: 'mathml' }],
       [
         rehypeHighlight,

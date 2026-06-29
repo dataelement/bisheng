@@ -339,15 +339,20 @@ export function MoveToDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl" onOpenAutoFocus={(e) => e.preventDefault()}>
-                <DialogHeader>
+            {/* Mobile (≤768px): full-screen sheet, single-column tree (right panel
+                hidden), full-width footer — mirrors the member-management dialog. */}
+            <DialogContent
+                className="flex max-w-3xl flex-col max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:gap-3 max-[768px]:rounded-none max-[768px]:p-4"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+                <DialogHeader className="text-left">
                     <DialogTitle>{localize("com_knowledge.move_to")}</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex h-[420px] overflow-hidden rounded-lg border border-[#ececec]">
+                <div className="flex h-[420px] overflow-hidden rounded-lg border border-[#ececec] max-[768px]:h-auto max-[768px]:min-h-0 max-[768px]:flex-1 max-[768px]:rounded-none max-[768px]:border-0">
                     {/* Left: categorized space + folder tree */}
-                    <div className="flex w-72 shrink-0 flex-col border-r border-[#ececec]">
-                        <div className="p-3">
+                    <div className="flex w-72 shrink-0 flex-col border-r border-[#ececec] max-[768px]:w-full max-[768px]:border-r-0">
+                        <div className="p-3 max-[768px]:px-0 max-[768px]:pt-0">
                             <ExpandableSearchField
                                 alwaysExpanded
                                 showClearButton
@@ -363,7 +368,10 @@ export function MoveToDialog({
                             names, mirroring the sidebar directory. scrollbar-os opts out of
                             the global custom scrollbar so the OS setting (auto-hide vs
                             always-on) is respected. */}
-                        <div ref={treeScrollRef} className="scrollbar-os flex-1 overflow-auto px-2 pb-2">
+                        <div
+                            ref={treeScrollRef}
+                            className="scrollbar-os flex-1 overflow-auto px-2 pb-2 max-[768px]:rounded-md max-[768px]:border max-[768px]:border-[#ECECEC] max-[768px]:p-2"
+                        >
                             {categories.length === 0 ? (
                                 <div className="flex h-full items-center justify-center px-3 text-center text-[12px] text-[#86909C]">
                                     {localize("com_knowledge.move_no_spaces")}
@@ -417,8 +425,9 @@ export function MoveToDialog({
                         </div>
                     </div>
 
-                    {/* Right: contents of the selected location */}
-                    <div className="flex flex-1 flex-col">
+                    {/* Right: contents of the selected location — hidden on mobile,
+                        where navigation/selection happens entirely in the left tree. */}
+                    <div className="flex flex-1 flex-col max-[768px]:hidden">
                         {/* Row metrics mirror the left tree items: 28px (h-7) rows, 12px text,
                             16px icon in a 20px slot, p-2 container padding. */}
                         <div className="scrollbar-os flex-1 overflow-y-auto p-2">
@@ -467,11 +476,21 @@ export function MoveToDialog({
                     </div>
                 </div>
 
-                <DialogFooter>
-                    <Button variant="outline" className="h-8 !rounded-md" onClick={() => onOpenChange(false)}>
+                {/* Mobile: keep the two buttons in a row — 取消 (left) / 移动到此 (right),
+                    each filling half the width; height stays 32px. */}
+                <DialogFooter className="max-[768px]:flex-row max-[768px]:gap-2">
+                    <Button
+                        variant="outline"
+                        className="h-8 !rounded-md max-[768px]:flex-1"
+                        onClick={() => onOpenChange(false)}
+                    >
                         {localize("cancel")}
                     </Button>
-                    <Button className="h-8 !rounded-md" onClick={handleConfirm} disabled={!selection.spaceId}>
+                    <Button
+                        className="h-8 !rounded-md max-[768px]:flex-1"
+                        onClick={handleConfirm}
+                        disabled={!selection.spaceId}
+                    >
                         {localize("com_knowledge.move_here")}
                     </Button>
                 </DialogFooter>

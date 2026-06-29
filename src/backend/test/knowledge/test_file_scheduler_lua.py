@@ -243,3 +243,42 @@ def test_dispatch_re_adds_user_to_inflight_users(scheduler, redis_conn):
     assert not redis_conn.sismember("{bisheng_fs}:inflight_users", "9")
     scheduler.dispatch_one(user_id="9")
     assert redis_conn.sismember("{bisheng_fs}:inflight_users", "9")
+
+
+# ---------------------------------------------------------------------------
+# Per-file parse lock — idempotency guard so a file is never parsed twice at once
+# ---------------------------------------------------------------------------
+
+
+def test_acquire_parse_lock_blocks_second_acquire(scheduler, redis_conn):
+    token = scheduler.acquire_parse_lock(file_id="3684", ttl_seconds=120)
+    assert token
+    assert scheduler.acquire_parse_lock(file_id="3684", ttl_seconds=120) is None
+    assert 0 < redis_conn.ttl("{bisheng_fs}:parse_lock:3684") <= 120
+
+
+def test_release_parse_lock_only_releases_own_token(scheduler, redis_conn):
+    token = scheduler.acquire_parse_lock(file_id="3684", ttl_seconds=120)
+    scheduler.release_parse_lock(file_id="3684", token="not-the-token")
+    assert redis_conn.get("{bisheng_fs}:parse_lock:3684") == token  # untouched
+    scheduler.release_parse_lock(file_id="3684", token=token)
+    assert redis_conn.get("{bisheng_fs}:parse_lock:3684") is None
+    # released → acquirable again
+    assert scheduler.acquire_parse_lock(file_id="3684", ttl_seconds=120)
+
+
+def test_parse_lock_alive_reflects_existence(scheduler, redis_conn):
+    assert scheduler.parse_lock_alive(file_id="3684") is False
+    token = scheduler.acquire_parse_lock(file_id="3684", ttl_seconds=120)
+    assert scheduler.parse_lock_alive(file_id="3684") is True
+    scheduler.release_parse_lock(file_id="3684", token=token)
+    assert scheduler.parse_lock_alive(file_id="3684") is False
+
+
+def test_refresh_parse_lock_extends_ttl_only_for_owner(scheduler, redis_conn):
+    token = scheduler.acquire_parse_lock(file_id="3684", ttl_seconds=120)
+    redis_conn.expire("{bisheng_fs}:parse_lock:3684", 5)
+    assert scheduler.refresh_parse_lock(file_id="3684", token=token, ttl_seconds=120) is True
+    assert redis_conn.ttl("{bisheng_fs}:parse_lock:3684") > 5
+    # a stale token must NOT be able to refresh someone else's lock
+    assert scheduler.refresh_parse_lock(file_id="3684", token="stale", ttl_seconds=120) is False

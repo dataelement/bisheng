@@ -29,7 +29,7 @@ export function Sidebar({ open, pdfDoc, currentPage, onPageClick }: SidebarProps
 
     return (
         <div
-            className="w-[160px] h-full border-r border-[#e5e6eb] bg-[#f7f8fa] overflow-y-auto flex-shrink-0 py-2 px-2 flex flex-col gap-2"
+            className="scrollbar-os w-[160px] h-full border-r border-[#e5e6eb] bg-[#f7f8fa] overflow-y-auto flex-shrink-0 py-2 px-2 flex flex-col gap-2"
             ref={containerRef}
         >
             {pdfDoc &&

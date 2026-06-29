@@ -96,6 +96,8 @@ interface KnowledgeSpaceContentProps {
     onOpenSystemMenu?: () => void;
     onToggleSpaceList?: () => void;
     spaceListOpen?: boolean;
+    /** Edit current space (opens the space settings drawer owned by the page); permission-gated by the menu. */
+    onEditSpace?: () => void;
     /** Delete current space (navigates back to the list); permission-gated by the menu. */
     onDeleteSpace?: () => void;
     /** Open the search page from the top-bar search icon. */
@@ -139,6 +141,7 @@ export function KnowledgeSpaceContent({
     onOpenSystemMenu,
     onToggleSpaceList,
     spaceListOpen = false,
+    onEditSpace,
     onDeleteSpace,
     onOpenSearch,
     searchMode = false,
@@ -295,6 +298,12 @@ export function KnowledgeSpaceContent({
         spaceActionPermissions,
         space.id,
         "manage_space_relation",
+    );
+    // Edit space — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
+    const canEditSpace = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "edit_space",
     );
     // ─── Version Management ──────────────────────────────────────────────
     const versionManagementEnabled = useVersionManagementEnabled();
@@ -1111,6 +1120,12 @@ export function KnowledgeSpaceContent({
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onCreateFolder()}>
                                             <FolderPlus className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canEditSpace && onEditSpace && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onEditSpace()}>
+                                            <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.space_settings")}</span>
                                         </DropdownMenuItem>
                                     )}
                                     {showShareInMenu && (

@@ -8,7 +8,7 @@ import { useLocalize } from '~/hooks';
 import { StepRow, detailTextCls } from './StepRow';
 import { INK, MUTED } from './execTokens';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
-import { parseClarifyRequest } from './stepUtils';
+import { CLARIFY_SKIP_SIGNAL, parseClarifyRequest } from './stepUtils';
 
 export function IntentRow({ data }: { data: ExecStepEventData }) {
     const localize = useLocalize();
@@ -53,7 +53,8 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
                     {request.callReason && <p className={detailTextCls}>{request.callReason}</p>}
                     {answer && (
                         <p className="whitespace-pre-wrap text-xs leading-5" style={{ color: MUTED }}>
-                            {answer}
+                            {/* fallback-card skip: show a friendly "已跳过" instead of the raw sentinel */}
+                            {answer === CLARIFY_SKIP_SIGNAL ? localize('com_linsight_clarify_skip_answer') : answer}
                         </p>
                     )}
                 </>

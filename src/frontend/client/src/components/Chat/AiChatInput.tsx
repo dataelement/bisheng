@@ -534,7 +534,7 @@ const AiChatInput = memo(
                             {isStreaming || taskRunning ? (
                                 <button
                                     type="button"
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
+                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
                                     onClick={onStop}
                                     aria-label="Stop generating"
                                 >
@@ -576,7 +576,7 @@ const AiChatInput = memo(
                                         sendDisabled ||
                                         fileUploading
                                     }
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
