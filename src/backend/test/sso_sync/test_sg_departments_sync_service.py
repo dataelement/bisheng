@@ -31,13 +31,19 @@ def _request(*fields: SgDepartmentFieldItem, mdm_id: int = 42, uuid: str = "batc
 
 def _enter_dao_patches(stack: ExitStack, **overrides):
     defaults = {
-        "DepartmentDao.aget_by_source_external_id": AsyncMock(return_value=None),
-        "DepartmentDao.aget_by_external_id": AsyncMock(return_value=None),
-        "DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(return_value=[]),
+        f"{MODULE}.DepartmentDao.aget_by_source_external_id": AsyncMock(return_value=None),
+        f"{MODULE}.DepartmentDao.aget_by_external_id": AsyncMock(return_value=None),
+        f"{MODULE}.DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(return_value=[]),
+        "bisheng.department.domain.services.department_change_handler.DepartmentChangeHandler.execute_async": AsyncMock(),
+        "bisheng.department.domain.services.department_archive_cleanup_service.DepartmentArchiveCleanupService.arun_for_archived_department": AsyncMock(),
     }
-    defaults.update(overrides)
+    normalized_overrides = {
+        (key if key.startswith(MODULE) or key.startswith("bisheng.") else f"{MODULE}.{key}"): value
+        for key, value in overrides.items()
+    }
+    defaults.update(normalized_overrides)
     for target, mock in defaults.items():
-        stack.enter_context(patch(f"{MODULE}.{target}", mock))
+        stack.enter_context(patch(target, mock))
 
 
 @pytest.mark.asyncio
@@ -336,3 +342,172 @@ class TestSgDepartmentsSyncService:
         assert len(relink_calls) == 1
         assert relink_calls[0].kwargs["parent_id"] == 10
         assert relink_calls[0].kwargs["sync_parent_external_id"] is None
+
+    async def test_new_child_writes_fga_parent_tuple(self):
+        from bisheng.department.domain.services.department_change_handler import (
+            DepartmentChangeHandler,
+        )
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        payload = _request(
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+            SgDepartmentFieldItem(
+                uuid="u2",
+                code="C1",
+                pid="P1",
+                remark="Child",
+                state="0",
+            ),
+        )
+        parent = _dept(dept_id=10, path="/1/10/")
+        child = SimpleNamespace(id=11, path="/1/10/11/", parent_id=10, sort_order=0)
+        child_created = {"value": False}
+
+        async def _upsert(**kwargs):
+            if kwargs["external_id"] == "P1":
+                return parent
+            child_created["value"] = True
+            return child
+
+        async def _get_by_source(_src, ext):
+            if ext == "P1":
+                return parent
+            if ext == "C1" and child_created["value"]:
+                return child
+            return None
+
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "DepartmentDao.aget_by_source_external_id": AsyncMock(
+                        side_effect=_get_by_source,
+                    ),
+                },
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda ext, _tid: parent if ext == "P1" else None,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=_upsert,
+                )
+            )
+            on_created = stack.enter_context(
+                patch.object(DepartmentChangeHandler, "on_created", return_value=["created-op"])
+            )
+            execute = stack.enter_context(
+                patch(
+                    "bisheng.department.domain.services.department_change_handler.DepartmentChangeHandler.execute_async",
+                    new_callable=AsyncMock,
+                )
+            )
+            await SgDepartmentsSyncService.execute(payload)
+
+        on_created.assert_any_call(11, 10)
+        assert execute.await_count >= 1
+
+    async def test_archive_triggers_fga_cleanup(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        payload = _request(
+            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="00"),
+        )
+        archived = SimpleNamespace(id=99, parent_id=10)
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    return_value=archived,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                    new_callable=AsyncMock,
+                    return_value=archived,
+                )
+            )
+            cleanup = stack.enter_context(
+                patch(
+                    "bisheng.department.domain.services.department_archive_cleanup_service.DepartmentArchiveCleanupService.arun_for_archived_department",
+                    new_callable=AsyncMock,
+                )
+            )
+            await SgDepartmentsSyncService.execute(payload)
+
+        cleanup.assert_awaited_once_with(99, reason="sg_department_archive")
+
+    async def test_relink_writes_fga_on_created_when_parent_was_pending(self):
+        from bisheng.department.domain.services.department_change_handler import (
+            DepartmentChangeHandler,
+        )
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        parent = _dept(dept_id=10, path="/1/10/")
+        child = SimpleNamespace(
+            id=11,
+            external_id="C1",
+            name="Child",
+            parent_id=None,
+            path="/11/",
+            sort_order=0,
+            sync_parent_external_id="P1",
+        )
+        relinked = SimpleNamespace(id=11, parent_id=10, path="/1/10/11/")
+        payload = _request(
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+        )
+
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "DepartmentDao.aget_by_source_external_id": AsyncMock(
+                        side_effect=lambda _src, ext: parent if ext == "P1" else None,
+                    ),
+                    "DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(
+                        return_value=[child],
+                    ),
+                },
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda ext, _tid: parent if ext == "P1" else None,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda **kwargs: relinked if kwargs.get("external_id") == "C1" else parent,
+                )
+            )
+            on_created = stack.enter_context(
+                patch.object(DepartmentChangeHandler, "on_created", return_value=["created-op"])
+            )
+            stack.enter_context(
+                patch(
+                    "bisheng.department.domain.services.department_change_handler.DepartmentChangeHandler.execute_async",
+                    new_callable=AsyncMock,
+                )
+            )
+            await SgDepartmentsSyncService.execute(payload)
+
+        on_created.assert_any_call(11, 10)

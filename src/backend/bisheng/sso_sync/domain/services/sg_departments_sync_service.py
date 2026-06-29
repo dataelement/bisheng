@@ -13,6 +13,12 @@ from bisheng.core.context.tenant import (
 )
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.department.domain.services.department_archive_cleanup_service import (
+    DepartmentArchiveCleanupService,
+)
+from bisheng.department.domain.services.department_change_handler import (
+    DepartmentChangeHandler,
+)
 from bisheng.sso_sync.domain.constants import SG_SOURCE
 from bisheng.sso_sync.domain.schemas.sg_payloads import (
     SgDataInfoItem,
@@ -126,6 +132,19 @@ class SgDepartmentsSyncService:
         parent_cache: dict[str, Department],
     ) -> SgDataInfoItem:
         try:
+            existing = await DepartmentDao.aget_by_source_external_id(
+                cls.SOURCE,
+                row.code,
+            )
+            old_parent_id = None
+            if existing is not None:
+                raw_old_parent_id = getattr(existing, "parent_id", None)
+                old_parent_id = int(raw_old_parent_id) if raw_old_parent_id is not None else None
+            was_archived = existing is not None and (
+                getattr(existing, "status", "") == "archived" or getattr(existing, "is_deleted", 0) == 1
+            )
+            is_new = existing is None
+
             parent, pending_parent_code = await cls._resolve_parent(
                 row.parent_code,
                 parent_cache,
@@ -133,7 +152,7 @@ class SgDepartmentsSyncService:
             ts = int(time.time())
             parent_id = int(parent.id) if parent is not None and parent.id is not None else None
             parent_path = parent.path if parent is not None else ""
-            await DepartmentDao.aupsert_by_external_id(
+            dept = await DepartmentDao.aupsert_by_external_id(
                 source=cls.SOURCE,
                 external_id=row.code,
                 name=row.name,
@@ -145,10 +164,25 @@ class SgDepartmentsSyncService:
                 sync_parent_external_id=pending_parent_code,
             )
             if row.status == 1:
-                await DepartmentDao.aarchive_by_external_id(
+                archived = await DepartmentDao.aarchive_by_external_id(
                     cls.SOURCE,
                     row.code,
                     ts,
+                )
+                if archived is not None and archived.id is not None:
+                    await DepartmentArchiveCleanupService.arun_for_archived_department(
+                        int(archived.id),
+                        reason="sg_department_archive",
+                    )
+            elif dept is not None and dept.id is not None:
+                raw_parent_id = getattr(dept, "parent_id", None)
+                new_parent_id = int(raw_parent_id) if raw_parent_id is not None else None
+                await cls._sync_department_tree_fga(
+                    int(dept.id),
+                    old_parent_id=old_parent_id,
+                    new_parent_id=new_parent_id,
+                    is_new=is_new,
+                    was_archived=was_archived,
                 )
             return SgDataInfoItem(
                 uuid=row.payload.uuid,
@@ -257,8 +291,9 @@ class SgDepartmentsSyncService:
         parent: Department,
         mdm_id: int,
     ) -> None:
+        old_parent_id = int(child.parent_id) if getattr(child, "parent_id", None) is not None else None
         ts = int(time.time())
-        await DepartmentDao.aupsert_by_external_id(
+        dept = await DepartmentDao.aupsert_by_external_id(
             source=cls.SOURCE,
             external_id=str(child.external_id),
             name=child.name,
@@ -269,6 +304,49 @@ class SgDepartmentsSyncService:
             tenant_id=ROOT_TENANT_ID,
             sync_parent_external_id=None,
         )
+        if dept is not None and dept.id is not None:
+            raw_parent_id = getattr(dept, "parent_id", None)
+            new_parent_id = int(raw_parent_id) if raw_parent_id is not None else None
+            await cls._sync_department_tree_fga(
+                int(dept.id),
+                old_parent_id=old_parent_id,
+                new_parent_id=new_parent_id,
+                is_new=False,
+                was_archived=False,
+            )
+
+    @classmethod
+    async def _sync_department_tree_fga(
+        cls,
+        dept_id: int,
+        *,
+        old_parent_id: int | None,
+        new_parent_id: int | None,
+        is_new: bool,
+        was_archived: bool,
+    ) -> None:
+        """Keep OpenFGA department parent edges aligned with MySQL tree changes."""
+        if new_parent_id is None:
+            if old_parent_id is not None and not is_new and not was_archived:
+                ops = DepartmentChangeHandler.on_archived(dept_id, old_parent_id)
+                await DepartmentChangeHandler.execute_async(ops)
+            return
+
+        if is_new or was_archived:
+            ops = DepartmentChangeHandler.on_created(dept_id, new_parent_id)
+        elif old_parent_id != new_parent_id:
+            if old_parent_id is None:
+                ops = DepartmentChangeHandler.on_created(dept_id, new_parent_id)
+            else:
+                ops = DepartmentChangeHandler.on_moved(
+                    dept_id,
+                    old_parent_id,
+                    new_parent_id,
+                )
+        else:
+            return
+
+        await DepartmentChangeHandler.execute_async(ops)
 
     @staticmethod
     def _normalize_parent_code(value: str) -> str:
