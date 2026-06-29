@@ -79,6 +79,42 @@ export const useGetBsConfig = (
   );
 };
 
+export interface PortalConfigOption {
+  code: string;
+  label?: string;
+  name?: string;
+}
+
+export interface PortalMetadataConfig {
+  document_types: PortalConfigOption[];
+  business_domain_options: PortalConfigOption[];
+}
+
+async function fetchPortalMetadataConfig(): Promise<PortalMetadataConfig> {
+  const res = await fetch('/api/v1/knowledge/config');
+  if (!res.ok) throw new Error('Failed to fetch portal config');
+  const json = await res.json();
+  const data = json?.data ?? json;
+  return {
+    document_types: Array.isArray(data?.document_types) ? data.document_types : [],
+    business_domain_options: Array.isArray(data?.business_domain_options) ? data.business_domain_options : [],
+  };
+}
+
+export const useGetPortalMetadataConfig = (): QueryObserverResult<PortalMetadataConfig> => {
+  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  return useQuery<PortalMetadataConfig>(
+    ['portalMetadataConfig'],
+    fetchPortalMetadataConfig,
+    {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: 'always',
+      enabled: queriesEnabled,
+    },
+  );
+};
+
 export const useModelBuilding = () => {
   const [shouldPoll, setShouldPoll] = useState(true);
 

@@ -39,7 +39,7 @@ import {
     DialogTitle,
     Input,
 } from "~/components/ui";
-import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
+import { useGetBsConfig, useGetPortalMetadataConfig } from "~/hooks/queries/endpoints/queries";
 import { useConfirm, useToastContext } from "~/Providers";
 import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
@@ -87,6 +87,7 @@ import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
 import { usePortalDeepLink } from "./hooks/usePortalDeepLink";
 import { usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
+import { BUSINESS_DOMAIN_OPTIONS } from "./uploadMetadata";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
@@ -141,6 +142,7 @@ export default function PortalKnowledgeWorkbench() {
     const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
     const { data: bsConfig } = useGetBsConfig();
+    const { data: portalMetaConfig } = useGetPortalMetadataConfig();
     const isH5 = usePrefersMobileLayout();
     const aiPane = useAiSplitPane();
     const groupRefs = useRef<Record<SpaceGroupKey, HTMLDivElement | null>>({
@@ -770,10 +772,24 @@ export default function PortalKnowledgeWorkbench() {
     const isUploadTargetAdmin = uploadTargetSpace?.role === SpaceRole.CREATOR || uploadTargetSpace?.role === SpaceRole.ADMIN;
     const canUploadInPortal = Boolean(uploadTargetSpace && (isUploadTargetAdmin || canUploadFile));
     const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && (isActiveSpaceAdmin || canCreateFolder));
-    const fileCategoryOptions = useMemo(
-        () => normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types),
-        [bsConfig],
-    );
+    const fileCategoryOptions = useMemo(() => {
+        if (portalMetaConfig?.document_types?.length) {
+            return normalizePortalFileCategoryOptions(
+                portalMetaConfig.document_types.map((dt) => ({ code: dt.code, label: dt.label ?? dt.name ?? dt.code }))
+            );
+        }
+        return normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types);
+    }, [portalMetaConfig, bsConfig]);
+
+    const businessDomainOptions = useMemo(() => {
+        if (portalMetaConfig?.business_domain_options?.length) {
+            return portalMetaConfig.business_domain_options.map((opt) => ({
+                code: opt.code,
+                name: opt.name ?? opt.label ?? opt.code,
+            }));
+        }
+        return BUSINESS_DOMAIN_OPTIONS;
+    }, [portalMetaConfig]);
     const portalUploadSizeLimits = useMemo(
         () => resolveUploadSizeLimits((bsConfig as UploadSizeEnvConfig | null) ?? undefined),
         [bsConfig],
@@ -2091,6 +2107,7 @@ export default function PortalKnowledgeWorkbench() {
                     fileCategoryCode,
                     fileCategoryOptions: resolvedFileCategoryOptions,
                     businessDomainCode,
+                    businessDomainOptions,
                     uploadTagOptions,
                     selectedUploadTagValues,
                     uploadTagLoading,

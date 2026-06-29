@@ -20,6 +20,8 @@ import {
     BUSINESS_DOMAIN_OPTIONS,
     type PortalUploadTagOption,
 } from "../uploadMetadata";
+
+type BusinessDomainOptionItem = { code: string; name: string };
 import { formatFileSize } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -43,6 +45,7 @@ interface PortalUploadDialogProps {
     fileCategoryCode: string;
     fileCategoryOptions: PortalFileCategoryOption[];
     businessDomainCode: string;
+    businessDomainOptions?: BusinessDomainOptionItem[];
     uploadTagOptions: PortalUploadTagOption[];
     selectedUploadTagValues: string[];
     uploadTagLoading: boolean;
@@ -140,6 +143,7 @@ export function PortalUploadDialog({
     fileCategoryCode,
     fileCategoryOptions,
     businessDomainCode,
+    businessDomainOptions = BUSINESS_DOMAIN_OPTIONS,
     uploadTagOptions,
     selectedUploadTagValues,
     uploadTagLoading,
@@ -303,7 +307,7 @@ export function PortalUploadDialog({
                                             onChange={(event) => onSelectBusinessDomain(event.currentTarget.value)}
                                         >
                                             <option value="">AI 自动生成</option>
-                                            {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                                            {businessDomainOptions.map((option) => (
                                                 <option key={option.code} value={option.code}>
                                                     {option.code} / {option.name}
                                                 </option>
