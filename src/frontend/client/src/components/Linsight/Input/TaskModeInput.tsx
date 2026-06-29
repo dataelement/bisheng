@@ -9,7 +9,8 @@
  * per-session Recoil atom and survive exiting task mode; skills are cleared
  * on exit. Exit = navigate back to /c.
  */
-import { ArrowUp, Mic, Square } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
+import { Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
@@ -387,7 +388,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 aria-label="Send message"
                                 data-testid="send-button"
                             >
-                                <ArrowUp size={18} />
+                                <Outlined.ArrowUp size={16} />
                             </button>
                         ) : (
                             <button
@@ -403,7 +404,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 aria-label={localize('com_linsight_voice_coming_soon')}
                             >
                                 {/* Voice input is a visual placeholder this iteration */}
-                                <Mic size={16} />
+                                <Outlined.Microphone size={16} />
                             </button>
                         )}
                     </div>

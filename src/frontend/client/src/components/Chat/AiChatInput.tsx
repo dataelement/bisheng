@@ -576,11 +576,11 @@ const AiChatInput = memo(
                                         sendDisabled ||
                                         fileUploading
                                     }
-                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
-                                    <SendIcon size={24} />
+                                    <SendIcon size={18} />
                                 </button>
                             )}
                         </div>

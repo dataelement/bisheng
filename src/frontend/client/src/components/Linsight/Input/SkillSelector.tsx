@@ -49,12 +49,17 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
     };
 
     return (
-        <div className="flex min-h-0 flex-col gap-1.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
+            {/* Panel title — mirrors the knowledge panel header for visual consistency */}
+            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+                {localize('com_linsight_skill_title')}
+            </p>
+
             {/* Search — stopPropagation so typing isn't hijacked by the Radix menu's type-ahead */}
             <div className="relative shrink-0">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input
-                    className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
+                    className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-sm focus-visible:ring-1 focus-visible:ring-blue-500/20"
                     placeholder={localize('com_linsight_skill_search')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -73,7 +78,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                     {localize('com_linsight_skill_empty')}
                 </div>
             ) : (
-                <div className="flex max-h-[300px] min-h-0 flex-col gap-0.5 overflow-y-auto">
+                <div className="scrollbar-os flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto pb-2">
                     {filtered.map((skill) => {
                         const isChecked = selected.some((s) => s.name === skill.name);
                         return (
@@ -83,7 +88,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                     e.preventDefault();
                                     handleToggle(skill);
                                 }}
-                                className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-2 outline-none hover:bg-slate-50 focus:bg-slate-50"
+                                className="flex cursor-pointer items-start gap-2 rounded-[6px] px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
                             >
                                 <div
                                     className={cn(
@@ -94,9 +99,9 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                     {isChecked && <Check size={12} className="stroke-[3] text-white" />}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="truncate text-[13px] leading-5 text-slate-700">{skill.display_name}</p>
+                                    <p className="truncate text-[14px] leading-5 text-slate-700">{skill.display_name}</p>
                                     {skill.description && (
-                                        <p className="line-clamp-2 text-xs leading-4 text-slate-400">{skill.description}</p>
+                                        <p className="line-clamp-2 text-[12px] leading-4 text-[#999]">{skill.description}</p>
                                     )}
                                 </div>
                             </DropdownMenuItem>
