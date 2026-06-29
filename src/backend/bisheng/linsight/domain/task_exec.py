@@ -389,7 +389,9 @@ class LinsightWorkflowTask:
             "configurable": {"thread_id": session_model.id},
             "recursion_limit": getattr(linsight_conf, "max_steps", 200),
         }
-        agent_input = {"messages": [{"role": "user", "content": question}]}
+        # Prepend the current-time block (same rationale as _build_agent_input):
+        # per-task time awareness without busting the static system-prompt cache.
+        agent_input = {"messages": [{"role": "user", "content": f"{self._current_time_block()}\n{question}"}]}
         async for chunk in agent.astream(
             agent_input,
             config=config,
@@ -866,6 +868,20 @@ class LinsightWorkflowTask:
             raise TaskExecutionError(f"Agent task execution failed: {e}") from e
 
     @staticmethod
+    def _current_time_block() -> str:
+        """Current server-local time block for the first user message.
+
+        Injected into the dynamic first message (NOT the static system prompt)
+        so the system prompt stays byte-identical across tasks and remains
+        prefix-cacheable by the model provider, while the agent still gets
+        per-task time awareness. Uses server-local time, consistent with the
+        repo-wide ``default_factory=datetime.now``.
+        """
+        now = datetime.now()
+        weekday = "一二三四五六日"[now.weekday()]
+        return f"# 当前时间\n{now.strftime('%Y-%m-%d %H:%M')} 周{weekday}（服务器本地时区）"
+
+    @staticmethod
     def _build_agent_input(
         session_model: LinsightSessionVersion,
         file_list,
@@ -881,7 +897,10 @@ class LinsightWorkflowTask:
         appended when present. The deepagents kernel plans the todo清单 from this
         seed during astream.
         """
-        parts: list[str] = []
+        # Lead with the current-time block so the agent is time-aware. Placing it
+        # in the (already dynamic) first user message keeps the system prompt
+        # static and prefix-cacheable.
+        parts: list[str] = [LinsightWorkflowTask._current_time_block()]
         if history_summary:
             parts.append(history_summary)
         if session_model.question:

@@ -166,6 +166,63 @@ __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工�
 # empty). The prompt advertisement must track it — see _build_*_prompt below.
 _KB_TOOL_NAME = "search_knowledge_base"
 
+# Static Chinese language-reinforcement block injected via the deepagents
+# HarnessProfile SUFFIX slot (system_prompt_suffix). deepagents assembles the
+# system prompt as USER -> (BASE or CUSTOM) -> SUFFIX (graph.py:832-838), so this
+# lands at the VERY TAIL of the system prompt — closest to the conversation,
+# where language guidance adheres most reliably. The SUFFIX is APPENDED (never
+# replaced), so it reinforces BOTH the main agent and the researcher subagent
+# without overwriting either's authored prompt. This counters the ~5600 chars of
+# English the deepagents runtime appends (BASE_AGENT_PROMPT + the filesystem /
+# task middleware prompts), which drift the model's reasoning to English — it is
+# the tail-position counterpart to the front-position language block already in
+# the USER prompt (the 2026-06-19 thinking-language fix P1). MUST stay STATIC:
+# the linsight worker registers this once per process into the global harness
+# registry; per-task dynamic content there would race across concurrent tasks.
+_LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH = """# 语言（最高优先级，覆盖以上全部英文说明）
+
+请全程使用与用户输入一致的语言完成所有输出：用户用中文则全程使用简体中文，用户用英文则全程使用英文。该约束适用于你的**思考与推理过程（thinking）、任务规划、工具调用前后的旁白、写入文件的中间笔记、向用户的提问、最终回复与交付物正文**。当本规则与上文任何指令（包括框架自带的英文说明）发生冲突时，一律以本规则为准；绝不允许“用英文思考、再用中文回复”。"""
+
+# Providers we've already registered the suffix profile for, so registration is
+# done once per process (the linsight worker is long-running). The suffix is
+# STATIC, so the rare concurrent double-registration writes an identical value
+# and is harmless — no lock needed.
+_REGISTERED_SUFFIX_PROVIDERS: set[str] = set()
+
+
+def _ensure_linsight_harness_profile(model: BaseChatModel) -> None:
+    """Idempotently register a BiSheng-owned HarnessProfile carrying the static
+    Chinese language-reinforcement suffix for the resolved model's provider.
+
+    Registration is the ONLY public way to inject a SUFFIX — create_deep_agent
+    has no profile kwarg — and it MUST run before create_deep_agent resolves the
+    profile (graph.py:568). We set ONLY ``system_prompt_suffix`` and leave
+    ``base_system_prompt=None``: keeping the SDK English BASE on the main agent
+    is intentional, and a custom base would CLOBBER the researcher subagent's
+    own prompt (it shares this profile; graph.py:682 + _apply_profile_prompt
+    REPLACES, whereas the suffix APPENDS).
+
+    Keyed by the model's provider. BiSheng resolves every linsight model as a
+    ``BishengLLM`` wrapper, whose provider derives from the class name via the
+    langchain-core base ``_get_ls_params`` ("bishengllm"), so a single stable
+    key covers all linsight models and collides with no built-in profile.
+    Linsight is the only deepagents agent builder in BiSheng, so this
+    process-global registration affects nothing else.
+    """
+    from deepagents import HarnessProfile, register_harness_profile
+    from deepagents._models import get_model_provider
+
+    provider = get_model_provider(model)
+    if not provider or provider in _REGISTERED_SUFFIX_PROVIDERS:
+        # No derivable provider -> the suffix can't be keyed; the inline language
+        # lines in the main / researcher prompts remain as a fallback.
+        return
+    register_harness_profile(
+        provider,
+        HarnessProfile(system_prompt_suffix=_LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH),
+    )
+    _REGISTERED_SUFFIX_PROVIDERS.add(provider)
+
 
 def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
@@ -558,6 +615,11 @@ async def create_linsight_agent(
 
     svid = svid or session_model.id
     model = await _resolve_model(session_model, model_id)
+
+    # Register the BiSheng-owned harness profile (static Chinese language suffix)
+    # BEFORE create_deep_agent resolves the profile (graph.py:568). Appends only;
+    # keeps the SDK base and never clobbers the researcher subagent's prompt.
+    _ensure_linsight_harness_profile(model)
 
     if backend is None:
         backend = _default_backend(svid, file_dir)
