@@ -1,6 +1,7 @@
 "use client"
 
-import { LoaderCircle, Mic } from "lucide-react"
+import { Outlined } from "bisheng-icons"
+import { LoaderCircle } from "lucide-react"
 import PropTypes from "prop-types"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRecoilState } from "recoil"
@@ -294,7 +295,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
                 )}
                 {!isProcessing && !isRecording && (
                     <Button size={'icon'} disabled={disabled} onClick={startRecording} className="rounded-full w-8 h-8">
-                        <Mic size={18} className="" />
+                        <Outlined.Microphone size={18} />
                     </Button>
                 )}
             </div>

@@ -112,6 +112,23 @@ const Nav = ({
     [data, searchQuery, searchQueryRes?.data],
   );
 
+  // Edge-fade shadows: white-to-transparent gradients at the top/bottom of the
+  // conversation list, mirroring the knowledge-space menu. Visible only when
+  // there is content above / below the current viewport — disappear at the
+  // boundary so a non-scrollable list shows no mask at all.
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+  const updateScrollShadows = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    setCanScrollUp(scrollTop > 0);
+    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 1);
+  }, [containerRef]);
+  useEffect(() => {
+    updateScrollShadows();
+  }, [conversations, updateScrollShadows]);
+
   const toggleNavVisible = () => {
     setNavVisible((prev: boolean) => !prev);
     if (newUser) {
@@ -157,7 +174,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full min-h-0 w-full flex-col gap-0 pt-5 pb-5 px-3 max-[767px]:gap-0 max-[767px]:p-0"
+                  className="flex h-full min-h-0 w-full flex-col gap-0 pt-5 px-3 max-[767px]:gap-0 max-[767px]:p-0"
                 >
                   {/* New chat header and buttons */}
                   <NewChat
@@ -165,21 +182,44 @@ const Nav = ({
                     isSmallScreen={isSmallScreen}
                     showToggleButton
                   />
-                  <div
-                    className={cn(
-                      '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2 max-[767px]:-mr-0 max-[767px]:pr-0',
-                    )}
-                    ref={containerRef}
-                  >
-                    {/* Conversation history list */}
-                    <Conversations
-                      conversations={conversations}
-                      moveToTop={moveToTop}
-                      toggleNav={itemToggleNav}
+                  {/* Wrap the scroll container so the top/bottom edge-fade
+                      gradients can be absolutely positioned over the viewport. */}
+                  <div className="relative flex min-h-0 flex-1 flex-col">
+                    {/* Top edge fade — fades in when there is content above. */}
+                    <div
+                      aria-hidden
+                      className={cn(
+                        'pointer-events-none absolute left-0 right-0 top-0 h-8 z-10 transition-opacity duration-150',
+                        'bg-gradient-to-b from-white to-transparent',
+                        canScrollUp ? 'opacity-100' : 'opacity-0',
+                      )}
                     />
-                    {(isFetchingNextPage || showLoading) && (
-                      <Spinner className={cn('m-1 mx-auto mb-4 h-4 w-4 text-text-primary')} />
-                    )}
+                    {/* Bottom edge fade — same idea, mirrored. */}
+                    <div
+                      aria-hidden
+                      className={cn(
+                        'pointer-events-none absolute bottom-0 left-0 right-0 h-8 z-10 transition-opacity duration-150',
+                        'bg-gradient-to-t from-white to-transparent',
+                        canScrollDown ? 'opacity-100' : 'opacity-0',
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2 pb-3 max-[767px]:-mr-0 max-[767px]:pr-0',
+                      )}
+                      ref={containerRef}
+                      onScroll={updateScrollShadows}
+                    >
+                      {/* Conversation history list */}
+                      <Conversations
+                        conversations={conversations}
+                        moveToTop={moveToTop}
+                        toggleNav={itemToggleNav}
+                      />
+                      {(isFetchingNextPage || showLoading) && (
+                        <Spinner className={cn('m-1 mx-auto mb-4 h-4 w-4 text-text-primary')} />
+                      )}
+                    </div>
                   </div>
                   {isSmallScreen ? <ChatNavUserFooter /> : null}
                 </nav>

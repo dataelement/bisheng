@@ -402,12 +402,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const taskArtifacts = useWorkspacePanel(latestTaskVersionId);
 
   // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
-  // is a separate instance from the docked panel (PreviewBody isn't cached, so we
-  // never mount both at once). It's portaled to document.body + position:fixed so
-  // it can escape chatContainer and cover the sidebar conversation list. It expands
-  // to fill the rounded content card (the white panel inside <main>'s p-2 gutter
-  // that holds the sidebar + chat) — NOT the whole window — so the icon rail and the
-  // card's surrounding gap + radius are preserved. `fsMounted` keeps it in the DOM
+  // is a separate instance from the docked panel (only one is ever mounted at a
+  // time). It's portaled to document.body + position:fixed so it can escape
+  // chatContainer and cover the sidebar conversation list. It expands to fill the
+  // rounded content card (the white panel inside <main>'s gutter that holds the
+  // sidebar + chat) — NOT the whole window — so the icon rail and the card's
+  // surrounding gap + radius are preserved. `fsMounted` keeps it in the DOM
   // across the collapse transition; `fsExpanded` drives the geometry between the
   // docked card's box and the content card's box, both measured in viewport-inset
   // form on enter (still mounted that render). Exiting: collapse, unmount on end.
@@ -442,6 +442,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         // position the whole time — only the gray border slides out to the card edge
         // and the left edge fills the card. No button shift, smooth border, uniform
         // #FBFBFB fill (the 4px is overlay bg, not a white ring).
+        // The content card sits inside <main>'s content box, so its left edge is
+        // main.left + main's (possibly-asymmetric / zero) left padding. Read it live
+        // instead of hardcoding so changing the layout gutter never desyncs the
+        // fullscreen left edge.
+        const mainPadLeft = parseFloat(getComputedStyle(main).paddingLeft) || 0;
         const collapsed = { top: c.top, left: c.left, right: W - c.right, bottom: H - c.bottom };
         setFsBox({
           collapsed,
@@ -449,7 +454,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             top: collapsed.top - 4,
             right: collapsed.right - 4,
             bottom: collapsed.bottom - 4,
-            left: m.left + 8,
+            left: m.left + mainPadLeft,
           },
         });
       }
@@ -898,7 +903,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           {latestTaskVersionId && !isTouchLayout && fsMounted && fsBox && createPortal(
             <div
               className="fixed z-[100] overflow-hidden border border-[#ECECEC] bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
-              style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: 12 }}
+              style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: fsExpanded ? 12 : 8 }}
               onTransitionEnd={(e) => {
                 // Unmount only after the collapse finishes (ignore the expand end
                 // and bubbled child transitions).

@@ -317,6 +317,7 @@ export const ChatKnowledge = ({
   onEnterTaskMode,
   renderSkillSubmenu,
   taskModeActive = false,
+  skillSelected = false,
 }: {
   /** Controls the trigger button and which menu sections render:
    *  - 'plus'      → "+" trigger; file-upload + task-mode (+ optional add-skill) sections.
@@ -339,6 +340,8 @@ export const ChatKnowledge = ({
   renderSkillSubmenu?: (close: () => void) => ReactNode;
   /** When already in task mode, show the entry checked (toggle indicator). */
   taskModeActive?: boolean;
+  /** F035: tint the "添加技能" icon brand-blue once at least one skill is picked. */
+  skillSelected?: boolean;
 }) => {
   const localize = useLocalize();
   const PAGE_SIZE = 20;
@@ -870,13 +873,14 @@ export const ChatKnowledge = ({
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={18} className="text-[#999]" />
+                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />
                       <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_linsight_add_skill')}
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[360px] w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above). */}
+                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -889,7 +893,7 @@ export const ChatKnowledge = ({
                   className="flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={18} className="text-[#999]" />
+                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>

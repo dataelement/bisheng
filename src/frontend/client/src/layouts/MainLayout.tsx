@@ -223,13 +223,16 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-2 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        // Rail: let the content column shrink to its 44px width instead of stretching the track.
+        // Expanded drawer keeps the stretched full-width layout.
+        showExpandedHubSidebar ? undefined : 'items-center',
         // Mobile chat 路由的 sidebar 显隐由 MainLayout 顶层条件渲染管理(systemMenuRevealing),
         // 这里不再硬加 hidden,否则 systemMenu 露出时 sidebar 也被隐掉。
       )}
     >
       <div className={cn('flex flex-col', showExpandedHubSidebar ? 'gap-4 items-stretch' : 'gap-10 items-center')}>
-        <div className={cn('relative shrink-0', showExpandedHubSidebar ? 'flex items-center justify-between p-2' : 'size-10 flex items-center justify-center')}>
+        <div className={cn('relative shrink-0', showExpandedHubSidebar ? 'flex items-center justify-between p-2' : 'size-11 flex items-center justify-center')}>
           {showExpandedHubSidebar ? (
             <>
               {bsConfig?.sidebarIcon?.image ? (
@@ -471,7 +474,7 @@ export default function MainLayout() {
       <main
         className={cn(
           'relative min-w-0 flex-1',
-          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] p-2',
+          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] py-2 pr-2',
           shouldHideSidebarOnMobileAppsArea && 'transition-transform duration-300 ease-out',
           systemMenuRevealing && 'translate-x-16',
         )}
