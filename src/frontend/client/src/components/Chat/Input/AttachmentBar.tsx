@@ -20,7 +20,7 @@ import {
     useRef,
     useState,
 } from "react";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
@@ -124,7 +124,7 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
 
 const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => (
     <CardShell
-        icon={<Sparkles className="size-4 text-blue-500" />}
+        icon={<Outlined.Skill size={16} className="text-blue-500" />}
         label={skill?.display_name || skill?.name || ""}
         onRemove={onRemove}
     />

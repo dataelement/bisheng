@@ -6,7 +6,7 @@
  * search over display name + description.
  */
 import { Check, Loader2, SearchIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { DropdownMenuItem, Input } from '~/components/ui';
@@ -38,6 +38,22 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                 (s.description || '').toLowerCase().includes(kw),
         );
     }, [skills, keyword]);
+
+    // Edge fades: visible only when there is content above / below the current
+    // viewport. Mirrors the knowledge panel's scroll-mask behavior.
+    const scrollNodeRef = useRef<HTMLDivElement | null>(null);
+    const [canScrollUp, setCanScrollUp] = useState(false);
+    const [canScrollDown, setCanScrollDown] = useState(false);
+    const updateScrollIndicators = useCallback(() => {
+        const el = scrollNodeRef.current;
+        if (!el) return;
+        const { scrollTop, scrollHeight, clientHeight } = el;
+        setCanScrollUp(scrollTop > 0);
+        setCanScrollDown(scrollTop + clientHeight < scrollHeight - 1);
+    }, []);
+    useEffect(() => {
+        updateScrollIndicators();
+    }, [filtered, updateScrollIndicators]);
 
     const handleToggle = (skill: TaskModeSkill) => {
         const exists = selected.some((s) => s.name === skill.name);
@@ -78,7 +94,30 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                     {localize('com_linsight_skill_empty')}
                 </div>
             ) : (
-                <div className="scrollbar-os flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto pb-2">
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                    {/* Top edge fade — list content dissolves into the menu surface. */}
+                    <div
+                        aria-hidden
+                        className={cn(
+                            'pointer-events-none absolute left-0 right-0 top-0 z-10 h-3 transition-opacity duration-150',
+                            'bg-gradient-to-b from-white to-transparent',
+                            canScrollUp ? 'opacity-100' : 'opacity-0',
+                        )}
+                    />
+                    {/* Bottom edge fade — mirrored. */}
+                    <div
+                        aria-hidden
+                        className={cn(
+                            'pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-3 transition-opacity duration-150',
+                            'bg-gradient-to-t from-white to-transparent',
+                            canScrollDown ? 'opacity-100' : 'opacity-0',
+                        )}
+                    />
+                    <div
+                        ref={scrollNodeRef}
+                        className="scrollbar-os flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto pb-2"
+                        onScroll={updateScrollIndicators}
+                    >
                     {filtered.map((skill) => {
                         const isChecked = selected.some((s) => s.name === skill.name);
                         return (
@@ -107,6 +146,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                             </DropdownMenuItem>
                         );
                     })}
+                    </div>
                 </div>
             )}
         </div>

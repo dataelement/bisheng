@@ -107,7 +107,10 @@ export function PlusMenu({
                         >
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <Outlined.Newspaper size={16} className="text-slate-600" />
+                                    <Outlined.Newspaper
+                                        size={16}
+                                        className={cn(selectedSkills.length > 0 ? 'text-blue-600' : 'text-slate-600')}
+                                    />
                                     {selectedSkills.length > 0 && (
                                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                                     )}
