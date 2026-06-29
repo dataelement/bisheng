@@ -93,6 +93,30 @@ export function mergeVisibleRegisteredFiles(
     };
 }
 
+export function mergeCreatedFolder(
+    existingFiles: KnowledgeFile[],
+    createdFolder: KnowledgeFile,
+): { files: KnowledgeFile[]; addedCount: number } {
+    const createdId = String(createdFolder.id || "");
+    if (!createdId) {
+        return { files: [createdFolder, ...existingFiles], addedCount: 1 };
+    }
+
+    let replacedExisting = false;
+    const files = [
+        createdFolder,
+        ...existingFiles.filter((file) => {
+            const sameFile = String(file.id) === createdId;
+            if (sameFile) {
+                replacedExisting = true;
+            }
+            return !sameFile;
+        }),
+    ];
+
+    return { files, addedCount: replacedExisting ? 0 : 1 };
+}
+
 interface UseFileUploadOptions {
     activeSpace: KnowledgeSpace | null;
     currentFolderId: string | undefined;
@@ -392,8 +416,11 @@ export function useFileUpload({
 
                         // Show root-level folder in the current listing immediately
                         if (isRootLevel) {
-                            setFiles((prev) => [folder, ...prev]);
-                            setTotal((prev) => prev + 1);
+                            const { addedCount } = mergeCreatedFolder(files, folder);
+                            setFiles((prev) => mergeCreatedFolder(prev, folder).files);
+                            if (addedCount > 0) {
+                                setTotal((prev) => prev + addedCount);
+                            }
                         }
                     } catch (err: unknown) {
                         const reason = err instanceof Error ? err.message : String(err);
@@ -470,7 +497,7 @@ export function useFileUpload({
                 folderUploadInFlightRef.current = false;
             }
         },
-        [activeSpace, currentFolderId, currentPage, loadFiles, localize, setDuplicateFiles, setFiles, setTotal, showToast],
+        [activeSpace, currentFolderId, currentPage, files, loadFiles, localize, setDuplicateFiles, setFiles, setTotal, showToast],
     );
 
     // ─── Folder creation ─────────────────────────────────────────────────
@@ -515,6 +542,8 @@ export function useFileUpload({
             // ── Confirm in-progress folder creation ──
             if (creatingFolder && fileId === creatingFolder.id) {
                 const requestSpaceId = String(activeSpace.id);
+                const targetParentId = creatingFolder.parentId ?? null;
+                const isCurrentCreationFolder = (currentFolderId ?? null) === targetParentId;
                 try {
                     const sensitiveCheck = await checkSensitiveWordsApi(activeSpace.id, [newName]);
                     if (sensitiveCheck.has_violation) {
@@ -523,13 +552,18 @@ export function useFileUpload({
                     }
                     const created = await createFolderApi(activeSpace.id, {
                         name: newName,
-                        parent_id: currentFolderId || null,
+                        parent_id: targetParentId,
                     });
                     if (activeSpaceIdRef.current !== requestSpaceId) {
                         return;
                     }
-                    setFiles(prev => [created, ...prev]);
-                    setTotal(prev => prev + 1);
+                    if (isCurrentCreationFolder) {
+                        const { addedCount } = mergeCreatedFolder(files, created);
+                        setFiles(prev => mergeCreatedFolder(prev, created).files);
+                        if (addedCount > 0) {
+                            setTotal(prev => prev + addedCount);
+                        }
+                    }
                     setCreatingFolder(null);
                     // Keep the left-side folder tree in sync.
                     dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);

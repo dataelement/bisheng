@@ -1,6 +1,7 @@
 import { extractKnowledgeFileError, FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import {
   extractDuplicateFileEntries,
+  mergeCreatedFolder,
   mergeVisibleRegisteredFiles,
 } from "./useFileUpload";
 
@@ -68,6 +69,41 @@ describe("useFileUpload helpers", () => {
     ).toEqual({
       files: [newWaitingFile, existingFile],
       addedCount: 1,
+    });
+  });
+
+  test("mergeCreatedFolder replaces an existing folder row instead of duplicating it", () => {
+    const existingFolder = makeKnowledgeFile({
+      id: "31",
+      name: "BBB",
+      type: FileType.FOLDER,
+      status: FileStatus.SUCCESS,
+    });
+    const duplicateFolder = makeKnowledgeFile({
+      id: "31",
+      name: "BBB",
+      type: FileType.FOLDER,
+      status: FileStatus.SUCCESS,
+    });
+    const siblingFolder = makeKnowledgeFile({
+      id: "32",
+      name: "AAA",
+      type: FileType.FOLDER,
+      status: FileStatus.SUCCESS,
+    });
+    const createdFolder = makeKnowledgeFile({
+      id: "31",
+      name: "BBB",
+      type: FileType.FOLDER,
+      status: FileStatus.SUCCESS,
+      updatedAt: "2026-06-29T10:00:00Z",
+    });
+
+    expect(
+      mergeCreatedFolder([existingFolder, duplicateFolder, siblingFolder], createdFolder),
+    ).toEqual({
+      files: [createdFolder, siblingFolder],
+      addedCount: 0,
     });
   });
 

@@ -113,6 +113,33 @@ export function createTreeNode(file: KnowledgeFile): PortalFileTreeNode {
     };
 }
 
+export function dedupeFilesById(files: KnowledgeFile[]): KnowledgeFile[] {
+    const seen = new Set<string>();
+    return files.filter((file) => {
+        const id = String(file.id || "");
+        if (!id) return true;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
+}
+
+export function dedupeTreeNodesByFileId(nodes: PortalFileTreeNode[]): PortalFileTreeNode[] {
+    const seen = new Set<string>();
+    return nodes
+        .filter((node) => {
+            const id = String(node.file.id || "");
+            if (!id) return true;
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        })
+        .map((node) => ({
+            ...node,
+            children: dedupeTreeNodesByFileId(node.children),
+        }));
+}
+
 export function flattenTreeFiles(nodes: PortalFileTreeNode[]): KnowledgeFile[] {
     return nodes.flatMap((node) => [
         node.file,

@@ -58,6 +58,8 @@ import type {
 import {
     collectTreeFileIds,
     createTreeNode,
+    dedupeFilesById,
+    dedupeTreeNodesByFileId,
     extractExt,
     findTreeNode,
     findTreeNodePath,
@@ -421,7 +423,7 @@ export default function PortalKnowledgeWorkbench() {
             const nextFiles = typeof value === "function"
                 ? (value as (prev: KnowledgeFile[]) => KnowledgeFile[])(currentFiles)
                 : value;
-            return nextFiles.map(createTreeNode);
+            return dedupeFilesById(nextFiles).map(createTreeNode);
         });
     }, []);
 
@@ -436,12 +438,13 @@ export default function PortalKnowledgeWorkbench() {
             const nextFiles = typeof value === "function"
                 ? (value as (prev: KnowledgeFile[]) => KnowledgeFile[])(currentFiles)
                 : value;
+            const dedupedFiles = dedupeFilesById(nextFiles);
             return {
                 ...node,
-                children: nextFiles.map(createTreeNode),
+                children: dedupedFiles.map(createTreeNode),
                 loaded: true,
                 expanded: true,
-                total: Math.max(node.total, nextFiles.length),
+                total: Math.max(node.total, dedupedFiles.length),
             };
         }));
     }, [currentFolderId, setRootFiles]);
@@ -557,8 +560,8 @@ export default function PortalKnowledgeWorkbench() {
             const total = (res as any).total ?? res.data.length;
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => append
-                ? [...prev, ...nextFiles.map(createTreeNode)]
-                : nextFiles.map(createTreeNode));
+                ? dedupeTreeNodesByFileId([...prev, ...nextFiles.map(createTreeNode)])
+                : dedupeFilesById(nextFiles).map(createTreeNode));
             setTreeRootPage(page);
             setTreeRootTotal(total);
             setTreeRootHasMore(Boolean((res as any).has_more ?? (page * TREE_PAGE_SIZE < total)));
@@ -613,7 +616,7 @@ export default function PortalKnowledgeWorkbench() {
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, folderId, (node) => ({
                 ...node,
-                children: nextFiles.map(createTreeNode),
+                children: dedupeFilesById(nextFiles).map(createTreeNode),
                 expanded: true,
                 loaded: true,
                 loading: false,
@@ -659,16 +662,16 @@ export default function PortalKnowledgeWorkbench() {
             ? updateTreeNode(treeNodes, currentFolderId, (node) => ({
                 ...node,
                 expanded: true,
-                children: [
+                children: dedupeTreeNodesByFileId([
                     ...transientFolderFiles.map(createTreeNode),
                     ...node.children,
-                ],
+                ]),
             }))
             : treeNodes;
-        return [
+        return dedupeTreeNodesByFileId([
             ...transientRootFiles.map(createTreeNode),
             ...withFolderTransients,
-        ];
+        ]);
     }, [currentFolderId, transientFolderFiles, transientRootFiles, treeNodes]);
     const visibleTreeFiles = useMemo(
         () => flattenTreeFiles(visibleTreeNodes),
@@ -1487,7 +1490,7 @@ export default function PortalKnowledgeWorkbench() {
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
                 ...item,
-                children: nextFiles.map(createTreeNode),
+                children: dedupeFilesById(nextFiles).map(createTreeNode),
                 expanded: true,
                 loaded: true,
                 loading: false,
@@ -1527,7 +1530,7 @@ export default function PortalKnowledgeWorkbench() {
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
                 ...item,
-                children: [...item.children, ...nextFiles.map(createTreeNode)],
+                children: dedupeTreeNodesByFileId([...item.children, ...nextFiles.map(createTreeNode)]),
                 loading: false,
                 loaded: true,
                 page: nextPage,
@@ -1589,7 +1592,7 @@ export default function PortalKnowledgeWorkbench() {
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
                 ...item,
-                children: nextFiles.map(createTreeNode),
+                children: dedupeFilesById(nextFiles).map(createTreeNode),
                 expanded: true,
                 loaded: true,
                 loading: false,

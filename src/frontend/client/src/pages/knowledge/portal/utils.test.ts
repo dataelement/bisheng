@@ -1,4 +1,24 @@
-import { extractExt } from "./utils";
+import { FileType, type KnowledgeFile } from "~/api/knowledge";
+import {
+    createTreeNode,
+    dedupeFilesById,
+    dedupeTreeNodesByFileId,
+    extractExt,
+} from "./utils";
+
+function makeFile(overrides: Partial<KnowledgeFile>): KnowledgeFile {
+    return {
+        id: "1",
+        name: "demo",
+        type: FileType.FOLDER,
+        tags: [],
+        path: "demo",
+        spaceId: "space-1",
+        createdAt: "",
+        updatedAt: "",
+        ...overrides,
+    };
+}
 
 describe("portal preview utils", () => {
     describe("extractExt", () => {
@@ -26,6 +46,35 @@ describe("portal preview utils", () => {
 
         it("falls back to the display name extension when no preview URL is available", () => {
             expect(extractExt("VCU告警操作文档.docx")).toBe("docx");
+        });
+    });
+
+    describe("folder list dedupe", () => {
+        it("keeps the first row for duplicate file ids", () => {
+            const created = makeFile({ id: "101", name: "BBB" });
+            const duplicate = makeFile({ id: "101", name: "BBB duplicate" });
+            const sibling = makeFile({ id: "102", name: "AAA" });
+
+            expect(dedupeFilesById([created, duplicate, sibling])).toEqual([created, sibling]);
+        });
+
+        it("dedupes tree nodes within each folder level", () => {
+            const child = createTreeNode(makeFile({ id: "201", name: "child" }));
+            const duplicateChild = createTreeNode(makeFile({ id: "201", name: "child duplicate" }));
+            const parent = {
+                ...createTreeNode(makeFile({ id: "101", name: "parent" })),
+                children: [child, duplicateChild],
+            };
+            const duplicateParent = createTreeNode(makeFile({ id: "101", name: "parent duplicate" }));
+            const sibling = createTreeNode(makeFile({ id: "102", name: "sibling" }));
+
+            expect(dedupeTreeNodesByFileId([parent, duplicateParent, sibling])).toEqual([
+                {
+                    ...parent,
+                    children: [child],
+                },
+                sibling,
+            ]);
         });
     });
 });
