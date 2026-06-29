@@ -212,6 +212,36 @@ async def _aget_user_tenant_root_path(login_user) -> str | None:
     return mount.path
 
 
+async def _aget_user_scope(login_user) -> tuple[bool, set[str]]:
+    """Three-tier visibility scope, shared by ``aget_tree`` and the F038 lazy
+    children/search/path-tree endpoints so they cannot drift.
+
+    Returns ``(is_sys_admin, admin_paths)``:
+    - system admin → ``(True, set())`` (full tree; no path filter, no FGA lookup)
+    - otherwise → ``(False, {materialized paths the user may see})`` = union of the
+      dept-admin subtree roots and the tenant-admin mount point.
+
+    Raises :class:`DepartmentPermissionDeniedError` when a non-sys-admin has no
+    admin departments and is not a tenant admin (same point/timing as the old
+    inline check in ``aget_tree``).
+
+    A node ``d`` is visible iff ``is_sys_admin`` or
+    ``any(d.path.startswith(p) for p in admin_paths)``.
+    """
+    if _is_admin(login_user):
+        return True, set()
+    admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+    is_tenant_admin = await _is_tenant_admin(login_user)
+    if not admin_depts and not is_tenant_admin:
+        raise DepartmentPermissionDeniedError()
+    admin_paths: set[str] = {d.path for d in admin_depts if d.path}
+    if is_tenant_admin:
+        tenant_root_path = await _aget_user_tenant_root_path(login_user)
+        if tenant_root_path:
+            admin_paths.add(tenant_root_path)
+    return False, admin_paths
+
+
 def _get_dept_id_prefix() -> str:
     from bisheng.common.services.config_service import settings
 
@@ -413,16 +443,9 @@ class DepartmentService:
         # dept-admin subtrees and tenant-admin mount subtree (PRD §4.5).
         # Both flags are queried independently so a user who is both
         # gets the union, not just the first hit.
-        is_sys_admin = _is_admin(login_user)
-        is_tenant_admin = False
-        admin_depts = []
-        if not is_sys_admin:
-            admin_depts = await DepartmentDao.aget_user_admin_departments(
-                login_user.user_id,
-            )
-            is_tenant_admin = await _is_tenant_admin(login_user)
-            if not admin_depts and not is_tenant_admin:
-                raise DepartmentPermissionDeniedError()
+        # F038: scope computed via the shared helper so the lazy children/search
+        # endpoints can't drift from the tree's visibility (see _aget_user_scope).
+        is_sys_admin, admin_paths = await _aget_user_scope(login_user)
 
         async with get_async_db_session() as session:
             # Get all departments (including archived) for current tenant
@@ -434,16 +457,10 @@ class DepartmentService:
 
             # Subtree filter for non-sys-admin: union of dept-admin subtrees
             # and the tenant-admin mount subtree (Child Admin per PRD §4.5).
-            if not is_sys_admin:
-                admin_paths: set[str] = {d.path for d in admin_depts if d.path}
-                if is_tenant_admin:
-                    tenant_root_path = await _aget_user_tenant_root_path(login_user)
-                    if tenant_root_path:
-                        admin_paths.add(tenant_root_path)
-                if admin_paths:
-                    depts = [d for d in depts if d.path and any(d.path.startswith(p) for p in admin_paths)]
-                    if not depts:
-                        return []
+            if not is_sys_admin and admin_paths:
+                depts = [d for d in depts if d.path and any(d.path.startswith(p) for p in admin_paths)]
+                if not depts:
+                    return []
 
         # F027 AC-13: per-node user-count field removed from the tree response.
         # The previous batched ``COUNT(UserDepartment.id) GROUP BY department_id``
