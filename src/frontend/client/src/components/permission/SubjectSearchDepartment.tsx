@@ -10,7 +10,6 @@ interface DepartmentNode {
   dept_id: string;
   name: string;
   parent_id: number | null;
-  member_count?: number;
   children?: DepartmentNode[];
 }
 
@@ -278,9 +277,6 @@ function TreeNode({
         />
         <Building2 className="h-4 w-4 text-gray-400" />
         <span className="min-w-0 truncate text-sm">{node.name}</span>
-        {node.member_count != null && (
-          <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>
-        )}
         {isDisabled && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
             {localize("com_permission.already_granted")}

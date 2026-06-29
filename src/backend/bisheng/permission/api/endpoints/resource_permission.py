@@ -830,12 +830,11 @@ async def _list_knowledge_space_grant_users(
 async def _list_knowledge_space_grant_departments(
     *, tenant_id: int, restrict_dept_ids: frozenset[int] | None = None
 ) -> list[dict]:
-    from sqlalchemy import func
     from sqlmodel import select
 
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import Department, UserDepartment
+    from bisheng.database.models.department import Department
     from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
 
     with bypass_tenant_filter():
@@ -896,19 +895,11 @@ async def _list_knowledge_space_grant_departments(
     if not departments:
         return []
 
-    dept_ids = [int(dept.id) for dept in departments if getattr(dept, "id", None) is not None]
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            count_result = await session.exec(
-                select(
-                    UserDepartment.department_id,
-                    func.count(UserDepartment.id),
-                )
-                .where(UserDepartment.department_id.in_(dept_ids))
-                .group_by(UserDepartment.department_id)
-            )
-            count_map = {int(dept_id): int(count) for dept_id, count in count_result.all()}
-
+    # NOTE: per-department member_count was intentionally dropped here. Computing it
+    # required a `COUNT(*) ... WHERE department_id IN (<all subtree dept ids>) GROUP BY`,
+    # whose giant `.in_(...)` bind-param list serializes catastrophically on DM8's
+    # fake-async driver (~66s for 50k departments, vs ~3s for the rest of this call).
+    # The grant-subject picker never renders the count, so the query is pure waste.
     nodes = {
         int(dept.id): {
             "id": int(dept.id),
@@ -919,7 +910,6 @@ async def _list_knowledge_space_grant_departments(
             "sort_order": int(getattr(dept, "sort_order", 0) or 0),
             "source": dept.source,
             "status": dept.status,
-            "member_count": count_map.get(int(dept.id), 0),
             "children": [],
         }
         for dept in departments

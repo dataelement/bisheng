@@ -102,7 +102,6 @@ describe("PermissionGrantTab", () => {
         dept_id: "dept-7",
         name: "测试部门",
         parent_id: null,
-        member_count: 3,
         children: [],
       },
     ]);
@@ -235,14 +234,12 @@ describe("PermissionGrantTab", () => {
         dept_id: "dept-7",
         name: "测试部门",
         parent_id: null,
-        member_count: 3,
         children: [
           {
             id: 8,
             dept_id: "dept-8",
             name: "子部门",
             parent_id: 7,
-            member_count: 1,
             children: [],
           },
         ],
