@@ -81,6 +81,8 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Initialize chat session, message, and llm."""
     ws_config = await WorkStationService.aget_config()
     model_info = next((model for model in ws_config.models if model.id == data.model), None)
+    if not model_info and ws_config.models:
+        model_info = ws_config.models[0]
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
 
