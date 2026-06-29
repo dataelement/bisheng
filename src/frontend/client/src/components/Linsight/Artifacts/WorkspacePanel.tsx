@@ -11,6 +11,7 @@
 import { Outlined } from 'bisheng-icons';
 import FileIcon from '~/components/ui/icon/File';
 import { useLocalize } from '~/hooks';
+import { EmptyStateIllustration } from '~/components/illustrations';
 import { cn } from '~/utils';
 import { type ArtifactFile, downloadArtifactFile, getFileExtension } from './artifactUtils';
 import { PreviewBody } from './PreviewBody';
@@ -79,7 +80,7 @@ export function WorkspacePanel({
                 'flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#FBFBFB]',
                 // Fullscreen overlays the whole route viewport flush to the edges;
                 // the card chrome (radius/border) only applies to the docked panel.
-                !fullscreen && 'rounded-[12px] border border-[#ECECEC]',
+                !fullscreen && 'rounded-lg border border-[#ECECEC]',
             )}
         >
             {previewFile ? (
@@ -135,8 +136,9 @@ export function WorkspacePanel({
                         {files.length ? (
                             <div className="flex flex-col gap-2">{files.map(renderRow)}</div>
                         ) : (
-                            <div className="flex h-full items-center justify-center text-center text-sm font-normal text-gray-400">
-                                {localize('com_linsight_workspace_empty')}
+                            <div className="flex h-full flex-col items-center justify-center text-center">
+                                <EmptyStateIllustration className="mb-4 size-[120px] opacity-90" />
+                                <p className="text-[14px] font-normal text-[#999999]">{localize('com_linsight_workspace_empty')}</p>
                             </div>
                         )}
                     </div>

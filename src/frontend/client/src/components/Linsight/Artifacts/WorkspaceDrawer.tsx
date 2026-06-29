@@ -7,6 +7,7 @@ import { Eye } from 'lucide-react';
 import FileIcon from '~/components/ui/icon/File';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/Sheet';
 import { useLocalize } from '~/hooks';
+import { EmptyStateIllustration } from '~/components/illustrations';
 import { type ArtifactFile, getFileExtension } from './artifactUtils';
 
 interface WorkspaceDrawerProps {
@@ -57,8 +58,9 @@ export function WorkspaceDrawer({ open, onOpenChange, files, onPreview }: Worksp
                     {renderGroup('com_linsight_workspace_uploaded', uploaded)}
                     {renderGroup('com_linsight_workspace_generated', generated)}
                     {!files.length && (
-                        <div className="py-10 text-center text-sm text-gray-400">
-                            {localize('com_linsight_workspace_empty')}
+                        <div className="flex flex-col items-center justify-center py-10 text-center">
+                            <EmptyStateIllustration className="mb-4 size-[120px] opacity-90" />
+                            <p className="text-[14px] font-normal text-[#999999]">{localize('com_linsight_workspace_empty')}</p>
                         </div>
                     )}
                 </div>
