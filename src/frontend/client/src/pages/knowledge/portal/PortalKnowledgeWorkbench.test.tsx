@@ -2905,18 +2905,18 @@ describe("PortalKnowledgeWorkbench", () => {
         const createSpaceRule = css.match(/\.createSpaceRow\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
         const spaceNameRule = css.match(/\.spaceName\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
 
-        expect(spaceHeaderRule).toMatch(/height\s*:\s*46px/);
-        expect(spaceHeaderRule).toMatch(/padding\s*:\s*0 10px/);
-        expect(spaceHeaderRule).toMatch(/font-size\s*:\s*15px/);
-        expect(spaceHeaderIconRule).toMatch(/width\s*:\s*24px/);
-        expect(spaceHeaderIconRule).toMatch(/height\s*:\s*24px/);
-        expect(groupRowRule).toMatch(/padding\s*:\s*0 10px 0 32px/);
-        expect(groupIconRule).toMatch(/width\s*:\s*14px/);
-        expect(groupIconRule).toMatch(/height\s*:\s*14px/);
-        expect(groupLabelRule).toMatch(/font-size\s*:\s*12\.5px/);
-        expect(spaceSelectRule).toMatch(/padding\s*:\s*0 0 0 42px/);
-        expect(createSpaceRule).toMatch(/padding\s*:\s*0 10px 0 42px/);
-        expect(spaceNameRule).toMatch(/font-size\s*:\s*12\.5px/);
+        expect(spaceHeaderRule).toMatch(/height\s*:\s*56px/);
+        expect(spaceHeaderRule).toMatch(/padding\s*:\s*0 16px/);
+        expect(spaceHeaderRule).toMatch(/font-size\s*:\s*18px/);
+        expect(spaceHeaderIconRule).toMatch(/width\s*:\s*18px/);
+        expect(spaceHeaderIconRule).toMatch(/height\s*:\s*18px/);
+        expect(groupRowRule).toMatch(/padding\s*:\s*0 16px 0 24px/);
+        expect(groupIconRule).toMatch(/width\s*:\s*16px/);
+        expect(groupIconRule).toMatch(/height\s*:\s*16px/);
+        expect(groupLabelRule).toMatch(/font-size\s*:\s*15px/);
+        expect(spaceSelectRule).toMatch(/padding\s*:\s*0 0 0 52px/);
+        expect(createSpaceRule).toMatch(/padding\s*:\s*0 16px 0 52px/);
+        expect(spaceNameRule).toMatch(/font-size\s*:\s*15px/);
     });
 
     test("keeps upload review table inside a wide dialog instead of overflowing the modal", () => {

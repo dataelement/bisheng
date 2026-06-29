@@ -31,31 +31,61 @@
 }
 
 .spaceHeader {
-  height: 46px;
+  height: 56px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px;
-  background: linear-gradient(90deg, #edf6ff 0%, #fff 100%);
-  font-size: 15px;
+  gap: 8px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, #cce2ff 0%, #ffffff 100%);
+  color: #273142;
+  font-size: 18px;
   font-weight: 600;
 }
 
 .spaceHeaderIcon {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
-  color: #2c76f4;
-  background: #e7f0ff;
 }
 
 .spaceHeaderIcon img,
 .spaceHeaderIcon svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.spaceHeaderTitle {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spaceHeaderCollapse {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.spaceHeaderCollapse:hover {
+  background: rgba(54, 98, 227, 0.08);
+}
+
+.spaceHeaderCollapseIcon {
+  width: 16px;
+  height: 16px;
   object-fit: contain;
 }
 
@@ -145,12 +175,12 @@
 
 .groupRow {
   width: 100%;
-  height: 34px;
+  height: 40px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px 0 32px;
-  color: #545a60;
+  gap: 8px;
+  padding: 0 16px 0 24px;
+  color: #273142;
   background: transparent;
   text-align: left;
 }
@@ -161,7 +191,7 @@
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 0;
   color: inherit;
   background: transparent;
@@ -170,8 +200,8 @@
 }
 
 .groupIcon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -182,12 +212,42 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: 15px;
   font-weight: 500;
+  color: #273142;
 }
 
-.groupCreateButton,
 .groupExpandButton {
+  width: 12px;
+  height: 100%;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a94a6;
+  background: transparent;
+  cursor: pointer;
+}
+
+.groupExpandButton svg {
+  width: 12px;
+  height: 12px;
+}
+
+.groupCaret {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 3.6px 0 3.6px 4.8px;
+  border-color: transparent transparent transparent #000;
+  transition: transform 120ms ease;
+}
+
+.groupCaretExpanded {
+  transform: rotate(90deg);
+}
+
+.groupCreateButton {
   width: 22px;
   height: 22px;
   flex: 0 0 auto;
@@ -200,8 +260,7 @@
   cursor: pointer;
 }
 
-.groupCreateButton:not(:disabled):hover,
-.groupExpandButton:hover {
+.groupCreateButton:not(:disabled):hover {
   color: #2c76f4;
   background: #eef4ff;
 }
@@ -211,19 +270,18 @@
   cursor: not-allowed;
 }
 
-.groupCreateButton svg,
-.groupExpandButton svg {
-  width: 12px;
-  height: 12px;
+.groupCreateButton svg {
+  width: 14px;
+  height: 14px;
 }
 
 .spaceRow {
   width: calc(100% - 20px);
-  height: 34px;
+  height: 40px;
   margin-left: 10px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 0 6px 0 0;
   border-radius: 5px;
   color: #273142;
@@ -241,8 +299,8 @@
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 0 0 42px;
+  gap: 8px;
+  padding: 0 0 0 52px;
   color: inherit;
   background: transparent;
   text-align: left;
@@ -250,13 +308,13 @@
 }
 
 .spaceSelectButton svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 .spaceIcon {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -299,12 +357,12 @@
 
 .createSpaceRow {
   width: calc(100% - 20px);
-  height: 34px;
+  height: 40px;
   margin-left: 10px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px 0 42px;
+  gap: 8px;
+  padding: 0 16px 0 52px;
   border-radius: 5px;
   color: #273142;
   background: transparent;
@@ -313,8 +371,8 @@
 }
 
 .createSpaceRow svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 .sidebarToggleIcon {
@@ -341,33 +399,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: 15px;
 }
 
 .emptySpace {
   padding: 3px 10px 7px 52px;
   color: #9aa6b8;
   font-size: 11.5px;
-}
-
-.sidebarFooter {
-  height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 5px;
-  padding-right: 10px;
-  border: 0;
-  border-top: 1px solid #e5edf7;
-  background: #fff;
-  color: #545a60;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.sidebarFooter:hover {
-  color: #2c76f4;
-  background: #f7fbff;
 }
 
 .filePane {
@@ -432,7 +470,7 @@
 .fileActions {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   margin-top: 7px;
   flex-wrap: nowrap;
 }
@@ -443,8 +481,8 @@
 }
 
 .folderAction {
-  width: 29px;
-  height: 29px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

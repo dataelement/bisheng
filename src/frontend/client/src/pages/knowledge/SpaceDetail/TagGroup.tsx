@@ -68,7 +68,7 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
                 {visibleTags.map((tag, index) => (
                     <div
                         key={tag.id}
-                        className={`bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm whitespace-nowrap
+                        className={`bg-[#EBF5FD] text-[#545A60] text-[12px] px-1.5 py-0.5 rounded-[4px] border border-[#E6E6E6] whitespace-nowrap
               ${index === 0 ? 'min-w-[30px] truncate flex-shrink' : 'flex-shrink-0'}`}
                     >
                         {tag.name}
@@ -79,7 +79,7 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
                 {hiddenTags.length > 0 && (
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <div className="bg-[#f2f3f5] text-[#4e5969] font-medium text-xs px-1.5 py-0.5 rounded-sm cursor-pointer flex-shrink-0">
+                            <div className="bg-[#EBF5FD] text-[#545A60] font-medium text-[12px] px-1.5 py-0.5 rounded-[4px] border border-[#E6E6E6] cursor-pointer flex-shrink-0">
                                 +{hiddenTags.length}
                             </div>
                         </TooltipTrigger>

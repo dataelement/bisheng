@@ -58,7 +58,7 @@ const FileIconRenderer = ({
     if (isFolder) {
         return (
             <img
-                src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/folder-yellow.svg`}
+                src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/folder@2x.png`}
                 alt=""
                 className={iconSlotClass}
             />
@@ -66,45 +66,22 @@ const FileIconRenderer = ({
     }
 
     if (extension && fileIconExtensions.has(extension)) {
-        if(extension=="md")
-        {
-            return (
-                <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/${extension}.png`}
-                    alt=""
-                    className={iconSlotClass}
-                />
-            );
-        }
-           if(extension=="doc")
-        {
-            return (
-                <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/${extension}.png`}
-                    alt=""
-                    className={iconSlotClass}
-                />
-            );
-        }
-           if(extension=="pdf")
-        {
-            return (
-                <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/${extension}.png`}
-                    alt=""
-                    className={iconSlotClass}
-                />
-            );
-        }
-        else{
-            return (
-                <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/file-${extension}.svg`}
-                    alt=""
-                    className={iconSlotClass}
-                />
-            );
-       }
+        // Design icons override for the common doc types; others fall back to the
+        // per-extension svg set.
+        const overrideIconByExtension: Record<string, string> = {
+            doc: "word@2x.png",
+            docx: "word@2x.png",
+            pdf: "pdf@2x.png",
+            md: "md.png",
+        };
+        const overrideIcon = overrideIconByExtension[extension];
+        return (
+            <img
+                src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/${overrideIcon ?? `file-${extension}.svg`}`}
+                alt=""
+                className={iconSlotClass}
+            />
+        );
     }
 
     // Only show thumbnail when file is successfully parsed

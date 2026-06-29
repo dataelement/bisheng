@@ -382,12 +382,12 @@ const SortableHeader = ({
         />
     );
     const title = (
-        <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>{children}</span>
+        <span className={cn("text-[15px] font-normal text-[#545A60]")}>{children}</span>
     );
     return (
         <TableHead
             className={cn(
-                "group relative my-2 cursor-pointer select-none overflow-visible bg-[rgb(251,251,251)] p-0 pr-3",
+                "group relative my-2 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
                 "transition-colors hover:bg-[#f2f3f5]",
                 isSticky && "sticky z-20"
             )}
@@ -476,16 +476,16 @@ function FileTableHeader({
     };
 
     return (
-        <TableHeader className="border-b border-[#e5e6eb] bg-[rgb(251,251,251)]">
+        <TableHeader className="border-b border-[#e5e6eb] bg-[#F3F4F6]">
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
-                    className="sticky left-0 z-20 bg-[rgb(251,251,251)] p-0 text-center"
+                    className="sticky left-0 z-20 bg-[#F3F4F6] p-0 text-center"
                     style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
                 >
                     <div className="flex h-full items-center justify-center">
                         <Checkbox
-                            className="border-gray-400 data-[state=checked]:border-primary"
+                            className="rounded-[3px] border-[#AEB7C0] data-[state=checked]:border-primary"
                             checked={isIndeterminate ? "indeterminate" : isAllSelected}
                             onCheckedChange={onSelectAll}
                         />
@@ -536,7 +536,7 @@ function FileTableHeader({
                 {shougangEnabled && enableEncodingClassification && (
                     <>
                         <TableHead
-                            className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                            className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                             style={{
                                 width: columnWidths.fileType,
                                 minWidth: columnWidths.fileType,
@@ -549,7 +549,7 @@ function FileTableHeader({
                             <ResizeHandle columnKey="fileType" onResizeStart={onResizeStart} />
                         </TableHead>
                         <TableHead
-                            className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                            className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                             style={{
                                 width: columnWidths.businessDomain,
                                 minWidth: columnWidths.businessDomain,
@@ -566,7 +566,7 @@ function FileTableHeader({
 
                 {/* 标签 — 不排序 */}
                 <TableHead
-                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -577,7 +577,7 @@ function FileTableHeader({
                 {/* 文件编码 — 仅 shougang 模式显示 */}
                 {shougangEnabled && (
                     <TableHead
-                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                        className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                         style={{
                             width: columnWidths.fileEncoding,
                             minWidth: columnWidths.fileEncoding,
@@ -606,7 +606,7 @@ function FileTableHeader({
                 {/* 状态 — 管理员始终可见；普通成员仅在存在审批状态时展示 */}
                 {showStatusColumn && (
                     <TableHead
-                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                        className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                         style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                     >
                         <div className="flex items-center gap-1.5 border-l pl-3">
@@ -617,7 +617,7 @@ function FileTableHeader({
 
                 {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
                 <TableHead
-                    className="border-none bg-[rgb(251,251,251)] p-0"
+                    className="border-none bg-[#F3F4F6] p-0"
                     style={{ width: 0, minWidth: 0, maxWidth: 0 }}
                 />
 
@@ -1204,7 +1204,7 @@ function FileRow({
                     <Checkbox
                         checked={isSelected}
                         onCheckedChange={onSelect}
-                        className={`size-4 border-gray-400 ${isSelected ? "border-primary" : ""}`}
+                        className={`size-4 rounded-[3px] border-[#AEB7C0] ${isSelected ? "border-primary" : ""}`}
                     />
                 </div>
             </TableCell>
@@ -1220,8 +1220,8 @@ function FileRow({
                 }}
             >
                 <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
-                    <div className="flex size-[14px] shrink-0 items-center justify-center rounded-sm bg-white">
-                        <FileIconRenderer file={file} isFolder={isFolder} className="size-[14px]" showThumbnail={false} />
+                    <div className="flex size-[18px] shrink-0 items-center justify-center rounded-sm bg-white">
+                        <FileIconRenderer file={file} isFolder={isFolder} className="size-[18px]" showThumbnail={false} />
                     </div>
                     {isRenaming ? (
                         <input
@@ -1259,10 +1259,10 @@ function FileRow({
                                 tabIndex={isFolder || namePreviewable ? 0 : undefined}
                                 aria-label={isFolder || namePreviewable ? `打开${file.name}` : undefined}
                                 className={cn(
-                                    "text-sm truncate flex-1",
+                                    "text-[15px] truncate flex-1",
                                     namePreviewable
-                                        ? "cursor-pointer text-[#165dff] hover:text-[#4080FF]"
-                                        : "cursor-default text-[#4e5969]"
+                                        ? "cursor-pointer text-[#3662E3] hover:text-[#4080FF]"
+                                        : "cursor-default text-[#3662E3]"
                                 )}
                                 onClick={(e) => {
                                     e.stopPropagation();

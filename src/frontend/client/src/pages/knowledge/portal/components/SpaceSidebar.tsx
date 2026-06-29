@@ -1,6 +1,5 @@
 import type { MutableRefObject } from "react";
 import {
-    ChevronRight,
     LogOut,
     MoreHorizontal,
     Pin,
@@ -9,7 +8,6 @@ import {
     Settings,
     UsersRound,
     X,
-    ChevronDown
 } from "lucide-react";
 import { GlobalSearchPanel } from "./GlobalSearchPanel";
 import {
@@ -103,7 +101,7 @@ function SpaceMenu({
                     title="更多操作"
                     onClick={(event) => event.stopPropagation()}
                 >
-                    <MoreHorizontal size={15} />
+                    <MoreHorizontal size={14} />
                 </button>
             </DropdownMenuTrigger>
             <SidebarListMoreMenuContent onClick={(event) => event.stopPropagation()}>
@@ -240,7 +238,22 @@ export function SpaceSidebar({
                                 data-testid="space-sidebar-title-icon"
                             />
                         </span>
-                        <span>我的知识库</span>
+                        <span className={s.spaceHeaderTitle}>我的知识库</span>
+                        <button
+                            type="button"
+                            className={s.spaceHeaderCollapse}
+                            aria-label="收起知识库侧栏"
+                            title="收起"
+                            onClick={onCollapseSidebar}
+                        >
+                            <img
+                                className={s.spaceHeaderCollapseIcon}
+                                src={resolveAssetUrl(SIDEBAR_TOGGLE_ICON_SRC.collapse)}
+                                alt=""
+                                aria-hidden="true"
+                                data-testid="space-sidebar-collapse-icon"
+                            />
+                        </button>
                     </div>
                     <GlobalSearchPanel onSelectFile={onGlobalSearchSelectFile} />
                     <div className={s.spaceList}>
@@ -256,6 +269,17 @@ export function SpaceSidebar({
                                     }}
                                 >
                                     <div className={s.groupRow}>
+                                        <button
+                                            type="button"
+                                            className={s.groupExpandButton}
+                                            aria-label={`${expanded ? "收起" : "展开"}${group.title}`}
+                                            onClick={() => onToggleGroup(group.key)}
+                                        >
+                                            <span
+                                                className={`${s.groupCaret} ${expanded ? s.groupCaretExpanded : ""}`}
+                                                aria-hidden="true"
+                                            />
+                                        </button>
                                         <button
                                             type="button"
                                             className={s.groupToggleButton}
@@ -281,15 +305,7 @@ export function SpaceSidebar({
                                                 onOpenCreateSpace(group);
                                             }}
                                         >
-                                            <Plus size={13} />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={s.groupExpandButton}
-                                            aria-label={`${expanded ? "收起" : "展开"}${group.title}`}
-                                            onClick={() => onToggleGroup(group.key)}
-                                        >
-                                            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                            <Plus size={14} />
                                         </button>
                                     </div>
                                     {expanded ? (
@@ -355,21 +371,6 @@ export function SpaceSidebar({
                             );
                         })}
                     </div>
-                    <button
-                        type="button"
-                        className={s.sidebarFooter}
-                        aria-label="收起知识库侧栏"
-                        onClick={onCollapseSidebar}
-                    >
-                        <img
-                            className={s.sidebarToggleIcon}
-                            src={resolveAssetUrl(SIDEBAR_TOGGLE_ICON_SRC.collapse)}
-                            alt=""
-                            aria-hidden="true"
-                            data-testid="space-sidebar-collapse-icon"
-                        />
-                        <span>收起</span>
-                    </button>
                 </>
             )}
         </aside>

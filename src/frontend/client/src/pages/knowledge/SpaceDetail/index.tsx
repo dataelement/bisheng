@@ -1305,7 +1305,7 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
+                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}

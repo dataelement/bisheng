@@ -41,7 +41,7 @@ export function PortalHeaderActions({
                 aria-label="上传"
             >
                 {/* <Upload size={14} /> */}
-                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/upload.png`} alt="" className="size-[14px]" />
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/upload.svg`} alt="" className="size-[16px]" />
             </button>
             <button
                 type="button"
@@ -52,7 +52,7 @@ export function PortalHeaderActions({
                 aria-label="网页链接"
             >
                 {/* <Globe2 size={14} /> */}
-                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/web-link.png`} alt="" className="size-[14px]" />
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/web-link.svg`} alt="" className="size-[16px]" />
             </button>
             <button
                 type="button"
@@ -62,7 +62,7 @@ export function PortalHeaderActions({
                 aria-label="在线创建文档"
             >
                 {/* <SquarePen size={14} /> */}
-                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/create-doc.png`} alt="" className="size-[14px]" />
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/create-doc.svg`} alt="" className="size-[16px]" />
             </button>
             <button
                 type="button"
@@ -73,7 +73,7 @@ export function PortalHeaderActions({
                 aria-label="新建文件夹"
             >
                 
-                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/new-folder.png`} alt="" className="size-[14px]" />
+                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/new-folder.svg`} alt="" className="size-[16px]" />
                 {/* <FolderPlus size={14} /> */}
             </button>
             <DropdownMenu>
@@ -84,7 +84,7 @@ export function PortalHeaderActions({
                         title={statusFilter.length ? `筛选：已选择 ${statusFilter.length} 项` : "筛选"}
                         aria-label="筛选"
                     >
-                        <FunnelIcon size={14} />
+                        <FunnelIcon size={16} />
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className={s.actionMenu}>
