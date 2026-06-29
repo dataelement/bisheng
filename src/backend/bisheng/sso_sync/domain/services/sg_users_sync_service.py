@@ -11,6 +11,7 @@ from bisheng.core.context.tenant import (
     set_current_tenant_id,
 )
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
@@ -150,7 +151,11 @@ class SgUsersSyncService:
 
             if user.user_id is None:
                 raise ValueError("user_id missing after user upsert")
-            await cls._ensure_primary_membership(int(user.user_id), int(dept.id))
+            user_id = int(user.user_id)
+            if row.delete_flag == 1:
+                await cls._handle_off_job(user_id)
+            else:
+                await cls._ensure_primary_membership(user_id, int(dept.id))
 
             return SgDataInfoItem(
                 uuid=row.payload.uuid,
@@ -178,16 +183,15 @@ class SgUsersSyncService:
         user_id: int,
         dept_id: int,
     ) -> None:
-        """Ensure ``user_department`` row exists so department members API works."""
+        """Ensure ``user_department`` primary row exists for on-job SG users."""
         current = await UserDepartmentDao.aget_user_primary_department(user_id)
-        if current is not None and current.department_id == dept_id:
+        if current is not None and int(current.department_id) == dept_id:
             await cls._sync_department_member_tuples(user_id, [dept_id])
             return
         if current is not None:
-            await UserDepartmentDao.aset_primary_flag(
+            await cls._remove_department_membership(
                 user_id,
-                current.department_id,
-                is_primary=0,
+                int(current.department_id),
             )
         existing = await UserDepartmentDao.aget_membership(user_id, dept_id)
         if existing is not None:
@@ -204,6 +208,33 @@ class SgUsersSyncService:
                 source=cls.SOURCE,
             )
         await cls._sync_department_member_tuples(user_id, [dept_id])
+
+    @classmethod
+    async def _handle_off_job(cls, user_id: int) -> None:
+        """Remove SG-managed department memberships and OpenFGA tuples for off-job users."""
+        memberships = await UserDepartmentDao.aget_user_departments(user_id)
+        for row in memberships:
+            if getattr(row, "source", None) != cls.SOURCE:
+                continue
+            await cls._remove_department_membership(
+                user_id,
+                int(row.department_id),
+            )
+
+    @classmethod
+    async def _remove_department_membership(
+        cls,
+        user_id: int,
+        department_id: int,
+    ) -> None:
+        """Drop DB membership plus FGA member/admin tuples for a department."""
+        await UserDepartmentDao.aremove_member(user_id, department_id)
+        ops = DepartmentChangeHandler.on_member_removed(
+            department_id,
+            user_id,
+        ) + DepartmentChangeHandler.on_admin_removed(department_id, [user_id])
+        await DepartmentChangeHandler.execute_async(ops)
+        await DepartmentAdminGrantDao.adelete(user_id, department_id)
 
     @classmethod
     async def _sync_department_member_tuples(
