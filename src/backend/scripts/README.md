@@ -2,6 +2,33 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Knowledge Space Scripts
+
+### `reparse_knowledge_space_files.py`
+
+重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
+
+bash scripts/reparse_knowledge_space_files.sh
+bash scripts/reparse_knowledge_space_files.sh --apply --concurrency 4
+```
+
+Scope:
+
+- 不传范围参数：处理所有知识空间中的真实文件
+- `--space-id`：包含指定知识空间下的所有真实文件，可重复传入
+- `--folder-id`：递归包含指定文件夹下所有层级的真实文件，可重复传入
+- `--file-id`：包含指定真实文件，可重复传入
+- 仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION` 状态，跳过 `WAITING` / `PROCESSING` / `REBUILDING`
+
 ## Export Scripts
 
 ### `export_daily_chat_messages.py`

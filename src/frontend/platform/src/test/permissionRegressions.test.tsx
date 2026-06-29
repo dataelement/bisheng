@@ -502,6 +502,72 @@ describe("Relation model regressions", () => {
     expect(screen.queryByText("分享文件")).not.toBeInTheDocument();
   });
 
+  it("renders create folder and upload file under the space-level knowledge-space column", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "所有者",
+        relation: "owner",
+        grant_tier: "owner",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetKnowledgeSpacePermissionTemplateApi.mockResolvedValue({
+      title: "知识空间模块",
+      columns: [
+        {
+          title: "空间级",
+          items: [
+            { id: "view_space", label: "查看空间", relation: "can_read" },
+            { id: "create_folder", label: "创建文件夹", relation: "can_edit" },
+            { id: "upload_file", label: "上传文件", relation: "can_edit" },
+          ],
+        },
+        {
+          title: "文件夹级",
+          items: [
+            { id: "view_folder", label: "查看文件夹", relation: "can_read" },
+          ],
+        },
+        {
+          title: "文件级",
+          items: [
+            { id: "view_file", label: "查看文件", relation: "can_read" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expectTextBefore(
+      "system.permissionTemplate.columnSpaceLevel",
+      "system.permissionTemplate.create_folder",
+    );
+    expectTextBefore(
+      "system.permissionTemplate.columnSpaceLevel",
+      "system.permissionTemplate.upload_file",
+    );
+    expectTextBefore(
+      "system.permissionTemplate.create_folder",
+      "system.permissionTemplate.columnFolderLevel",
+    );
+    expectTextBefore(
+      "system.permissionTemplate.upload_file",
+      "system.permissionTemplate.columnFolderLevel",
+    );
+    expectTextBefore(
+      "system.permissionTemplate.columnFolderLevel",
+      "system.permissionTemplate.view_folder",
+    );
+    expectTextBefore(
+      "system.permissionTemplate.columnFileLevel",
+      "system.permissionTemplate.view_file",
+    );
+  });
+
   it("renders the knowledge-library section from the backend template source of truth", async () => {
     mockedGetRelationModelsApi.mockResolvedValue([
       {

@@ -170,6 +170,8 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
         items: [
           { id: "view_space", label: "", relation: "can_read" },
           { id: "edit_space", label: "", relation: "can_edit" },
+          { id: "create_folder", label: "", relation: "can_edit" },
+          { id: "upload_file", label: "", relation: "can_edit" },
           { id: "delete_space", label: "", relation: "can_delete" },
           { id: "share_space", label: "", relation: "can_manage" },
           { id: "manage_space_relation", label: "", relation: "can_manage" },
@@ -179,7 +181,6 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
         title: "文件夹级",
         items: [
           { id: "view_folder", label: "", relation: "can_read" },
-          { id: "create_folder", label: "", relation: "can_edit" },
           { id: "rename_folder", label: "", relation: "can_edit" },
           { id: "delete_folder", label: "", relation: "can_delete" },
           { id: "download_folder", label: "", relation: "can_read" },
@@ -191,7 +192,6 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
         title: "文件级",
         items: [
           { id: "view_file", label: "", relation: "can_read" },
-          { id: "upload_file", label: "", relation: "can_edit" },
           { id: "rename_file", label: "", relation: "can_edit" },
           { id: "delete_file", label: "", relation: "can_delete" },
           { id: "download_file", label: "", relation: "can_read" },

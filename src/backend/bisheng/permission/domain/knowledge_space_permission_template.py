@@ -37,6 +37,8 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
             'items': [
                 {'id': 'view_space', 'label': '查看空间', 'relation': 'can_read'},
                 {'id': 'edit_space', 'label': '编辑空间信息', 'relation': 'can_edit'},
+                {'id': 'create_folder', 'label': '创建文件夹', 'relation': 'can_edit'},
+                {'id': 'upload_file', 'label': '上传文件', 'relation': 'can_edit'},
                 {'id': 'delete_space', 'label': '删除空间', 'relation': 'can_delete'},
                 {'id': 'share_space', 'label': '分享空间', 'relation': 'can_manage'},
                 {'id': 'manage_space_relation', 'label': '管理空间协作者', 'relation': 'can_manage'},
@@ -46,7 +48,6 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
             'title': '文件夹级',
             'items': [
                 {'id': 'view_folder', 'label': '查看文件夹', 'relation': 'can_read'},
-                {'id': 'create_folder', 'label': '创建文件夹', 'relation': 'can_edit'},
                 {'id': 'rename_folder', 'label': '重命名文件夹', 'relation': 'can_edit'},
                 {'id': 'delete_folder', 'label': '删除文件夹', 'relation': 'can_delete'},
                 {'id': 'download_folder', 'label': '下载文件夹', 'relation': 'can_read'},
@@ -58,7 +59,6 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
             'title': '文件级',
             'items': [
                 {'id': 'view_file', 'label': '查看文件', 'relation': 'can_read'},
-                {'id': 'upload_file', 'label': '上传文件', 'relation': 'can_edit'},
                 {'id': 'rename_file', 'label': '重命名文件', 'relation': 'can_edit'},
                 {'id': 'delete_file', 'label': '删除文件', 'relation': 'can_delete'},
                 {'id': 'download_file', 'label': '下载文件', 'relation': 'can_read'},

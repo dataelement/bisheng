@@ -13,6 +13,20 @@ def mock_admin_user():
 
 class TestRelationModelBindings:
 
+    def test_knowledge_space_template_groups_create_and_upload_under_space_level(self):
+        from bisheng.permission.domain.knowledge_space_permission_template import (
+            KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
+        )
+
+        columns = {
+            column['title']: {item['id'] for item in column['items']}
+            for column in KNOWLEDGE_SPACE_PERMISSION_TEMPLATE['columns']
+        }
+
+        assert {'create_folder', 'upload_file'} <= columns['空间级']
+        assert 'create_folder' not in columns['文件夹级']
+        assert 'upload_file' not in columns['文件级']
+
     def test_normalize_relation_model_name_strips_template_prefix(self):
         from bisheng.permission.api.endpoints.resource_permission import _normalize_model_dict
 
