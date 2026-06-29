@@ -267,6 +267,8 @@
       "manage_tool_owner": "ツール所有者を管理",
       "manage_tool_viewer": "ツールの編集者・利用者を管理",
       "publish_app": "アプリを公開",
+      "move_file": "ファイルを移動",
+      "move_folder": "フォルダを移動",
       "rename_file": "ファイル名を変更",
       "rename_folder": "フォルダ名を変更",
       "sectionApplication": "アプリ／ワークフロー",

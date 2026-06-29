@@ -340,6 +340,7 @@ export function KnowledgeSpaceContent({
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
     const [movingFile, setMovingFile] = useState<KnowledgeFile | null>(null);
@@ -592,6 +593,53 @@ export function KnowledgeSpaceContent({
         ).then((ids) => {
             if (!cancelled) {
                 setDeleteEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [isAdmin, permissionEntryProbeKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (isAdmin) {
+            setMoveEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setMoveEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+                const result = await checkPermission(
+                    resourceType,
+                    file.id,
+                    "can_edit",
+                    file.type === FileType.FOLDER ? "move_folder" : "move_file",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setMoveEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
             }
         });
 
@@ -1328,7 +1376,7 @@ export function KnowledgeSpaceContent({
                                     publishEntryIds={publishEntryIds}
                                     onManagePermission={hideFilePermissionActions ? undefined : handleManagePermission}
                                     onMove={onMoveFile ? (file) => setMovingFile(file) : undefined}
-                                    moveEntryIds={renameEntryIds}
+                                    moveEntryIds={moveEntryIds}
                                     onPublishFile={setPublishingFile}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

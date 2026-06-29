@@ -267,6 +267,8 @@
       "manage_tool_owner": "Manage tool owners",
       "manage_tool_viewer": "Manage tool editors and viewers",
       "publish_app": "Publish application",
+      "move_file": "Move file",
+      "move_folder": "Move folder",
       "rename_file": "Rename file",
       "rename_folder": "Rename folder",
       "sectionApplication": "Apps & workflows",

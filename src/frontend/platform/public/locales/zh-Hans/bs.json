@@ -268,6 +268,8 @@
       "manage_tool_owner": "管理工具所有者",
       "manage_tool_viewer": "管理工具编辑者与使用者",
       "publish_app": "发布应用",
+      "move_file": "移动文件",
+      "move_folder": "移动文件夹",
       "rename_file": "重命名文件",
       "rename_folder": "重命名文件夹",
       "sectionApplication": "应用/工作流模块",
