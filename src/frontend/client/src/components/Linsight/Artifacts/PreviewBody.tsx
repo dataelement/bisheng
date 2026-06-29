@@ -8,6 +8,7 @@ import { Colored, Outlined } from 'bisheng-icons';
 import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
+import FilePreview from '~/pages/knowledge/FilePreview';
 import { Button } from '~/components/ui';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useLocalize } from '~/hooks';
@@ -50,7 +51,7 @@ const OUTLINED_FILE_ICONS: Record<string, React.ComponentType<{ className?: stri
 // WorkspacePanel instance, which would otherwise re-fetch and flash a spinner every
 // time. Artifacts are immutable per version, so versionId+url is a safe key — a hit
 // lets the new instance render instantly with no spinner and no network round-trip.
-const previewCache = new Map<string, { text?: string; imageUrl?: string }>();
+const previewCache = new Map<string, { text?: string; imageUrl?: string; resolvedUrl?: string }>();
 const previewCacheKey = (file: ArtifactFile, versionId: string) => `${versionId}::${file.file_url}`;
 
 /** Resolve + load the preview source (text content or same-origin image url). */
@@ -64,12 +65,16 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
     const [error, setError] = useState(false);
     const [text, setText] = useState(cached?.text ?? '');
     const [imageUrl, setImageUrl] = useState(cached?.imageUrl ?? '');
+    // For 'document' kind we only resolve the share url and hand it to FilePreview,
+    // which fetches/parses the bytes itself (pdfjs / mammoth / xlsx).
+    const [resolvedUrl, setResolvedUrl] = useState(cached?.resolvedUrl ?? '');
 
     useEffect(() => {
         setError(false);
         if (!file) {
             setText('');
             setImageUrl('');
+            setResolvedUrl('');
             setLoading(false);
             return undefined;
         }
@@ -77,6 +82,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         if (kind === 'unsupported') {
             setText('');
             setImageUrl('');
+            setResolvedUrl('');
             setLoading(false);
             return undefined;
         }
@@ -87,6 +93,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
             // Already fetched — render immediately, no spinner, no refetch.
             setText(hit.text ?? '');
             setImageUrl(hit.imageUrl ?? '');
+            setResolvedUrl(hit.resolvedUrl ?? '');
             setLoading(false);
             return undefined;
         }
@@ -94,6 +101,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         let cancelled = false;
         setText('');
         setImageUrl('');
+        setResolvedUrl('');
         setLoading(true);
         (async () => {
             try {
@@ -102,6 +110,10 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
                 if (kind === 'image') {
                     previewCache.set(key, { imageUrl: url });
                     setImageUrl(url);
+                } else if (kind === 'document') {
+                    // Resolve only — FilePreview's viewers fetch the bytes themselves.
+                    previewCache.set(key, { resolvedUrl: url });
+                    setResolvedUrl(url);
                 } else {
                     const response = await fetch(url);
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -122,7 +134,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         };
     }, [file, versionId]);
 
-    return { loading, error, text, imageUrl };
+    return { loading, error, text, imageUrl, resolvedUrl };
 }
 
 interface PreviewBodyProps {
@@ -133,7 +145,7 @@ interface PreviewBodyProps {
 export function PreviewBody({ file, versionId }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
-    const { loading, error, text, imageUrl } = usePreviewSource(file, versionId);
+    const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
     const kind = getArtifactPreviewKind(file);
 
     const handleDownloadToView = async () => {
@@ -183,6 +195,19 @@ export function PreviewBody({ file, versionId }: PreviewBodyProps) {
             <div className="flex h-full items-center justify-center p-4">
                 <img className="max-h-full max-w-full object-contain" src={imageUrl} alt={file.file_name} />
             </div>
+        );
+    }
+    if (kind === 'document') {
+        // docx / pdf / xls / xlsx / csv → reuse the shared knowledge-space viewer.
+        // compactMode = viewer only (no top bar / sidebar / zoom): Linsight's own
+        // toolbar (back / download / fullscreen / close) provides the chrome.
+        return (
+            <FilePreview
+                fileName={file.file_name}
+                fileType={getFileExtension(file.file_name)}
+                fileUrl={resolvedUrl}
+                compactMode
+            />
         );
     }
     if (kind === 'markdown') {
