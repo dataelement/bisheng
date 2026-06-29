@@ -11,6 +11,7 @@ import {
     X,
     ChevronDown
 } from "lucide-react";
+import { GlobalSearchPanel } from "./GlobalSearchPanel";
 import {
     DropdownMenu,
     DropdownMenuItem,
@@ -65,6 +66,7 @@ interface SpaceSidebarProps {
     onPinSpace: (space: KnowledgeSpace, pinned: boolean, group: SpaceGroup) => void;
     onDeleteSpace: (space: KnowledgeSpace) => void;
     onLeaveSpace: (space: KnowledgeSpace) => void;
+    onGlobalSearchSelectFile: (spaceId: number, fileId: number, fileName: string) => void;
 }
 
 function SpaceMenu({
@@ -190,6 +192,7 @@ export function SpaceSidebar({
     onPinSpace,
     onDeleteSpace,
     onLeaveSpace,
+    onGlobalSearchSelectFile,
 }: SpaceSidebarProps) {
     return (
         <aside className={`${s.spaceSidebar} ${collapsed ? s.spaceSidebarCollapsed : ""}`}>
@@ -239,6 +242,7 @@ export function SpaceSidebar({
                         </span>
                         <span>我的知识库</span>
                     </div>
+                    <GlobalSearchPanel onSelectFile={onGlobalSearchSelectFile} />
                     <div className={s.spaceList}>
                         {groups.map((group) => {
                             const expanded = expandedGroups[group.key];

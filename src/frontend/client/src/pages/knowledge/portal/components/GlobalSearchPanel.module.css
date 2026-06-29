@@ -1,0 +1,185 @@
+.searchRoot {
+  padding: 6px 8px 0;
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f0f4fa;
+  border: 1px solid #dfe7f2;
+  border-radius: 6px;
+  padding: 4px 8px;
+  height: 30px;
+}
+
+.searchIcon {
+  color: #8a9ab5;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  color: #273142;
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: #a8b6cc;
+}
+
+.searchClear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #8a9ab5;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.searchClear:hover {
+  background: #e0e8f4;
+}
+
+.searchResults {
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #dfe7f2;
+  border-radius: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.searchStatus {
+  padding: 10px 12px;
+  color: #8a9ab5;
+}
+
+.searchSummary {
+  padding: 6px 10px 4px;
+  color: #8a9ab5;
+  font-size: 11px;
+}
+
+.treeLevel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 5px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2c76f4;
+  text-align: left;
+}
+
+.treeLevel:hover {
+  background: #f0f6ff;
+}
+
+.treeSpaceBlock {
+  padding-left: 8px;
+}
+
+.treeSpace {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+  color: #3d5068;
+  text-align: left;
+}
+
+.treeSpace:hover {
+  background: #f5f8ff;
+}
+
+.treeSpaceName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeCount {
+  color: #a8b6cc;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.chevron {
+  transition: transform 160ms ease;
+  flex-shrink: 0;
+  color: #8a9ab5;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.treeFile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 4px 10px 4px 22px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #f0f4fa;
+  cursor: pointer;
+  font-size: 12px;
+  color: #273142;
+  text-align: left;
+}
+
+.treeFile:last-child {
+  border-bottom: 0;
+}
+
+.treeFile:hover {
+  background: #eef5ff;
+}
+
+.treeFolderPath {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #8a9ab5;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeFileName {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #273142;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeFileName span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

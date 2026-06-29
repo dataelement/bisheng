@@ -1855,6 +1855,9 @@ export default function PortalKnowledgeWorkbench() {
                         onPinSpace={(space, pinned, group) => void handlePinSpace(space, pinned, group)}
                         onDeleteSpace={(space) => void handleDeleteSpace(space)}
                         onLeaveSpace={(space) => void handleLeaveSpace(space)}
+                        onGlobalSearchSelectFile={(spaceId, fileId, fileName) =>
+                            handleOpenSourceFile(String(spaceId), String(fileId), fileName)
+                        }
                     />
 
                     {!selectedFile ? (

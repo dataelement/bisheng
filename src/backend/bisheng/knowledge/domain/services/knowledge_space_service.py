@@ -4790,6 +4790,99 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.personal_spaces.append(space)
         return grouped
 
+    async def global_search_files(
+        self,
+        keyword: str,
+        page: int = 1,
+        page_size: int = 30,
+    ) -> Dict:
+        """Search files by name across all spaces the user can access.
+
+        Returns tree-structured results grouped by space level then space, with
+        resolved folder paths for each matching file.
+        """
+        grouped = await self.get_grouped_spaces()
+        all_spaces: List[KnowledgeRead] = (
+            grouped.public_spaces
+            + grouped.department_spaces
+            + grouped.team_spaces
+            + grouped.personal_spaces
+        )
+        if not all_spaces:
+            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+        space_id_list = [int(space.id) for space in all_spaces]
+        space_by_id = {int(space.id): space for space in all_spaces}
+
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            space_id_list,
+            file_name=keyword.strip() if keyword else None,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+        )
+        # Only keep actual files (not folders)
+        files = [f for f in files if int(f.file_type) != FileType.DIR.value]
+
+        total = len(files)
+        start = (page - 1) * page_size
+        page_files = files[start: start + page_size]
+
+        # Resolve folder paths in bulk
+        folder_ids: set[int] = set()
+        for f in page_files:
+            for part in (f.file_level_path or "").split("/"):
+                if part:
+                    folder_ids.add(int(part))
+
+        folder_name_map: Dict[int, str] = {}
+        if folder_ids:
+            folders = await KnowledgeFileDao.aget_file_by_ids(list(folder_ids))
+            folder_name_map = {
+                int(fd.id): str(fd.file_name or "")
+                for fd in folders
+                if int(fd.file_type) == FileType.DIR.value
+            }
+
+        # Build flat list of results enriched with space/folder info
+        level_order = {
+            KnowledgeSpaceLevelEnum.PUBLIC: 0,
+            KnowledgeSpaceLevelEnum.DEPARTMENT: 1,
+            KnowledgeSpaceLevelEnum.TEAM: 2,
+            KnowledgeSpaceLevelEnum.PERSONAL: 3,
+        }
+        level_labels = {
+            KnowledgeSpaceLevelEnum.PUBLIC: "公共知识库",
+            KnowledgeSpaceLevelEnum.DEPARTMENT: "部门知识库",
+            KnowledgeSpaceLevelEnum.TEAM: "团队知识库",
+            KnowledgeSpaceLevelEnum.PERSONAL: "个人知识库",
+        }
+
+        result_items = []
+        for f in page_files:
+            space = space_by_id.get(int(f.knowledge_id))
+            if not space:
+                continue
+            level = space.space_level or KnowledgeSpaceLevelEnum.PERSONAL
+            folder_segments: List[str] = []
+            for part in (f.file_level_path or "").split("/"):
+                if part:
+                    name = folder_name_map.get(int(part))
+                    if name:
+                        folder_segments.append(name)
+            result_items.append({
+                "file_id": f.id,
+                "file_name": f.file_name,
+                "file_type_ext": (f.file_name or "").rsplit(".", 1)[-1].lower() if "." in (f.file_name or "") else "",
+                "space_id": int(f.knowledge_id),
+                "space_name": space.name or "",
+                "space_level": str(level.value) if isinstance(level, KnowledgeSpaceLevelEnum) else str(level),
+                "space_level_label": level_labels.get(level, str(level)),
+                "space_level_order": level_order.get(level, 99),
+                "folder_path": folder_segments,
+            })
+
+        result_items.sort(key=lambda x: (x["space_level_order"], x["space_name"], x["folder_path"], x["file_name"]))
+        return {"total": total, "page": page, "page_size": page_size, "data": result_items}
+
     async def get_authorized_space_options(
         self,
         keyword: str = "",

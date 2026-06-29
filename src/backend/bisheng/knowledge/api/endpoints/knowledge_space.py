@@ -401,6 +401,17 @@ async def get_space_folder_stats(
     return resp_200(result)
 
 
+@router.get("/global-search")
+async def global_search_files(
+    keyword: str = Query(default="", description="搜索关键词"),
+    page: int = 1,
+    page_size: int = 30,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.global_search_files(keyword=keyword, page=page, page_size=page_size)
+    return resp_200(result)
+
+
 @router.get("/{space_id}/search")
 async def search_space_children(
     space_id: int,

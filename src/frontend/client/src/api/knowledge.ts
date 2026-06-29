@@ -2647,3 +2647,34 @@ export async function recordPortalDownloadEventApi(
         // best-effort
     }
 }
+
+export interface GlobalSearchFileResult {
+    file_id: number;
+    file_name: string;
+    file_type_ext: string;
+    space_id: number;
+    space_name: string;
+    space_level: string;
+    space_level_label: string;
+    space_level_order: number;
+    folder_path: string[];
+}
+
+export interface GlobalSearchResult {
+    total: number;
+    page: number;
+    page_size: number;
+    data: GlobalSearchFileResult[];
+}
+
+export async function globalSearchSpaceFilesApi(
+    keyword: string,
+    page: number = 1,
+    pageSize: number = 30,
+): Promise<GlobalSearchResult> {
+    const res = await request.get<ApiResponse<GlobalSearchResult>>(
+        `/api/v1/knowledge/space/global-search`,
+        { params: { keyword, page, page_size: pageSize } },
+    );
+    return res?.data ?? { total: 0, page: 1, page_size: pageSize, data: [] };
+}
