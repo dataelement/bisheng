@@ -154,9 +154,9 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
                 // Update pagination tokens per envelope shape.
                 if (isSearching) {
-                    const totalCount = (res as any).total ?? 0;
-                    const fetchedSoFar = searchPageToFetch * pageSize;
-                    setHasMore(fetchedSoFar < totalCount);
+                    // F040: search now returns `has_more` directly (batch-scan, no
+                    // exact total) — drive next-page off it instead of total math.
+                    setHasMore(Boolean((res as any).has_more));
                     setNextSearchPage(searchPageToFetch);
                 } else {
                     setNextCursor((res as any).next_cursor ?? null);

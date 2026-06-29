@@ -69,7 +69,7 @@ export function ExportSelectionButton({
         >
             <Outlined.FileExport
                 size={14}
-                className={cn(active ? 'text-[#1677ff]' : 'text-[#818181]')}
+                className={cn(active ? 'text-blue-500' : 'text-[#818181]')}
             />
         </button>
     );

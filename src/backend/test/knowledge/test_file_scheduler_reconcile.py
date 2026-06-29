@@ -63,6 +63,7 @@ def test_case3_processing_timeout_reenqueues(monkeypatch):
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
     sched.active_users.return_value = []
+    sched.parse_lock_alive.return_value = False  # worker genuinely dead
     monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
     stale = datetime.now() - timedelta(hours=10)
     row = _row(KnowledgeFileStatus.PROCESSING, file_name="a.pdf", user_id=7, update_time=stale)
@@ -81,6 +82,86 @@ def test_case3_processing_timeout_reenqueues(monkeypatch):
     sched.complete_file.assert_called_once_with(user_id="7", file_id="100")
     sched.enqueue_file.assert_called_once()
     status_update.assert_called_once()
+
+
+def test_case3_lock_dead_reenqueues_even_when_update_time_fresh(monkeypatch):
+    """Crash recovery: the parse lock is the authoritative liveness signal. When
+    a PROCESSING file's lock is dead (holding worker crashed → lock self-expired),
+    reconcile must recover it IMMEDIATELY — even if update_time is still fresh
+    (far below inflight_ttl). Waiting out the old ~2h timeout left a crashed
+    file's queue blocked for hours."""
+    _patch_fair_enabled(monkeypatch)
+    sched = MagicMock()
+    sched.inflight_users.return_value = ["7"]
+    sched.inflight_files.return_value = ["100"]
+    sched.active_users.return_value = []
+    sched.parse_lock_alive.return_value = False  # holding worker crashed
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    fresh = datetime.now()  # nowhere near inflight_ttl
+    row = _row(KnowledgeFileStatus.PROCESSING, file_name="a.pdf", user_id=7, update_time=fresh)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
+        lambda ids: [row],
+    )
+    status_update = MagicMock()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.update_file_status",
+        status_update,
+    )
+
+    reconcile_file_scheduler_task.run()
+
+    sched.complete_file.assert_called_once_with(user_id="7", file_id="100")
+    sched.enqueue_file.assert_called_once()
+    status_update.assert_called_once()
+
+
+def test_case3_lock_alive_never_reenqueues_however_long(monkeypatch):
+    """A healthy long parse keeps its lock alive via heartbeat; reconcile must
+    never re-enqueue it regardless of age (no concurrent-duplicate parse)."""
+    _patch_fair_enabled(monkeypatch)
+    sched = MagicMock()
+    sched.inflight_users.return_value = ["7"]
+    sched.inflight_files.return_value = ["100"]
+    sched.active_users.return_value = []
+    sched.parse_lock_alive.return_value = True  # heartbeat still refreshing
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    very_old = datetime.now() - timedelta(hours=10)
+    row = _row(KnowledgeFileStatus.PROCESSING, file_name="big.txt", user_id=7, update_time=very_old)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
+        lambda ids: [row],
+    )
+
+    reconcile_file_scheduler_task.run()
+
+    sched.complete_file.assert_not_called()
+    sched.enqueue_file.assert_not_called()
+
+
+def test_case3_processing_timeout_but_parse_lock_alive_skips(monkeypatch):
+    """A file past inflight_ttl whose parse lock is still alive is a long-but-
+    healthy parse (heartbeat refreshing the lock), NOT a dead worker. Reconcile
+    must leave it in place — re-enqueuing would spawn a concurrent duplicate
+    parse of the same file (the task-storm OOM bug)."""
+    _patch_fair_enabled(monkeypatch)
+    sched = MagicMock()
+    sched.inflight_users.return_value = ["7"]
+    sched.inflight_files.return_value = ["100"]
+    sched.active_users.return_value = []
+    sched.parse_lock_alive.return_value = True  # worker still actively parsing
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    stale = datetime.now() - timedelta(hours=10)
+    row = _row(KnowledgeFileStatus.PROCESSING, file_name="big.txt", user_id=7, update_time=stale)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
+        lambda ids: [row],
+    )
+
+    reconcile_file_scheduler_task.run()
+
+    sched.complete_file.assert_not_called()
+    sched.enqueue_file.assert_not_called()
 
 
 def test_case3_processing_fresh_skips(monkeypatch):

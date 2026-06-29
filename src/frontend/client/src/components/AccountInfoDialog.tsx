@@ -524,7 +524,7 @@ export function AccountInfoDialog({
                                 "h-11 flex-1 rounded-lg px-4 text-[15px] font-normal",
                                 isSubmitDisabled()
                                     ? "cursor-not-allowed bg-[#e5e6eb] text-[#c9cdd4] hover:bg-[#e5e6eb]"
-                                    : "bg-blue-500 text-white hover:bg-blue-400",
+                                    : "bg-blue-500 text-white hover:bg-blue-400 btn-brand-primary",
                             )}
                         >
                             {localize("com_account_info_confirm_change")}

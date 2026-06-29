@@ -9,10 +9,13 @@ import type { PluggableList } from 'unified';
 import { code, codeNoExecution, a, p } from './Markdown';
 import { CodeBlockProvider, ArtifactProvider } from '~/Providers';
 import { langSubset } from '~/utils';
+import { rehypeBr } from '~/utils/rehypeBr';
 
 const MarkdownLite = memo(
   ({ content = '', codeExecution = true }: { content?: string; codeExecution?: boolean }) => {
     const rehypePlugins: PluggableList = [
+      // Turn literal <br> into real line breaks (e.g. inside table cells).
+      rehypeBr,
       [rehypeKatex, { output: 'mathml' }],
       [
         rehypeHighlight,

@@ -463,7 +463,11 @@ class FineGrainedPermissionService:
         matched_lineage_binding = False
         saw_bound_model_tuple = False
         saw_legacy_subscription_viewer_tuple = False
-        fga = PermissionService._get_fga()
+        # Use the async accessor (consistent with PermissionService): the sync
+        # _get_fga() can fail to materialize the optional app-context instance in
+        # async paths before the module singleton is warm, which would skip the
+        # whole tuple-read block and silently degrade to implicit-level only.
+        fga = await PermissionService._aget_fga()
         if fga is not None:
             try:
                 for resource_type, resource_id in lineage:

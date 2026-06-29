@@ -411,6 +411,9 @@
   "com_linsight_clarify_skipped": "跳过",
   "com_linsight_clarify_next": "下一题",
   "com_linsight_clarify_submit": "确定",
+  "com_linsight_clarify_skip_start": "跳过，开始任务",
+  "com_linsight_clarify_supplement": "补充信息",
+  "com_linsight_clarify_skip_answer": "已跳过",
   "com_linsight_task_panel": "任务",
   "com_linsight_task_panel_done": "任务已完成",
   "com_linsight_task_terminated": "任务已终止",
@@ -1176,6 +1179,7 @@
   "subscribed": "已加入",
   "website": "网站",
   "api_errors": {
+    "11001": "软件授权已过期，请联系管理员续期",
     "403": "暂无操作权限",
     "404": "资源不存在",
     "429": "系统正忙，请稍候",
@@ -1441,7 +1445,10 @@
     "center_title": "应用中心",
     "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
     "explore_more": "探索更多应用",
-    "recent_apps_hint": "最近使用过的应用都在这里～"
+    "recent_apps_hint": "最近使用过的应用都在这里～",
+    "service_maintenance_title": "系统维护中",
+    "service_maintenance": "我们正在进行紧急维护，服务将尽快恢复。",
+    "refresh": "刷新重试"
   },
   "com_knowledge": {
     "add_new": "新增",
@@ -1550,6 +1557,7 @@
     "format_list": "pdf(含扫描件)、ofd、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、dps、et",
     "get_download_link_failed": "下载链接获取失败",
     "go_to_square": "前往广场",
+    "go_to_knowledge_square": "前往知识广场",
     "history_chat": "历史会话",
     "html_preview": "HTML 预览",
     "image_preview": "图片预览",
@@ -1622,6 +1630,7 @@
     "no_matched_tags": "暂无匹配标签",
     "no_more_content": "没有更多内容了",
     "no_related_content_please": "无相关内容，请",
+    "no_related_content_you_can": "无相关内容，您可以",
     "no_tags": "暂无标签",
     "no_auto_tag_library": "暂无可用标签库，请先在管理端构建模块创建标签库",
     "load_tag_libraries_failed": "标签库加载失败，请稍后重试",

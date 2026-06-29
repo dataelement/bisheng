@@ -275,7 +275,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 onClick={() => onAiAssistant?.()}
                             >
                                 <span className="ai-btn-shimmer-overlay" />
-                                <AiChatIcon className="size-3.5 text-blue-200" stroke="#94BFFF" />
+                                <AiChatIcon className="size-3.5 text-blue-200" />
                                 <span className="text-[#000D4D]">{localize("com_subscription.ai_assistant")}</span>
                             </button>}
                         </div>

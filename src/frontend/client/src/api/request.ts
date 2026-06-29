@@ -123,8 +123,35 @@ export const translateApiErrorMessage = (data: any) => {
   return statusMessage || (statusCodeKey ? i18next.t(statusCodeKey, data?.data) : "");
 };
 
+// License degradation (gateway returns 11001): throttle the toast so a burst of
+// failing business calls doesn't flood the user with duplicate notices.
+let lastLicenseExpiredToastAt = 0;
+function shouldToastLicenseExpired(): boolean {
+  const now = Date.now();
+  if (now - lastLicenseExpiredToastAt > 5000) {
+    lastLicenseExpiredToastAt = now;
+    return true;
+  }
+  return false;
+}
+
 customAxios.interceptors.response.use(
   (response) => {
+    // License expired (gateway degradation): always surface a clear toast and reject,
+    // regardless of per-call error flags, so end users learn it's an authorization
+    // issue rather than a transient glitch. See feature 037.
+    if (response.data?.status_code === 11001) {
+      const message = translateApiErrorMessage(response.data) || response.data.status_message || '';
+      if (message && shouldToastLicenseExpired()) {
+        window.showToast?.({ message, status: 'error' });
+      }
+      const err: any = new Error(message || 'license expired (11001)');
+      err.status_code = 11001;
+      err.status_message = response.data.status_message;
+      err.response = response;
+      return Promise.reject(err);
+    }
+
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
     // explicitly opts out via skip403Redirect.
     if (response.data.status_code === 403 && !response.config.skip403Redirect) {
@@ -164,6 +191,12 @@ customAxios.interceptors.response.use(
     const originalRequest = error.config;
     if (!error.response) {
       return Promise.reject(error);
+    }
+
+    // Gateway/backend service exception → surface the global maintenance overlay.
+    // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
+    if (error.response.status === 500) {
+      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
     }
 
     if (originalRequest.url?.includes('/api/auth/2fa') === true) {

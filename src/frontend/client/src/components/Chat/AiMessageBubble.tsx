@@ -156,7 +156,7 @@ function CopyButton({ text }: { text: string }) {
             title="复制"
             aria-label="复制"
         >
-            {copied ? <Outlined.Copied size={14} className="text-[#1677ff]" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
+            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
     );
 }
@@ -269,6 +269,8 @@ function AgentTimeline({
     messageId,
 }: {
     events: AgentEvent[];
+    /** Whether the message is still streaming — used to mark the trailing group
+     * as live so its thinking node shows the 正在/已 status. */
     isStreaming: boolean;
     /** Index in `blocks` of the trailing text block to skip (rendered by the
      * main bubble Markdown). -1 if no such block. */

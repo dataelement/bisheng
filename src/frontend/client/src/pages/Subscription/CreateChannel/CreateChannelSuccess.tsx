@@ -24,11 +24,11 @@ export function CreateChannelSuccessContent({
                 <div className="flex gap-3">
                     <Button
                         variant="secondary"
-                        className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-[#E8F3FF]"
+                        className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-blue-50"
                         onClick={onViewChannel}
                     >{localize("com_subscription.view_channel")}</Button>
                     <Button
-                        className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400"
+                        className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400 btn-brand-primary"
                         onClick={onManageMembers}
                     >{localize("com_subscription.member_management")}</Button>
                 </div>

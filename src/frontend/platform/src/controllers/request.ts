@@ -110,6 +110,18 @@ function isEnvelope(data: any): boolean {
     return data && typeof data === "object" && typeof data.status_code === "number"
 }
 
+// License degradation (gateway returns 11001): throttle the toast so a burst of
+// failing business calls doesn't flood the user with duplicate notices.
+let lastLicenseExpiredToastAt = 0;
+function shouldToastLicenseExpired(): boolean {
+    const now = Date.now();
+    if (now - lastLicenseExpiredToastAt > 5000) {
+        lastLicenseExpiredToastAt = now;
+        return true;
+    }
+    return false;
+}
+
 customAxios.interceptors.response.use(function (response) {
     if (response.data instanceof Blob) return response.data;
     if (response.data.status_code === 200) {
@@ -124,6 +136,20 @@ customAxios.interceptors.response.use(function (response) {
     }
     const statusCode = response.data.status_code
     const errorMessage = decodeEnvelopeMessage(response.data)
+
+    // License expired (gateway degradation): always toast (throttled) regardless of
+    // whether the caller wraps the call with captureAndAlertRequestErrorHoc, then
+    // reject(null) so the HoC doesn't double-toast. See feature 037.
+    if (statusCode === 11001) {
+        if (shouldToastLicenseExpired()) {
+            toast({
+                title: `${i18next.t('prompt')}`,
+                variant: 'error',
+                description: i18next.t('license.expired'),
+            })
+        }
+        return Promise.reject(null);
+    }
 
     // 密码过期，标记后透传给业务层处理
     if (statusCode === 10601) {

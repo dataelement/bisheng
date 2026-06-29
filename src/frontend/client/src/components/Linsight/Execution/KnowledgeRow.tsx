@@ -33,9 +33,12 @@ export function KnowledgeRow({ step }: { step: MergedStep }) {
     // Unified icon system (§1.3): running → Accent Loading spinner; done → Ink
     // BookOpenText (matching the top-level node glyph). Hit-list glyph is the
     // Outlined.File equivalent (lucide FileText removed), 16px Muted as detail.
-    const icon = step.running
-        ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
-        : <Outlined.BookOpenText size={16} style={{ color: INK }} />;
+    // Open-aware: spinner only while COLLAPSED + running; expanded reverts to the
+    // node's own glyph (running child below carries the live state).
+    const icon = (open: boolean) =>
+        step.running && !open
+            ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
+            : <Outlined.BookOpenText size={16} style={{ color: INK }} />;
     return (
         <StepRow icon={icon} title={step.name} running={step.running}>
             {step.callReason && <p className={detailTextCls} style={{ color: BODY }}>{step.callReason}</p>}

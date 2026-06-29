@@ -303,12 +303,36 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         preview_cache_key,
         callback_url,
     )
+
+    fair_enabled = settings.knowledge_file_worker.fair_scheduler_enabled
+    sched = file_scheduler.FileScheduler() if fair_enabled else None
+    lock_token = None
+    stop_heartbeat = None
+    if fair_enabled:
+        conf = settings.knowledge_file_worker.fair_scheduler
+        lock_token = sched.acquire_parse_lock(file_id=str(file_id), ttl_seconds=conf.parse_lock_ttl_seconds)
+        if lock_token is None:
+            # Idempotency guard: another worker is already parsing this file.
+            # A duplicate task can arrive via acks_late broker redelivery (this
+            # worker OOM-killed mid-parse) or a reconcile re-enqueue while the
+            # file is still parsing. Parsing it again means N threads loading the
+            # same file + LLM + Milvus/ES at once → memory blowup. Skip entirely;
+            # do NOT touch completion bookkeeping (the holder owns that).
+            logger.warning(
+                "parse_knowledge_file_celery: file_id={} already being parsed; skipping duplicate",
+                file_id,
+            )
+            return
+        stop_heartbeat = file_scheduler.start_parse_heartbeat(sched, file_id=str(file_id), token=lock_token, conf=conf)
+
     knowledge = None
     try:
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
+        if stop_heartbeat is not None:
+            stop_heartbeat()
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not db_file and knowledge:
             logger.debug("delete_knowledge_file_celery file_id={}", file_id)
@@ -317,9 +341,8 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             # db_file is empty — fixed to use file_id directly.
             delete_vector_files([file_id], knowledge)
 
-        if settings.knowledge_file_worker.fair_scheduler_enabled:
+        if fair_enabled:
             try:
-                sched = file_scheduler.FileScheduler()
                 if db_file:
                     sched.complete_file(user_id=str(db_file[0].user_id), file_id=str(file_id))
                 else:
@@ -334,6 +357,11 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                     "file_scheduler: complete_file/trigger failed for file_id={}",
                     file_id,
                 )
+            finally:
+                # Always release the parse lock last so a duplicate can't slip in
+                # between completion and release.
+                if lock_token is not None:
+                    sched.release_parse_lock(file_id=str(file_id), token=lock_token)
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):

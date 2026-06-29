@@ -23,10 +23,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from typing import Annotated
 
 from json_repair import json_repair
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, tool
+from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
@@ -130,6 +132,12 @@ __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/com
   - 多选问题（multiple=true，如输出格式）：用户可勾选多项。
   - 收集“输出格式”用一个多选问题，选项含 markdown / html / docx / pdf。
 - 一次性把所有要问的问完。不要罗列工具或能力限制，也不要预先解释工作流。
+- 【正确示例】questions 必须是这样的 JSON 数组（照此结构直接填——切勿把问题写进 reason，也切勿把数组序列化成字符串）：
+  questions=[
+    {"question": "你想构建哪一类 agent？", "options": ["对话/工具调用型（LLM Agent）", "自动化流程/任务编排型", "检索增强问答型（RAG）"], "multiple": false},
+    {"question": "主要落地场景或用途是？", "options": ["客服答疑", "数据分析与报告", "内容创作", "研发/代码辅助"], "multiple": false},
+    {"question": "希望的交付格式？", "options": ["markdown", "html", "docx", "pdf"], "multiple": true}
+  ]
 
 # 默认假设（无需追问，缺失时直接采用）
 - 输出格式：默认仅 markdown；仅当用户明确选择才追加 html / docx / pdf，不要擅自猜测。
@@ -279,23 +287,13 @@ def _recover_question_items(s: str) -> list[dict]:
     return best
 
 
-def _coerce_questions(value: object) -> list[dict]:
-    """Normalize the ``questions`` arg into a clean ``list[dict]``, tolerating
-    models that stringify nested tool arguments.
-
-    Some non-OpenAI models (observed with qwen3.7-max) serialize the whole
-    ``questions`` array — or each question object — as a JSON *string* on the
-    OpenAI-compatible function-calling path. Strict ``list[dict]`` validation
-    then rejects it ("Input should be a valid list") before ``ask_user`` ever
-    runs, so the model retries the same malformed call forever and never parks.
-
-    This coercion recovers the intended structure. Beyond valid-JSON strings it
-    also salvages MALFORMED ones via ``_recover_question_items`` (``json_repair``)
-    — e.g. a whole array crammed into one list element with unescaped quotes and a
-    missing opening bracket. Every step degrades rather than raises: an
-    unrecoverable payload becomes ``[]`` (ask_user still parks with reason only),
-    and a partially-recovered item that yields no real question is dropped — the
-    user never sees a raw JSON blob as a question.
+def _normalize_to_dicts(value: object) -> list[dict]:
+    """Structural normalization shared by ``_coerce_questions`` and
+    ``_salvage_options_only``: parse the (possibly stringified, or per-item
+    stringified) ``questions`` payload into a flat list of dict candidates WITHOUT
+    the final "must carry question text" filter. The result MAY include options-only
+    dicts and debris — each caller applies its own keep-rule. Degrades to ``[]``
+    (never raises) on anything unparseable.
     """
     if value is None:
         return []
@@ -321,13 +319,120 @@ def _coerce_questions(value: object) -> list[dict]:
         elif isinstance(item, list):
             # a smuggled nested array of question dicts
             out.extend(q for q in item if isinstance(q, dict))
-    # Keep only real questions: drops salvage debris (e.g. a bare options list with
-    # no question text) so a malformed input can never surface as an empty/garbage row.
-    return [q for q in out if isinstance(q, dict) and str(q.get("question", "")).strip()]
+    return [q for q in out if isinstance(q, dict)]
+
+
+def _coerce_questions(value: object) -> list[dict]:
+    """Normalize the ``questions`` arg into a clean ``list[dict]``, tolerating
+    models that stringify nested tool arguments.
+
+    Some non-OpenAI models (observed with qwen3.7-max) serialize the whole
+    ``questions`` array — or each question object — as a JSON *string* on the
+    OpenAI-compatible function-calling path. Strict ``list[dict]`` validation
+    then rejects it ("Input should be a valid list") before ``ask_user`` ever
+    runs, so the model retries the same malformed call forever and never parks.
+
+    This coercion recovers the intended structure. Beyond valid-JSON strings it
+    also salvages MALFORMED ones via ``_recover_question_items`` (``json_repair``)
+    — e.g. a whole array crammed into one list element with unescaped quotes and a
+    missing opening bracket. Every step degrades rather than raises: an
+    unrecoverable payload becomes ``[]`` (ask_user still parks with reason only),
+    and a partially-recovered item that yields no real question is dropped — the
+    user never sees a raw JSON blob as a question.
+
+    Keeps only items carrying real question text; options-only dicts are dropped
+    here (a bare options list with no question text), but recovered separately by
+    ``_salvage_options_only`` when ``ask_user`` would otherwise have nothing to show.
+    """
+    return [q for q in _normalize_to_dicts(value) if str(q.get("question", "")).strip()]
+
+
+# ② options-only salvage uses a NEUTRAL question title rather than the model's
+# ``reason``: the reason is already shown as the clarify card HEADER (stream_event_
+# mapper maps interrupt ``reason`` -> ``call_reason``), so repeating it as the body
+# question text would duplicate it on screen. The frontend drops a tool_call whose
+# question is empty (parseClarifyRequest), so a non-empty placeholder is required for
+# the options to render at all.
+_SALVAGE_QUESTION_TITLE = "请从以下选项中选择"
+
+
+def _salvage_options_only(value: object) -> list[dict]:
+    """② options-only salvage. When the model passed option lists but forgot the
+    question text, ``_coerce_questions`` drops them (no ``question`` key) and the
+    card would degrade to a blank free-text box. Instead keep the options under a
+    neutral placeholder title (``_SALVAGE_QUESTION_TITLE``) so the card renders the
+    clickable options — a renderable card without a wasted retry round-trip. Only
+    fires for dicts that have real options but no question text; pure debris (neither
+    question nor options) is still dropped.
+    """
+    salvaged: list[dict] = []
+    for q in _normalize_to_dicts(value):
+        if str(q.get("question", "")).strip():
+            continue  # has text — already kept by _coerce_questions
+        options = [str(o) for o in (q.get("options") or []) if str(o).strip()]
+        if options:
+            salvaged.append(
+                {"question": _SALVAGE_QUESTION_TITLE, "options": options, "multiple": bool(q.get("multiple", False))}
+            )
+    return salvaged
+
+
+# ① empty-questions self-heal. The model usually HAS the questions in its reasoning
+# (observed live: thinking lists 4 questions) but failed to fill the param, so the
+# coerced result is empty and the card degrades to a blank free-text box. Return
+# this actionable correction as a NORMAL tool result (ToolMessage) so the agent loop
+# continues and the model re-calls WITH structure — instead of immediately parking
+# on an empty card. Capped at ONE nudge per turn via ``_empty_retry_count`` so a
+# model that still cannot structure parks free-text rather than looping: this keeps
+# the 2026-06-22 no-infinite-retry guarantee (we never hard-reject + spin forever).
+# The marker is a substring of the hint so a later call can detect "already nudged".
+_EMPTY_QUESTIONS_RETRY_MARKER = "questions 为空，无法生成结构化澄清卡片"
+_EMPTY_QUESTIONS_RETRY_HINT = (
+    "你刚才调用 ask_user 时 "
+    + _EMPTY_QUESTIONS_RETRY_MARKER
+    + "。请立刻只重新调用一次 ask_user，把你要确认的问题作为 JSON 数组传入 questions —— "
+    + '每项形如 {"question": "完整问题文本", "options": ["选项1", "选项2", "选项3"], "multiple": false}：'
+    "给 1-3 个问题、每个尽量带 2-4 个预设选项供用户点选；只有确实无法预设选项的问题才把该问的 options 留空。"
+    "不要把问题写进 reason 文字里，也不要再次提交空 questions。"
+)
+
+
+def _empty_retry_count(state: object) -> int:
+    """How many times THIS turn ``ask_user`` already returned the empty-questions
+    corrective hint. Caps the self-heal nudge at one (then degrade to a free-text
+    park) so a model that cannot produce structured questions never loops. Reads the
+    message history injected via ``InjectedState``; tolerant of a missing / None
+    state (returns 0 → one nudge allowed) and of both message-object and dict shapes.
+    A new user turn (``human`` message) re-arms the nudge.
+    """
+    messages = None
+    if isinstance(state, dict):
+        messages = state.get("messages")
+    elif state is not None:
+        messages = getattr(state, "messages", None)
+    if not messages:
+        return 0
+    count = 0
+    for m in messages:
+        if isinstance(m, dict):
+            role = m.get("type") or m.get("role")
+            content = m.get("content")
+        else:
+            role = getattr(m, "type", None)
+            content = getattr(m, "content", None)
+        if role in ("human", "user"):
+            count = 0  # current-turn boundary: a fresh user turn re-arms the nudge
+        elif role == "tool" and isinstance(content, str) and _EMPTY_QUESTIONS_RETRY_MARKER in content:
+            count += 1
+    return count
 
 
 @tool
-async def ask_user(reason: str, questions: list[dict] | str | None = None) -> str:
+async def ask_user(
+    reason: str,
+    questions: list[dict] | str | None = None,
+    state: Annotated[dict | None, InjectedState] = None,
+) -> str:
     """需要用户补充信息、做选择或确认时调用本工具暂停任务并向用户提问；用户回答后任务自动继续。
 
     只有调用本工具才会真正暂停等待用户输入——不要直接用普通文字提问后就结束任务。
@@ -342,18 +447,30 @@ async def ask_user(reason: str, questions: list[dict] | str | None = None) -> st
     Returns:
         用户的回答文本。
     """
-    questions = _coerce_questions(questions)
+    coerced = _coerce_questions(questions)
+    if not coerced:
+        # ② options provided but the question text was dropped → keep the options.
+        coerced = _salvage_options_only(questions)
+    if not coerced:
+        # ① nudge the model once to resubmit structured questions; on the second
+        # empty call this turn, fall through and park free-text (reason-only card).
+        if _empty_retry_count(state) == 0:
+            return _EMPTY_QUESTIONS_RETRY_HINT
     tool_calls = [
         {
             "id": f"q_{i}",
             "name": "clarify",
             "args": {
-                "question": str(q.get("question", "")),
+                # Both coerced and salvaged items already carry non-empty text; the
+                # placeholder is a last-resort guard so a tool_call is never dropped
+                # by the frontend for an empty question (it would NOT duplicate the
+                # reason header — that is exactly why _SALVAGE_QUESTION_TITLE is used).
+                "question": str(q.get("question", "")).strip() or _SALVAGE_QUESTION_TITLE,
                 "options": [str(o) for o in (q.get("options") or [])],
                 "multiple": bool(q.get("multiple", False)),
             },
         }
-        for i, q in enumerate(questions or [])
+        for i, q in enumerate(coerced)
     ]
     return interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
 

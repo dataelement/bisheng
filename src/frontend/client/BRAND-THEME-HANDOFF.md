@@ -70,6 +70,15 @@ blue: { 50:'rgb(var(--brand-50) / <alpha-value>)', ... 900:'rgb(var(--brand-900)
 
 **多 SVG 同屏注意**：把 `id`（gradient/clipPath/mask）用 `useId()` 做唯一化，否则重复 id 串色。FolderIcon 已示范。
 
+### 3.1 插画专用调色板 `--illus-*`（2026-06-24）
+
+空状态插画**不用 `--brand-*`，改用独立的 `--illus-100/300/500`**（`style.css`）。原因：用户画插画用的鲜绿 `#19B476/#BDE6D3/#7CD0B1` 比 UI 品牌绿 `#187C54` 系更亮；若跟 `--brand-*` 会被压暗、与设计稿不符。
+
+- `:root`（蓝模式）：`--illus-*` = 品牌蓝（#165DFF/#6AA1FF/#BEDAFF），所以蓝模式插画仍跟随切蓝。
+- `.theme-green`：`--illus-500=#19B476`、`--illus-300=#7CD0B1`、`--illus-100=#BDE6D3`（忠于原图）。
+
+7 张插画组件（EmptyState/ArticleQA/ListWebLink/Crawling/NoPermission/Success/SystemMaintenance）的 `fill/stroke` 都用 `rgb(var(--illus-NNN))`。**新插画一律用 `--illus-*`，不要用 `--brand-*`。** UI 品牌绿 `#187C54`（按钮/链接/选中）不受影响。FolderIcon 等 UI 图标仍用 `--brand-*`。
+
 ---
 
 ## 4. 本轮已固定为「不跟随主题、永远蓝」的例外（不要误改成绿）
@@ -114,6 +123,7 @@ blue: { 50:'rgb(var(--brand-50) / <alpha-value>)', ... 900:'rgb(var(--brand-900)
 | `ListWebLinkIllustration` | 列表网页链接 | |
 | `CrawlingIllustration` | 爬取中 | mask uid 已唯一化 |
 | `SuccessIllustration` | 成功态 | **跟随品牌主题**（用户已确认，非固定语义成功绿） |
+| `SystemMaintenanceIllustration` | 系统维护 | 数据库+扳手；无 mask；2026-06-24 新增，组件已建未接槽位 |
 
 **通用空状态已替换（2026-06-24）**：10 处通用 `assets/channel/empty.png` 的 `<img>` 已换成 `<EmptyStateIllustration className="size-[120px] mb-X opacity-90" />`（去掉对内联 SVG 无意义的 `object-contain`）：ChannelMemberManagementPanel、ChannelMemberDialog、KnowledgeSpaceMemberManagementPanel、KnowledgeSpaceMemberDialog、ChannelSquare、Subscription/index、knowledge/index、KnowledgeSquare、SpaceDetail/index、apps/AppEmptyState。
 

@@ -49,6 +49,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     UpdateChannelRequest,
     UpdateMemberRoleRequest,
 )
+from bisheng.channel.domain.services.article_count_cache import ArticleCountCache
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import (
@@ -799,6 +800,57 @@ class ChannelService:
         counts = await asyncio.gather(*[unread_for(n) for n in sub_names])
         return {name: count for name, count in zip(sub_names, counts)}
 
+    async def _calculate_sub_channel_unread_counts_batch(
+        self, channel: Channel, all_read_ids: list[str]
+    ) -> dict[str, int]:
+        """F040: per-sub-channel unread for one channel in a single ES msearch.
+
+        Expresses each sub-channel's unread directly as ``count(main+sub filter AND
+        NOT read_ids)`` (must_not terms) and batches all sub-channels via
+        ``count_articles_batch`` — collapsing the per-sub ``total - matching_read``
+        loop (S x (1 + read-chunk) sequential ES queries) into one round-trip. Set
+        identity makes this equal to the ``_calculate_sub_channel_unread_counts``
+        oracle. Oversized read sets fall back to that oracle for correctness."""
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+        sub_names: list[str] = []
+        for fr in channel.filter_rules or []:
+            if isinstance(fr, dict) and fr.get("channel_type") == "sub":
+                name = fr.get("name")
+                if name and name not in sub_names:
+                    sub_names.append(name)
+        if not sub_names:
+            return {}
+        if all_read_ids and len(all_read_ids) > _MAX_UNREAD_EXCLUDE_TERMS:
+            return await self._calculate_sub_channel_unread_counts(channel, all_read_ids)
+
+        exclude = all_read_ids or None
+        requests = []
+        for name in sub_names:
+            sub_rule_groups = self._extract_filter_rule_groups(channel, channel_type="sub", sub_channel_name=name)
+            effective_rule_groups = [*main_rule_groups, *sub_rule_groups]
+            requests.append(
+                {
+                    "source_ids": channel.source_list,
+                    "filter_rules": effective_rule_groups if effective_rule_groups else None,
+                    "exclude_article_ids": exclude,
+                }
+            )
+        counts = await self.article_es_service.count_articles_batch(requests)
+        return {name: count for name, count in zip(sub_names, counts)}
+
+    async def get_sub_channel_unread_counts(self, channel_id: str, login_user: UserPayload) -> dict[str, int]:
+        """F040: per-sub-channel unread for the current user — served by the dedicated
+        ``GET /channel/manager/{id}/unread-counts`` endpoint (split out of channel
+        detail so the preview/detail path no longer pays this per-user ES cost)."""
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ChannelNotFoundError()
+        channel = channels[0]
+        all_read_ids: list[str] = []
+        if self.article_read_repository:
+            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
+        return await self._calculate_sub_channel_unread_counts_batch(channel, all_read_ids)
+
     @staticmethod
     def _sort_channels(items: list[ChannelItemResponse], sort_by: SortByEnum) -> list[ChannelItemResponse]:
         """
@@ -1093,6 +1145,15 @@ class ChannelService:
         )
 
     @staticmethod
+    async def _user_can_edit_channel(user_id: int, channel_id: str) -> bool:
+        return await PermissionService.check(
+            user_id=user_id,
+            relation="can_edit",
+            object_type="channel",
+            object_id=channel_id,
+        )
+
+    @staticmethod
     async def _user_can_read_channel(user_id: int, channel_id: str) -> bool:
         return await PermissionService.check(
             user_id=user_id,
@@ -1194,9 +1255,7 @@ class ChannelService:
 
         return ChannelSquarePageResponse(data=result_list, total=total)
 
-    async def get_recommended_channels(
-        self, login_user: UserPayload, limit: int = 12
-    ) -> ChannelSquarePageResponse:
+    async def get_recommended_channels(self, login_user: UserPayload, limit: int = 12) -> ChannelSquarePageResponse:
         """
         Home-page discovery recommendations: released PUBLIC channels sorted by
         content (article) count descending, for the empty-state carousel shown to
@@ -1208,9 +1267,7 @@ class ChannelService:
         ``total`` is the number of qualifying public channels (capped at the candidate
         limit) so the frontend can fall back to the empty illustration when < 3.
         """
-        rows = await self.channel_repository.find_public_recommend_channels(
-            user_id=login_user.user_id
-        )
+        rows = await self.channel_repository.find_public_recommend_channels(user_id=login_user.user_id)
 
         items = await self._build_square_items(rows)
 
@@ -1232,20 +1289,26 @@ class ChannelService:
         if not rows:
             return []
 
-        # To avoid N+1 ES queries, build a batch request
-        batch_requests = []
-        for row in rows:
-            channel = row[0]
-            main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
-            batch_requests.append(
-                {
-                    "source_ids": channel.source_list or [],
-                    "filter_rules": main_rule_groups if main_rule_groups else None,
-                    "include_article_ids": None,
-                }
-            )
+        # F040: main article counts come from a short-TTL Redis cache; only the cache
+        # *misses* go to ES (still batched into one msearch), then are written back.
+        # ``article_counts`` stays a list parallel to ``rows``. Shared by the square and
+        # the home-page recommendations, so both benefit from the cache.
+        channels = [row[0] for row in rows]
+        cached_counts = await ArticleCountCache.get_main_counts([c.id for c in channels])
 
-        article_counts = await self.article_es_service.count_articles_batch(batch_requests)
+        miss_indices = [i for i, c in enumerate(channels) if c.id not in cached_counts]
+        miss_requests = [
+            {
+                "source_ids": channels[i].source_list or [],
+                "filter_rules": self._extract_filter_rule_groups(channels[i], channel_type="main") or None,
+                "include_article_ids": None,
+            }
+            for i in miss_indices
+        ]
+        fresh_counts = await self.article_es_service.count_articles_batch(miss_requests) if miss_requests else []
+        fresh_by_index = {idx: (fresh_counts[j] if j < len(fresh_counts) else 0) for j, idx in enumerate(miss_indices)}
+        await ArticleCountCache.set_main_counts({channels[i].id: fresh_by_index[i] for i in miss_indices})
+        article_counts = [cached_counts.get(c.id, fresh_by_index.get(i, 0)) for i, c in enumerate(channels)]
 
         # Collect top 5 source IDs from all channels for the square
         all_needed_source_ids = set()
@@ -1367,8 +1430,9 @@ class ChannelService:
         if existing_membership:
             existing_membership.status = status
             await self.space_channel_member_repository.update(existing_membership)
+            member_row = existing_membership
         else:
-            await self.space_channel_member_repository.add_member(
+            member_row = await self.space_channel_member_repository.add_member(
                 business_id=req.channel_id,
                 business_type=BusinessTypeEnum.CHANNEL,
                 user_id=login_user.user_id,
@@ -1411,19 +1475,25 @@ class ChannelService:
                     ip_address=get_request_ip(request) if request else None,
                 )
             )
-            if gate_result.decision == "pass":
-                if existing_membership:
-                    existing_membership.status = MembershipStatusEnum.ACTIVE
-                    await self.space_channel_member_repository.update(existing_membership)
+            if gate_result.decision == ApprovalGateDecision.PASS:
+                # Reuse the membership row created/updated above instead of
+                # re-fetching it. The old re-fetch raced a concurrent unsubscribe
+                # (returned None between create and re-fetch → the just-approved
+                # access was silently dropped, no error). member_row is always set
+                # by the create/update block above.
+                if member_row is not None:
+                    member_row.status = MembershipStatusEnum.ACTIVE
+                    await self.space_channel_member_repository.update(member_row)
                 else:
-                    membership = await self.space_channel_member_repository.find_membership(
+                    # Defensive upsert: the row vanished (concurrent unsubscribe);
+                    # recreate it ACTIVE so an approved subscription is never lost.
+                    await self.space_channel_member_repository.add_member(
                         business_id=req.channel_id,
                         business_type=BusinessTypeEnum.CHANNEL,
                         user_id=login_user.user_id,
+                        role=UserRoleEnum.MEMBER,
+                        status=MembershipStatusEnum.ACTIVE,
                     )
-                    if membership:
-                        membership.status = MembershipStatusEnum.ACTIVE
-                        await self.space_channel_member_repository.update(membership)
                 await self.__class__.sync_direct_channel_user_permissions(
                     req.channel_id,
                     login_user.user_id,
@@ -1534,19 +1604,12 @@ class ChannelService:
         if not channel:
             raise ChannelNotFoundError()
 
-        # 2. Verify current user can edit channel settings
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
-        )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not a member of this channel")
-
-        current_relation = resolve_channel_relation(current_membership)
-        if current_relation not in {
-            ChannelRelationEnum.OWNER,
-            ChannelRelationEnum.MANAGER,
-            ChannelRelationEnum.EDITOR,
-        }:
+        # 2. Verify current user can edit channel settings. Super admins are always
+        # allowed; otherwise the ReBAC ``can_edit`` relation decides. ``can_edit`` is
+        # satisfied by owner / manager / editor (permission pyramid), and—unlike the
+        # membership table—also honours edit grants delivered through departments,
+        # user groups or direct OpenFGA tuples.
+        if not login_user.is_admin() and not await self._user_can_edit_channel(login_user.user_id, channel_id):
             raise ChannelPermissionDeniedError(
                 msg="Only the owner, manager, or editor can update the channel information"
             )
@@ -1732,14 +1795,28 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user permission
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
+        # 2. Verify current user permission.
+        # F040: a single ``find_membership_split`` lookup returns both
+        # ``current_membership`` (highest-rank ACTIVE row → permission gating) and
+        # ``status_membership`` (highest-rank row of any status → displayed
+        # subscription status), replacing the old two-query path. Deriving both
+        # from one result set is exactly equivalent AND avoids the
+        # collapse-to-one-row bug where a higher-ranked PENDING/REJECTED row
+        # (multi-grant model) would mask an ACTIVE membership.
+        current_membership, status_membership = await self.space_channel_member_repository.find_membership_split(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id,
         )
+        # F040: build the F037 shared ReBAC context once and pass it in, instead of
+        # letting ``_get_channel_permission_ids`` re-derive bindings/models/subject
+        # strings inline on every detail request.
+        permission_context = await self._build_channel_permission_context(login_user)
         permission_ids = await self._get_channel_permission_ids(
             channel_id,
             login_user,
             current_membership,
+            context=permission_context,
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
@@ -1760,19 +1837,22 @@ class ChannelService:
         # 4. Get Subscriber Count
         subscriber_count = await self.space_channel_member_repository.count_channel_members(channel_id=channel_id)
 
-        # 5. Get Article Count
+        # 5. Get Article Count — F040: served from a short-TTL Redis cache (the main
+        # count is user-independent). On miss / Redis down, fall back to a live ES
+        # count and write it back. ``None`` means miss (a cached 0 is a valid hit).
         main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
-        article_count = await self.article_es_service.count_articles(
-            source_ids=channel.source_list,
-            filter_rules=main_rule_groups if main_rule_groups else None,
-        )
+        article_count = await ArticleCountCache.get_main_count(channel_id)
+        if article_count is None:
+            article_count = await self.article_es_service.count_articles(
+                source_ids=channel.source_list,
+                filter_rules=main_rule_groups if main_rule_groups else None,
+            )
+            await ArticleCountCache.set_main_count(channel_id, article_count)
 
-        # 5b. Per-sub-channel unread counts (sub-channel name → unread) for this user.
-        all_read_ids = []
-        if self.article_read_repository:
-            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
-        sub_channel_unread_counts = await self._calculate_sub_channel_unread_counts(channel, all_read_ids)
+        # 5b. F040: per-sub-channel unread counts are NO LONGER computed here — they
+        # are the dominant per-user ES cost and the preview drawer never shows them.
+        # In-channel views fetch them lazily via GET /channel/manager/{id}/unread-counts.
 
         # Complete info source list
         source_infos = []
@@ -1798,17 +1878,9 @@ class ChannelService:
 
         # Determine subscription status. ``current_membership`` is ACTIVE-only (it
         # gates permissions), but the subscribe button must also reflect PENDING /
-        # REJECTED applications — the same states the channel square shows. When the
-        # user has no active membership, fall back to an include_inactive lookup so a
-        # pending application reads as "applying" instead of "not subscribed".
-        status_membership = current_membership
-        if status_membership is None:
-            status_membership = await self.space_channel_member_repository.find_membership(
-                business_id=channel_id,
-                business_type=BusinessTypeEnum.CHANNEL,
-                user_id=login_user.user_id,
-                include_inactive=True,
-            )
+        # REJECTED applications — the same states the channel square shows. F040:
+        # ``status_membership`` (the highest-rank row of any status from the split
+        # lookup above) carries that PENDING/REJECTED state, so use it directly.
         subscription_status = self._resolve_membership_subscription_status(status_membership)
 
         # Knowledge-sync config — only returned for the channel creator since
@@ -1835,7 +1907,6 @@ class ChannelService:
             creator_name=creator_name,
             subscriber_count=subscriber_count,
             article_count=article_count,
-            sub_channel_unread_counts=sub_channel_unread_counts,
             subscription_status=subscription_status,
             relation=relation,
             permission_ids=_sorted_channel_permission_ids(permission_ids),
@@ -2005,8 +2076,8 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user may dismiss the channel: either the creator, or
-        #    a user explicitly granted the `delete_channel` fine-grained permission.
+        # 2. Verify current user may dismiss the channel: a super admin, the creator,
+        #    or a user granted the `delete_channel` fine-grained permission via ReBAC.
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
@@ -2015,7 +2086,7 @@ class ChannelService:
             and current_membership.status == MembershipStatusEnum.ACTIVE
             and current_membership.user_role == UserRoleEnum.CREATOR
         )
-        if not is_active_creator:
+        if not login_user.is_admin() and not is_active_creator:
             permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
             if "delete_channel" not in permission_ids:
                 raise ChannelPermissionDeniedError(

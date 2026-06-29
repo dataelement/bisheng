@@ -262,8 +262,30 @@ def _default_relation_models() -> list[dict]:
     ]
 
 
+def _roster_cache_tenant_id() -> int:
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    return get_current_tenant_id() or 0
+
+
 async def _get_relation_models() -> list[dict]:
-    """只读；若库中无记录则初始化默认四条，禁止每次读取都覆盖已保存的自定义模型。"""
+    """只读；若库中无记录则初始化默认四条，禁止每次读取都覆盖已保存的自定义模型。
+
+    F040 (E): served from a process-local cache keyed by the config row's
+    ``update_time``; on a version match the parse is skipped. Version unavailable
+    (``None``, e.g. first init) → rebuild + no caching (fail-safe)."""
+    from bisheng.permission.domain.services import relation_roster_cache
+
+    version = await ConfigDao.aget_config_version(_RELATION_MODELS_KEY)
+    return await relation_roster_cache.get_or_build(
+        name="relation_models",
+        tenant_id=_roster_cache_tenant_id(),
+        version=version,
+        build=_build_relation_models,
+    )
+
+
+async def _build_relation_models() -> list[dict]:
     row = await ConfigDao.aget_config_by_key(_RELATION_MODELS_KEY)
     if not row or not (row.value or "").strip():
         models = _default_relation_models()
@@ -290,7 +312,25 @@ async def _save_relation_models(models: list[dict]) -> None:
 
 
 async def _get_bindings() -> list[dict]:
-    """只读；禁止每次读取都把绑定表写回空数组。"""
+    """只读；禁止每次读取都把绑定表写回空数组。
+
+    F040 (E): served from a process-local cache keyed by the config row's
+    ``update_time`` — this collapses the repeated DB read + ``json.loads`` + legacy
+    scan that every ReBAC read (esp. ``/children`` deep-expansion) otherwise pays.
+    Version unavailable (``None``) → rebuild + no caching (fail-safe). The list is
+    treated as read-only by all callers, matching the existing per-request memo."""
+    from bisheng.permission.domain.services import relation_roster_cache
+
+    version = await ConfigDao.aget_config_version(_RELATION_MODEL_BINDINGS_KEY)
+    return await relation_roster_cache.get_or_build(
+        name="relation_bindings",
+        tenant_id=_roster_cache_tenant_id(),
+        version=version,
+        build=_build_bindings,
+    )
+
+
+async def _build_bindings() -> list[dict]:
     row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)
     if not row or not (row.value or "").strip():
         return []

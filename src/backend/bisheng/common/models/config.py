@@ -1,48 +1,49 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from sqlalchemy import Column, DateTime, text
-from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import LargeText
 
 
 class ConfigKeyEnum(Enum):
-    INIT_DB = 'initdb_config'  # Default System Configuration
-    HOME_TAGS = 'home_tags'  # Home LabelIDVertical
-    WEB_CONFIG = 'web_config'  # Configuration items for front-end customization
-    KNOWLEDGE_LLM = 'knowledge_llm'  # Knowledge Base Default Model Configuration
-    ASSISTANT_LLM = 'assistant_llm'  # Assistant Default Model Configuration
-    EVALUATION_LLM = 'evaluation_llm'  # Review default model configuration
-    WORKFLOW_LLM = 'workflow_llm'  # Workflow default model configuration
-    WORKSTATION = 'workstation'  # Daily Chat configuration
-    WORKSTATION_LINSIGHT = 'workstation_linsight'  # Linsight configuration
-    WORKSTATION_SUBSCRIPTION = 'workstation_subscription'  # Subscription configuration
-    WORKSTATION_KNOWLEDGE_SPACE = 'workstation_knowledge_space'  # Knowledge Space Configuration
+    INIT_DB = "initdb_config"  # Default System Configuration
+    HOME_TAGS = "home_tags"  # Home LabelIDVertical
+    WEB_CONFIG = "web_config"  # Configuration items for front-end customization
+    KNOWLEDGE_LLM = "knowledge_llm"  # Knowledge Base Default Model Configuration
+    ASSISTANT_LLM = "assistant_llm"  # Assistant Default Model Configuration
+    EVALUATION_LLM = "evaluation_llm"  # Review default model configuration
+    WORKFLOW_LLM = "workflow_llm"  # Workflow default model configuration
+    WORKSTATION = "workstation"  # Daily Chat configuration
+    WORKSTATION_LINSIGHT = "workstation_linsight"  # Linsight configuration
+    WORKSTATION_SUBSCRIPTION = "workstation_subscription"  # Subscription configuration
+    WORKSTATION_KNOWLEDGE_SPACE = "workstation_knowledge_space"  # Knowledge Space Configuration
 
-    LINSIGHT_LLM = 'linsight_llm'  # workstation Default Model Configuration
+    LINSIGHT_LLM = "linsight_llm"  # workstation Default Model Configuration
 
 
 class ConfigBase(SQLModelSerializable):
     key: str = Field(index=True, unique=True)
     value: str = Field(sa_column=Column(LargeText))
-    comment: Optional[str] = Field(default=None, index=False)
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+    comment: str | None = Field(default=None, index=False)
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
+        ),
+    )
 
 
 class Config(ConfigBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
-    __table_args__ = {
-        "mysql_charset": "utf8mb4",
-        "mysql_collate": "utf8mb4_unicode_ci"
-    }
+    __table_args__ = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
 
 
 class ConfigRead(ConfigBase):
@@ -55,21 +56,20 @@ class ConfigCreate(ConfigBase):
 
 class ConfigUpdate(SQLModelSerializable):
     key: str
-    value: Optional[str] = None
-    comment: Optional[str] = None
+    value: str | None = None
+    comment: str | None = None
 
 
 class ConfigDao(ConfigBase):
-
     @classmethod
-    def get_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
+    def get_config(cls, key: ConfigKeyEnum) -> Config | None:
         with get_sync_db_session() as session:
             statement = select(Config).where(Config.key == key.value)
             config = session.exec(statement).first()
             return config
 
     @classmethod
-    async def aget_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
+    async def aget_config(cls, key: ConfigKeyEnum) -> Config | None:
         async with get_async_db_session() as session:
             statement = select(Config).where(Config.key == key.value)
             config = await session.exec(statement)
@@ -77,10 +77,22 @@ class ConfigDao(ConfigBase):
             return config
 
     @classmethod
-    async def aget_config_by_key(cls, key: str) -> Optional[Config]:
+    async def aget_config_by_key(cls, key: str) -> Config | None:
         """按任意字符串 key 读取配置（用于非 ConfigKeyEnum 的扩展项）。"""
         async with get_async_db_session() as session:
             statement = select(Config).where(Config.key == key)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
+    async def aget_config_version(cls, key: str) -> datetime | None:
+        """F040: lightweight version read — fetch ONLY ``update_time`` (not the
+        possibly-large ``value`` blob) for use as a cache key. Returns ``None`` when
+        the row is absent so callers fail-safe to a live rebuild without caching.
+        ``update_time`` carries ``onupdate=CURRENT_TIMESTAMP`` so it advances on every
+        config write, making it a safe version for read-side cache invalidation."""
+        async with get_async_db_session() as session:
+            statement = select(Config.update_time).where(Config.key == key)
             result = await session.exec(statement)
             return result.first()
 

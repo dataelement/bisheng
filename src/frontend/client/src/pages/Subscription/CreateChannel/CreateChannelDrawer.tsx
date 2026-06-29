@@ -783,7 +783,7 @@ export function CreateChannelDrawer({
                                             form.setSubmitting(false);
                                         }
                                     }}
-                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1"
+                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1 btn-brand-primary"
                                 >
                                     {isEditMode
                                         ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

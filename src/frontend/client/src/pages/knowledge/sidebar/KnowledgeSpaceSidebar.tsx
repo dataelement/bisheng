@@ -185,7 +185,7 @@ export function KnowledgeSpaceSidebar({
         ])),
         [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
     );
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
+    const { permissions: spaceActionPermissions, ensureSpacePermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
 
     const getItemPermissions = (space: KnowledgeSpace, type: "created" | "joined" | "department") => {
         const isCreator = type === "created" || space.role === SpaceRole.CREATOR;
@@ -280,6 +280,7 @@ export function KnowledgeSpaceSidebar({
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
                 onManageMembers={onManageMembers}
+                onMenuOpen={() => ensureSpacePermissions(s.id)}
                 {...getItemPermissions(s, sectionType)}
             />
         ) : (
@@ -295,6 +296,7 @@ export function KnowledgeSpaceSidebar({
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
                 onManageMembers={onManageMembers}
+                onMenuOpen={() => ensureSpacePermissions(s.id)}
                 {...getItemPermissions(s, sectionType)}
             />
         );
@@ -556,14 +558,22 @@ export function KnowledgeSpaceSidebar({
                     </div>
                 </div>
                 {!collapsed && !mobileDrawerMode && !compactMode && !mobilePageMode && (
-                    <div className="shrink-0 px-3 py-3">
+                    <div className="flex shrink-0 flex-col gap-2 px-3 py-3">
                         <Button
                             variant="secondary"
                             onClick={() => onKnowledgeSquare?.()}
                             className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                         >
                             <Outlined.BlocksAndArrows className="size-4" />
-                            {localize("com_knowledge.go_to_square")}
+                            {localize("com_knowledge.go_to_knowledge_square")}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={onCreateSpace}
+                            className="h-8 w-full gap-1 rounded-[6px] bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                        >
+                            <Plus className="size-4" />
+                            {localize("com_knowledge.create_knowledge_space")}
                         </Button>
                     </div>
                 )}

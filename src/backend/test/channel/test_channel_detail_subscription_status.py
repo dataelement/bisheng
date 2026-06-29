@@ -48,6 +48,14 @@ class _MembershipRepo:
             return None
         return self.member
 
+    async def find_membership_split(self, business_id, business_type, user_id):
+        # Single-row mock: highest-active is the row only when ACTIVE; highest-any
+        # is the row regardless of status.
+        if self.member is None:
+            return None, None
+        highest_active = self.member if self.member.status == MembershipStatusEnum.ACTIVE else None
+        return highest_active, self.member
+
     async def find_members_by_role(self, channel_id, role):
         return []
 
@@ -102,6 +110,10 @@ def _pending_member() -> SpaceChannelMember:
     )
 
 
+async def _empty_context(self, login_user):
+    return {}
+
+
 @pytest.fixture(autouse=True)
 def _stub_permissions(monkeypatch):
     # Detail also resolves channel permission ids; keep that out of the DB/OpenFGA
@@ -111,6 +123,9 @@ def _stub_permissions(monkeypatch):
         "get_effective_permission_ids_async",
         staticmethod(_async_return([])),
     )
+    # F040: detail builds the shared F037 context (DB-backed) before resolving
+    # permission ids; stub it so this test stays off the DB path.
+    monkeypatch.setattr(ChannelService, "_build_channel_permission_context", _empty_context)
 
 
 @pytest.mark.asyncio

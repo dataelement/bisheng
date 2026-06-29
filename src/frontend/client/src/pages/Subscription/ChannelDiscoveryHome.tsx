@@ -269,7 +269,7 @@ export function ChannelDiscoveryHome({
                 <button
                     type="button"
                     onClick={onCreateChannel}
-                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors fine-pointer:hover:bg-blue-400 active:bg-blue-600"
+                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors fine-pointer:hover:bg-blue-400 active:bg-blue-600 btn-brand-primary"
                 >
                     {localize("com_subscription.create_channel")}
                 </button>

@@ -126,3 +126,14 @@ if current == ARGV[1] then
 end
 return 0
 """
+
+REFRESH_LOCK = r"""
+-- Extend a lock's TTL only if the caller still owns it (token match). Used by
+-- the parse heartbeat to keep a long-running parse's lock alive without ever
+-- stealing a lock that a different worker now holds.
+local current = redis.call('GET', KEYS[1])
+if current == ARGV[1] then
+    return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 0
+"""

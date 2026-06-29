@@ -66,9 +66,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     abstract: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     file_size: int | None = Field(default=None, index=False, description="File size inbytes")
     md5: str | None = Field(default=None, index=False)
-    parse_type: str | None = Field(
-        default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode"
-    )
+    parse_type: str | None = Field(default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode")
     split_rule: str | None = Field(default=None, sa_column=Column(Text), description="Files parsed in what mode")
     preview_file_object_name: str | None = Field(default=None, index=True, description="Preview File Object name")
     bbox_object_name: str | None = Field(default="", description="bboxFiles inminioStored object name")
@@ -555,7 +553,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
         page: int = 0,
         page_size: int = 0,
         exclude_file_ids: list[int] | None = None,
+        id_tiebreaker: bool = False,
     ) -> list[KnowledgeFile]:
+        """Offset-paginated file filter query.
+
+        ``id_tiebreaker``: append ``, id ASC`` to the ORDER BY so the row order is
+        fully deterministic. F040 space-search batch-scans this query in
+        successive OFFSET windows; without a unique tie-breaker, rows sharing the
+        same sort key (file_type / ext_rank / update_time) could be re-ordered
+        across batches, causing duplicates or skips. Off by default so existing
+        callers keep their current ordering.
+        """
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(
             statement,
@@ -568,6 +576,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
             order_field=order_field,
             order_sort=order_sort,
         )
+        if id_tiebreaker:
+            statement = statement.order_by(col(KnowledgeFile.id).asc())
         if exclude_file_ids:
             statement = statement.where(col(KnowledgeFile.id).notin_(exclude_file_ids))
         if page and page_size:

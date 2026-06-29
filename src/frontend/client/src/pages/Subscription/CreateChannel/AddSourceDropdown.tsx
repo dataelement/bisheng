@@ -37,7 +37,8 @@ function WebsiteSourceLink({
 }) {
     return (
         <span className="group/link inline-flex max-w-full items-center align-middle text-[#1D2129]">
-            <span className="truncate">
+            {/* External-link source: name turns brand blue on hover and stays blue (does not follow theme). */}
+            <span className="truncate transition-colors group-hover/link:text-[#335CFF]">
                 {truncateName(name, maxLen)}
             </span>
             <button
@@ -50,7 +51,7 @@ function WebsiteSourceLink({
                         (e.currentTarget as HTMLElement).click();
                     }
                 }}
-                className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center text-blue-500 cursor-pointer opacity-0 transition-opacity group-hover/link:opacity-100"
+                className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center text-[#335CFF] cursor-pointer opacity-0 transition-opacity group-hover/link:opacity-100"
             >
                 <ChannelRightSmallUpIcon className="size-4 shrink-0" />
             </button>
@@ -369,7 +370,7 @@ export function AddSourceDropdown({
                                             mgr.handleClearSearch();
                                             mgr.setActiveTab("website");
                                         }}
-                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-blue-500 hover:bg-blue-400"
+                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-blue-500 hover:bg-blue-400 btn-brand-primary"
                                     >
                                         {localize("com_subscription.confirm_crawl")}
                                     </Button>
@@ -409,7 +410,7 @@ export function AddSourceDropdown({
                                                     className={cn(
                                                         "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 cursor-pointer",
                                                         dis && "opacity-60 cursor-not-allowed",
-                                                        sel && "bg-[#E8F3FF]"
+                                                        sel && "bg-blue-50"
                                                     )}
                                                 >
                                                     <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#F2F3F5]">
@@ -490,7 +491,7 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={mgr.handleConfirm}
                                     disabled={mgr.pendingSources.length === 0}
-                                    className="bg-blue-500 h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
+                                    className="bg-blue-500 h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
                                 >
                                     {localize("com_subscription.confirm_add")}
                                 </Button>

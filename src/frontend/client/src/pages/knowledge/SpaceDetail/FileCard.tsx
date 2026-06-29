@@ -36,6 +36,8 @@ const renderHighlightedName = (text: string, keyword?: string) => {
 interface FileCardProps {
     file: KnowledgeFile;
     userRole: SpaceRole;
+    /** F040: lazily resolve this file's action permissions when its menu opens. */
+    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
@@ -85,6 +87,7 @@ interface FileCardProps {
 export function FileCard({
     file,
     userRole,
+    onEnsureFilePermissions,
     isSelected,
     onSelect,
     onDownload,
@@ -129,6 +132,11 @@ export function FileCard({
     const isUploading = isKnowledgeItemUploading(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    // F040: resolve this file's action permissions lazily, only when the menu opens.
+    const handleMoreMenuOpenChange = (open: boolean) => {
+        setMoreMenuOpen(open);
+        if (open) onEnsureFilePermissions?.(file);
+    };
     const failureMessage = (
         file.status === FileStatus.FAILED ||
         file.status === FileStatus.TIMEOUT ||
@@ -143,7 +151,9 @@ export function FileCard({
     const isFolder = file.type === FileType.FOLDER;
     // A folder still uploading its batch: shown only as a name with a translucent
     // "uploading" overlay, not clickable, not a drag source / drop target.
-    const isUploadingFolderPlaceholder = isFolder && isUploading;
+    // Inline-create placeholders (isCreating) are excluded — a freshly created
+    // folder is a normal folder with a highlighted rename input, no scrim/tag.
+    const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */
@@ -581,7 +591,7 @@ export function FileCard({
                                 </Button>
                             )}
                             {showMoreMenu && (
-                                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                                <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                                     <DropdownMenuTrigger asChild>
                                         <Button
                                             variant="outline"
@@ -726,7 +736,7 @@ export function FileCard({
                         </Button>
                     )}
                     {showMoreMenu && (
-                        <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                        <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="outline"

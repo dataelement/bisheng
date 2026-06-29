@@ -2,6 +2,7 @@ import {
     activeFlowNode,
     buildFlowNodes,
     buildTimelineGroups,
+    CLARIFY_SKIP_SIGNAL,
     explodeSubagentGroup,
     extractNarration,
     findPendingUserInput,
@@ -907,5 +908,40 @@ describe('stepUtils — findPendingUserInput (park-awaiting-user signal)', () =>
     it('tolerates null/undefined inputs and missing history', () => {
         expect(findPendingUserInput(null, null)).toBeNull();
         expect(findPendingUserInput(undefined, [{ history: null, children: null }])).toBeNull();
+    });
+});
+
+describe('stepUtils — clarify fallback routing contract (ClarifyCard dispatcher)', () => {
+    // ClarifyCard routes to the ima-style ClarifyFallbackCard IFF
+    // parseClarifyRequest(data).questions.length === 0 (the ask_user "parse-failure"
+    // degrade that previously fell to a bare textarea). These pin that boundary plus
+    // the skip sentinel the fallback emits.
+
+    it('no tool_calls -> zero questions (dispatcher routes to the fallback card)', () => {
+        const data: ExecStepEventData = { step_type: 'call_user_input', call_reason: '需要确认几个关键信息', params: {} };
+        expect(parseClarifyRequest(data).questions).toHaveLength(0);
+    });
+
+    it('tool_calls present but no question text -> still zero questions (fallback)', () => {
+        const data: ExecStepEventData = {
+            step_type: 'call_user_input',
+            call_reason: 'r',
+            params: { tool_calls: [{ id: 'q_0', name: 'clarify', args: { options: ['a', 'b'] } }] },
+        };
+        expect(parseClarifyRequest(data).questions).toHaveLength(0);
+    });
+
+    it('a well-formed question -> non-zero (interactive card path stays unchanged)', () => {
+        const data: ExecStepEventData = {
+            step_type: 'call_user_input',
+            call_reason: 'r',
+            params: { tool_calls: [{ id: 'q_0', name: 'clarify', args: { question: '关注哪个地区？', options: ['中国', '全球'] } }] },
+        };
+        expect(parseClarifyRequest(data).questions).toHaveLength(1);
+    });
+
+    it('CLARIFY_SKIP_SIGNAL is a stable non-empty control phrase (skip -> proceed with defaults)', () => {
+        expect(typeof CLARIFY_SKIP_SIGNAL).toBe('string');
+        expect(CLARIFY_SKIP_SIGNAL.trim().length).toBeGreaterThan(0);
     });
 });

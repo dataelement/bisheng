@@ -1,4 +1,9 @@
 {
+  "license": {
+    "warning": "软件授权将在 {{days}} 天后到期，请及时联系管理员续期。",
+    "critical": "软件授权将在 {{days}} 天后到期，请尽快联系管理员续期！",
+    "expired": "软件授权已过期，请联系管理员续期。"
+  },
   "title": "BISHENG",
   "bisheng": "{{bishengZh}}",
   "linsight": "{{linsightZh}}",

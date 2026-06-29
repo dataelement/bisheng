@@ -37,6 +37,30 @@ const enum FileProcessingStrategy {
     OriginalFile = "keep_raw",    // 不解析（原始文件）
 }
 
+// F038 (单选 + 输出变量联动): form strategy is a single named option, stored as a
+// fixed atomic-mode array. The 3 named options map to fixed arrays.
+const enum FormOption {
+    ParseOnly = "parse_only",       // [extract_text]        解析(不存入临时知识库)
+    ParseIngest = "parse_ingest",   // [extract_text, ingest] 解析(存入临时知识库)
+    NoParse = "no_parse",           // [keep_raw]            不解析(原始文件)
+}
+const optionToModes = (opt: FormOption): FileProcessingStrategy[] =>
+    opt === FormOption.NoParse
+        ? [FileProcessingStrategy.OriginalFile]
+        : opt === FormOption.ParseIngest
+            ? [FileProcessingStrategy.ParseContent, FileProcessingStrategy.TempKnowledge]
+            : [FileProcessingStrategy.ParseContent];
+// Normalize any stored value (array / legacy string / superseded multi-array) into one option.
+const modesToOption = (value: any): FormOption => {
+    const arr = Array.isArray(value) ? value : (value ? [value] : []);
+    if (arr.includes(FileProcessingStrategy.TempKnowledge)) return FormOption.ParseIngest;
+    if (arr.includes(FileProcessingStrategy.ParseContent)) return FormOption.ParseOnly;
+    if (arr.includes(FileProcessingStrategy.OriginalFile)) return FormOption.NoParse;
+    return FormOption.ParseOnly;
+};
+const optIngests = (opt: any): boolean =>
+    modesToOption(opt?.file_parse_mode) === FormOption.ParseIngest;
+
 
 function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptions }) {
     const { t } = useTranslation('flow');
@@ -45,10 +69,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         [FormType.Select]: t("categoryExample"), // 例如"保险类别"
         [FormType.File]: t("uploadExample"), // 例如"请上传去年财报"
     };
-    const processingStrategyOptions = useMemo(() => [
-        { value: FileProcessingStrategy.ParseContent, label: t("parseFile") },
-        { value: FileProcessingStrategy.TempKnowledge, label: t("temporaryKnowledgeBase") },
-        { value: FileProcessingStrategy.OriginalFile, label: t("notParse") },
+    const processingOptions = useMemo(() => [
+        { value: FormOption.ParseOnly, label: t("parseNoIngest") },
+        { value: FormOption.ParseIngest, label: t("parseWithIngest") },
+        { value: FormOption.NoParse, label: t("notParse") },
     ], [t]);
     const [defaultValue] = useState(initialData?.value || "");
     const [formData, setFormData] = useState({
@@ -64,7 +88,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         isRequired: true,
         allowMultiple: false,  // Allow multiple file uploads
         options: [],  // Options for Select input
-        processingStrategy: FileProcessingStrategy.ParseContent, // 文件处理策略
+        processingOption: FormOption.ParseOnly as FormOption, // 文件处理策略（单选 3 项）
     });
     const [errors, setErrors] = useState<any>({});
     const editRef = useRef(false); // 编辑状态
@@ -120,7 +144,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 fileContentSize: fileContentSize || 15000,
                 imageFile,
                 isMultiple: allowMultiple,
-                processingStrategy: processingStrategy || FileProcessingStrategy.TempKnowledge,
+                processingOption: modesToOption(processingStrategy),
             });
 
             editRef.current = true;
@@ -146,11 +170,11 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let initialFileContentCounter = 1;
         let initialFilePathCounter = 1;
         let initialFileImageCounter = 1;
-        while (existingOptions?.some(opt => opt.file_parse_mode === "ingest_to_temp_kb" && opt.type === "file" && opt.key === initialVarName)) {
+        while (existingOptions?.some(opt => optIngests(opt) && opt.type === "file" && opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
-        while (existingOptions?.some(opt => opt.file_parse_mode !== "ingest_to_temp_kb" && opt.file_parse_mode && opt.key === initialVarName)) {
+        while (existingOptions?.some(opt => !optIngests(opt) && opt.file_parse_mode && opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
@@ -206,69 +230,54 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             newErrors.options = t("optionsRequired");
         }
 
-        // Validation for file upload variables (if multiple files are allowed)
+        // Validation for file upload variables — validate every visible field by the
+        // unified rule (mirrors shouldShowField): path always, image by upload type,
+        // content when parsing, temp-KB name (=variableName) when ingesting.
         if (formData.formType === FormType.File) {
-            // 根据文件类型和处理策略验证不同的字段
-            if (formData.fileType === 'all') {
-                // 全部类型文件
-                if (formData.processingStrategy === FileProcessingStrategy.TempKnowledge) {
-                    // 存入临时知识库 - 需要验证 variableName
-                    // 上面已经验证过了
-                } else if (formData.processingStrategy === FileProcessingStrategy.ParseContent) {
-                    // 解析文件内容 - 验证解析结果变量名称和长度
-                    if (!formData.filecontent.trim()) {
-                        newErrors.filecontent = "variableNameRequired";
-                    } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filecontent)) {
-                        newErrors.filecontent = "variableNameInvalid";
-                    } else if (formData.filecontent.length > 50) {
-                        newErrors.filecontent = t("variableNameTooLong");
-                    } else if (
-                        existingOptions?.some(opt => opt.type === 'file'
-                            && opt.file_content === formData.filecontent)
-                        && formData.filecontent !== oldcontentNameRef.current
-                    ) {
-                        newErrors.filecontent = t("variableNameExists");
-                    }
-                } else if (formData.processingStrategy === FileProcessingStrategy.OriginalFile) {
-                    // 不解析（原始文件）- 验证图片变量名称和文件路径变量名称
-                    const _error = validateImageFileVariableName(formData.imageFile, existingOptions);
-                    if (_error) {
-                        newErrors.imageFile = _error
-                    }
+            const isParse = formData.processingOption === FormOption.ParseOnly
+                || formData.processingOption === FormOption.ParseIngest;
+            const isImageCapable = formData.fileType === 'all' || formData.fileType === 'image';
 
-                    // 验证文件路径变量名称
-                    if (!formData.filepath.trim()) {
-                        newErrors.filepath = t("variableNameRequired");
-                    } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filepath)) {
-                        newErrors.filepath = t("variableNameInvalid");
-                    } else if (formData.filepath.length > 50) {
-                        newErrors.filepath = t("variableNameTooLong");
-                    } else if (
-                        existingOptions?.some(opt => opt.type === 'file'
-                            && opt.file_path === formData.filepath)
-                        && formData.filepath !== oldPathNameRef.current
-                    ) {
-                        newErrors.filepath = t("variableNameExists");
-                    }
-                }
-            } else {
-                // 文档类型文件
-                if (formData.processingStrategy === FileProcessingStrategy.OriginalFile) {
-                    if (!formData.filepath.trim()) {
-                        newErrors.filepath = t("variableNameRequired");
-                    } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filepath)) {
-                        newErrors.filepath = t("variableNameInvalid");
-                    } else if (formData.filepath.length > 50) {
-                        newErrors.filepath = t("variableNameTooLong");
-                    } else if (
-                        existingOptions?.some(opt => opt.type === 'file'
-                            && opt.file_path === formData.filepath)
-                        && formData.filepath !== oldPathNameRef.current
-                    ) {
-                        newErrors.filepath = t("variableNameExists");
-                    }
+            // 解析结果变量名称（解析时）
+            if (isParse) {
+                if (!formData.filecontent.trim()) {
+                    newErrors.filecontent = "variableNameRequired";
+                } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filecontent)) {
+                    newErrors.filecontent = "variableNameInvalid";
+                } else if (formData.filecontent.length > 50) {
+                    newErrors.filecontent = t("variableNameTooLong");
+                } else if (
+                    existingOptions?.some(opt => opt.type === 'file'
+                        && opt.file_content === formData.filecontent)
+                    && formData.filecontent !== oldcontentNameRef.current
+                ) {
+                    newErrors.filecontent = t("variableNameExists");
                 }
             }
+
+            // 图片变量名称（上传类型含图片，恒展示）
+            if (isImageCapable) {
+                const _error = validateImageFileVariableName(formData.imageFile, existingOptions);
+                if (_error) {
+                    newErrors.imageFile = _error
+                }
+            }
+
+            // 文件路径变量名称（恒展示）
+            if (!formData.filepath.trim()) {
+                newErrors.filepath = t("variableNameRequired");
+            } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filepath)) {
+                newErrors.filepath = t("variableNameInvalid");
+            } else if (formData.filepath.length > 50) {
+                newErrors.filepath = t("variableNameTooLong");
+            } else if (
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_path === formData.filepath)
+                && formData.filepath !== oldPathNameRef.current
+            ) {
+                newErrors.filepath = t("variableNameExists");
+            }
+            // 临时知识库名称 = variableName（仅入库时展示），已在上方校验
         }
 
 
@@ -372,17 +381,19 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         setErrors({});
     }
 
-    // 处理文件处理策略变化
-    const handleProcessingStrategyChange = (strategy: FileProcessingStrategy) => {
+    // 处理文件处理策略变化（单选 3 项）
+    const handleProcessingStrategyChange = (option: FormOption) => {
         setErrors({});
 
         setFormData(prev => {
-            const updates: any = { processingStrategy: strategy };
+            const updates: any = { processingOption: option };
             const fileOptions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-            const isEdit = editRef.current;
+            const willIngest = option === FormOption.ParseIngest;
+            const wasIngest = prev.processingOption === FormOption.ParseIngest;
+            const isParse = willIngest || option === FormOption.ParseOnly;
 
-            // 临时知识库策略
-            if (strategy === FileProcessingStrategy.TempKnowledge) {
+            // 临时知识库名 = variableName：入库时补唯一 file 名，退出入库回退内部 uuid（编辑态）
+            if (willIngest && !wasIngest) {
                 let name = 'file';
                 let counter = 1;
                 while (fileOptions.some(opt => opt.key === name)) {
@@ -390,15 +401,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                     name = `file${counter}`;
                 }
                 updates.variableName = name;
+            } else if (editRef.current && wasIngest && !willIngest) {
+                updates.variableName = `file_${generateUUID(6)}`;
             }
 
-            if (isEdit && prev.processingStrategy === FileProcessingStrategy.TempKnowledge && strategy !== FileProcessingStrategy.TempKnowledge) {
-                const uuid = `file_${generateUUID(6)}`;
-                updates.variableName = uuid;
-            }
-
-            // 解析文件内容策略
-            if (strategy === FileProcessingStrategy.ParseContent && (!prev.filecontent || prev.filecontent.trim() === '')) {
+            // 解析结果变量名：解析时补缺省
+            if (isParse && (!prev.filecontent || prev.filecontent.trim() === '')) {
                 let name = 'file_content';
                 let counter = 1;
                 while (fileOptions.some(opt => opt.file_content === name)) {
@@ -408,74 +416,33 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 updates.filecontent = name;
             }
 
-            // 不解析原始文件策略
-            if (strategy === FileProcessingStrategy.OriginalFile) {
-                if (!prev.filepath || prev.filepath.trim() === '') {
-                    let name = 'file_path';
-                    let counter = 1;
-                    while (fileOptions.some(opt => opt.file_path === name)) {
-                        counter += 1;
-                        name = `file_path${counter}`;
-                    }
-                    updates.filepath = name;
-                }
-
-                if ((prev.fileType === 'all' || prev.fileType === 'image') && (!prev.imageFile || prev.imageFile.trim() === '')) {
-                    let name = 'image_file';
-                    let counter = 1;
-                    while (fileOptions.some(opt => opt.image_file === name)) {
-                        counter += 1;
-                        name = `image_file${counter}`;
-                    }
-                    updates.imageFile = name;
-                }
-            }
-
             return { ...prev, ...updates };
         });
     };
     // 获取可用的文件处理策略选项
     const getAvailableProcessingStrategies = () => {
-        return processingStrategyOptions;
-
+        return processingOptions;
     };
 
-    // 检查是否需要显示某个字段
+    // 检查是否需要显示某个字段（统一规则：路径恒显、图片看上传类型、解析结果看是否解析、临时库名看是否入库）
     const shouldShowField = (fieldType) => {
         if (formData.formType !== FormType.File) return false;
 
-        if (formData.fileType === 'all' || formData.fileType === 'image') {
-            // 全部类型和图片类型
-            switch (fieldType) {
-                case 'tempKnowledge':
-                    return formData.processingStrategy === FileProcessingStrategy.TempKnowledge;
-                case 'parseContent':
-                    return formData.processingStrategy === FileProcessingStrategy.ParseContent;
-                case 'imageFile':
-                    // 全部类型和图片类型的不解析需要显示图片变量
-                    return formData.processingStrategy === FileProcessingStrategy.OriginalFile;
-                case 'filePath':
-                    // 全部类型和图片类型的不解析需要显示文件路径
-                    return formData.processingStrategy === FileProcessingStrategy.OriginalFile;
-                default:
-                    return false;
-            }
-        } else {
-            // 文档类型文件
-            switch (fieldType) {
-                case 'tempKnowledge':
-                    return formData.processingStrategy === FileProcessingStrategy.TempKnowledge;
-                case 'parseContent':
-                    return formData.processingStrategy === FileProcessingStrategy.ParseContent;
-                case 'filePath':
-                    // 文档类型的不解析只显示文件路径
-                    return formData.processingStrategy === FileProcessingStrategy.OriginalFile;
-                case 'imageFile':
-                    // 文档类型不显示图片变量名称
-                    return false;
-                default:
-                    return false;
-            }
+        const option = formData.processingOption;
+        const isParse = option === FormOption.ParseOnly || option === FormOption.ParseIngest;
+        const isImageCapable = formData.fileType === 'all' || formData.fileType === 'image';
+
+        switch (fieldType) {
+            case 'tempKnowledge':
+                return option === FormOption.ParseIngest;
+            case 'parseContent':
+                return isParse;
+            case 'imageFile':
+                return isImageCapable;
+            case 'filePath':
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -642,8 +609,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 />
             </Label>
             <Select
-                value={formData.processingStrategy}
-                onValueChange={handleProcessingStrategyChange}
+                value={formData.processingOption}
+                onValueChange={(v) => handleProcessingStrategyChange(v as FormOption)}
             >
                 <SelectTrigger className="mt-2">
                     <SelectValue placeholder={t("selectFile")} />
@@ -832,15 +799,20 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             fileType: file_type,
             fileContentSize: file_content_size,
             imageFile: image_file,
-            processingStrategy: file_parse_mode
+            processingOption: file_parse_option // single named option (F038)
         } = _data;
+        // The 3 named options map to fixed atomic-mode arrays (stored契约).
+        const file_parse_mode = optionToModes(file_parse_option);
+        const isParse = file_parse_option === FormOption.ParseOnly
+            || file_parse_option === FormOption.ParseIngest;
+        const isIngest = file_parse_option === FormOption.ParseIngest;
+
         let key
         if (type === FormType.File) {
-            if (file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                // 临时知识库：key 永远等于 variableName
+            if (isIngest) {
+                // 解析(入库)：key 永远等于 variableName（即临时知识库名）
                 key = variableName;
             } else {
-                // 非临时策略
                 key = editKey || `file_${generateUUID(6)}`;
             }
         } else {
@@ -848,35 +820,21 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
         }
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
 
-        // 根据文件类型和处理策略清理字段
+        // 按统一规则清理字段：路径恒留；图片看上传类型；解析结果看是否解析。
         let cleanedImageFile = image_file;
         let cleanedFileContent = file_content;
         let cleanedFilePath = file_path;
         let cleanedFileContentSize = file_content_size;
 
         if (type === FormType.File) {
+            if (!isParse) {
+                cleanedFileContent = '';
+            }
+            // 图片变量仅在上传类型含图片时保留
             if (file_type === 'file') {
-                // 文档类型：清空图片相关字段
                 cleanedImageFile = '';
             }
-
-            // 根据处理策略清理字段
-            if (file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                // 临时知识库：只保留key，清空其他文件相关字段
-                cleanedFileContent = '';
-                cleanedFilePath = '';
-                cleanedImageFile = '';
-                // cleanedFileContentSize = 0;
-            } else if (file_parse_mode === FileProcessingStrategy.ParseContent) {
-                // 解析文件内容：清空图片和路径字段
-                cleanedImageFile = '';
-                cleanedFilePath = '';
-                // fileContentSize 应该保留
-            } else if (file_parse_mode === FileProcessingStrategy.OriginalFile) {
-                // 不解析：清空解析内容字段
-                cleanedFileContent = '';
-                // cleanedFileContentSize = 0;
-            }
+            // 文件路径恒留（path 恒暴露），不清空 cleanedFilePath
         }
 
         // 创建新的表单项对象
@@ -961,20 +919,19 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             let variableList = el.key;
 
             if (el.type === 'file') {
-                // 文件类型需要显示所有相关变量
+                // 文件类型按统一规则列出产出变量：解析结果(解析时) / 图片(含图片类型) / 路径(恒) / 临时库名(入库时)
                 const variableParts = [];
+                const arr = Array.isArray(el.file_parse_mode)
+                    ? el.file_parse_mode
+                    : (el.file_parse_mode ? [el.file_parse_mode] : []);
+                const isParse = arr.includes(FileProcessingStrategy.ParseContent);
+                const isIngest = arr.includes(FileProcessingStrategy.TempKnowledge);
+                const isImageCapable = el.file_type === 'all' || el.file_type === 'image';
 
-                // 根据处理策略添加不同的变量
-                if (el.file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                    variableParts.push(el.key);
-                } else if (el.file_parse_mode === FileProcessingStrategy.ParseContent) {
-                    if (el.file_content) variableParts.push(el.file_content);
-                } else if (el.file_parse_mode === FileProcessingStrategy.OriginalFile) {
-                    if (el.file_path) variableParts.push(el.file_path);
-                    if (el.image_file && (el.file_type === 'all' || el.file_type === 'image')) {
-                        variableParts.push(el.image_file);
-                    }
-                }
+                if (isParse && el.file_content) variableParts.push(el.file_content);
+                if (isImageCapable && el.image_file) variableParts.push(el.image_file);
+                if (el.file_path) variableParts.push(el.file_path);
+                if (isIngest) variableParts.push(el.key);
 
                 if (variableParts.length > 0) {
                     variableList = variableParts.join(', ');
@@ -982,18 +939,6 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             }
 
             let text = `${el.value}（${variableList}）`;
-
-            // 如果需要还可以添加处理策略信息（可选）
-            if (el.type === 'file') {
-                let strategyText = '';
-                if (el.file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                    strategyText = t('temporaryKnowledgeBase');
-                } else if (el.file_parse_mode === FileProcessingStrategy.ParseContent) {
-                    strategyText = t("parseFile");
-                } else if (el.file_parse_mode === FileProcessingStrategy.OriginalFile) {
-                    strategyText = t("notParse");
-                }
-            }
 
             return {
                 key: el.key,

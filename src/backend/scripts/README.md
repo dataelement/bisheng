@@ -402,6 +402,25 @@ bash scripts/backfill_knowledge_space_user_pin.sh          # dry-run
 bash scripts/backfill_knowledge_space_user_pin.sh apply    # 写入
 ```
 
+### `backfill_departments_under_single_root.py`
+
+把所有"误挂为根"的部门收编到默认组织根部门(`BS@root`)下，保证全平台只有一个根部门。
+
+背景：历史上 SSO 网关同步的顶层部门(`parent_external_id` 为空)被挂为 `parent_id=None`，变成与"默认组织"平级的兄弟根，导致出现多个根、且其 `path` 不以默认组织根 path 为前缀(按 `path LIKE '{root_path}%'` 圈定租户成员时被漏算)。同步逻辑已修复(顶层部门改挂默认组织根下)，但增量推送未重推的存量部门需本脚本一次性收编。
+
+做什么：默认租户下、除默认组织根外的所有 active 根部门(`parent_id IS NULL`)，设 `parent_id=默认组织根.id` 并级联重写整棵子树 `path`。不区分 source，不触碰挂载状态。幂等：收编后 `parent_id` 不再为空，重复运行被自然跳过。
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py            # dry-run（默认，不写库）
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py --apply    # 写入
+
+# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
+bash scripts/backfill_departments_under_single_root.sh          # dry-run
+bash scripts/backfill_departments_under_single_root.sh apply    # 写入
+```
+
 ### `backfill_user_tenant_associations.py`
 
 把缺失/未激活的默认租户归属回填到 `user_tenant` 表。这段逻辑原先挂在服务启动流程 `init_default_data()` 的 `_init_default_tenant` 里，每次进程启动都会全表扫描 `users`/`user_tenant`（一次反连接 + 一次"把全部 `is_active=1` 行读进内存"），在大用户量部署下属于把数据维护塞进了热路径。已从启动流剥离——启动只保证默认租户(id=1)存在。
@@ -419,4 +438,47 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_user_tenant_a
 # 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
 bash scripts/backfill_user_tenant_associations.sh          # dry-run
 bash scripts/backfill_user_tenant_associations.sh apply    # 写入
+```
+
+### `backfill_department_parent_tuples.py`
+
+把 DB 部门树的父子关系回填成 OpenFGA 的 `department#parent` 继承边（additive，只加不删，幂等）。
+
+背景：写 `department:{parent}#parent@department:{child}` 边的只有 F002 手动建/移部门；SSO 同步及早期 f006 迁移进来的部门在 FGA 里没有这条边，导致部门 admin 的 FGA 继承对其失效。SSO 同步链路已修复为实时维护 parent 边，本脚本按 DB 当前树形一次性补齐**存量**部门的边。
+
+遍历所有 `status='active'` 且 `parent_id` 非空的部门（全租户、全来源），每个发一条 `write department:{parent_id}#parent department:{id}`。`batch_write_tuples` 对重复写幂等，可反复跑。
+
+> 运行顺序：在 `backfill_departments_under_single_root.py`（定型 parent_id）**之后**运行，会一并补上被收编部门的 root→顶层 边。
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_department_parent_tuples.py            # dry-run（默认）
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_department_parent_tuples.py --apply     # 写入
+
+# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
+bash scripts/backfill_department_parent_tuples.sh          # dry-run
+bash scripts/backfill_department_parent_tuples.sh apply    # 写入
+```
+
+### `seed_load_test_org.py`
+
+压测数据脚本：批量生成**部门树 + 用户**灌入数据库，用于大用户量下的体验/性能测试（尤其 ReBAC 读路径）。
+
+在平台默认根部门（`Tenant.root_dept_id`）下按 `--fanout` 广度优先生成 `--departments` 个部门（自动维护物化 `path` 与 `department#parent` FGA 边），再生成 `--users` 个本地用户轮询分配主部门（`is_primary=1`，可选 `--secondary-ratio` 挂附属部门），每人写 user + 默认角色 + user_department + user_tenant 及 `department#member` FGA 边。
+
+所有数据打 `source=<--source>`（默认 `loadtest`）标签 + `external_id=loadtest_dept_*/loadtest_user_*`，因此**幂等**且可用 `--purge` 一键清理。统一密码 `Test@1234ab`。
+
+> 干跑是默认行为，`--apply` 才写库/写 FGA/删数据。默认写 OpenFGA；`--no-fga` 只灌库。`--with-role-fga` 才逐用户同步默认角色到 FGA（慢）。
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --departments 200 --users 50000 --fanout 8             # dry-run（默认）
+config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --departments 200 --users 50000 --fanout 8 --apply      # 写入 DB + FGA
+config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --departments 200 --users 50000 --apply --no-fga        # 只灌库
+config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --purge --apply                                        # 清理压测数据
+
+# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
+bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 ```

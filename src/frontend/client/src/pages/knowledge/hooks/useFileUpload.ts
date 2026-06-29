@@ -300,10 +300,23 @@ export function useFileUpload({
 
             // Register all uploaded files and check for duplicates from response
             try {
-                const registeredFiles = await addFilesApi(activeSpace.id, {
-                    file_path: uploadedPaths,
-                    parent_id: currentFolderId ? Number(currentFolderId) : null,
-                });
+                // Upload succeeded; register the files. Retry the registration
+                // ONCE on failure (no re-upload) to recover from transient errors
+                // — otherwise a flaky register leaves the files as storage orphans
+                // with no record in the space. A duplicate re-register from the
+                // retry is caught by the duplicate detection below.
+                const registerUploaded = () =>
+                    addFilesApi(activeSpace.id, {
+                        file_path: uploadedPaths,
+                        parent_id: currentFolderId ? Number(currentFolderId) : null,
+                    });
+                let registeredFiles: Awaited<ReturnType<typeof addFilesApi>>;
+                try {
+                    registeredFiles = await registerUploaded();
+                } catch (firstErr) {
+                    console.warn("[useFileUpload] file registration failed, retrying once:", firstErr);
+                    registeredFiles = await registerUploaded();
+                }
                 const dupes = extractDuplicateFileEntries(registeredFiles);
                 if (dupes.length > 0) {
                     setDuplicateFiles(dupes);
@@ -328,7 +341,16 @@ export function useFileUpload({
                     await loadFiles(1); // reconcile from page 1 (cursor mode: page>1 = append)
                 }
             } catch (e) {
-                // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
+                // Registration failed AFTER a successful upload: the file is in
+                // object storage but not registered in the space. Surface it
+                // instead of silently swallowing — the empty catch made it look
+                // like nothing happened while leaving a storage orphan and (below)
+                // clearing the placeholder, so the user got no feedback at all.
+                console.error("[useFileUpload] file registration failed:", e);
+                showToast({
+                    message: localize("com_knowledge.file_register_failed"),
+                    severity: NotificationSeverity.ERROR,
+                });
             }
 
             // Clear placeholders after list data has been updated

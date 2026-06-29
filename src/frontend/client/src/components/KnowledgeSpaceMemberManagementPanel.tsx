@@ -211,7 +211,7 @@ export function KnowledgeSpaceMemberManagementPanel({
                             className={cn(
                                 "cursor-default",
                                 member.role === "member" &&
-                                    "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500",
+                                    "bg-blue-50 text-blue-500 data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-500",
                             )}
                             onClick={(e) => e.preventDefault()}
                         >
@@ -242,7 +242,7 @@ export function KnowledgeSpaceMemberManagementPanel({
                     <DropdownMenuItem
                         className={cn(
                             member.role === "admin" &&
-                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500",
+                                "bg-blue-50 text-blue-500 data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-500",
                         )}
                         onClick={() => {
                             if (!canCreatorManage || member.role === "admin" || member.role === "creator") return;
@@ -254,7 +254,7 @@ export function KnowledgeSpaceMemberManagementPanel({
                     <DropdownMenuItem
                         className={cn(
                             member.role === "member" &&
-                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500",
+                                "bg-blue-50 text-blue-500 data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-500",
                         )}
                         onClick={() => {
                             if (!canCreatorManage || member.role === "member") return;

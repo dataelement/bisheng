@@ -752,7 +752,7 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
                             </div>
                             {filePath && (
                                 <button
-                                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center"
+                                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center btn-brand-primary"
                                     onClick={() => window.open(filePath, "_blank")}
                                 >
                                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

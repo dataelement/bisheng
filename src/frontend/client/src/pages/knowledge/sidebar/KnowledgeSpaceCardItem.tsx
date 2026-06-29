@@ -1,6 +1,7 @@
 import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { KnowledgeSpace } from "~/api/knowledge";
+import { KnowledgeSpaceIcon } from "~/components/illustrations";
 import {
     DropdownMenu,
     DropdownMenuItem,
@@ -18,8 +19,6 @@ import {
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 
-const SPACE_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/knowledge/space-icon.png`;
-
 interface KnowledgeSpaceCardItemProps {
     space: KnowledgeSpace;
     isActive: boolean;
@@ -30,6 +29,8 @@ interface KnowledgeSpaceCardItemProps {
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
     onManageMembers?: (space: KnowledgeSpace) => void;
+    /** F040: lazily resolve this space's action permissions when its menu opens. */
+    onMenuOpen?: () => void;
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
@@ -50,6 +51,7 @@ export default function KnowledgeSpaceCardItem({
     onPin,
     onSettings,
     onManageMembers,
+    onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
@@ -67,12 +69,7 @@ export default function KnowledgeSpaceCardItem({
                 }`}
             onClick={() => onSelect(space)}
         >
-            <img
-                src={SPACE_ICON_SRC}
-                alt=""
-                aria-hidden
-                className="size-12 shrink-0 rounded-md object-contain"
-            />
+            <KnowledgeSpaceIcon className="size-12 shrink-0" aria-hidden />
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                     <span className="truncate text-sm leading-6 text-[#212121]">{space.name}</span>
@@ -85,7 +82,7 @@ export default function KnowledgeSpaceCardItem({
                 </div>
             </div>
 
-            <DropdownMenu onOpenChange={setMenuOpen}>
+            <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
                 <DropdownMenuTrigger asChild>
                     <button
                         type="button"

@@ -483,7 +483,7 @@ export function AgentGrid({
                     <Button
                       variant="default"
                       onClick={() => loadMore(id)}
-                      className="h-8 px-3 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white"
+                      className="h-8 px-3 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white btn-brand-primary"
                       disabled={loading}
                     >
                       {loading ? (

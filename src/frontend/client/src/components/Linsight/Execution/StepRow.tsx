@@ -16,7 +16,7 @@ const StepDepthContext = createContext(0);
 
 /** Shared spinner glyph for in-progress steps. */
 export function RunningSpinner() {
-    return <Outlined.Loading size={16} className="animate-spin text-primary" />;
+    return <Outlined.Loading size={16} className="animate-spin text-blue-main" />;
 }
 
 /** Map a step/tool name to its leading icon (completed state). */
