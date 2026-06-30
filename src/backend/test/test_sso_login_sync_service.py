@@ -33,6 +33,7 @@ def _payload(
     ts=1000, name='Alice', email='a@x.com', phone=None,
     tenant_mapping=None,
     account_disabled=None,
+    force_login=False,
 ):
     from bisheng.sso_sync.domain.schemas.payloads import (
         LoginSyncRequest, UserAttrsDTO,
@@ -44,6 +45,7 @@ def _payload(
         ts=ts,
         tenant_mapping=tenant_mapping,
         account_disabled=account_disabled,
+        force_login=force_login,
     )
     if secondary is not _PAYLOAD_OMIT_SECONDARY:
         kw['secondary_dept_external_ids'] = secondary
@@ -87,6 +89,7 @@ def patches(monkeypatch):
     redis_mock.async_connection = MagicMock()
     redis_mock.async_connection.set = AsyncMock(return_value=True)
     redis_mock.adelete = AsyncMock(return_value=None)
+    redis_mock.aset = AsyncMock(return_value=None)
     monkeypatch.setattr(m, 'get_redis_client', AsyncMock(return_value=redis_mock))
 
     # Parent chain — default: identity mapping of the primary ext.
@@ -172,6 +175,10 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         m.UserService, '_reject_login_if_user_has_no_usable_access',
         AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        m.UserService, 'has_other_active_session',
+        AsyncMock(return_value=False),
     )
 
     # JWT signer
@@ -682,3 +689,39 @@ class TestExistingUserAttrUpdate:
         m.UserDao.aupdate_user.assert_awaited_once()
         updated_user = m.UserDao.aupdate_user.await_args.args[0]
         assert updated_user.update_time is not None
+
+
+@pytest.mark.asyncio
+class TestSingleSessionControl:
+
+    async def test_existing_active_session_blocks_login_sync_without_force(self, patches):
+        from bisheng.common.errcode.user import UserMultiLoginConflictError
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        existing = _user(user_id=7, source='wecom', external_id='u1')
+        m.UserDao.aget_by_source_external_id = AsyncMock(return_value=existing)
+        m.UserService.has_other_active_session = AsyncMock(return_value=True)
+        patches.assert_chain.return_value = {'D1': _dept('D1', id=11)}
+
+        with pytest.raises(UserMultiLoginConflictError):
+            await LoginSyncService.execute(_payload(), request_ip='')
+
+        patches.redis.aset.assert_not_awaited()
+
+    async def test_force_login_sync_writes_current_session(self, patches):
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        existing = _user(user_id=7, source='wecom', external_id='u1')
+        m.UserDao.aget_by_source_external_id = AsyncMock(return_value=existing)
+        m.UserService.has_other_active_session = AsyncMock(return_value=True)
+        patches.assert_chain.return_value = {'D1': _dept('D1', id=11)}
+
+        resp = await LoginSyncService.execute(_payload(force_login=True), request_ip='')
+
+        assert resp.token == 'jwt-token-xyz'
+        patches.redis.aset.assert_awaited_once()
+        assert patches.redis.aset.await_args.args[1] == 'jwt-token-xyz'

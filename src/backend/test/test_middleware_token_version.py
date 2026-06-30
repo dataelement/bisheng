@@ -89,6 +89,65 @@ class TestValidateTokenVersion:
         assert result is True
 
 
+class TestValidateCurrentSessionToken:
+
+    def test_multi_login_allowed_returns_true(self, monkeypatch):
+        import sys
+
+        config_mod = sys.modules.get('bisheng.common.services.config_service') or MagicMock()
+        sys.modules['bisheng.common.services.config_service'] = config_mod
+        config_mod.settings = MagicMock()
+
+        async def _fake_login_method():
+            return MagicMock(allow_multi_login=True)
+
+        config_mod.settings.aget_system_login_method = _fake_login_method
+        result = asyncio.run(hm._validate_current_session_token(100, 'old-token'))
+        assert result is True
+
+    def test_single_session_mismatch_returns_false(self, monkeypatch):
+        import sys
+
+        config_mod = sys.modules.get('bisheng.common.services.config_service') or MagicMock()
+        sys.modules['bisheng.common.services.config_service'] = config_mod
+        config_mod.settings = MagicMock()
+
+        async def _fake_login_method():
+            return MagicMock(allow_multi_login=False)
+
+        config_mod.settings.aget_system_login_method = _fake_login_method
+
+        cache_mod = MagicMock()
+        redis = MagicMock()
+        redis.aget = AsyncMock(return_value='new-token')
+        cache_mod.get_redis_client = AsyncMock(return_value=redis)
+        sys.modules['bisheng.core.cache.redis_manager'] = cache_mod
+
+        result = asyncio.run(hm._validate_current_session_token(100, 'old-token'))
+        assert result is False
+
+    def test_single_session_match_returns_true(self, monkeypatch):
+        import sys
+
+        config_mod = sys.modules.get('bisheng.common.services.config_service') or MagicMock()
+        sys.modules['bisheng.common.services.config_service'] = config_mod
+        config_mod.settings = MagicMock()
+
+        async def _fake_login_method():
+            return MagicMock(allow_multi_login=False)
+
+        config_mod.settings.aget_system_login_method = _fake_login_method
+
+        cache_mod = MagicMock()
+        redis = MagicMock()
+        redis.aget = AsyncMock(return_value='same-token')
+        cache_mod.get_redis_client = AsyncMock(return_value=redis)
+        sys.modules['bisheng.core.cache.redis_manager'] = cache_mod
+
+        result = asyncio.run(hm._validate_current_session_token(100, 'same-token'))
+        assert result is True
+
+
 # -------------------------------------------------------------------------
 # _apply_token_version_and_visible (integration-style, using a fake token)
 # -------------------------------------------------------------------------
@@ -123,6 +182,30 @@ class TestApplyTokenVersionAndVisible:
         assert result is not None
         assert result.status_code == 401
 
+    def test_current_session_mismatch_returns_offline_401(self, monkeypatch):
+        self._patch_subject(monkeypatch, {
+            'user_id': 100, 'user_name': 'a', 'tenant_id': 5, 'token_version': 1,
+        })
+
+        async def _fake_validate_version(uid, tv):
+            return True
+
+        async def _fake_validate_session(uid, token):
+            return False
+
+        monkeypatch.setattr(hm, '_validate_token_version', _fake_validate_version)
+        monkeypatch.setattr(hm, '_validate_current_session_token', _fake_validate_session)
+
+        async def _run():
+            return await hm._apply_token_version_and_visible(
+                self._build_request(), 'old-token',
+            )
+
+        result = asyncio.run(_run())
+        assert result is not None
+        assert result.status_code == 401
+        assert b'10604' in result.body
+
     def test_match_sets_visible_for_child_user(self, monkeypatch):
         """ContextVar mutations inside asyncio.run() don't escape the new
         event loop context, so we read get_visible_tenant_ids() INSIDE the
@@ -135,7 +218,10 @@ class TestApplyTokenVersionAndVisible:
             return True
         async def _fake_is_super(uid):
             return False
+        async def _fake_validate_session(uid, token):
+            return True
         monkeypatch.setattr(hm, '_validate_token_version', _fake_validate)
+        monkeypatch.setattr(hm, '_validate_current_session_token', _fake_validate_session)
         monkeypatch.setattr(hm, '_check_is_global_super', _fake_is_super)
 
         async def _run():
@@ -157,7 +243,10 @@ class TestApplyTokenVersionAndVisible:
             return True
         async def _fake_is_super(uid):
             return True
+        async def _fake_validate_session(uid, token):
+            return True
         monkeypatch.setattr(hm, '_validate_token_version', _fake_validate)
+        monkeypatch.setattr(hm, '_validate_current_session_token', _fake_validate_session)
         monkeypatch.setattr(hm, '_check_is_global_super', _fake_is_super)
 
         async def _run():

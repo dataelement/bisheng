@@ -1,7 +1,9 @@
 """F014 ``POST /api/v1/internal/sso/login-sync`` endpoint."""
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.sso_sync.domain.constants import DEFAULT_SSO_SYNC_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
@@ -35,11 +37,20 @@ async def login_sync(
     secondary departments, derives the leaf tenant via F012 sync, and
     returns a freshly signed JWT.
     """
-    result = await LoginSyncService.execute(
-        payload,
-        request_ip=get_request_ip(request),
-        row_source=payload.source or DEFAULT_SSO_SYNC_SOURCE,
-    )
+    try:
+        result = await LoginSyncService.execute(
+            payload,
+            request_ip=get_request_ip(request),
+            row_source=payload.source or DEFAULT_SSO_SYNC_SOURCE,
+        )
+    except BaseErrorCode as exc:
+        return JSONResponse(
+            content=UnifiedResponseModel(
+                status_code=exc.code,
+                status_message=exc.message,
+                data=None,
+            ).model_dump(mode='json'),
+        )
     # Best-effort per-request audit row. ``skip_org_sync_log`` is used when
     # Gateway calls ``gateway_wecom_org_sync`` which flushes a single row.
     if not payload.skip_org_sync_log:

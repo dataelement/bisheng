@@ -21,7 +21,7 @@ from bisheng.common.errcode.sso_sync import (
     SsoUserLockBusyError,
     SsoUserNotFoundError,
 )
-from bisheng.common.errcode.user import UserForbiddenError
+from bisheng.common.errcode.user import UserForbiddenError, UserMultiLoginConflictError
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
@@ -70,6 +70,7 @@ from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 from bisheng.user.domain.services.user import UserService
+from bisheng.user.domain.const import USER_CURRENT_SESSION
 
 _USER_LOCK_KEY = "user:sso_lock:{external_user_id}"
 
@@ -211,6 +212,12 @@ class LoginSyncService:
                         raise UserNoRoleForLoginError()
                     raise UserNoWebMenuForLoginError()
 
+                if (
+                    not payload.force_login
+                    and await UserService.has_other_active_session(int(user.user_id))
+                ):
+                    raise UserMultiLoginConflictError()
+
                 auth_jwt = AuthJwt()
                 token_version = await UserDao.aget_token_version(user.user_id)
                 access_token = LoginUser.create_access_token(
@@ -218,6 +225,12 @@ class LoginSyncService:
                     auth_jwt,
                     tenant_id=leaf_tenant.id,
                     token_version=token_version,
+                )
+                redis_client = await get_redis_client()
+                await redis_client.aset(
+                    USER_CURRENT_SESSION.format(user.user_id),
+                    access_token,
+                    auth_jwt.cookie_conf.jwt_token_expire_time + 3600,
                 )
             finally:
                 current_tenant_id.reset(token)

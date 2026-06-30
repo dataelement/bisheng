@@ -137,6 +137,32 @@ async def _validate_token_version(
     return int(current) == int(payload_token_version)
 
 
+async def _validate_current_session_token(user_id: int, token: str) -> bool:
+    if not user_id or not token:
+        return True
+    try:
+        from bisheng.common.services.config_service import settings
+        login_method = await settings.aget_system_login_method()
+        if login_method.allow_multi_login:
+            return True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug('allow_multi_login lookup failed for user %d: %s', user_id, exc)
+        return True
+
+    try:
+        from bisheng.core.cache.redis_manager import get_redis_client
+        from bisheng.user.domain.const import USER_CURRENT_SESSION
+        redis_client = await get_redis_client()
+        current_token = await redis_client.aget(USER_CURRENT_SESSION.format(user_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug('current session lookup failed for user %d: %s', user_id, exc)
+        return True
+
+    if not current_token:
+        return True
+    return str(current_token) == token
+
+
 async def _check_is_global_super(user_id: int) -> bool:
     """FGA check: ``user:{id} super_admin system:global`` with Redis caching.
 
@@ -237,6 +263,16 @@ async def _apply_token_version_and_visible(
             content={
                 'status_code': 19103,
                 'status_message': 'token_version mismatch — please re-login',
+                'data': None,
+            },
+        )
+    if user_id and not await _validate_current_session_token(user_id, token):
+        from bisheng.common.errcode.user import UserLoginOfflineError
+        return JSONResponse(
+            status_code=401,
+            content={
+                'status_code': UserLoginOfflineError.Code,
+                'status_message': UserLoginOfflineError.Msg,
                 'data': None,
             },
         )

@@ -24,7 +24,12 @@ class UserPasswordError(BaseErrorCode):
 
 class UserLoginOfflineError(BaseErrorCode):
     Code: int = 10604
-    Msg: str = "Your account is logged in on another device and the session on this device has been logged out.\nIf this wasn't you, please change your account password as soon as possible."
+    Msg: str = '账号已在其他设备登录，请重新登录'
+
+
+class UserMultiLoginConflictError(BaseErrorCode):
+    Code: int = 10612
+    Msg: str = '该用户已在其它设备登录，是否继续登录？'
 
 
 class UserNameAlreadyExistError(BaseErrorCode):

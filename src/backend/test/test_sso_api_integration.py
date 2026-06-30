@@ -155,6 +155,36 @@ class TestLoginSyncRoute:
         assert resp.status_code == 200
         assert mocked_services.login.await_args.kwargs['row_source'] == 'wecom'
 
+    def test_business_error_returns_unified_response(
+        self, configure_sso_secret, hmac_signer, mocked_services,
+    ):
+        from bisheng.common.errcode.user import UserMultiLoginConflictError
+
+        app = _mount_app()
+        body = (
+            b'{"external_user_id":"u1",'
+            b'"primary_dept_external_id":"D1",'
+            b'"user_attrs":{"name":"Alice"},'
+            b'"ts":1000}'
+        )
+        mocked_services.login.side_effect = UserMultiLoginConflictError()
+        sig = hmac_signer('POST', LOGIN_SYNC_PATH, body)
+        with TestClient(app) as client:
+            resp = client.post(
+                LOGIN_SYNC_PATH,
+                content=body,
+                headers={
+                    'X-Signature': sig,
+                    'Content-Type': 'application/json',
+                },
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['status_code'] == 10612
+        assert data['status_message'] == '该用户已在其它设备登录，是否继续登录？'
+        assert data['data'] is None
+
     def test_invalid_signature_rejected(
         self, configure_sso_secret, mocked_services,
     ):

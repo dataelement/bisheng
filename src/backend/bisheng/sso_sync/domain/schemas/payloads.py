@@ -130,6 +130,10 @@ class LoginSyncRequest(BaseModel):
         default=False,
         description='Internal: suppress per-call org_sync_log flush (batch endpoint).',
     )
+    force_login: bool = Field(
+        default=False,
+        description='Force login when single-session mode detects an existing active session.',
+    )
 
     @field_validator('source')
     @classmethod

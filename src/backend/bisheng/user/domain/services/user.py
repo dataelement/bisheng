@@ -17,6 +17,7 @@ from bisheng.common.errcode.user import (
     UserNameTooLongError,
     UserNoRoleForLoginError,
     UserNoWebMenuForLoginError,
+    UserMultiLoginConflictError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
@@ -365,6 +366,44 @@ class UserService:
             return None
 
     @classmethod
+    async def has_other_active_session(cls, user_id: int, request_token: str = "") -> bool:
+        try:
+            login_method = await settings.aget_system_login_method()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('allow_multi_login lookup failed for user %s: %s', user_id, exc)
+            return False
+        if login_method.allow_multi_login:
+            return False
+
+        try:
+            redis_client = await get_redis_client()
+            current_token = await redis_client.aget(USER_CURRENT_SESSION.format(user_id))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('current session lookup failed for user %s: %s', user_id, exc)
+            return False
+
+        if not current_token:
+            return False
+        current_token = str(current_token)
+        if request_token and request_token == current_token:
+            return False
+        try:
+            AuthJwt().decode_jwt_token(current_token)
+        except Exception:
+            return False
+        return True
+
+    @staticmethod
+    def _extract_request_access_token(request: Request) -> str:
+        token = (request.cookies.get('access_token_cookie') or '').strip()
+        if token:
+            return token
+        auth = (request.headers.get('Authorization') or '').strip()
+        if auth.lower().startswith('bearer '):
+            return auth[7:].strip()
+        return ''
+
+    @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
         from bisheng.api.services.audit_log import AuditLogService
 
@@ -404,6 +443,15 @@ class UserService:
         no_role_resp = await cls._reject_login_if_user_has_no_usable_access(db_user)
         if no_role_resp is not None:
             return no_role_resp
+
+        if (
+            not user.force_login
+            and await cls.has_other_active_session(
+                int(db_user.user_id),
+                cls._extract_request_access_token(request),
+            )
+        ):
+            return UserMultiLoginConflictError.return_resp()
 
         # Multi-tenant login flow
         tenant_id = None
