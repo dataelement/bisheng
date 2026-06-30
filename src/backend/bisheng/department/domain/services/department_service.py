@@ -611,6 +611,14 @@ class DepartmentService:
         kw = (keyword or "").strip()
         if not kw:
             return {"roots": [], "total_matches": 0, "truncated": False}
+        # Non-sys-admin with an EMPTY visible scope sees nothing — return empty
+        # WITHOUT a query (mirrors aget_children_layer's root layer). Otherwise the
+        # empty ``admin_paths`` would degrade to an UNSCOPED ``name LIKE`` (the DAO
+        # treats ``[]`` like ``None``), and although _abuild_pruned_forest then drops
+        # every out-of-scope row, ``total_matches`` would still leak a tenant-wide
+        # match count.
+        if not is_sys_admin and not admin_paths:
+            return {"roots": [], "total_matches": 0, "truncated": False}
         limit = max(1, min(limit, 200))
         path_prefixes = None if is_sys_admin else list(admin_paths)
         matched = await DepartmentDao.aget_by_name_like(

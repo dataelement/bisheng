@@ -296,3 +296,33 @@ class TestDeptAdminScope:
         body = resp.json()
         assert body["status_code"] == 21009
         assert "Sales" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_search_empty_scope_returns_empty_no_count_leak():
+    """F038 (review M1): a non-sys-admin whose visible scope resolves to EMPTY
+    must get an empty search — no rows AND no tenant-wide ``total_matches`` count —
+    not an unscoped ``name LIKE``. Short-circuited before the DAO."""
+    from unittest.mock import MagicMock
+
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.department.domain.services.department_service import DepartmentService
+
+    with (
+        patch(f"{_SVC}._aget_user_scope", new=AsyncMock(return_value=(False, set()))),
+        patch.object(DepartmentDao, "aget_by_name_like", new=AsyncMock(return_value=[])) as mock_search,
+    ):
+        result = await DepartmentService.asearch_tree(MagicMock(), keyword="anything")
+
+    assert result == {"roots": [], "total_matches": 0, "truncated": False}
+    mock_search.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_aget_by_name_like_empty_scope_returns_no_rows():
+    """F038 (review M1): the DAO fails CLOSED — an empty ``path_prefixes`` list
+    yields no rows (never an unscoped search), distinct from ``None`` (unscoped)."""
+    from bisheng.database.models.department import DepartmentDao
+
+    rows = await DepartmentDao.aget_by_name_like("x", path_prefixes=[])
+    assert rows == []

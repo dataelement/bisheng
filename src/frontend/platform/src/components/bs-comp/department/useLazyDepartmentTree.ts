@@ -131,6 +131,9 @@ export function useLazyDepartmentTree(
   // Refs so callbacks stay stable yet read live state (avoids re-fetch storms).
   const childIdsRef = useRef(childIds)
   childIdsRef.current = childIds
+  // The cacheKey (data source) the current normalized state belongs to, so a
+  // source switch on a still-mounted hook drops the previous scope's tree.
+  const loadedKeyRef = useRef<string | null>(null)
 
   const fetchLayer = useCallback(
     async (parentId: number | null): Promise<DepartmentTreeNode[] | null> => {
@@ -218,7 +221,20 @@ export function useLazyDepartmentTree(
   // so closed pickers on a page cost nothing.
   useEffect(() => {
     if (!autoLoad) return
-    if (childIdsRef.current[ROOT_KEY]) return // already loaded
+    const keyChanged = loadedKeyRef.current !== null && loadedKeyRef.current !== cacheKey
+    // Same source already loaded (e.g. a popover reopening) → nothing to do.
+    if (!keyChanged && childIdsRef.current[ROOT_KEY]) return
+    // Switching data source (cacheKey) on a mounted hook → drop the previous
+    // scope's normalized state so we never render the wrong-scope tree. Mutate
+    // the ref synchronously so the load guard + loadChildren see it immediately.
+    if (keyChanged) {
+      childIdsRef.current = {}
+      setNodeMap({})
+      setChildIds({})
+      setExpanded(new Set())
+      setSearchResult(null)
+    }
+    loadedKeyRef.current = cacheKey
     let cancelled = false
     setInitialLoading(true)
     ;(async () => {

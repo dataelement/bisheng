@@ -415,19 +415,14 @@ export async function searchChannelGrantSubjectsDepartmentsApi(
             ...withChannelPermissionRequestOptions(config),
         },
     );
-    return unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res);
-}
-
-export async function getChannelGrantSubjectsDepartmentPathTreeApi(
-    channelId: string,
-    deptInternalId: number,
-    config?: ChannelPermissionRequestConfig
-): Promise<GrantDepartmentSearchResult> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grant-subjects/departments/${deptInternalId}/path-tree`,
-        withChannelPermissionRequestOptions(config),
+    // Fail safe on a `data:null` envelope (parity with the resource-scoped twin).
+    return (
+        unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res) ?? {
+            roots: [],
+            total_matches: 0,
+            truncated: false,
+        }
     );
-    return unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res);
 }
 
 export async function getChannelGrantSubjectsUserGroupsApi(

@@ -6,7 +6,7 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
 **版本**: v2.6.0
-**最后更新**: 2026-06-29（初版；member_count 移除已落地提交 `b8e481872`）
+**最后更新**: 2026-06-30（两端懒加载全部落地 + 旧整树端点全下线 + 授权列表/选人两处 path-tree N+1 修复；见修订历史）
 
 ---
 
@@ -145,7 +145,7 @@
   - 租户管理员 `_is_tenant_admin`（`:165`）→ `_aget_user_tenant_root_path`（`:192`，挂载点 path）并入 `admin_paths`。
   - 非以上且无管辖 → `DepartmentPermissionDeniedError`。
 - **scoping 复用范式**：`aget_global_members_search`（`department_service.py:1242`）已用 `or_(Department.path.like(f"{p}%") for p in admin_paths)` 把同一套范围下推到 SQL——懒加载 children/search 的 scoping **照此范式**。
-- 改造后端点（新增，迁移期与旧 `/tree` 并存）：
+- 改造后端点（新增，旧 `/tree` 已下线 `a097be203`，`aget_tree` 仅留作 parity oracle）：
   - `GET /departments/children?parent_id=&include_archived=` — 取根层（无 parent_id）或某节点直接子节点，节点带 `has_children`。
   - `GET /departments/search?keyword=&limit=` — 命中 + 祖先剪枝树。
   - `GET /departments/{id}/path-tree` — 根→该 id 的剪枝树（定位/回显）。
@@ -176,7 +176,7 @@
 |---|---|---|
 | `department_service.py` | platform 树 scoping + children/search/path-tree 编排 | 不写 ORM（走 DAO） |
 | `database/models/department.py`（DAO） | 单层/子树/批量取数 | 不含权限范围逻辑 |
-| `resource_permission.py::_list_knowledge_space_grant_departments` | 授权树（租户子树+F033） + 其 children/search/path-tree | 不复用 platform admin scoping |
+| `resource_permission.py` 授权 children/search/path-tree（`_grant_departments_*` + `_resolve_grant_dept_scope`，租户子树+F033） | 授权树懒加载端点族（全树 `_list_knowledge_space_grant_departments` 已下线） | 不复用 platform admin scoping |
 | `department_change_handler.py` | create/move/archive 的 FGA 边（`on_created:31`/`on_moved:43`/`on_archived:63`） | 与缓存失效解耦 |
 
 **platform 前端**（`src/frontend/platform/`，8 个消费方）
@@ -209,6 +209,9 @@
 | 6 | **`_list_knowledge_space_grant_departments` 被 F033 + F026 共用**：知识空间授权与频道授权同一 helper（频道传 `restrict_dept_ids=None`） | 改一处影响两端；漏测频道 | 改动同时覆盖两端；测试覆盖两 resource_type |
 | 7 | **授权"已授权"集合来自资源已有授权、不来自树**：`PermissionGrantTab` 的 `disabledIds` 由 `getPermissions(resource)` 提供，与是否加载整树无关 | 误以为懒加载会丢失"已授权"判定 | 决策 10 + spec §3 权限安全不变量；验收做等价性核对 |
 | 8 | **物化路径格式 `/1/21/106/`**：以 `/` 包裹的祖先 id 链；前缀匹配靠它 | 解析祖先 id、`startswith`/`LIKE` 写错会漏/越权 | 解析按 `/` 切分、去空段 |
+| 9 | **授权列表"每个授权部门一次 path-tree"是隐形 N+1**：include_children 授权被**后端展开成每个后代部门一条 tuple**，故权限列表可有几百条部门行；若前端为每行单独取 path-tree 全路径标签，打开界面就是几百并发请求（实测 ~20s） | 成员管理界面卡死；同选人组件按结果页每个不同部门取 path-tree 同理 | **后端**在权限列表响应里直接把部门 `subject_name` 解析成全路径（`_resolve_subject_names` 批量取部门+一次补载祖先名）；选人改 `/user/list?with_department_path`；前端删 per-grant/per-dept path-tree |
+| 10 | **看部门设置时不能无条件取「上级部门」path-tree**：子租户管理员的租户根部门、或超管看子租户根，其 parent 在查看者 scope 外 → `path-tree(parent_id)` 越权(21009)/多余根查询 | 进部门设置默认弹越权 toast / 多发一次根查询 | `DepartmentSettings` 仅当当前部门**不是**可见树顶层(`children(null)` 不含它)**且非租户根**时才取父 path-tree；租户根/绝对根一律按"根"对待 |
+| 11 | **scope 过滤必须 fail-closed**：`aget_by_name_like` 旧契约把 `path_prefixes=[]`(空 scope) 当 `None`(无 scope) → 非超管空 admin_paths 会退化成租户级 `name LIKE`，虽剪枝丢行但泄露命中计数 | 空 scope 用户搜索泄露租户级匹配数 | `asearch_tree` 对非超管空 admin_paths 短路返空；DAO `[]`→无行(fail-closed)，仅 `None`→无 scope |
 
 ---
 
@@ -221,9 +224,12 @@
 | `GET /departments/children`、`/departments/search`、`/departments/{id}/path-tree` | HTTP API（platform 范围） | platform 部门树各消费方 |
 | 授权页 `grant-subjects/departments` 的 children/search/path-tree 变体 | HTTP API（租户子树/F033 范围） | client 授权选择器（知识空间 + 频道） |
 | `DepartmentTreeNode` 增 `has_children` / `matched` 字段 | 响应字段（可选，默认 false） | 两前端 |
-| `_list_knowledge_space_grant_departments(tenant_id, restrict_dept_ids)` | 内部 Python（授权树取数 helper） | 频道授权 `ChannelAuthorizationService.list_grant_departments` 直接调用 |
-| `DepartmentService.aget_tree` / 新 children/search/path-tree 编排方法 | 内部 Python（Service 入口） | platform 部门树端点；改签名/语义需同步各调用方 |
-| 旧整树接口 `/departments/tree` | **迁移期保留 → 迁完删除** | 迁移前的旧消费方 |
+| ~~`_list_knowledge_space_grant_departments`~~ + 全树 `grant-subjects/departments`(resource+channel) | **已下线**(`096ebbafa`) | 无(client 已全迁 lazy) |
+| `DepartmentService.aget_tree` | 内部 Python(**仅保留作 scope 等价 oracle**,无 HTTP 路由) | `test_department_scope_parity` 等 parity 测试基线 |
+| children/search/path-tree 编排方法 | 内部 Python(Service 入口) | platform 部门树端点;改签名/语义需同步各调用方 |
+| ~~旧整树接口 `/departments/tree`~~ | **已下线**(`a097be203`) | 无(两端全迁 lazy) |
+| `GET /user/list?with_department_path=true` 返回 `department_path`(主属部门全路径) | HTTP API(可选参数,默认不返) | platform `DepartmentUsersSelect` 扁平用户搜索(替代 per-dept path-tree) |
+| `GET .../permissions` 部门项 `subject_name` = 全路径(`总公司/研发部/平台组`) | 响应字段语义(后端 `_resolve_subject_names` 批量解析) | 两端 `PermissionListTab`(替代 per-grant path-tree) |
 
 ### 6.2 我依赖别人的（Incoming）
 
@@ -278,3 +284,6 @@
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-06-29 | 初版；决策 1–12；member_count 移除已落地（`b8e481872`，反转 F027 AC-16） | F038 设计；5 万压测实测 |
+| 2026-06-30 | 两端懒加载全部落地（platform 8 消费方 + client 授权选择器）；**旧整树端点全部下线**：`GET /departments/tree`（`aget_tree` 保留作 scope 等价 oracle）、全树 `grant-subjects/departments`（resource + channel）、`_list_knowledge_space_grant_departments`；故 §4.1/§4.3/§6.1 中这些已不再是活契约（见下方各处「已下线」标注） | 消费方全迁完，T012 下线 |
+| 2026-06-30 | **新增对外契约**：① `GET /user/list?with_department_path=true` 返回每用户主属部门**全路径** `department_path`（默认不返，不影响其它消费方）；② 权限列表 `GET .../permissions` 的**部门 `subject_name` 改为全路径**（`总公司/研发部/平台组`，后端 `_resolve_subject_names` 批量补载祖先名解析） | 两处 path-tree N+1 修复（见 §5 坑 #9） |
+| 2026-06-30 | 反直觉坑补充（§5 #9 #10）：授权列表 per-grant path-tree N+1；子租户管理员/超管看部门设置时父在 scope 外不取 path-tree | code review 修复 |

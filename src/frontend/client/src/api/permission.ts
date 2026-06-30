@@ -293,18 +293,8 @@ export async function searchResourceGrantDepartments(
   return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
 }
 
-export async function getResourceGrantDepartmentPathTree(
-  resourceType: ResourceType,
-  resourceId: string,
-  deptInternalId: number,
-  config?: { signal?: AbortSignal }
-): Promise<GrantDepartmentSearchResult> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/${deptInternalId}/path-tree`,
-    withPermissionRequestOptions(config)
-  );
-  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
-}
+// (no client consumer needs locate/path-tree: the picker browses+searches only,
+// and the permission list reads the backend-resolved full-path subject_name.)
 
 export async function getUserGroups(
   config?: { signal?: AbortSignal }

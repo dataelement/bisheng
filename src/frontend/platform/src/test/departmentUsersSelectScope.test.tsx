@@ -140,6 +140,26 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     expect(screen.queryByText("Root")).not.toBeInTheDocument()
   })
 
+  // F038 regression: switching rootDeptId on a STILL-MOUNTED picker must reload
+  // the new scope, not keep the previous scope's stale subtree (cacheKey reset).
+  it("reloads the tree to the new scope when rootDeptId changes without remount", async () => {
+    const onChange = vi.fn<(v: DepartmentUserOption[]) => void>()
+    const { rerender } = render(
+      <DepartmentUsersSelect value={[]} onChange={onChange} rootDeptId={10} />,
+    )
+    openPicker()
+
+    // rootDeptId=10 → only the A subtree is visible.
+    await waitFor(() => expect(screen.getByText("A")).toBeInTheDocument())
+    expect(screen.queryByText("Root")).not.toBeInTheDocument()
+    expect(screen.queryByText("B")).not.toBeInTheDocument()
+
+    // Same instance, drop the scope → the full org tree must load.
+    rerender(<DepartmentUsersSelect value={[]} onChange={onChange} rootDeptId={undefined} />)
+    await waitFor(() => expect(screen.getByText("Root")).toBeInTheDocument())
+    expect(screen.getByText("B")).toBeInTheDocument()
+  })
+
   it("shows the empty message when rootDeptId does not match any node", async () => {
     const onChange = vi.fn<(v: DepartmentUserOption[]) => void>()
     render(

@@ -92,6 +92,7 @@ export function SubjectSearchDepartment({
   const isImplicit = (node: DepartmentTreeNode): boolean =>
     includeChildren &&
     !selectedIdSet.has(node.id) &&
+    !!node.path &&
     selectedPaths.some((sp) => node.path !== sp && node.path.startsWith(sp))
 
   // Summary = the explicit department picks (decision 10: the subtree coverage is

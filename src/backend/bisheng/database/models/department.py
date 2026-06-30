@@ -424,11 +424,15 @@ class DepartmentDao:
         """Department name substring search, scoped by materialized-path prefixes.
 
         F038: ``path_prefixes`` is the caller's (Service-computed) visible scope —
-        ``None``/empty means unscoped (system admin / tenant-root family);
-        otherwise rows are restricted to ``OR(path LIKE prefix%)``. The Service
-        guards empty/whitespace keywords (no full-table scan); ``limit`` caps the
-        result (caller fetches ``limit+1`` to detect truncation).
+        ``None`` means unscoped (system admin); an EMPTY list means an empty scope
+        → no rows (fail-closed, so a caller's empty scope never degrades into an
+        unscoped tenant-wide search); a non-empty list restricts to
+        ``OR(path LIKE prefix%)``. The Service guards empty/whitespace keywords
+        (no full-table scan); ``limit`` caps the result (caller fetches ``limit+1``
+        to detect truncation).
         """
+        if path_prefixes is not None and not path_prefixes:
+            return []
         async with get_async_db_session() as session:
             stmt = select(Department).where(
                 Department.name.like(f"%{keyword}%"),
