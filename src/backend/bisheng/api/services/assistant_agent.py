@@ -4,12 +4,10 @@ import time
 import uuid
 from typing import Annotated, Any
 
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.tools.render import format_tool_to_openai_tool
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import ArgsSchema, BaseTool
 from langgraph.prebuilt import create_react_agent
@@ -19,7 +17,6 @@ from pydantic import Field, SkipValidation
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
@@ -27,6 +24,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import (
@@ -35,6 +33,8 @@ from bisheng.common.errcode.assistant import (
     AssistantModelNotConfigError,
 )
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
@@ -46,12 +46,6 @@ from bisheng_langchain.gpts.auto_optimization import (
 from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
 from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 
-ASSISTANT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
-
-When the tool's results already contain the aforementioned private section reference markers, the final answer must retain these markers as is; they must not be deleted, rewritten, or interpreted.
-
-Do not output this rule."""
-
 
 class AssistantCitationToolWrapper(BaseTool):
     """Add citation prompt context for assistant tool invocations."""
@@ -62,6 +56,7 @@ class AssistantCitationToolWrapper(BaseTool):
     tool: BaseTool
     citation_registry_items: list[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
     citation_collector: CitationRegistryCollector | None = Field(default=None, exclude=True)
+    kb_name_by_id: dict[str, str] = Field(default_factory=dict, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
@@ -74,10 +69,10 @@ class AssistantCitationToolWrapper(BaseTool):
         )
 
     def _is_web_search_tool(self) -> bool:
-        return self.tool.name == 'web_search' or getattr(self.tool, 'tool_name', None) == 'web_search'
+        return self.tool.name == "web_search" or getattr(self.tool, "tool_name", None) == "web_search"
 
     def _has_knowledge_rag_tool(self) -> bool:
-        return hasattr(self.tool, 'knowledge_retriever_tool')
+        return hasattr(self.tool, "knowledge_retriever_tool")
 
     def _append_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -105,30 +100,30 @@ class AssistantCitationToolWrapper(BaseTool):
         await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
         return json.dumps(results, ensure_ascii=False)
 
-    def _build_knowledge_prompt(self) -> ChatPromptTemplate:
-        messages = list(self.tool.chat_prompt.messages)
-        citation_rules_message = SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES)
-        insert_index = 1 if messages and isinstance(messages[0], SystemMessagePromptTemplate) else 0
-        messages.insert(insert_index, citation_rules_message)
-        return ChatPromptTemplate.from_messages(messages)
-
-    def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+    def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {'context': source_documents}
-        if 'question' in self.tool.chat_prompt.input_variables:
-            inputs['question'] = query
-        return inputs
+        return self._dump_knowledge_chunks(source_documents)
 
-    async def _abuild_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+    async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {'context': source_documents}
-        if 'question' in self.tool.chat_prompt.input_variables:
-            inputs['question'] = query
-        return inputs
+        return self._dump_knowledge_chunks(source_documents)
+
+    def _dump_knowledge_chunks(self, source_documents: list) -> str:
+        """Serialise retrieved chunks into the <chunk_id> tool-output format (no inner
+        LLM summarisation — the assistant's main model does the synthesis and cites
+        from the per-chunk citation_key carried in <chunk_id>)."""
+        results = []
+        for doc in source_documents:
+            meta = getattr(doc, "metadata", {}) or {}
+            kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
+            kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
+            kb_name = self.kb_name_by_id.get(kb_id, "")
+            results.append(KnowledgeUtils.format_retrieved_chunk(doc, kb_name))
+        return json.dumps(results, ensure_ascii=False)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
         cache_citation_registry_items_sync(items)
@@ -144,25 +139,23 @@ class AssistantCitationToolWrapper(BaseTool):
 
     def _run(self, query: str, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return self._append_web_citation(self.tool.invoke({'query': query}, config=kwargs.get('config')))
+            return self._append_web_citation(self.tool.invoke({"query": query}, config=kwargs.get("config")))
         if not self._has_knowledge_rag_tool():
-            return self.tool.invoke({'query': query}, config=kwargs.get('config'))
+            return self.tool.invoke({"query": query}, config=kwargs.get("config"))
 
-        retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query})
-        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
-        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
-        return qa_chain.invoke(llm_inputs)
+        retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query})
+        return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return await self._aappend_web_citation(await self.tool.ainvoke({'query': query}, config=kwargs.get('config')))
+            return await self._aappend_web_citation(
+                await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
+            )
         if not self._has_knowledge_rag_tool():
-            return await self.tool.ainvoke({'query': query}, config=kwargs.get('config'))
+            return await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
 
-        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query})
-        llm_inputs = await self._abuild_knowledge_inputs(query, retrieval_result)
-        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
-        return await qa_chain.ainvoke(llm_inputs)
+        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query})
+        return await self._aformat_knowledge_results(retrieval_result)
 
 
 class AssistantAgent(AssistantUtils):
@@ -195,14 +188,14 @@ class AssistantAgent(AssistantUtils):
         self.offline_flows = []
         self.agent: ConfigurableAssistant | None = None
         self.agent_executor_dict = {
-            'ReAct': 'get_react_agent_executor',
-            'function call': 'get_openai_functions_agent_executor',
+            "ReAct": "get_react_agent_executor",
+            "function call": "get_openai_functions_agent_executor",
         }
         self.current_agent_executor = None
         self.llm: BaseLanguageModel | None = None
         self.llm_agent_executor = None
         # Knowledge Base Retrieval Related Parameters
-        self.knowledge_retriever = {'max_content': 15000, 'sort_by_source_and_index': False}
+        self.knowledge_retriever = {"max_content": 15000, "sort_by_source_and_index": False}
         self.citation_registry_collector = CitationRegistryCollector()
 
     async def init_assistant(self, callbacks: Callbacks = None):
@@ -227,39 +220,42 @@ class AssistantAgent(AssistantUtils):
 
         self.llm_agent_executor = default_llm.agent_executor_type
         self.knowledge_retriever = {
-            'max_content': default_llm.knowledge_max_content,
-            'sort_by_source_and_index': default_llm.knowledge_sort_index
+            "max_content": default_llm.knowledge_max_content,
+            "sort_by_source_and_index": default_llm.knowledge_sort_index,
         }
 
         # Inisialisasillm
-        self.llm = await LLMService.get_bisheng_llm(model_id=default_llm.model_id,
-                                                    temperature=self.assistant.temperature,
-                                                    streaming=default_llm.streaming,
-                                                    app_id=self.assistant.id,
-                                                    app_name=self.assistant.name,
-                                                    app_type=ApplicationTypeEnum.ASSISTANT,
-                                                    user_id=self.invoke_user_id)
+        self.llm = await LLMService.get_bisheng_llm(
+            model_id=default_llm.model_id,
+            temperature=self.assistant.temperature,
+            streaming=default_llm.streaming,
+            app_id=self.assistant.id,
+            app_name=self.assistant.name,
+            app_type=ApplicationTypeEnum.ASSISTANT,
+            user_id=self.invoke_user_id,
+        )
 
     async def init_auto_update_llm(self):
-        """ Initialize Automatic Optimization prompt and other information.llmInstances """
+        """Initialize Automatic Optimization prompt and other information.llmInstances"""
         assistant_llm = await LLMService.get_assistant_llm()
         if not assistant_llm.auto_llm:
             raise AssistantAutoLLMError()
 
-        self.llm = await LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
-                                                    temperature=self.assistant.temperature,
-                                                    streaming=assistant_llm.auto_llm.streaming,
-                                                    app_id=self.assistant.id,
-                                                    app_name=self.assistant.name,
-                                                    app_type=ApplicationTypeEnum.ASSISTANT,
-                                                    user_id=self.invoke_user_id)
+        self.llm = await LLMService.get_bisheng_llm(
+            model_id=assistant_llm.auto_llm.model_id,
+            temperature=self.assistant.temperature,
+            streaming=assistant_llm.auto_llm.streaming,
+            app_id=self.assistant.id,
+            app_name=self.assistant.name,
+            app_type=ApplicationTypeEnum.ASSISTANT,
+            user_id=self.invoke_user_id,
+        )
 
     async def init_tools(self, callbacks: Callbacks = None):
         """Get by nametool Vertical
-           tools_name_param:: {name: params}
+        tools_name_param:: {name: params}
         """
-        links: list[AssistantLink] = await AssistantLinkDao.get_assistant_link(
-            assistant_id=self.assistant.id)
+        links: list[AssistantLink] = await AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
         # tool
         tools: list[BaseTool] = []
         tool_ids = []
@@ -270,26 +266,47 @@ class AssistantAgent(AssistantUtils):
             else:
                 flow_links.append(link)
         if tool_ids:
-            tools = await ToolExecutor.init_by_tool_ids(tool_ids,
-                                                        app_id=self.assistant.id,
-                                                        app_name=self.assistant.name,
-                                                        app_type=ApplicationTypeEnum.ASSISTANT,
-                                                        user_id=self.invoke_user_id,
-                                                        skip_unauthorized=True,
-                                                        llm=self.llm,
-                                                        callbacks=callbacks)
+            tools = await ToolExecutor.init_by_tool_ids(
+                tool_ids,
+                app_id=self.assistant.id,
+                app_name=self.assistant.name,
+                app_type=ApplicationTypeEnum.ASSISTANT,
+                user_id=self.invoke_user_id,
+                skip_unauthorized=True,
+                llm=self.llm,
+                callbacks=callbacks,
+            )
 
+        kb_ids: list[int] = []
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
-                knowledge_tool = await ToolExecutor.init_knowledge_tool(self.invoke_user_id, knowledge_id, llm=self.llm,
-                                                                        callbacks=callbacks,
-                                                                        **self.knowledge_retriever)
+                kb_ids.append(knowledge_id)
+                knowledge_tool = await ToolExecutor.init_knowledge_tool(
+                    self.invoke_user_id, knowledge_id, llm=self.llm, callbacks=callbacks, **self.knowledge_retriever
+                )
                 tools.append(knowledge_tool)
         self.tools = [self.wrap_citation_tool(tool) for tool in tools]
+        kb_name_by_id = self._resolve_kb_name_by_id(kb_ids)
+        for tool in self.tools:
+            if isinstance(tool, AssistantCitationToolWrapper) and tool._has_knowledge_rag_tool():
+                tool.kb_name_by_id = kb_name_by_id
+
+    @staticmethod
+    def _resolve_kb_name_by_id(kb_ids: list[int]) -> dict[str, str]:
+        """Map knowledge_id -> name to fill <knowledge_base_name> in retrieved chunks."""
+        ids = []
+        for kid in kb_ids or []:
+            try:
+                ids.append(int(kid))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return {}
+        return {str(kb.id): (kb.name or "") for kb in KnowledgeDao.get_list_by_ids(ids)}
 
     def wrap_citation_tool(self, tool: BaseTool) -> BaseTool:
-        if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
+        if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
             return AssistantCitationToolWrapper.wrap(tool, self.citation_registry_collector)
         return tool
 
@@ -327,66 +344,67 @@ class AssistantAgent(AssistantUtils):
         agent_executor_type = self.llm_agent_executor
         self.current_agent_executor = agent_executor_type
         # Do the Conversion
-        agent_executor_type = self.agent_executor_dict.get(agent_executor_type,
-                                                           agent_executor_type)
+        agent_executor_type = self.agent_executor_dict.get(agent_executor_type, agent_executor_type)
 
         prompt = self.assistant.prompt
-        if getattr(self.llm, 'model_name', '').startswith('command-r'):
+        if getattr(self.llm, "model_name", "").startswith("command-r"):
             prompt = self.ASSISTANT_PROMPT_COHERE.format(preamble=prompt)
-        if self.has_citation_tools():
-            prompt = f'{prompt}\n\n{ASSISTANT_CITATION_PROMPT_RULES}'
-        if self.current_agent_executor == 'ReAct':
+        # Conditional backstop: only inject citation rules when the assistant's own prompt
+        # doesn't already carry them (e.g. seeded via auto-optimization), avoiding duplication.
+        if self.has_citation_tools() and not prompt_has_citation_rules(self.assistant.prompt):
+            prompt = f"{prompt}\n\n{CITATION_PROMPT_RULES}"
+        if self.current_agent_executor == "ReAct":
             # Inisialisasiagent
-            self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
-                                               tools=self.tools,
-                                               llm=self.llm,
-                                               assistant_message=prompt)
+            self.agent = ConfigurableAssistant(
+                agent_executor_type=agent_executor_type, tools=self.tools, llm=self.llm, assistant_message=prompt
+            )
         else:
             # function-callingpattern, but also add recursive constraints
-            logger.info(f'Creating LangGraph agent with {len(self.tools)} tools, llm type: {type(self.llm)}')
-            logger.info(f'LLM streaming capability: {getattr(self.llm, "streaming", "unknown")}')
+            logger.info(f"Creating LangGraph agent with {len(self.tools)} tools, llm type: {type(self.llm)}")
+            logger.info(f"LLM streaming capability: {getattr(self.llm, 'streaming', 'unknown')}")
 
             self.agent = create_react_agent(self.llm, self.tools, prompt=prompt, checkpointer=False)
-            logger.info(f'LangGraph agent created: {type(self.agent)}')
+            logger.info(f"LangGraph agent created: {type(self.agent)}")
 
             # areagentAdd Recursive Limit Configuration
-            self.agent = self.agent.with_config({'recursion_limit': 100})
-            logger.info('Agent config applied: recursion_limit=100')
+            self.agent = self.agent.with_config({"recursion_limit": 100})
+            logger.info("Agent config applied: recursion_limit=100")
 
     async def optimize_assistant_prompt(self):
-        """ Automatically optimize generationprompt """
-        chain = ({
-                     'assistant_name': lambda x: x['assistant_name'],
-                     'assistant_description': lambda x: x['assistant_description'],
-                 }
-                 | ASSISTANT_PROMPT_OPT
-                 | self.llm)
-        async for one in chain.astream({
-            'assistant_name': self.assistant.name,
-            'assistant_description': self.assistant.prompt,
-        }):
+        """Automatically optimize generationprompt"""
+        chain = (
+            {
+                "assistant_name": lambda x: x["assistant_name"],
+                "assistant_description": lambda x: x["assistant_description"],
+            }
+            | ASSISTANT_PROMPT_OPT
+            | self.llm
+        )
+        async for one in chain.astream(
+            {
+                "assistant_name": self.assistant.name,
+                "assistant_description": self.assistant.prompt,
+            }
+        ):
             yield one
 
     def sync_optimize_assistant_prompt(self):
         return optimize_assistant_prompt(self.llm, self.assistant.name, self.assistant.desc)
 
     def generate_guide(self, prompt: str):
-        """ Generate opening dialogue and opening questions """
+        """Generate opening dialogue and opening questions"""
         return generate_opening_dialog(self.llm, prompt)
 
     def generate_description(self, prompt: str):
-        """ Generate description dialog """
+        """Generate description dialog"""
         return generate_breif_description(self.llm, prompt)
 
     def choose_tools(self, tool_list: list[dict[str, str]], prompt: str) -> list[str]:
         """
-         Choose A Tool
-         tool_list: [{name: xxx, description: xxx}]
+        Choose A Tool
+        tool_list: [{name: xxx, description: xxx}]
         """
-        tool_list = [
-            ToolInfo(tool_name=one['name'], tool_description=one['description'])
-            for one in tool_list
-        ]
+        tool_list = [ToolInfo(tool_name=one["name"], tool_description=one["description"]) for one in tool_list]
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 
@@ -396,32 +414,33 @@ class AssistantAgent(AssistantUtils):
         # False callback to call back skills that are offline to the front-end
         for one in self.offline_flows:
             run_id = uuid.uuid4()
-            await callback[0].on_tool_start({
-                'name': one,
-            },
-                input_str='flow is offline',
-                run_id=run_id)
-            await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
+            await callback[0].on_tool_start(
+                {
+                    "name": one,
+                },
+                input_str="flow is offline",
+                run_id=run_id,
+            )
+            await callback[0].on_tool_end(output="flow is offline", name=one, run_id=run_id)
 
     async def record_chat_history(self, message: list[Any]):
         # Record Assistant Chat History
-        if not os.getenv('BISHENG_RECORD_HISTORY'):
+        if not os.getenv("BISHENG_RECORD_HISTORY"):
             return
         try:
-            os.makedirs('/app/data/history', exist_ok=True)
-            with open(f'/app/data/history/{self.assistant.id}_{time.time()}.json',
-                      'w',
-                      encoding='utf-8') as f:
+            os.makedirs("/app/data/history", exist_ok=True)
+            with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
                 json.dump(
                     {
-                        'system': self.assistant.prompt,
-                        'message': message,
-                        'tools': [format_tool_to_openai_tool(t) for t in self.tools]
+                        "system": self.assistant.prompt,
+                        "message": message,
+                        "tools": [format_tool_to_openai_tool(t) for t in self.tools],
                     },
                     f,
-                    ensure_ascii=False)
+                    ensure_ascii=False,
+                )
         except Exception as e:
-            logger.error(f'record assistant history error: {e!s}')
+            logger.error(f"record assistant history error: {e!s}")
 
     async def trim_messages(self, messages: list[Any]) -> list[Any]:
         # Dapatkanencoding
@@ -437,9 +456,9 @@ class AssistantAgent(AssistantUtils):
                     total_count += len(enc.encode(one.content))
                 elif isinstance(one, AIMessage):
                     total_count += len(enc.encode(one.content))
-                    if 'tool_calls' in one.additional_kwargs:
+                    if "tool_calls" in one.additional_kwargs:
                         total_count += len(
-                            enc.encode(json.dumps(one.additional_kwargs['tool_calls'], ensure_ascii=False))
+                            enc.encode(json.dumps(one.additional_kwargs["tool_calls"], ensure_ascii=False))
                         )
                 else:
                     total_count += len(enc.encode(str(one.content)))
@@ -464,11 +483,11 @@ class AssistantAgent(AssistantUtils):
         # trim message
         inputs = await self.trim_messages(inputs)
 
-        if self.current_agent_executor == 'ReAct':
+        if self.current_agent_executor == "ReAct":
             result = await self.react_run(inputs, callback)
         else:
-            result = await self.agent.ainvoke({'messages': inputs}, config=RunnableConfig(callbacks=callback))
-            result = result['messages']
+            result = await self.agent.ainvoke({"messages": inputs}, config=RunnableConfig(callbacks=callback))
+            result = result["messages"]
 
         # Record Chat History
         await self.record_chat_history([one.to_json() for one in result])
@@ -490,7 +509,7 @@ class AssistantAgent(AssistantUtils):
         # trim message
         inputs = await self.trim_messages(inputs)
 
-        if self.current_agent_executor == 'ReAct':
+        if self.current_agent_executor == "ReAct":
             # ReActMode temporarily does not support streaming, downgrade to non streaming
             result = await self.react_run(inputs, callback)
             # Record Chat History
@@ -501,20 +520,20 @@ class AssistantAgent(AssistantUtils):
             config = RunnableConfig(callbacks=callback)
             final_messages = []
 
-            logger.info('Using function-calling mode, starting astream...')
+            logger.info("Using function-calling mode, starting astream...")
 
             chunk_count = 0
 
             try:
                 # UsemessagesPatternedLangGraph streamingattaintokenLevel of Streaming Output
-                async for chunk in self.agent.astream({'messages': inputs}, config=config, stream_mode="messages"):
+                async for chunk in self.agent.astream({"messages": inputs}, config=config, stream_mode="messages"):
                     chunk_count += 1
 
                     # stream_mode="messages" Return (message, metadata) Meta Group
                     message = None
                     if isinstance(chunk, tuple) and len(chunk) >= 2:
                         message, metadata = chunk[:2]
-                    elif hasattr(chunk, 'content'):
+                    elif hasattr(chunk, "content"):
                         # Directly to the message object
                         message = chunk
 
@@ -524,29 +543,32 @@ class AssistantAgent(AssistantUtils):
                         yield [message]
 
             except Exception as astream_error:
-                logger.exception(f'Error in astream async for loop: {astream_error!s}')
+                logger.exception(f"Error in astream async for loop: {astream_error!s}")
                 raise astream_error
 
-            logger.info(f'Function calling astream completed, total chunks: {chunk_count}')
+            logger.info(f"Function calling astream completed, total chunks: {chunk_count}")
 
             if chunk_count == 0:
-                logger.warning('No chunks received from agent.astream()! This indicates a streaming issue.')
+                logger.warning("No chunks received from agent.astream()! This indicates a streaming issue.")
 
             # Record Chat History
             if final_messages:
                 await self.record_chat_history([one.to_json() for one in final_messages])
 
     async def react_run(self, inputs: list, callback: Callbacks = None):
-        """ react Mode input and execution """
-        result = await self.agent.ainvoke({
-            'input': inputs[-1].content,
-            'chat_history': inputs[:-1],
-        }, config=RunnableConfig(callbacks=callback))
+        """react Mode input and execution"""
+        result = await self.agent.ainvoke(
+            {
+                "input": inputs[-1].content,
+                "chat_history": inputs[:-1],
+            },
+            config=RunnableConfig(callbacks=callback),
+        )
         logger.debug(f"react_run result: {result}")
-        output = result['agent_outcome'].return_values['output']
+        output = result["agent_outcome"].return_values["output"]
         if isinstance(output, dict):
             output = list(output.values())[0]
-        for one in result['intermediate_steps']:
+        for one in result["intermediate_steps"]:
             inputs.append(one[0])
         inputs.append(AIMessage(content=output))
         return inputs

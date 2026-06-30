@@ -14,10 +14,12 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     annotate_rag_documents_with_citations,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
+    prompt_has_citation_rules,
 )
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
@@ -98,8 +100,15 @@ class RagNode(RagUtils):
         cache_citation_registry_items_sync(citation_items)
         self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, source_documents_with_citations)
         self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+        # Feed the inner QA model the <chunk_id> chunk format (citation_key lives in
+        # <chunk_id>), consistent with the workstation/agent tool output and the citation
+        # rules in the node's system prompt. Keep source_documents_with_citations intact for
+        # the citation registry, source display and logs.
         inputs = {
-            "context": source_documents_with_citations,
+            "context": [
+                Document(page_content=KnowledgeUtils.format_retrieved_chunk(doc), metadata=doc.metadata)
+                for doc in source_documents_with_citations
+            ],
         }
         if "question" in self._qa_prompt.input_variables:
             inputs["question"] = question
@@ -222,9 +231,11 @@ class RagNode(RagUtils):
         system_prompt = self._system_prompt.format(variable_map)
         self._log_system_prompt.append(system_prompt)
 
-        messages_general = [
-            SystemMessage(content=system_prompt),
-            SystemMessage(content=CITATION_PROMPT_RULES),
-            HumanMessagePromptTemplate.from_template(user_prompt),
-        ]
+        messages_general = [SystemMessage(content=system_prompt)]
+        # Citation-rule backstop: only inject when the node's own system prompt doesn't
+        # already carry the rules (the default template does), so existing nodes keep
+        # citations and updated prompts aren't duplicated.
+        if not prompt_has_citation_rules(system_prompt):
+            messages_general.append(SystemMessage(content=CITATION_PROMPT_RULES))
+        messages_general.append(HumanMessagePromptTemplate.from_template(user_prompt))
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)

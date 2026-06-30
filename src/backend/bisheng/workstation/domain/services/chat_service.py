@@ -7,9 +7,7 @@ from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import StreamingResponse
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from loguru import logger
 
 from bisheng.api.services import knowledge_imp
@@ -181,17 +179,13 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    prompt_has_citation_rules,
     save_message_citations,
     select_registry_items_for_persistence,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
 DEFAULT_AGENT_MAX_ITERATIONS = 50
-DAILY_CHAT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
-
-When the tool's results already contain the aforementioned private section reference markers, the final answer must retain these markers as is; they must not be deleted, rewritten, or interpreted.
-
-Do not output this rule."""
 
 
 class DailyChatCitationToolWrapper(BaseTool):
@@ -202,6 +196,7 @@ class DailyChatCitationToolWrapper(BaseTool):
     args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
     tool: BaseTool
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
+    kb_name_by_id: dict[str, str] = PydanticField(default_factory=dict, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
@@ -245,30 +240,27 @@ class DailyChatCitationToolWrapper(BaseTool):
         await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
         return json.dumps(results, ensure_ascii=False)
 
-    def _build_knowledge_prompt(self) -> ChatPromptTemplate:
-        messages = list(self.tool.chat_prompt.messages)
-        citation_rules_message = SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES)
-        insert_index = 1 if messages and isinstance(messages[0], SystemMessagePromptTemplate) else 0
-        messages.insert(insert_index, citation_rules_message)
-        return ChatPromptTemplate.from_messages(messages)
-
-    def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+    def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {"context": source_documents}
-        if "question" in self.tool.chat_prompt.input_variables:
-            inputs["question"] = query
-        return inputs
+        return self._dump_knowledge_chunks(source_documents)
 
-    async def _abuild_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+    async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {"context": source_documents}
-        if "question" in self.tool.chat_prompt.input_variables:
-            inputs["question"] = query
-        return inputs
+        return self._dump_knowledge_chunks(source_documents)
+
+    def _dump_knowledge_chunks(self, source_documents: list) -> str:
+        results = []
+        for doc in source_documents:
+            meta = getattr(doc, "metadata", {}) or {}
+            kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
+            kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
+            kb_name = self.kb_name_by_id.get(kb_id, "")
+            results.append(knowledge_imp.KnowledgeUtils.format_retrieved_chunk(doc, kb_name))
+        return json.dumps(results, ensure_ascii=False)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
         cache_citation_registry_items_sync(items)
@@ -285,9 +277,7 @@ class DailyChatCitationToolWrapper(BaseTool):
             return self.tool.invoke({"query": query}, config=config)
 
         retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query}, config=config)
-        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
-        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
-        return qa_chain.invoke(llm_inputs, config=config)
+        return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, config=None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
@@ -296,9 +286,7 @@ class DailyChatCitationToolWrapper(BaseTool):
             return await self.tool.ainvoke({"query": query}, config=config)
 
         retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query}, config=config)
-        llm_inputs = await self._abuild_knowledge_inputs(query, retrieval_result)
-        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
-        return await qa_chain.ainvoke(llm_inputs, config=config)
+        return await self._aformat_knowledge_results(retrieval_result)
 
 
 def _wrap_daily_chat_citation_tool(
@@ -661,26 +649,14 @@ async def _build_knowledge_search_tool(
         )
 
     def _format_chunk(doc) -> str:
+        # Shared formatter (unwrap stored wrapper + preserve citation_key + aligned
+        # tag format) lives in KnowledgeUtils so the workstation and the workflow
+        # agent knowledge tool can't drift. kb_name resolution stays caller-side.
         meta = getattr(doc, "metadata", {}) or {}
-        doc_id = meta.get("document_id") or ""
-        chunk_idx = meta.get("chunk_index", "")
-        chunk_id = meta.get("chunk_id") or (f"{doc_id}-{chunk_idx}" if doc_id != "" else str(chunk_idx))
-        file_title = meta.get("document_name") or meta.get("source") or meta.get("file_name") or ""
-        file_abstract = meta.get("file_abstract") or meta.get("abstract") or ""
-        content = (getattr(doc, "page_content", "") or "").strip()
         kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
         kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
         kb_name = kb_name_by_id.get(kb_id, "")
-        return (
-            "{"
-            f"<knowledge_base_id>{kb_id}</knowledge_base_id>\n"
-            f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
-            f"<chunk_id>{chunk_id}</chunk_id>\n"
-            f"<file_title>{file_title}</file_title>\n"
-            f"<file_abstract>{file_abstract}</file_abstract>\n"
-            f"<paragraph_content>{content}</paragraph_content>"
-            "}"
-        )
+        return knowledge_imp.KnowledgeUtils.format_retrieved_chunk(doc, kb_name)
 
     async def _resolve_tag_filter_file_ids(
         kb_filters: list[_KbFilter],
@@ -1378,13 +1354,14 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            if knowledge_bases_info or any(isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools):
-                sys_prompt = (
-                    f"{sys_prompt}\n\n{DAILY_CHAT_CITATION_PROMPT_RULES}"
-                    if sys_prompt
-                    else DAILY_CHAT_CITATION_PROMPT_RULES
-                )
-
+            # Citation-rule backstop: inject only when knowledge/citation tools are in play
+            # and the admin prompt doesn't already carry the rules (the default does), so
+            # existing configs keep citations and updated prompts aren't duplicated.
+            has_citation_tool = knowledge_bases_info or any(
+                isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools
+            )
+            if has_citation_tool and not prompt_has_citation_rules(sys_prompt):
+                sys_prompt = f"{sys_prompt}\n\n{CITATION_PROMPT_RULES}" if sys_prompt else CITATION_PROMPT_RULES
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(
