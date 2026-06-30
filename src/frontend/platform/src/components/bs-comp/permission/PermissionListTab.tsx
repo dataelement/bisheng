@@ -11,16 +11,16 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
-  getResourceGrantDepartmentsApi,
+  getResourceGrantDepartmentPathTreeApi,
   getResourcePermissions,
   type RelationModel,
 } from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import type { DepartmentSearchResult } from "@/types/api/department"
 import { cn } from "@/utils"
 import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { buildDepartmentPathLabelMap } from "./departmentPathUtils"
 import { RelationModelOption } from "./RelationSelect"
 import { PermissionEntry, RelationLevel, ResourceType, RevokeItem } from "./types"
 
@@ -119,15 +119,46 @@ export function PermissionListTab({
   const [isListScrolling, setIsListScrolling] = useState(false)
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // F038: resolve the path label (父/子/孙) for each GRANTED department via the
+  // lazy path-tree endpoint (bounded by the number of grants) instead of loading
+  // the whole department tree — which doesn't scale to tens of thousands of depts.
   useEffect(() => {
-    captureAndAlertRequestErrorHoc(
-      getResourceGrantDepartmentsApi(resourceType, resourceId),
-    ).then((res) => {
-      if (res && Array.isArray(res)) {
-        setDeptPathById(buildDepartmentPathLabelMap(res))
+    const deptIds = Array.from(
+      new Set(
+        entries
+          .filter((e) => e.subject_type === "department")
+          .map((e) => Number(e.subject_id)),
+      ),
+    )
+    if (!deptIds.length) {
+      setDeptPathById(new Map())
+      return
+    }
+    let cancelled = false
+    Promise.all(
+      deptIds.map((id) =>
+        captureAndAlertRequestErrorHoc(
+          getResourceGrantDepartmentPathTreeApi(resourceType, resourceId, id),
+        ).then((res) => [id, (res as DepartmentSearchResult | null) ?? null] as const),
+      ),
+    ).then((results) => {
+      if (cancelled) return
+      const map = new Map<number, string>()
+      for (const [id, tree] of results) {
+        const names: string[] = []
+        let cur = tree?.roots?.[0]
+        while (cur) {
+          names.push(cur.name)
+          cur = cur.children?.[0]
+        }
+        if (names.length) map.set(id, names.join("/"))
       }
+      setDeptPathById(map)
     })
-  }, [refreshKey, resourceId, resourceType])
+    return () => {
+      cancelled = true
+    }
+  }, [entries, resourceId, resourceType])
 
   const loadData = useCallback(async () => {
     setLoading(true)

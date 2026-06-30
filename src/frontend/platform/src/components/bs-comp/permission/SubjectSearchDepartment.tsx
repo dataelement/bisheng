@@ -153,6 +153,7 @@ export function SubjectSearchDepartment({
           isRowDisabled={(n) => disabledIdSet.has(n.id)}
           searchPlaceholder={t("search.department")}
           emptyHint={t("empty.departments")}
+          wheelScrollFix
           className="p-1"
         />
       </div>
