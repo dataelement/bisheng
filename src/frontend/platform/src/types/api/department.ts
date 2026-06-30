@@ -13,7 +13,19 @@ export interface DepartmentTreeNode {
   is_tenant_root: boolean
   /** Tenant.id this department mounts; null when is_tenant_root is false. */
   mounted_tenant_id: number | null
+  // F038 lazy tree: has_children drives the expand affordance without loading the
+  // child layer; matched flags a search/locate hit. Both optional so legacy
+  // full-tree consumers are unaffected; the lazy endpoints always populate them.
+  has_children?: boolean
+  matched?: boolean
   children: DepartmentTreeNode[]
+}
+
+/** F038 search / path-tree (locate) response: a pruned tree of hits + ancestors. */
+export interface DepartmentSearchResult {
+  roots: DepartmentTreeNode[]
+  total_matches: number
+  truncated: boolean
 }
 
 export interface DepartmentAdmin {
