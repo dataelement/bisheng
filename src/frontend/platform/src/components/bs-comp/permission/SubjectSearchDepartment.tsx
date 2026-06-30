@@ -144,7 +144,10 @@ export function SubjectSearchDepartment({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="min-h-0 flex-1 overflow-hidden rounded-[6px] border border-[#EBECF0]">
+      {/* Must be ``flex flex-col`` so LazyDepartmentTree's ``flex-1`` resolves to a
+          bounded height and its inner list actually scrolls (a plain block here
+          lets the tree size to content, so it overflows + can't scroll). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[6px] border border-[#EBECF0]">
         <LazyDepartmentTree
           controller={tree}
           onSelect={handleToggle}
