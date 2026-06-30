@@ -93,7 +93,7 @@ ALLOWLIST: set[tuple[str, int]] = {
     # folds the result into ``_filter_ids_by_tenant_gate``, which re-applies
     # the tenant boundary. The helper itself must stay cross-tenant; tightening
     # it would break the owner / child-tenant-admin scope union semantics.
-    ("permission/domain/services/permission_service.py", 1048),
+    ("permission/domain/services/permission_service.py", 1075),
 }
 
 
