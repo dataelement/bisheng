@@ -5,10 +5,11 @@ from typing import Any, Union
 from fastapi import Request
 from loguru import logger
 
-from bisheng.api.services.assistant_agent import ASSISTANT_CITATION_PROMPT_RULES, AssistantAgent
+from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq, StreamData
+from bisheng.citation.domain.services.citation_prompt_helper import CITATION_PROMPT_RULES
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (
@@ -460,6 +461,12 @@ class AssistantService(BaseService, AssistantUtils):
         auto_agent = AssistantAgent(assistant, "", login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
+        # Only seed citation rules when the assistant actually has a linked knowledge base
+        # (the dominant retrieval case); chat-only assistants don't need them. Web-only
+        # assistants still get citations at runtime via the backstop.
+        links = await AssistantLinkDao.get_assistant_link(assistant_id)
+        has_knowledge = any(link.knowledge_id for link in links)
+
         # Streaming Generation Prompts
         final_prompt = ""
         async for one_prompt in auto_agent.optimize_assistant_prompt():
@@ -469,9 +476,10 @@ class AssistantService(BaseService, AssistantUtils):
             final_prompt += one_prompt.content
         # Append the citation rules block so the generated (user-visible, editable) prompt
         # carries them; the runtime backstop then detects them and won't duplicate.
-        rules_block = f"\n\n{ASSISTANT_CITATION_PROMPT_RULES}"
-        yield str(StreamData(event="message", data={"type": "prompt", "message": rules_block}))
-        final_prompt += rules_block
+        if has_knowledge:
+            rules_block = f"\n\n{CITATION_PROMPT_RULES}"
+            yield str(StreamData(event="message", data={"type": "prompt", "message": rules_block}))
+            final_prompt += rules_block
         assistant.prompt = final_prompt
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 

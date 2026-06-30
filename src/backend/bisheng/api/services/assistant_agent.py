@@ -17,7 +17,6 @@ from pydantic import Field, SkipValidation
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
@@ -46,12 +45,6 @@ from bisheng_langchain.gpts.auto_optimization import (
 )
 from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
 from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
-
-ASSISTANT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
-
-When the tool's results already contain the aforementioned private section reference markers, the final answer must retain these markers as is; they must not be deleted, rewritten, or interpreted.
-
-Do not output this rule."""
 
 
 class AssistantCitationToolWrapper(BaseTool):
@@ -359,7 +352,7 @@ class AssistantAgent(AssistantUtils):
         # Conditional backstop: only inject citation rules when the assistant's own prompt
         # doesn't already carry them (e.g. seeded via auto-optimization), avoiding duplication.
         if self.has_citation_tools() and not prompt_has_citation_rules(self.assistant.prompt):
-            prompt = f"{prompt}\n\n{ASSISTANT_CITATION_PROMPT_RULES}"
+            prompt = f"{prompt}\n\n{CITATION_PROMPT_RULES}"
         if self.current_agent_executor == "ReAct":
             # Inisialisasiagent
             self.agent = ConfigurableAssistant(
