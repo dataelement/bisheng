@@ -5,7 +5,7 @@ from typing import Any, Union
 from fastapi import Request
 from loguru import logger
 
-from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.services.assistant_agent import ASSISTANT_CITATION_PROMPT_RULES, AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq, StreamData
@@ -467,6 +467,11 @@ class AssistantService(BaseService, AssistantUtils):
                 continue
             yield str(StreamData(event="message", data={"type": "prompt", "message": one_prompt.content}))
             final_prompt += one_prompt.content
+        # Append the citation rules block so the generated (user-visible, editable) prompt
+        # carries them; the runtime backstop then detects them and won't duplicate.
+        rules_block = f"\n\n{ASSISTANT_CITATION_PROMPT_RULES}"
+        yield str(StreamData(event="message", data={"type": "prompt", "message": rules_block}))
+        final_prompt += rules_block
         assistant.prompt = final_prompt
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 

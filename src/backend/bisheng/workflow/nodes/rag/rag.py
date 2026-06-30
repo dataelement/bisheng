@@ -14,6 +14,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     annotate_rag_documents_with_citations,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
+    prompt_has_citation_rules,
 )
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
@@ -230,9 +231,11 @@ class RagNode(RagUtils):
         system_prompt = self._system_prompt.format(variable_map)
         self._log_system_prompt.append(system_prompt)
 
-        messages_general = [
-            SystemMessage(content=system_prompt),
-            SystemMessage(content=CITATION_PROMPT_RULES),
-            HumanMessagePromptTemplate.from_template(user_prompt),
-        ]
+        messages_general = [SystemMessage(content=system_prompt)]
+        # Citation-rule backstop: only inject when the node's own system prompt doesn't
+        # already carry the rules (the default template does), so existing nodes keep
+        # citations and updated prompts aren't duplicated.
+        if not prompt_has_citation_rules(system_prompt):
+            messages_general.append(SystemMessage(content=CITATION_PROMPT_RULES))
+        messages_general.append(HumanMessagePromptTemplate.from_template(user_prompt))
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)

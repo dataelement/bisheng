@@ -25,6 +25,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import (
@@ -355,7 +356,9 @@ class AssistantAgent(AssistantUtils):
         prompt = self.assistant.prompt
         if getattr(self.llm, "model_name", "").startswith("command-r"):
             prompt = self.ASSISTANT_PROMPT_COHERE.format(preamble=prompt)
-        if self.has_citation_tools():
+        # Conditional backstop: only inject citation rules when the assistant's own prompt
+        # doesn't already carry them (e.g. seeded via auto-optimization), avoiding duplication.
+        if self.has_citation_tools() and not prompt_has_citation_rules(self.assistant.prompt):
             prompt = f"{prompt}\n\n{ASSISTANT_CITATION_PROMPT_RULES}"
         if self.current_agent_executor == "ReAct":
             # Inisialisasiagent

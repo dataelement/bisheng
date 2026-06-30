@@ -18,6 +18,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -37,11 +38,6 @@ agent_executor_dict = {
     "ReAct": "get_react_agent_executor",
     "function call": "get_openai_functions_agent_executor",
 }
-
-WORKFLOW_AGENT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
-
-当工具结果中已经包含上述私有区段引用标记时，最终回答必须原样保留这些标记，不得删除、改写或解释这些标记。
-不要输出本规则内容。"""
 
 
 class WorkflowCitationToolWrapper(BaseTool):
@@ -272,8 +268,11 @@ class AgentNode(BaseNode):
             if isinstance(tool, WorkflowCitationToolWrapper) and tool._has_knowledge_rag_tool():
                 tool.kb_name_by_id = kb_name_by_id
         self._citation_tools = [tool for tool in func_tools if isinstance(tool, WorkflowCitationToolWrapper)]
-        if self._has_citation_tools(func_tools):
-            system_prompt = f"{system_prompt}\n\n{WORKFLOW_AGENT_CITATION_PROMPT_RULES}"
+        # Citation-rule backstop: only inject when the node has citation tools and its own
+        # system prompt doesn't already carry the rules (the default template does), so
+        # existing nodes keep citations and updated prompts aren't duplicated.
+        if self._has_citation_tools(func_tools) and not prompt_has_citation_rules(system_prompt):
+            system_prompt = f"{system_prompt}\n\n{CITATION_PROMPT_RULES}"
         if self._agent_executor_type == "ReAct":
             self._agent = ConfigurableAssistant(
                 agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
