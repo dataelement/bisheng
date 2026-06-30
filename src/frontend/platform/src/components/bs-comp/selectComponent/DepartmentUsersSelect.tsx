@@ -9,7 +9,6 @@ import {
   getDepartmentPathTreeApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -47,22 +46,12 @@ type UserListItem = {
   external_id?: string | null
   dept_id?: number | string | null
   department_id?: number | null
+  // F038: primary-department full path resolved by the backend (with_department_path),
+  // so the flat user search shows the org path without per-department path-tree calls.
+  department_path?: string | null
 }
 
 const TREE_INDENT_PER_LEVEL = 22
-
-/** Follow a single-path pruned tree down to its leaf, joining names as a label. */
-function pathLabelOf(tree: DepartmentSearchResult | null): { id: number | null; label: string } {
-  const names: string[] = []
-  let cur = tree?.roots?.[0]
-  let id: number | null = null
-  while (cur) {
-    names.push(cur.name)
-    id = cur.id
-    cur = cur.children?.[0]
-  }
-  return { id, label: names.join(" / ") }
-}
 
 export default function DepartmentUsersSelect({
   value,
@@ -83,8 +72,6 @@ export default function DepartmentUsersSelect({
   const [searchedUsers, setSearchedUsers] = useState<UserListItem[]>([])
   const [deptUsersMap, setDeptUsersMap] = useState<Record<number, DepartmentUserOption[]>>({})
   const [loadingDeptIds, setLoadingDeptIds] = useState<Set<number>>(new Set())
-  // Resolved path label (父 / 子) per department id, for the flat user-search results.
-  const [deptLabelById, setDeptLabelById] = useState<Map<number, string>>(new Map())
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchAbortRef = useRef<AbortController | null>(null)
@@ -153,7 +140,10 @@ export default function DepartmentUsersSelect({
     searchAbortRef.current = ac
     setSearchingUsers(true)
     try {
-      const res = await getUsersApi({ name: q, page: 1, pageSize: 200 }, { signal: ac.signal })
+      const res = await getUsersApi(
+        { name: q, page: 1, pageSize: 200, withDepartmentPath: true },
+        { signal: ac.signal },
+      )
       if (!ac.signal.aborted) setSearchedUsers((res?.data || []) as UserListItem[])
     } catch {
       // ignore abort / network
@@ -179,38 +169,6 @@ export default function DepartmentUsersSelect({
       searchAbortRef.current?.abort()
     }
   }, [])
-
-  // Resolve department path labels for the (flat) user-search results lazily —
-  // one path-tree per distinct department in the result page.
-  useEffect(() => {
-    const ids = Array.from(
-      new Set(
-        searchedUsers
-          .map((u) => (u.department_id != null ? Number(u.department_id) : null))
-          .filter((id): id is number => id != null),
-      ),
-    ).filter((id) => !deptLabelById.has(id))
-    if (!ids.length) return
-    let cancelled = false
-    Promise.all(
-      ids.map((id) =>
-        captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(id, false)).then(
-          (res) => [id, pathLabelOf((res as DepartmentSearchResult | null) ?? null).label] as const,
-        ),
-      ),
-    ).then((pairs) => {
-      if (cancelled) return
-      setDeptLabelById((prev) => {
-        const next = new Map(prev)
-        for (const [id, label] of pairs) next.set(id, label)
-        return next
-      })
-    })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchedUsers])
 
   const setPicked = (user: DepartmentUserOption, departmentPath: string) => {
     const id = Number(user.value)
@@ -394,8 +352,7 @@ export default function DepartmentUsersSelect({
                 </div>
               ) : (
                 searchedUsers.map((u) => {
-                  const deptId = u.department_id != null ? Number(u.department_id) : null
-                  const deptLabel = deptId != null ? deptLabelById.get(deptId) ?? "" : ""
+                  const deptLabel = u.department_path ?? ""
                   return (
                     <div
                       key={`su-${u.user_id}`}

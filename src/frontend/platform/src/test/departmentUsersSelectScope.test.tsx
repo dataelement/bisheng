@@ -159,4 +159,38 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     expect(screen.queryByText("A")).not.toBeInTheDocument()
     expect(screen.queryByText("B")).not.toBeInTheDocument()
   })
+
+  // F038: the flat user search shows each user's org path from the backend
+  // (with_department_path) instead of firing one path-tree call per distinct
+  // department in the result page.
+  it("renders the backend-resolved department_path for user search, with no per-dept path-tree", async () => {
+    mockedUsers.mockResolvedValue({
+      data: [
+        {
+          user_id: 5,
+          user_name: "Zhang",
+          external_id: null,
+          department_id: 106,
+          department_path: "总公司/研发部/平台组",
+        },
+      ],
+      total: 1,
+    } as any)
+
+    render(<DepartmentUsersSelect value={[]} onChange={vi.fn()} />)
+    openPicker()
+
+    fireEvent.change(screen.getByPlaceholderText("system.searchUser"), {
+      target: { value: "Zhang" },
+    })
+
+    await screen.findByText("Zhang")
+    expect(screen.getByText("总公司/研发部/平台组")).toBeInTheDocument()
+    expect(mockedUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Zhang", withDepartmentPath: true }),
+      expect.anything(),
+    )
+    // The label comes from the user-list payload — no per-department path-tree call.
+    expect(mockedPathTree).not.toHaveBeenCalled()
+  })
 })
