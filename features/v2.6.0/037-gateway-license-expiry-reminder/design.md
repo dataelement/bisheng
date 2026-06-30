@@ -55,6 +55,13 @@
 - **判定规则**：`/api/*` 路径中，凡不属于 `/api/v1`、`/api/v2`（代理）且不是 `/api/license`（状态）的，即视为网关付费接口 → 拦；其余一律放行。
 - **何时该重新考虑**：若未来把某些付费能力放进 `/api/v1` 代理族下，需改判定规则（不能再简单按前缀）。
 
+### 决策 5：降级触发时机与 severity 对齐（到期日当天即降级）
+
+- **背景**：severity 映射里 `daysRemaining <= 0` 即 `expired`（红条），但降级的 `expired` 标志最初取 `current.isAfter(expireDay)`（严格次日才降级）。导致**到期日当天**：Banner 已红显 expired，但付费接口还没拦——自相矛盾。
+- **选定**：把降级 `expired` 标志改为 `daysRemaining <= 0`（含到期日当天），与 severity 完全对齐。`LicenseLoader.checkDate()`：`boolean expired = daysRemaining <= 0;`
+- **原因**：「红条说过期了」就应该「付费接口被拦」，两者一致才不迷惑；代价是比原 `System.exit` 语义早一天（到期日当天即停付费功能，而非次日）——对 trial 可接受。
+- **影响**：到期日当天起，`/api/oauth2/list` 等付费接口返 11001、前端 SSO 入口消失；透传 `/api/v1,v2` 仍放行。
+
 ---
 
 ## 4. 系统现状（接手必读）
