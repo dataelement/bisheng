@@ -23,7 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Building2, ChevronDown, Loader2, RotateCcw, Search, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
@@ -74,6 +74,12 @@ const SUBJECT_ICONS = {
 
 const LIST_SUBJECT_TYPES = ["user", "department"] as const;
 type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number];
+type ProtectedUserId = number | string | null | undefined;
+
+function normalizeUserId(value: ProtectedUserId) {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
 
 export interface PermissionApiAdapter {
   getPermissions: typeof getResourcePermissions;
@@ -93,6 +99,7 @@ interface PermissionListTabProps {
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the list to the given subject type.
   fixedSubjectType?: ListSubjectType;
+  spaceCreatorId?: ProtectedUserId;
   onPermissionChanged?: () => void;
   permissionApi?: PermissionApiAdapter;
   onChanged?: () => void;
@@ -149,11 +156,13 @@ export function PermissionListTab({
   prefetchedUseDefaultModels = false,
   skipGrantableModelsRequest = false,
   fixedSubjectType,
+  spaceCreatorId,
   onPermissionChanged,
   permissionApi,
   onChanged,
 }: PermissionListTabProps) {
   const localize = useLocalize();
+  const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const confirm = useConfirm();
   const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
@@ -300,6 +309,22 @@ export function PermissionListTab({
   }, [fixedSubjectType, hasVisibleEntries, subjectEntries.length, userSelectedTab, visiblePermissionEntries]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const protectedUserIds = useMemo(
+    () => new Set(
+      [spaceCreatorId, user?.id]
+        .map(normalizeUserId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+    [spaceCreatorId, user?.id],
+  );
+
+  const isProtectedUserEntry = useCallback(
+    (entry: PermissionEntry) =>
+      resourceType === "knowledge_space" &&
+      entry.subject_type === "user" &&
+      protectedUserIds.has(normalizeUserId(entry.subject_id) ?? ""),
+    [protectedUserIds, resourceType],
+  );
 
   const getEntryDisplayName = useCallback(
     (entry: PermissionEntry) => {
@@ -341,6 +366,7 @@ export function PermissionListTab({
   );
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
+    if (isProtectedUserEntry(entry)) return;
     const model = getEntryGrantableModels(entry).find((item) => item.id === modelId);
     const newLevel = (model?.relation || "viewer") as RelationLevel;
     if (!model || (newLevel === "owner" && entry.subject_type !== "user")) return;
@@ -449,6 +475,7 @@ export function PermissionListTab({
   };
 
   const handleDeleteSubject = async (entry: PermissionEntry) => {
+    if (isProtectedUserEntry(entry)) return;
     const ok = await confirm({
       title: localize("com_permission.action_revoke"),
       description: localize("com_permission.confirm_revoke"),
@@ -610,10 +637,11 @@ export function PermissionListTab({
                 const Icon = SUBJECT_ICONS[entry.subject_type] || User;
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
+                const isProtectedEntry = isProtectedUserEntry(entry);
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
                 const entryGrantableModels = getEntryGrantableModels(entry);
-                const canModifyEntry = canManageEntry(entry) && entryGrantableModels.length > 0;
-                const canDeleteEntrySubject = canDeleteSubject(entry);
+                const canModifyEntry = !isProtectedEntry && canManageEntry(entry) && entryGrantableModels.length > 0;
+                const canDeleteEntrySubject = !isProtectedEntry && canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
 

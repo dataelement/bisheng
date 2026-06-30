@@ -29,6 +29,34 @@ from ..dependencies import LoginUserDep
 router = APIRouter()
 
 
+class _PortalAgentPermissionUser:
+    """门户智能体列表按用户实际授权过滤，不使用 admin 全量可见快捷规则。"""
+
+    def __init__(self, user):
+        self._user = user
+
+    def __getattr__(self, name):
+        return getattr(self._user, name)
+
+    def is_admin(self) -> bool:
+        return False
+
+
+async def _filter_portal_agent_workflows_by_use_app(login_user, apps: list[dict]) -> list[dict]:
+    if not apps:
+        return apps
+    permission_user = _PortalAgentPermissionUser(login_user)
+    permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+        permission_user,
+        apps,
+        ['use_app'],
+    )
+    return [
+        app for app in apps
+        if 'use_app' in permission_map.get(str(app.get('id')), set())
+    ]
+
+
 @router.get('/app/recommended')
 async def get_recommended_apps(login_user=LoginUserDep):
     """Return admin-configured recommended apps.
@@ -235,7 +263,7 @@ async def list_portal_agent_workflows(login_user=LoginUserDep, data: PortalAgent
         page=0,
         limit=0,
     )
-    apps = await WorkFlowService.filter_apps_by_permission_id(login_user, apps, 'use_app')
+    apps = await _filter_portal_agent_workflows_by_use_app(login_user, apps)
     app_order = {workflow_id: idx for idx, workflow_id in enumerate(workflow_ids)}
     apps.sort(key=lambda app: app_order.get(str(app.get('id')), len(workflow_ids)))
     apps = WorkFlowService.add_extra_field(login_user, apps)

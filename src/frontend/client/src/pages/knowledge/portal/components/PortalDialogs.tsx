@@ -160,6 +160,7 @@ export function PortalDialogs({
                     resourceName={spacePermissionDialogSpace.name}
                     currentUserRole={spacePermissionDialogSpace.role}
                     spaceLevel={spacePermissionDialogSpace.spaceLevel}
+                    spaceCreatorId={spacePermissionDialogSpace.creatorId}
                     showShareTab={false}
                     showMembersTab={false}
                     showPermissionTab

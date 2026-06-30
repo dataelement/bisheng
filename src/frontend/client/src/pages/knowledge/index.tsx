@@ -898,6 +898,7 @@ export default function Knowledge() {
                 resourceName={spacePermissionDialogSpace?.name || ""}
                 currentUserRole={spacePermissionDialogSpace?.role || null}
                 spaceLevel={spacePermissionDialogSpace?.spaceLevel}
+                spaceCreatorId={spacePermissionDialogSpace?.creatorId}
                 showShareTab={false}
                 showMembersTab={false}
                 showPermissionTab

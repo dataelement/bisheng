@@ -291,17 +291,19 @@ async def test_list_portal_agent_workflows_filters_by_use_app_and_preserves_conf
         {'id': 'wf-c', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
     ]
 
-    async def filter_use_app(user, data, permission_id='use_app'):
-        assert permission_id == 'use_app'
-        return [one for one in data if one['id'] != 'wf-b']
-
     def add_extra_field(user, data):
         for app in data:
             app['tags'] = [SimpleNamespace(name=f"{app['id']}-tag")]
         return data
 
     with patch.object(module.FlowDao, 'aget_all_apps', new_callable=AsyncMock, return_value=(apps, False), create=True) as mock_list, \
-         patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_use_app), \
+         patch.object(
+             module.ApplicationPermissionService,
+             'get_app_permission_map_async',
+             new_callable=AsyncMock,
+             return_value={'wf-a': {'use_app'}, 'wf-b': set(), 'wf-c': {'use_app'}},
+             create=True,
+         ) as mock_permission_map, \
          patch.object(module.WorkFlowService, 'add_extra_field', side_effect=add_extra_field):
         result = await module.list_portal_agent_workflows(
             login_user=login_user,
@@ -315,8 +317,49 @@ async def test_list_portal_agent_workflows_filters_by_use_app_and_preserves_conf
         page=0,
         limit=0,
     )
+    mock_permission_map.assert_awaited_once()
+    assert mock_permission_map.await_args.args[0].user_id == 7
+    assert mock_permission_map.await_args.args[1] == apps
+    assert mock_permission_map.await_args.args[2] == ['use_app']
     assert [one['id'] for one in result['data']['workflows']] == ['wf-a', 'wf-c']
     assert result['data']['workflows'][0]['tags'][0].name == 'wf-a-tag'
+
+
+@pytest.mark.asyncio
+async def test_list_portal_agent_workflows_does_not_admin_bypass_use_app_permission():
+    module = _load_apps_endpoint_module()
+    login_user = MagicMock()
+    login_user.user_id = 7
+    login_user.is_admin.return_value = True
+    apps = [
+        {'id': 'wf-visible', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
+        {'id': 'wf-hidden', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
+    ]
+
+    with patch.object(module.FlowDao, 'aget_all_apps', new_callable=AsyncMock, return_value=(apps, False), create=True), \
+         patch.object(
+             module.ApplicationPermissionService,
+             'get_app_permission_map_async',
+             new_callable=AsyncMock,
+             return_value={'wf-visible': {'use_app'}, 'wf-hidden': set()},
+             create=True,
+         ) as mock_permission_map, \
+         patch.object(
+             module.WorkFlowService,
+             'filter_apps_by_permission_id',
+             new_callable=AsyncMock,
+             side_effect=AssertionError('portal agent list must not use admin-bypassing app filter'),
+         ), \
+         patch.object(module.WorkFlowService, 'add_extra_field', side_effect=lambda user, data: data):
+        result = await module.list_portal_agent_workflows(
+            login_user=login_user,
+            data=SimpleNamespace(workflow_ids=['wf-visible', 'wf-hidden']),
+        )
+
+    permission_user = mock_permission_map.await_args.args[0]
+    assert permission_user.user_id == 7
+    assert permission_user.is_admin() is False
+    assert [one['id'] for one in result['data']['workflows']] == ['wf-visible']
 
 
 @pytest.mark.asyncio

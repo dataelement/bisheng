@@ -8,8 +8,13 @@ import {
 } from "~/api/permission";
 import { PermissionListTab } from "./PermissionListTab";
 
+let mockCurrentUserId = "999";
+
 jest.mock("~/hooks", () => ({
   useLocalize: () => (key: string) => key,
+  useAuthContext: () => ({
+    user: mockCurrentUserId ? { id: mockCurrentUserId } : undefined,
+  }),
 }));
 
 jest.mock("~/Providers", () => ({
@@ -47,6 +52,7 @@ const mockedAuthorizeResource = jest.mocked(authorizeResource);
 describe("Client PermissionListTab", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCurrentUserId = "999";
     mockedAuthorizeResource.mockResolvedValue(null);
     mockedGetResourceGrantDepartments.mockResolvedValue([]);
     mockedGetGrantableRelationModels.mockResolvedValue([
@@ -136,6 +142,70 @@ describe("Client PermissionListTab", () => {
       expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     });
     expect(screen.getAllByLabelText("com_permission.remove")).toHaveLength(2);
+  });
+
+  it("keeps the space creator row read-only even when another owner remains", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+      {
+        subject_type: "user",
+        subject_id: 3,
+        subject_name: "Bob",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+        spaceCreatorId="2"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByLabelText("com_permission.remove")).toHaveLength(1);
+  });
+
+  it("keeps the current user's own knowledge-space row read-only", async () => {
+    mockCurrentUserId = "2";
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("deletes all relations for the selected subject", async () => {

@@ -48,6 +48,7 @@ interface KnowledgeSpaceShareDialogProps {
     showMembersTab?: boolean;
     showPermissionTab: boolean;
     spaceLevel?: SpaceLevel;
+    spaceCreatorId?: string | number | null;
     onPermissionChanged?: () => void;
     grantSubjectScopeSpaceId?: string;
 }
@@ -63,6 +64,7 @@ export function KnowledgeSpaceShareDialog({
     showMembersTab = false,
     showPermissionTab,
     spaceLevel,
+    spaceCreatorId,
     onPermissionChanged,
     grantSubjectScopeSpaceId,
 }: KnowledgeSpaceShareDialogProps) {
@@ -234,6 +236,7 @@ export function KnowledgeSpaceShareDialog({
                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                     prefetchedUseDefaultModels={useDefaultModels}
                     skipGrantableModelsRequest
+                    spaceCreatorId={resourceType === "knowledge_space" ? spaceCreatorId : undefined}
                     onPermissionChanged={onPermissionChanged}
                 />
             </TabsContent>
