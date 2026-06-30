@@ -14,12 +14,6 @@ function depSeg(deptId: string): string {
   return encodeURIComponent(deptId)
 }
 
-// ── Tree ───────────────────────────────────────────────
-
-export async function getDepartmentTreeApi(): Promise<DepartmentTreeNode[]> {
-  return await axios.get(`/api/v1/departments/tree`)
-}
-
 // ── Lazy tree (F038) ───────────────────────────────────
 // Per-layer browse / server-side search / locate-by-id, so large org trees never
 // load all nodes at once. `parent_id=null` returns the root layer; nodes carry

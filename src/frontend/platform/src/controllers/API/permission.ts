@@ -138,13 +138,6 @@ export async function getResourceGrantUsersApi(
   })
 }
 
-export async function getResourceGrantDepartmentsApi(
-  resourceType: string,
-  resourceId: string,
-): Promise<any[]> {
-  return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`)
-}
-
 // F038: lazy variants of the grant-subject department tree (browse one layer /
 // server search / locate). Same authorization scope as the full-tree endpoint
 // above (tenant subtree minus child-tenant mounts, optionally F033-narrowed),
@@ -200,12 +193,6 @@ export async function getKnowledgeSpaceGrantUsersApi(
   params?: { keyword?: string; page?: number; page_size?: number },
 ): Promise<any[]> {
   return await getResourceGrantUsersApi("knowledge_space", resourceId, params)
-}
-
-export async function getKnowledgeSpaceGrantDepartmentsApi(
-  resourceId: string,
-): Promise<any[]> {
-  return await getResourceGrantDepartmentsApi("knowledge_space", resourceId)
 }
 
 export async function getKnowledgeSpaceGrantUserGroupsApi(
