@@ -39,6 +39,11 @@ interface AiChatMessagesProps {
     flatMode?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
+    /** Show the export-session entry under assistant messages. The full homepage/task
+        chat opts in; the lightweight knowledge/file/article docks and share view leave
+        it off. Independent of knowledgeChatLayout (which is a layout-width flag and is
+        true for the homepage chat too). */
+    allowExport?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
     /** Overrides the empty-state illustration (defaults to the AI-home image).
@@ -77,6 +82,7 @@ function MessageTreeNode({
     currentIndex,
     onRegenerate,
     knowledgeChatLayout,
+    allowExport,
     onOpenCitationPanel,
     activeCitationMessageId,
     onPreviewFile,
@@ -88,6 +94,7 @@ function MessageTreeNode({
     onRegenerate?: (parentMessageId: string) => void;
     onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
+    allowExport?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
 }) {
@@ -132,6 +139,7 @@ function MessageTreeNode({
                 siblingCount={siblings.length}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                allowExport={allowExport}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
                 onPreviewFile={onPreviewFile}
@@ -145,6 +153,7 @@ function MessageTreeNode({
                     currentIndex={currentIndex + 1}
                     onRegenerate={onRegenerate}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    allowExport={allowExport}
                     onOpenCitationPanel={onOpenCitationPanel}
                     activeCitationMessageId={activeCitationMessageId}
                     onPreviewFile={onPreviewFile}
@@ -166,6 +175,7 @@ export default function AiChatMessages({
     hideHeaderTitle = false,
     flatMode = false,
     knowledgeChatLayout = false,
+    allowExport = false,
     emptyStateHint,
     emptyStateIllustration,
     contentWidthClassName,
@@ -397,6 +407,7 @@ export default function AiChatMessages({
                                             : undefined
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
+                                    allowExport={allowExport}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
                                     onPreviewFile={onPreviewFile}
@@ -413,6 +424,7 @@ export default function AiChatMessages({
                                 currentIndex={0}
                                 onRegenerate={onRegenerate}
                                 knowledgeChatLayout={knowledgeChatLayout}
+                                allowExport={allowExport}
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 activeCitationMessageId={activeCitationMessageId}
                                 onPreviewFile={onPreviewFile}
