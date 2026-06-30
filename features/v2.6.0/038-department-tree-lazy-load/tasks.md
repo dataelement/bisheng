@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 纯 What；用户确认 2026-06-29 |
 | design.md | ✅ 已评审 | 决策 1–12 + 接手必读；用户确认 2026-06-29；接手第一入口 |
 | tasks.md | ✅ 已拆解 | 本文件 |
-| 实现 | 🟡 进行中 | 7 / 16（T000 `b8e481872`、T002 `1af226f5d`、T001、T003+T004 platform 端点族、T005+T006 授权端点族[知识空间+频道]） |
+| 实现 | 🟡 进行中 | 8 / 16（后端全完：T000-T006；前端 T007 可复用懒加载件已落地，T008-T011 消费方迁移待续） |
 
 ---
 
@@ -85,11 +85,12 @@
 
 ### Wave 4 —— platform 前端基建
 
-- [ ] **T007**: platform 可复用懒加载树 hook + 展示组件 + API 封装
-  **文件**: `platform/src/components/bs-comp/department/`（新 hook + 组件）、`controllers/API/department.ts`
-  **逻辑**: `useLazyDepartmentTree`（节点 map/展开集/加载集、`loadChildren`、`mergePrunedTree`、`search`、`reveal`，react-query v3 缓存 `['dept-children', parentId]`）；展示组件箭头用 `has_children`、展开未加载则取子层 + spinner；搜索态渲染剪枝树并高亮 `matched`；新增 children/search/path-tree API 封装（走 request 模块，C7）
+- [x] **T007**: platform 可复用懒加载树 hook + 展示组件 + API 封装 ✅（`962343050`，tsc 零新增错误）
+  **文件**: `bs-comp/department/useLazyDepartmentTree.ts`(新 hook)、`bs-comp/department/LazyDepartmentTree.tsx`(新展示组件)、`bs-comp/department/index.ts`(barrel)、`controllers/API/department.ts`(3 封装)、`types/api/department.ts`(加 `has_children?`/`matched?` + `DepartmentSearchResult`)
+  **逻辑**: `useLazyDepartmentTree`——浏览态用规范化懒模型(node map + per-parent childIds，展开时取子层，react-query 缓存 `['dept-children',parentId,includeArchived]`)；搜索态直渲后端剪枝树(debounce 300ms)；`reveal(id)` 取 path-tree 链并把链上每层**整层加载**后展开(回显深层值)；`reloadLayer(parentId)` 失效单层(AC-05)。`LazyDepartmentTree`——箭头用 `has_children`、单层 spinner、`matched` 高亮、truncated 提示；row prefix/suffix slot + isRowDisabled 供导航树(建子按钮/挂载角标/归档)与 picker(勾选框/已授权)复用同一渲染器。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-06, AC-09, AC-10
   **手动验证**: 在接入页（T008）联调
+  **⚠️ 接手注意**: 消费方迁移(T008/T009/T009b)是**强耦合大重构**——`DepartmentPage/index.tsx` 把整树 `tree` 串进 4+ 子弹窗(MemberTable/DepartmentSettings/CreateDepartmentDialog)；`TreeDepartmentSelect` 还**导出** `getDepartmentDisplayPath`/`findDepartmentAncestorIds`/`findDepartmentNodeById`(消费方在整树上调用算回显路径)。改 picker 内部懒加载会波及所有用这些 helper 的消费方→须协调改 + 逐步 dev 验证。**别单独改一处**。
   **依赖**: T004
 
 ### Wave 5 —— platform 消费方迁移（每项独立小 PR）
