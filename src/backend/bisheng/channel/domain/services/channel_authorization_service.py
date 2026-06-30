@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
 
 from sqlmodel import col, select
 
@@ -37,36 +37,36 @@ from bisheng.permission.domain.schemas.permission_schema import (
     AuthorizeGrantItem,
     AuthorizeRevokeItem,
 )
-from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.permission.domain.services.resource_permission_notification_service import (
     ResourcePermissionNotificationService,
 )
 
 logger = logging.getLogger(__name__)
 
-_RELATION_MODELS_KEY = 'permission_relation_models_v1'
-_RELATION_MODEL_BINDINGS_KEY = 'permission_relation_model_bindings_v1'
-_GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
+_RELATION_MODELS_KEY = "permission_relation_models_v1"
+_RELATION_MODEL_BINDINGS_KEY = "permission_relation_model_bindings_v1"
+_GRANT_TIER_VALUES = frozenset({"owner", "manager", "usage"})
 
 # A relation model can only be granted when the caller holds the matching
 # fine-grained management permission. This intentionally keeps the three
 # `manage_channel_*` checkboxes independent: holding `manage_channel_manager`
 # must NOT imply the ability to grant the owner tier.
 _GRANT_TIER_TO_MANAGE_PERMISSION = {
-    'owner': 'manage_channel_owner',
-    'manager': 'manage_channel_manager',
-    'usage': 'manage_channel_user',
+    "owner": "manage_channel_owner",
+    "manager": "manage_channel_manager",
+    "usage": "manage_channel_user",
 }
 _CHANNEL_MANAGE_PERMISSION_IDS = frozenset(_GRANT_TIER_TO_MANAGE_PERMISSION.values())
 
 
 def _grant_tier_for_relation(relation: str) -> str:
-    if relation == 'owner':
-        return 'owner'
-    if relation == 'manager':
-        return 'manager'
-    return 'usage'
+    if relation == "owner":
+        return "owner"
+    if relation == "manager":
+        return "manager"
+    return "usage"
 
 
 class ChannelAuthorizationService:
@@ -74,7 +74,7 @@ class ChannelAuthorizationService:
         self,
         channel_repository,
         space_channel_member_repository: SpaceChannelMemberRepository,
-        membership_sync_service: Optional[ChannelMembershipSyncService] = None,
+        membership_sync_service: ChannelMembershipSyncService | None = None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
@@ -99,7 +99,7 @@ class ChannelAuthorizationService:
         notify_context = None
         if tuple_grants or tuple_revokes:
             notify_context = await ResourcePermissionNotificationService.build_context(
-                resource_type='channel',
+                resource_type="channel",
                 resource_id=channel_id,
                 grants=tuple_grants,
                 revokes=tuple_revokes,
@@ -107,7 +107,7 @@ class ChannelAuthorizationService:
 
         if tuple_grants or tuple_revokes:
             await PermissionService.authorize(
-                object_type='channel',
+                object_type="channel",
                 object_id=channel_id,
                 grants=tuple_grants,
                 revokes=tuple_revokes,
@@ -119,7 +119,7 @@ class ChannelAuthorizationService:
             original_bindings = await self._get_bindings()
             await self._save_binding_changes_from_snapshot(channel_id, request, original_bindings)
         except Exception as exc:
-            logger.exception('channel authorization sync failed: channel_id=%s', channel_id)
+            logger.exception("channel authorization sync failed: channel_id=%s", channel_id)
             if original_bindings is not None:
                 await self._restore_bindings(channel_id, original_bindings)
             await self._compensate_permission_write(channel_id, tuple_grants, tuple_revokes)
@@ -128,7 +128,7 @@ class ChannelAuthorizationService:
         await ResourcePermissionNotificationService.dispatch_after_authorize(
             context=notify_context,
             operator_user_id=login_user.user_id,
-            operator_user_name=getattr(login_user, 'user_name', None),
+            operator_user_name=getattr(login_user, "user_name", None),
         )
 
         return ChannelAuthorizeResponse(
@@ -136,17 +136,18 @@ class ChannelAuthorizationService:
             affected_member_count=0,
         )
 
-    async def list_permissions(self, channel_id: str, login_user: UserPayload) -> List[ChannelPermissionEntry]:
+    async def list_permissions(self, channel_id: str, login_user: UserPayload) -> list[ChannelPermissionEntry]:
         await self._require_manage_access(channel_id, login_user)
         channel = await self._ensure_channel(channel_id)
-        creator_id = int(channel.user_id) if getattr(channel, 'user_id', None) is not None else None
-        permissions = await PermissionService.get_resource_permissions('channel', channel_id)
+        creator_id = int(channel.user_id) if getattr(channel, "user_id", None) is not None else None
+        permissions = await PermissionService.get_resource_permissions("channel", channel_id)
         bindings = [
-            b for b in await self._get_bindings()
-            if b.get('resource_type') == 'channel' and str(b.get('resource_id')) == str(channel_id)
+            b
+            for b in await self._get_bindings()
+            if b.get("resource_type") == "channel" and str(b.get("resource_id")) == str(channel_id)
         ]
-        model_map = {m['id']: m for m in await self._get_relation_models()}
-        binding_map = {b.get('key'): b for b in bindings if b.get('key')}
+        model_map = {m["id"]: m for m in await self._get_relation_models()}
+        binding_map = {b.get("key"): b for b in bindings if b.get("key")}
         out: list[ChannelPermissionEntry] = []
         for item in permissions:
             binding = self._binding_from_map(
@@ -155,33 +156,35 @@ class ChannelAuthorizationService:
                 item.subject_type,
                 int(item.subject_id),
                 item.relation,
-                getattr(item, 'include_children', None),
+                getattr(item, "include_children", None),
             )
-            model_id = binding.get('model_id') if binding else getattr(item, 'model_id', None)
+            model_id = binding.get("model_id") if binding else getattr(item, "model_id", None)
             model = model_map.get(model_id) if model_id else None
-            out.append(ChannelPermissionEntry(
-                subject_type=item.subject_type,
-                subject_id=int(item.subject_id),
-                subject_name=getattr(item, 'subject_name', None),
-                subject_group_names=getattr(item, 'subject_group_names', None),
-                subject_member_names=getattr(item, 'subject_member_names', None),
-                relation=ChannelRelationEnum(item.relation),
-                include_children=binding.get('include_children') if binding else getattr(item, 'include_children', None),
-                model_id=model_id,
-                model_name=model.get('name') if model else getattr(item, 'model_name', None),
-                is_creator=(
-                    item.subject_type == 'user'
-                    and creator_id is not None
-                    and int(item.subject_id) == creator_id
-                ),
-            ))
+            out.append(
+                ChannelPermissionEntry(
+                    subject_type=item.subject_type,
+                    subject_id=int(item.subject_id),
+                    subject_name=getattr(item, "subject_name", None),
+                    subject_group_names=getattr(item, "subject_group_names", None),
+                    subject_member_names=getattr(item, "subject_member_names", None),
+                    relation=ChannelRelationEnum(item.relation),
+                    include_children=binding.get("include_children")
+                    if binding
+                    else getattr(item, "include_children", None),
+                    model_id=model_id,
+                    model_name=model.get("name") if model else getattr(item, "model_name", None),
+                    is_creator=(
+                        item.subject_type == "user" and creator_id is not None and int(item.subject_id) == creator_id
+                    ),
+                )
+            )
         return out
 
     async def grantable_relation_models(
         self,
         channel_id: str,
         login_user: UserPayload,
-    ) -> List[ChannelRelationModelItem]:
+    ) -> list[ChannelRelationModelItem]:
         await self._ensure_channel(channel_id)
         if login_user.is_admin():
             return [ChannelRelationModelItem(**m) for m in await self._get_relation_models()]
@@ -201,6 +204,7 @@ class ChannelAuthorizationService:
         if tenant_id is None:
             return []
         from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_users
+
         return await _list_knowledge_space_grant_users(
             tenant_id=tenant_id,
             keyword=keyword,
@@ -214,7 +218,40 @@ class ChannelAuthorizationService:
         if tenant_id is None:
             return []
         from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_departments
+
         return await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
+
+    # F038: lazy variants. Channels are never department-scoped, so restrict_root_path
+    # is always None — same tenant-subtree scope as the legacy full-tree list, just one
+    # layer / pruned tree at a time. Reuses the permission module's shared helpers.
+    async def list_grant_departments_children(
+        self, channel_id: str, login_user: UserPayload, parent_id: int | None = None
+    ):
+        await self._require_manage_access(channel_id, login_user)
+        tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
+        if tenant_id is None:
+            return []
+        from bisheng.permission.api.endpoints.resource_permission import _grant_departments_children
+
+        return await _grant_departments_children(tenant_id=tenant_id, parent_id=parent_id)
+
+    async def search_grant_departments(self, channel_id: str, login_user: UserPayload, keyword: str, limit: int = 50):
+        await self._require_manage_access(channel_id, login_user)
+        tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
+        if tenant_id is None:
+            return {"roots": [], "total_matches": 0, "truncated": False}
+        from bisheng.permission.api.endpoints.resource_permission import _grant_departments_search
+
+        return await _grant_departments_search(tenant_id=tenant_id, keyword=keyword, limit=limit)
+
+    async def get_grant_departments_path_tree(self, channel_id: str, login_user: UserPayload, dept_id: int):
+        await self._require_manage_access(channel_id, login_user)
+        tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
+        if tenant_id is None:
+            return {"roots": [], "total_matches": 0, "truncated": False}
+        from bisheng.permission.api.endpoints.resource_permission import _grant_departments_path_tree
+
+        return await _grant_departments_path_tree(tenant_id=tenant_id, dept_id=dept_id)
 
     async def list_grant_user_groups(self, channel_id: str, login_user: UserPayload, keyword: str):
         await self._require_manage_access(channel_id, login_user)
@@ -222,6 +259,7 @@ class ChannelAuthorizationService:
         if tenant_id is None:
             return []
         from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_user_groups
+
         return await _list_knowledge_space_grant_user_groups(
             tenant_id=tenant_id,
             keyword=keyword,
@@ -229,11 +267,11 @@ class ChannelAuthorizationService:
         )
 
     async def _ensure_channel(self, channel_id: str):
-        if hasattr(self.channel_repository, 'find_by_id'):
+        if hasattr(self.channel_repository, "find_by_id"):
             channel = await self.channel_repository.find_by_id(channel_id)
             if channel:
                 return channel
-        if hasattr(self.channel_repository, 'find_channels_by_ids'):
+        if hasattr(self.channel_repository, "find_channels_by_ids"):
             channels = await self.channel_repository.find_channels_by_ids([channel_id])
             if channels:
                 return channels[0]
@@ -251,7 +289,7 @@ class ChannelAuthorizationService:
         items = [*(request.grants or []), *(request.revokes or [])]
         if not items:
             return
-        known_types = {'user', 'department', 'user_group'}
+        known_types = {"user", "department", "user_group"}
         if any(item.subject_type not in known_types for item in items):
             raise ChannelPermissionDeniedError()
 
@@ -259,9 +297,9 @@ class ChannelAuthorizationService:
         if not grant_items:
             return
 
-        user_ids = {int(item.subject_id) for item in grant_items if item.subject_type == 'user'}
-        department_ids = {int(item.subject_id) for item in grant_items if item.subject_type == 'department'}
-        user_group_ids = {int(item.subject_id) for item in grant_items if item.subject_type == 'user_group'}
+        user_ids = {int(item.subject_id) for item in grant_items if item.subject_type == "user"}
+        department_ids = {int(item.subject_id) for item in grant_items if item.subject_type == "department"}
+        user_group_ids = {int(item.subject_id) for item in grant_items if item.subject_type == "user_group"}
 
         if user_ids and not await self._users_belong_to_tenant(user_ids, tenant_id):
             raise ChannelPermissionDeniedError()
@@ -271,9 +309,9 @@ class ChannelAuthorizationService:
             raise ChannelPermissionDeniedError()
 
     async def _channel_tenant_id(self, channel, login_user: UserPayload) -> int | None:
-        tenant_id = getattr(channel, 'tenant_id', None)
+        tenant_id = getattr(channel, "tenant_id", None)
         if tenant_id is None:
-            tenant_id = await self._resolve_channel_tenant(str(getattr(channel, 'id', '')), login_user)
+            tenant_id = await self._resolve_channel_tenant(str(getattr(channel, "id", "")), login_user)
         return int(tenant_id or 0) or None
 
     @staticmethod
@@ -293,8 +331,8 @@ class ChannelAuthorizationService:
                     .where(
                         col(User.user_id).in_(ids),
                         UserTenant.tenant_id == tenant_id,
-                        UserTenant.status == 'active',
-                        Tenant.status == 'active',
+                        UserTenant.status == "active",
+                        Tenant.status == "active",
                         User.delete == 0,
                     )
                 )
@@ -315,7 +353,7 @@ class ChannelAuthorizationService:
                     await session.exec(
                         select(Tenant).where(
                             Tenant.id == tenant_id,
-                            Tenant.status == 'active',
+                            Tenant.status == "active",
                         ),
                     )
                 ).first()
@@ -324,20 +362,20 @@ class ChannelAuthorizationService:
 
                 stmt = select(Department.id).where(
                     col(Department.id).in_(ids),
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
                 root_dept = None
-                if getattr(tenant, 'root_dept_id', None):
+                if getattr(tenant, "root_dept_id", None):
                     root_dept = (
                         await session.exec(
                             select(Department).where(
                                 Department.id == int(tenant.root_dept_id),
-                                Department.status == 'active',
+                                Department.status == "active",
                             ),
                         )
                     ).first()
                 if root_dept is not None:
-                    stmt = stmt.where(Department.path.like(f'{root_dept.path}%'))
+                    stmt = stmt.where(Department.path.like(f"{root_dept.path}%"))
                     if tenant_id == ROOT_TENANT_ID:
                         child_roots = (
                             await session.exec(
@@ -345,12 +383,12 @@ class ChannelAuthorizationService:
                                     Department.is_tenant_root == 1,
                                     Department.mounted_tenant_id.is_not(None),
                                     Department.mounted_tenant_id != ROOT_TENANT_ID,
-                                    Department.status == 'active',
+                                    Department.status == "active",
                                 ),
                             )
                         ).all()
                         for child_path in child_roots:
-                            stmt = stmt.where(~Department.path.like(f'{child_path}%'))
+                            stmt = stmt.where(~Department.path.like(f"{child_path}%"))
                 else:
                     stmt = stmt.where(Department.tenant_id == tenant_id)
                 rows = (await session.exec(stmt)).all()
@@ -372,7 +410,7 @@ class ChannelAuthorizationService:
                     .where(
                         col(Group.id).in_(ids),
                         Group.tenant_id == tenant_id,
-                        Tenant.status == 'active',
+                        Tenant.status == "active",
                     )
                 )
                 rows = (await session.exec(stmt)).all()
@@ -382,20 +420,20 @@ class ChannelAuthorizationService:
         self,
         channel_id: str,
         login_user: UserPayload,
-    ) -> Optional[ChannelRelationEnum]:
+    ) -> ChannelRelationEnum | None:
         if login_user.is_admin():
             return ChannelRelationEnum.OWNER
         try:
             permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
                 login_user,
-                'channel',
+                "channel",
                 channel_id,
             )
             relation = relation_from_channel_permission_ids(permission_ids)
             if relation:
                 return ChannelRelationEnum(relation)
         except Exception:
-            logger.exception('failed to resolve channel permission ids: channel_id=%s', channel_id)
+            logger.exception("failed to resolve channel permission ids: channel_id=%s", channel_id)
         return await self.space_channel_member_repository.get_effective_channel_relation(
             channel_id,
             login_user.user_id,
@@ -424,12 +462,12 @@ class ChannelAuthorizationService:
         try:
             resolved = await FineGrainedPermissionService.get_effective_permission_ids_async(
                 login_user,
-                'channel',
+                "channel",
                 channel_id,
             )
             permission_ids = set(resolved or [])
         except Exception:
-            logger.exception('failed to resolve channel permission ids: channel_id=%s', channel_id)
+            logger.exception("failed to resolve channel permission ids: channel_id=%s", channel_id)
         if not permission_ids:
             # Legacy members without a relation-model binding: derive the manage
             # permissions from their effective membership relation.
@@ -443,10 +481,10 @@ class ChannelAuthorizationService:
 
     @staticmethod
     def _model_grant_tier(model: dict) -> str:
-        tier = model.get('grant_tier')
+        tier = model.get("grant_tier")
         if tier in _GRANT_TIER_VALUES:
             return tier
-        return _grant_tier_for_relation(model.get('relation') or '')
+        return _grant_tier_for_relation(model.get("relation") or "")
 
     @staticmethod
     def _reject_creator_permission_change(channel, request: ChannelAuthorizeRequest) -> None:
@@ -456,13 +494,13 @@ class ChannelAuthorizationService:
         even by an actor holding ``manage_channel_owner``. Any grant or revoke
         that targets the creator user is rejected.
         """
-        creator_id = getattr(channel, 'user_id', None)
+        creator_id = getattr(channel, "user_id", None)
         if creator_id is None:
             return
         creator_id = int(creator_id)
         for item in [*(request.grants or []), *(request.revokes or [])]:
-            if item.subject_type == 'user' and int(item.subject_id) == creator_id:
-                raise ChannelPermissionDeniedError(msg='无法修改频道创建人的权限')
+            if item.subject_type == "user" and int(item.subject_id) == creator_id:
+                raise ChannelPermissionDeniedError(msg="无法修改频道创建人的权限")
 
     def _validate_request(
         self,
@@ -474,7 +512,7 @@ class ChannelAuthorizationService:
         for item in [*(request.grants or []), *(request.revokes or [])]:
             relation = ChannelRelationEnum(item.relation).value
             if not validate_channel_grant_subject(item.subject_type, relation):
-                raise ChannelPermissionDeniedError(msg='部门或用户组无法成为所有者')
+                raise ChannelPermissionDeniedError(msg="部门或用户组无法成为所有者")
             required = _GRANT_TIER_TO_MANAGE_PERMISSION.get(_grant_tier_for_relation(relation))
             if not required or required not in actor_permissions:
                 raise ChannelPermissionDeniedError()
@@ -508,7 +546,7 @@ class ChannelAuthorizationService:
     ) -> None:
         try:
             await PermissionService.authorize(
-                object_type='channel',
+                object_type="channel",
                 object_id=channel_id,
                 grants=[
                     AuthorizeGrantItem(
@@ -533,7 +571,7 @@ class ChannelAuthorizationService:
                 enforce_fga_success=True,
             )
         except Exception:
-            logger.exception('channel authorization compensation failed: channel_id=%s', channel_id)
+            logger.exception("channel authorization compensation failed: channel_id=%s", channel_id)
 
     async def _cleanup_grant_membership_sources(self, channel_id: str, binding_keys: list[str]) -> None:
         for binding_key in dict.fromkeys(binding_keys):
@@ -546,7 +584,7 @@ class ChannelAuthorizationService:
         try:
             await self._save_bindings(bindings)
         except Exception:
-            logger.exception('channel authorization binding restore failed: channel_id=%s', channel_id)
+            logger.exception("channel authorization binding restore failed: channel_id=%s", channel_id)
             raise
 
     async def _save_binding_changes(self, channel_id: str, request: ChannelAuthorizeRequest) -> None:
@@ -559,39 +597,39 @@ class ChannelAuthorizationService:
         request: ChannelAuthorizeRequest,
         bindings: list[dict],
     ) -> None:
-        bindings_map = {b.get('key'): b for b in bindings if b.get('key')}
+        bindings_map = {b.get("key"): b for b in bindings if b.get("key")}
         for revoke in request.revokes:
             bindings_map.pop(self.binding_key(channel_id, revoke), None)
         for grant in request.grants:
             key = self.binding_key(channel_id, grant)
             bindings_map[key] = {
-                'key': key,
-                'resource_type': 'channel',
-                'resource_id': str(channel_id),
-                'subject_type': grant.subject_type,
-                'subject_id': grant.subject_id,
-                'relation': ChannelRelationEnum(grant.relation).value,
-                'include_children': self._normalize_include_children(
+                "key": key,
+                "resource_type": "channel",
+                "resource_id": str(channel_id),
+                "subject_type": grant.subject_type,
+                "subject_id": grant.subject_id,
+                "relation": ChannelRelationEnum(grant.relation).value,
+                "include_children": self._normalize_include_children(
                     grant.subject_type,
                     grant.include_children,
                 ),
-                'model_id': grant.model_id or ChannelRelationEnum(grant.relation).value,
+                "model_id": grant.model_id or ChannelRelationEnum(grant.relation).value,
             }
         await self._save_bindings(list(bindings_map.values()))
 
     @staticmethod
     def _normalize_include_children(subject_type: str, include_children) -> bool | None:
-        if subject_type != 'department':
+        if subject_type != "department":
             return None
         return bool(include_children)
 
     @classmethod
     def binding_key(cls, channel_id: str, item: ChannelGrantItem | ChannelRevokeItem) -> str:
         include_children = cls._normalize_include_children(item.subject_type, item.include_children)
-        scope = '-' if include_children is None else ('1' if include_children else '0')
+        scope = "-" if include_children is None else ("1" if include_children else "0")
         return (
-            f'channel:{channel_id}:{item.subject_type}:{item.subject_id}:'
-            f'{ChannelRelationEnum(item.relation).value}:{scope}'
+            f"channel:{channel_id}:{item.subject_type}:{item.subject_id}:"
+            f"{ChannelRelationEnum(item.relation).value}:{scope}"
         )
 
     @classmethod
@@ -604,10 +642,10 @@ class ChannelAuthorizationService:
         include_children,
     ) -> list[str]:
         normalized = cls._normalize_include_children(subject_type, include_children)
-        scope = '-' if normalized is None else ('1' if normalized else '0')
+        scope = "-" if normalized is None else ("1" if normalized else "0")
         return [
-            f'channel:{channel_id}:{subject_type}:{subject_id}:{relation}:{scope}',
-            f'channel:{channel_id}:{subject_type}:{subject_id}:{relation}',
+            f"channel:{channel_id}:{subject_type}:{subject_id}:{relation}:{scope}",
+            f"channel:{channel_id}:{subject_type}:{subject_id}:{relation}",
         ]
 
     @classmethod
@@ -644,11 +682,10 @@ class ChannelAuthorizationService:
         remaining: list[dict] = []
         removed = 0
         for binding in bindings:
-            is_channel_binding = (
-                binding.get('resource_type') == 'channel'
-                and str(binding.get('resource_id')) == str(channel_id)
+            is_channel_binding = binding.get("resource_type") == "channel" and str(binding.get("resource_id")) == str(
+                channel_id
             )
-            if is_channel_binding and binding.get('relation') != ChannelRelationEnum.OWNER.value:
+            if is_channel_binding and binding.get("relation") != ChannelRelationEnum.OWNER.value:
                 removed += 1
                 continue
             remaining.append(binding)
@@ -659,10 +696,10 @@ class ChannelAuthorizationService:
     @staticmethod
     async def _get_bindings() -> list[dict]:
         row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)
-        if not row or not (row.value or '').strip():
+        if not row or not (row.value or "").strip():
             return []
         try:
-            bindings = json.loads(row.value or '[]')
+            bindings = json.loads(row.value or "[]")
         except Exception:
             return []
         return bindings if isinstance(bindings, list) else []
@@ -677,10 +714,10 @@ class ChannelAuthorizationService:
     @classmethod
     async def _get_relation_models(cls) -> list[dict]:
         row = await ConfigDao.aget_config_by_key(_RELATION_MODELS_KEY)
-        if not row or not (row.value or '').strip():
+        if not row or not (row.value or "").strip():
             return cls._default_relation_models()
         try:
-            models = json.loads(row.value or '[]')
+            models = json.loads(row.value or "[]")
         except Exception:
             return cls._default_relation_models()
         if not isinstance(models, list) or not models:
@@ -691,39 +728,39 @@ class ChannelAuthorizationService:
     def _default_relation_models() -> list[dict]:
         return [
             {
-                'id': relation,
-                'name': name,
-                'relation': relation,
-                'grant_tier': grant_tier,
-                'permissions': list(default_permission_ids_for_relation(relation)),
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": relation,
+                "name": name,
+                "relation": relation,
+                "grant_tier": grant_tier,
+                "permissions": list(default_permission_ids_for_relation(relation)),
+                "permissions_explicit": False,
+                "is_system": True,
             }
             for relation, name, grant_tier in (
-                ('owner', '所有者', 'owner'),
-                ('manager', '可管理', 'manager'),
-                ('editor', '可编辑', 'usage'),
-                ('viewer', '可查看', 'usage'),
+                ("owner", "所有者", "owner"),
+                ("manager", "可管理", "manager"),
+                ("editor", "可编辑", "usage"),
+                ("viewer", "可查看", "usage"),
             )
         ]
 
     @staticmethod
     def _normalize_model_dict(model: dict) -> dict:
         out = dict(model)
-        relation = out.get('relation') or 'viewer'
-        out['relation'] = relation
-        out['id'] = out.get('id') or relation
-        out['name'] = out.get('name') or relation
-        out['permissions'] = out.get('permissions') or list(default_permission_ids_for_relation(relation))
-        out['permissions_explicit'] = bool(out.get('permissions_explicit', False))
-        out['is_system'] = bool(out.get('is_system', False))
-        if out.get('grant_tier') not in _GRANT_TIER_VALUES:
-            out['grant_tier'] = 'owner' if relation == 'owner' else 'manager' if relation == 'manager' else 'usage'
+        relation = out.get("relation") or "viewer"
+        out["relation"] = relation
+        out["id"] = out.get("id") or relation
+        out["name"] = out.get("name") or relation
+        out["permissions"] = out.get("permissions") or list(default_permission_ids_for_relation(relation))
+        out["permissions_explicit"] = bool(out.get("permissions_explicit", False))
+        out["is_system"] = bool(out.get("is_system", False))
+        if out.get("grant_tier") not in _GRANT_TIER_VALUES:
+            out["grant_tier"] = "owner" if relation == "owner" else "manager" if relation == "manager" else "usage"
         return out
 
     async def _resolve_channel_tenant(self, channel_id: str, login_user: UserPayload) -> int | None:
         try:
-            tenant_id = await PermissionService._resolve_resource_tenant('channel', channel_id)
+            tenant_id = await PermissionService._resolve_resource_tenant("channel", channel_id)
         except Exception:
             tenant_id = None
-        return int(tenant_id or getattr(login_user, 'tenant_id', 0) or 0) or None
+        return int(tenant_id or getattr(login_user, "tenant_id", 0) or 0) or None

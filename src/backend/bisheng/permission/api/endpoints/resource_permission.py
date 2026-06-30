@@ -933,6 +933,303 @@ async def _list_knowledge_space_grant_departments(
     return _sort_tree(roots)
 
 
+# --------------------------------------------------------------------------- #
+# F038: lazy variants of the grant-subject department tree (browse one layer /
+# search / locate). Same visible scope as ``_list_knowledge_space_grant_departments``
+# — the TENANT ROOT SUBTREE minus child-tenant mount subtrees, optionally clamped
+# to a bound department's subtree (F033) — but never loads the whole tree. The
+# F033 restriction is passed as a PATH PREFIX (``restrict_root_path``) rather than
+# an id set, so it stays a ``path LIKE`` predicate and never hits DM8's large
+# ``.in_()`` serialization trap (design §5 #1). The channel picker is the
+# ``restrict_root_path=None`` case (decision 3: same scope helper, no admin scope).
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class _GrantDeptScope:
+    """Resolved browse scope for the grant-subject department tree.
+
+    ``positive_prefix`` — materialized-path prefix of the visible subtree root
+    (tenant root, or the F033 bound department); ``None`` falls back to a
+    ``tenant_id`` filter when the tenant has no root department.
+    ``exclude_prefixes`` — child-tenant mount subtrees carved out (ROOT tenant only).
+    """
+
+    positive_prefix: str | None
+    exclude_prefixes: tuple[str, ...]
+    tenant_id: int
+
+
+def _grant_path_ids(path: str | None) -> list[int]:
+    """Ancestor→self id chain from a materialized path ``/10/11/12/`` → ``[10, 11, 12]``."""
+    out: list[int] = []
+    for part in (path or "").split("/"):
+        part = part.strip()
+        if part:
+            try:
+                out.append(int(part))
+            except ValueError:
+                continue
+    return out
+
+
+def _grant_in_scope(dept, scope: "_GrantDeptScope") -> bool:
+    """Whether ``dept`` is inside the visible scope (positive prefix / tenant
+    fallback, and not under any excluded child-mount subtree)."""
+    path = getattr(dept, "path", None)
+    if scope.positive_prefix is not None:
+        if not (path and path.startswith(scope.positive_prefix)):
+            return False
+    elif int(getattr(dept, "tenant_id", 0) or 0) != scope.tenant_id:
+        return False
+    return not any(path and path.startswith(ex) for ex in scope.exclude_prefixes)
+
+
+def _apply_grant_scope(stmt, scope: "_GrantDeptScope", Department):
+    """Push the visible scope into a ``select(Department...)`` statement."""
+    if scope.positive_prefix is not None:
+        stmt = stmt.where(Department.path.like(f"{scope.positive_prefix}%"))
+    else:
+        stmt = stmt.where(Department.tenant_id == scope.tenant_id)
+    for ex in scope.exclude_prefixes:
+        stmt = stmt.where(~Department.path.like(f"{ex}%"))
+    return stmt
+
+
+def _grant_dept_node(dept, *, has_children: bool = False, matched: bool = False) -> dict:
+    return {
+        "id": int(dept.id),
+        "dept_id": dept.dept_id,
+        "name": dept.name,
+        "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
+        "path": dept.path,
+        "sort_order": int(getattr(dept, "sort_order", 0) or 0),
+        "source": dept.source,
+        "status": dept.status,
+        "has_children": has_children,
+        "matched": matched,
+        "children": [],
+    }
+
+
+async def _resolve_grant_dept_scope(session, tenant_id: int, restrict_root_path: str | None):
+    """Resolve ``_GrantDeptScope`` for ``tenant_id``; ``None`` when the tenant is
+    missing/inactive (callers return empty). Mirrors the scope construction in
+    ``_list_knowledge_space_grant_departments``."""
+    from sqlmodel import select
+
+    from bisheng.database.models.department import Department
+    from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
+
+    tenant = (await session.exec(select(Tenant).where(Tenant.id == tenant_id, Tenant.status == "active"))).first()
+    if tenant is None:
+        return None
+
+    root_dept = None
+    if getattr(tenant, "root_dept_id", None):
+        root_dept = (
+            await session.exec(
+                select(Department).where(
+                    Department.id == int(tenant.root_dept_id),
+                    Department.status == "active",
+                )
+            )
+        ).first()
+
+    exclude: list[str] = []
+    if root_dept is not None and tenant_id == ROOT_TENANT_ID:
+        child_roots = (
+            await session.exec(
+                select(Department.path).where(
+                    Department.is_tenant_root == 1,
+                    Department.mounted_tenant_id.is_not(None),
+                    Department.mounted_tenant_id != ROOT_TENANT_ID,
+                    Department.status == "active",
+                )
+            )
+        ).all()
+        exclude = [p for p in child_roots if p]
+
+    if root_dept is not None:
+        positive = restrict_root_path or root_dept.path
+    else:
+        positive = restrict_root_path  # may be None → tenant_id fallback
+    return _GrantDeptScope(positive_prefix=positive, exclude_prefixes=tuple(exclude), tenant_id=tenant_id)
+
+
+async def _grant_children_existence(session, parent_ids: list[int], scope: "_GrantDeptScope", Department) -> set[int]:
+    """Which of ``parent_ids`` (one rendered layer) have ≥1 visible child — one
+    ``DISTINCT parent_id`` query, no N+1. ``parent_ids`` is a single layer so the
+    ``.in_()`` stays small."""
+    if not parent_ids:
+        return set()
+    from sqlmodel import select
+
+    stmt = select(Department.parent_id).where(
+        Department.parent_id.in_(parent_ids),
+        Department.status == "active",
+    )
+    stmt = _apply_grant_scope(stmt, scope, Department).distinct()
+    rows = (await session.exec(stmt)).all()
+    out: set[int] = set()
+    for r in rows:
+        val = r[0] if isinstance(r, (list, tuple)) else r
+        if val is not None:
+            out.add(int(val))
+    return out
+
+
+async def _grant_build_pruned(
+    session, seeds, matched_ids: set[int], scope: "_GrantDeptScope", Department
+) -> list[dict]:
+    """Minimal forest of ``seeds`` + their in-scope ancestors (clamped to the
+    positive prefix so names above it never leak); ``matched_ids`` flagged."""
+    if not seeds:
+        return []
+    from sqlmodel import select
+
+    needed: set[int] = set()
+    for d in seeds:
+        needed.update(_grant_path_ids(d.path))
+    if not needed:
+        return []
+    rows = list(
+        (
+            await session.exec(select(Department).where(Department.id.in_(list(needed)), Department.status == "active"))
+        ).all()
+    )
+    visible = [d for d in rows if _grant_in_scope(d, scope)]
+    if not visible:
+        return []
+    existence = await _grant_children_existence(session, [int(d.id) for d in visible], scope, Department)
+    nodes = {
+        int(d.id): _grant_dept_node(d, has_children=int(d.id) in existence, matched=int(d.id) in matched_ids)
+        for d in visible
+    }
+    roots: list[dict] = []
+    for d in visible:
+        pid = int(d.parent_id) if getattr(d, "parent_id", None) is not None else None
+        if pid is not None and pid in nodes:
+            nodes[pid]["children"].append(nodes[int(d.id)])
+        else:
+            roots.append(nodes[int(d.id)])
+
+    def _sort(layer: list[dict]):
+        layer.sort(key=lambda n: (n["sort_order"], n["id"]))
+        for n in layer:
+            _sort(n["children"])
+
+    _sort(roots)
+    return roots
+
+
+async def _grant_departments_children(
+    *, tenant_id: int, parent_id: int | None = None, restrict_root_path: str | None = None
+) -> list[dict]:
+    """One visible layer of the grant-subject department tree (AC-24). No
+    ``parent_id`` → root layer (the scope root). Out-of-scope/missing parent →
+    empty (no leak)."""
+    from sqlmodel import select
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import Department
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            scope = await _resolve_grant_dept_scope(session, tenant_id, restrict_root_path)
+            if scope is None:
+                return []
+            if parent_id is None:
+                if scope.positive_prefix is not None:
+                    root_ids = _grant_path_ids(scope.positive_prefix)
+                    if not root_ids:
+                        return []
+                    root = (
+                        await session.exec(
+                            select(Department).where(Department.id == root_ids[-1], Department.status == "active")
+                        )
+                    ).first()
+                    depts = [root] if root is not None and _grant_in_scope(root, scope) else []
+                else:
+                    stmt = select(Department).where(Department.parent_id.is_(None), Department.status == "active")
+                    stmt = _apply_grant_scope(stmt, scope, Department)
+                    depts = list((await session.exec(stmt.order_by(Department.sort_order, Department.id))).all())
+            else:
+                parent = (
+                    await session.exec(
+                        select(Department).where(Department.id == parent_id, Department.status == "active")
+                    )
+                ).first()
+                if parent is None or not _grant_in_scope(parent, scope):
+                    return []
+                stmt = select(Department).where(Department.parent_id == parent_id, Department.status == "active")
+                stmt = _apply_grant_scope(stmt, scope, Department)
+                depts = list((await session.exec(stmt.order_by(Department.sort_order, Department.id))).all())
+
+            depts = [d for d in depts if d is not None]
+            if not depts:
+                return []
+            existence = await _grant_children_existence(session, [int(d.id) for d in depts], scope, Department)
+            return [_grant_dept_node(d, has_children=int(d.id) in existence) for d in depts]
+
+
+async def _grant_departments_search(
+    *, tenant_id: int, keyword: str, limit: int = 50, restrict_root_path: str | None = None
+) -> dict:
+    """Server-side name search within the grant scope → pruned tree (AC-26).
+    Blank keyword returns empty without a query; ``truncated`` set over ``limit``."""
+    kw = (keyword or "").strip()
+    if not kw:
+        return {"roots": [], "total_matches": 0, "truncated": False}
+    limit = max(1, min(limit, 200))
+
+    from sqlmodel import select
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import Department
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            scope = await _resolve_grant_dept_scope(session, tenant_id, restrict_root_path)
+            if scope is None:
+                return {"roots": [], "total_matches": 0, "truncated": False}
+            stmt = select(Department).where(Department.name.like(f"%{kw}%"), Department.status == "active")
+            stmt = _apply_grant_scope(stmt, scope, Department)
+            matched = list(
+                (await session.exec(stmt.order_by(Department.sort_order, Department.id).limit(limit + 1))).all()
+            )
+            truncated = len(matched) > limit
+            matched = matched[:limit]
+            matched_ids = {int(d.id) for d in matched}
+            roots = await _grant_build_pruned(session, matched, matched_ids, scope, Department)
+            return {"roots": roots, "total_matches": len(matched), "truncated": truncated}
+
+
+async def _grant_departments_path_tree(*, tenant_id: int, dept_id: int, restrict_root_path: str | None = None) -> dict:
+    """Locate/reveal a department within the grant scope (AC-26). Out-of-scope or
+    missing target → empty roots (no leak)."""
+    from sqlmodel import select
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import Department
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            scope = await _resolve_grant_dept_scope(session, tenant_id, restrict_root_path)
+            if scope is None:
+                return {"roots": [], "total_matches": 0, "truncated": False}
+            target = (
+                await session.exec(select(Department).where(Department.id == dept_id, Department.status == "active"))
+            ).first()
+            if target is None or not _grant_in_scope(target, scope):
+                return {"roots": [], "total_matches": 0, "truncated": False}
+            roots = await _grant_build_pruned(session, [target], {int(target.id)}, scope, Department)
+            return {"roots": roots, "total_matches": 1, "truncated": False}
+
+
 async def _list_knowledge_space_grant_user_groups(
     *,
     tenant_id: int,
@@ -1440,6 +1737,109 @@ async def get_grant_subject_departments(
             tenant_id=tenant_id,
             restrict_dept_ids=scope.subtree_dept_ids if scope else None,
         )
+    )
+
+
+# F038: empty payloads for the lazy grant-subject department endpoints, by shape.
+_EMPTY_DEPT_LAYER: list = []
+_EMPTY_DEPT_TREE = {"roots": [], "total_matches": 0, "truncated": False}
+
+
+async def _grant_dept_lazy_preamble(resource_type: str, resource_id: str, login_user):
+    """Shared gate for the lazy grant-subject department endpoints.
+
+    Returns ``(error_resp, tenant_id, restrict_root_path, empty)``:
+    - ``error_resp`` set → return it immediately (invalid resource / denied);
+    - ``empty=True`` → no authorizable target (no tenant, or a department space
+      whose bound department is archived/missing) → caller returns the empty shape;
+    - otherwise ``restrict_root_path`` is the F033 bound-department path (or
+      ``None`` for normal spaces / channels — the same scope as the legacy list).
+
+    F033 is threaded as a PATH (not the id set) so the lazy queries stay
+    ``path LIKE`` and avoid DM8's large ``.in_()`` trap (design §5 #1).
+    """
+    if resource_type not in VALID_RESOURCE_TYPES:
+        return PermissionInvalidResourceError.return_resp(), None, None, False
+    if not await _has_resource_permission_management_access(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    ):
+        return PermissionDeniedError.return_resp(), None, None, False
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return None, None, None, True
+    scope = await _resolve_department_space_scope(resource_type, resource_id)
+    restrict_root_path = None
+    if scope is not None:
+        if not scope.subtree_dept_ids:
+            return None, tenant_id, None, True  # bound dept archived/missing → no target
+        from bisheng.database.models.department import DepartmentDao
+
+        bound = await DepartmentDao.aget_by_id(scope.department_id)
+        if bound is None or getattr(bound, "path", None) is None:
+            return None, tenant_id, None, True
+        restrict_root_path = bound.path
+    return None, tenant_id, restrict_root_path, False
+
+
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/children")
+async def get_grant_subject_departments_children(
+    resource_type: str,
+    resource_id: str,
+    parent_id: int | None = Query(None),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    err, tenant_id, restrict_root_path, empty = await _grant_dept_lazy_preamble(resource_type, resource_id, login_user)
+    if err is not None:
+        return err
+    if empty:
+        return resp_200(_EMPTY_DEPT_LAYER)
+    return resp_200(
+        await _grant_departments_children(
+            tenant_id=tenant_id, parent_id=parent_id, restrict_root_path=restrict_root_path
+        )
+    )
+
+
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/search")
+async def search_grant_subject_departments(
+    resource_type: str,
+    resource_id: str,
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    err, tenant_id, restrict_root_path, empty = await _grant_dept_lazy_preamble(resource_type, resource_id, login_user)
+    if err is not None:
+        return err
+    if empty:
+        return resp_200(dict(_EMPTY_DEPT_TREE))
+    return resp_200(
+        await _grant_departments_search(
+            tenant_id=tenant_id, keyword=keyword, limit=limit, restrict_root_path=restrict_root_path
+        )
+    )
+
+
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/{dept_id:int}/path-tree")
+async def get_grant_subject_departments_path_tree(
+    resource_type: str,
+    resource_id: str,
+    dept_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    err, tenant_id, restrict_root_path, empty = await _grant_dept_lazy_preamble(resource_type, resource_id, login_user)
+    if err is not None:
+        return err
+    if empty:
+        return resp_200(dict(_EMPTY_DEPT_TREE))
+    return resp_200(
+        await _grant_departments_path_tree(tenant_id=tenant_id, dept_id=dept_id, restrict_root_path=restrict_root_path)
     )
 
 

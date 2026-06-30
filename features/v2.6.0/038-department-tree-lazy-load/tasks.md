@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 纯 What；用户确认 2026-06-29 |
 | design.md | ✅ 已评审 | 决策 1–12 + 接手必读；用户确认 2026-06-29；接手第一入口 |
 | tasks.md | ✅ 已拆解 | 本文件 |
-| 实现 | 🟡 进行中 | 5 / 16（T000 `b8e481872`、T002 `1af226f5d`、T001、T003+T004 children/search/path-tree） |
+| 实现 | 🟡 进行中 | 7 / 16（T000 `b8e481872`、T002 `1af226f5d`、T001、T003+T004 platform 端点族、T005+T006 授权端点族[知识空间+频道]） |
 
 ---
 
@@ -70,15 +70,15 @@
 
 ### Wave 3 —— 授权树端点族（租户子树 + F033 范围）
 
-- [ ] **T005**: grant-subjects children/search/path-tree 集成测试（知识空间 + 频道）
+- [x] **T005**: grant-subjects children/search/path-tree 集成测试（知识空间 + 频道）✅（14/14，aiosqlite 直测共享 helper）
   **文件**: `test/permission/test_grant_departments_lazy.py`
-  **逻辑**: 测授权树取子层/搜索/定位；覆盖**两 resource_type**（知识空间 + 频道）、F033 `restrict_dept_ids` 收敛、范围用"租户子树减子租户挂载"（**非** admin 范围，design 决策 3）
+  **逻辑**: 测授权树取子层/搜索/定位；覆盖**两 resource_type**（知识空间=带 restrict / 频道=restrict None，同一 helper 两模式）、F033 收敛、范围用"租户子树减子租户挂载"（**非** admin 范围，design 决策 3）；含 ROOT_TENANT 子租户挂载剔除 + 越权返回空不泄露
   **覆盖 AC**: AC-24, AC-26（后端侧）
   **依赖**: T001
 
-- [ ] **T006**: grant-subjects children/search/path-tree 实现
-  **文件**: `permission/api/endpoints/resource_permission.py`、`channel/domain/services/channel_authorization_service.py`（复用）
-  **逻辑**: 在 `_list_knowledge_space_grant_departments` 同源逻辑上加单层/搜索/定位变体，scoping 用其自身租户子树+F033；频道侧复用（`restrict_dept_ids=None`）
+- [x] **T006**: grant-subjects children/search/path-tree 实现 ✅
+  **文件**: `permission/api/endpoints/resource_permission.py`(`_grant_departments_children`/`_grant_departments_search`/`_grant_departments_path_tree` + `_resolve_grant_dept_scope`/`_grant_build_pruned`/`_grant_dept_lazy_preamble` + 3 KS 端点)、`channel/domain/services/channel_authorization_service.py`(3 复用方法)、`channel/api/endpoints/channel_manager.py`(3 频道端点)
+  **逻辑**: 在 `_list_knowledge_space_grant_departments` 同源 scope（租户子树 − 子租户挂载）上加单层/搜索/定位变体；**F033 收敛改用 bound dept 的 `path` 前缀（不灌 id 集，规避达梦大 `.in_()`）**；频道侧 `restrict_root_path=None` 复用同 helper。端点用 `resp_200`（懒加载后单响应小，jsonable_encoder 成本可忽略；决策 7 的 ORJSON 是为整树 14MB 而设）
   **测试**: T005 通过
   **覆盖 AC**: AC-24, AC-26（后端侧）
   **依赖**: T005

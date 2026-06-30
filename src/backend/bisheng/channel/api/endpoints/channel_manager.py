@@ -225,6 +225,41 @@ async def list_channel_grant_departments(
     return resp_200(data=result)
 
 
+# F038: lazy channel department picker (browse one layer / search / locate).
+@router.get("/{channel_id}/grant-subjects/departments/children")
+async def list_channel_grant_departments_children(
+    channel_id: str,
+    parent_id: int | None = Query(None, description="None → root layer; else direct children of this internal id"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.list_grant_departments_children(channel_id, login_user, parent_id)
+    return resp_200(data=result)
+
+
+@router.get("/{channel_id}/grant-subjects/departments/search")
+async def search_channel_grant_departments(
+    channel_id: str,
+    keyword: str = Query("", description="Department name keyword"),
+    limit: int = Query(50, ge=1, le=200, description="Max matches"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.search_grant_departments(channel_id, login_user, keyword, limit)
+    return resp_200(data=result)
+
+
+@router.get("/{channel_id}/grant-subjects/departments/{dept_id:int}/path-tree")
+async def get_channel_grant_departments_path_tree(
+    channel_id: str,
+    dept_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.get_grant_departments_path_tree(channel_id, login_user, dept_id)
+    return resp_200(data=result)
+
+
 @router.get("/{channel_id}/grant-subjects/user-groups")
 async def list_channel_grant_user_groups(
     channel_id: str,
