@@ -14,7 +14,7 @@ import React, { useId } from 'react';
  *   #BDE6D3 (light green) → rgb(var(--illus-100))
  *   #D9D9D9 (mask alpha) / white → kept as-is
  */
-export const EmptyStateIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
+export const EmptyStateIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const uid = useId();
     const maskId = `empty-mask-${uid}`;
 
@@ -23,7 +23,7 @@ export const EmptyStateIllustration = ({ className, ...props }: React.SVGProps<S
     const fill500a = { fill: 'rgb(var(--illus-500))', fillOpacity: 0.6 } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
             <mask id={maskId} style={{ maskType: 'alpha' }} maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="400">
                 <rect width="400" height="400" fill="#D9D9D9" />
             </mask>
