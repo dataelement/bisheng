@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 纯 What；用户确认 2026-06-29 |
 | design.md | ✅ 已评审 | 决策 1–12 + 接手必读；用户确认 2026-06-29；接手第一入口 |
 | tasks.md | ✅ 已拆解 | 本文件 |
-| 实现 | 🟡 进行中 | 10 / 16（后端全完 T000-T006；前端 T007 件 + T008 两棵导航树 + T009 共享 picker 已落地&类型干净；T009b/T010/T011/T012/T013 待续，含 5 个测试需补 QueryClientProvider+懒加载断言） |
+| 实现 | 🟡 进行中 | ~13 / 16（后端 T000-T006 全完；前端 T007 件 + T008 两棵导航树 + T009 共享 picker + T009b 2/3 多选 picker(SubjectSearchDepartment/KS 弹窗) + T014 契约 已落地&类型干净&已 push；**剩** T009b 第 3 个 picker(DepartmentUsersSelect)、T010 client、T011、T012、T013） |
 
 ---
 
@@ -110,11 +110,10 @@
   **依赖**: T007
   **测试欠账已清 ✅ `5163a7353`**: `test-utils` 的 `AllProviders` 加 `QueryClientProvider`(每次 render 新 client)中心修复;3 个测试改 mock 懒加载 API + stub `LazyDepartmentTree`(其 SearchInput 引 SVG，jsdom 渲不了)保留真 hook + 去 `tree` prop。**顺带抓到真 bug**:删除选中部门后 `handleTreeChange` 在 refreshAll 完成前清选择→自动选中重选到陈旧首根(被删的那个);已改 await refreshAll 后再清(两个页面)。全套 11→8 失败文件(剩余皆 pre-existing)。
 
-- [ ] **T009b**: 迁移其余 platform 独立 picker
-  **文件**: `bs-comp/selectComponent/DepartmentUsersSelect.tsx`、`bs-comp/permission/SubjectSearchDepartment.tsx`(platform 版)、`BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx`
-  **逻辑**: 三者各接入 T007 件改懒加载 + 搜索 + 定位回显；`DepartmentUsersSelect` 的成员懒加载本就有、只改树部分；默认 `include_archived=false`
+- [~] **T009b**: 迁移其余 platform 独立 picker（2/3 ✅）
+  **文件**: ✅ `bs-comp/permission/SubjectSearchDepartment.tsx`(`cbc441343`，授权多选，决策9/10 path 隐式选中+去 materialize，注入 grant API)、✅ `BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx`(`c01b87d27`，复用 LazyDepartmentTree+checkbox，绑定 diff 只跟踪小 id 集，全选降级为"已加载部门")；**⬜ `bs-comp/selectComponent/DepartmentUsersSelect.tsx`** 未做
+  **DepartmentUsersSelect 难点(留待专做)**: 它是**用户选择器**(树是导航、用户是叶子)，**搜索是按用户名 getUsersApi → 按 department_id 桶入树**(显示含命中用户的部门)。懒加载下无整树可桶入 → 需**重设计搜索**(如改扁平用户列表带部门路径，或对命中 department_id 逐个 path-tree 拉)，属设计变更非机械迁移；浏览态(展开部门取成员)可懒，搜索态是硬骨头。`useLazyDepartmentTree` 已支持注入数据源(`fetchChildren/Search/PathTree`+`cacheKey`)可复用。
   **覆盖 AC**: AC-10, AC-17
-  **手动验证**: 部门用户选择器/权限主体选择/知识空间映射 各打开秒开、可搜、不含归档
   **依赖**: T007
 
 ### Wave 6 —— client 授权选择器迁移
