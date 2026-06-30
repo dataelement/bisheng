@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { filterPermissionModelsWithScopeItems } from "./permissionModelInfo";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
@@ -305,9 +306,11 @@ export function PermissionGrantTab({
   ]);
 
   const availableModels = useMemo(() => {
-    if (effectiveSubjectType === "user") return models;
-    return models.filter((model) => model.relation !== "owner");
-  }, [effectiveSubjectType, models]);
+    const subjectModels = effectiveSubjectType === "user"
+      ? models
+      : models.filter((model) => model.relation !== "owner");
+    return filterPermissionModelsWithScopeItems(resourceType, subjectModels);
+  }, [effectiveSubjectType, models, resourceType]);
   const selectedGrantModel = useMemo(() => {
     return availableModels.find((model) => model.id === selectedModelId) ?? availableModels[0];
   }, [availableModels, selectedModelId]);

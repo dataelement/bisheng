@@ -1,5 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { cn } from "~/utils";
+import { Info } from "lucide-react";
 import type { RelationLevel, ResourceType } from "~/api/permission";
 import type { RelationModelOption } from "./RelationSelect";
 
@@ -109,6 +110,21 @@ export function getPermissionModelScopeItems(
   return scopeItems.filter((item) => permissionIdSet.has(item.id));
 }
 
+export function hasPermissionModelScopeItems(
+  resourceType: ResourceType,
+  model: RelationModelOption,
+) {
+  const items = getPermissionModelScopeItems(resourceType, model);
+  return items === null || items.length > 0;
+}
+
+export function filterPermissionModelsWithScopeItems(
+  resourceType: ResourceType,
+  models: RelationModelOption[],
+) {
+  return models.filter((model) => hasPermissionModelScopeItems(resourceType, model));
+}
+
 interface PermissionModelHelpIconProps {
   resourceType: ResourceType;
   model: RelationModelOption;
@@ -123,41 +139,39 @@ export function PermissionModelHelpIcon({
   className,
 }: PermissionModelHelpIconProps) {
   const items = getPermissionModelScopeItems(resourceType, model);
-  if (items === null) return null;
+  if (items === null || items.length === 0) return null;
 
   const labels = items.map((item) => localize(item.labelKey));
-  const summary = labels.length ? labels.join("、") : localize("com_permission.model_scope_empty");
+  const summary = labels.join("、");
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span
-          aria-hidden="true"
+        <button
+          type="button"
           data-testid={`permission-model-help-${resourceType}-${model.id}`}
           data-permission-summary={summary}
           className={cn(
-            "ml-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold leading-4 text-[#F53F3F]",
+            "ml-1 shrink-0 cursor-pointer",
             className,
           )}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          ?
-        </span>
+          <Info
+            className="size-4 text-[#86909c] outline-none hover:text-[#165dff]"
+            aria-hidden="true"
+          />
+        </button>
       </TooltipTrigger>
       <TooltipContent
         side="top"
         noArrow
         className="z-[140] max-w-[280px] bg-white text-[#212121] shadow-md"
       >
-        <div className="space-y-1 text-left">
-          <p className="text-[12px] font-medium leading-5">
-            {localize("com_permission.model_scope_title")}
-          </p>
-          <p className="text-[12px] leading-5 text-[#4E5969]">
-            {summary}
-          </p>
-        </div>
+        <p className="text-left text-[12px] leading-5 text-[#4E5969]">
+          {summary}
+        </p>
       </TooltipContent>
     </Tooltip>
   );

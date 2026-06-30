@@ -1,4 +1,8 @@
-import { getPermissionModelScopeItems } from "./permissionModelInfo";
+import {
+  filterPermissionModelsWithScopeItems,
+  getPermissionModelScopeItems,
+  hasPermissionModelScopeItems,
+} from "./permissionModelInfo";
 import type { ResourceType } from "~/api/permission";
 import type { RelationModelOption } from "./RelationSelect";
 
@@ -50,5 +54,31 @@ describe("permission model scope info", () => {
       permissions_explicit: true,
       is_system: false,
     })).toEqual(["view_file", "delete_file"]);
+  });
+
+  it("identifies and filters models without current resource permission items", () => {
+    const emptyFileModel: RelationModelOption = {
+      id: "folder_only",
+      name: "Folder Only",
+      relation: "editor",
+      permissions: ["view_folder"],
+      permissions_explicit: true,
+      is_system: false,
+    };
+    const fileModel: RelationModelOption = {
+      id: "file_editor",
+      name: "File Editor",
+      relation: "editor",
+      permissions: ["rename_file"],
+      permissions_explicit: true,
+      is_system: false,
+    };
+
+    expect(itemIds("knowledge_file", emptyFileModel)).toEqual([]);
+    expect(hasPermissionModelScopeItems("knowledge_file", emptyFileModel)).toBe(false);
+    expect(filterPermissionModelsWithScopeItems("knowledge_file", [
+      emptyFileModel,
+      fileModel,
+    ])).toEqual([fileModel]);
   });
 });

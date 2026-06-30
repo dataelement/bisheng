@@ -2000,8 +2000,6 @@
     "level_viewer": "Viewer",
     "list_empty_for_subject": "No entries for this subject type",
     "manage_permission": "Manage Permissions",
-    "model_scope_empty": "No specific permission items",
-    "model_scope_title": "Permission items",
     "permission_item_create_folder": "Create folder",
     "permission_item_delete_file": "Delete file",
     "permission_item_delete_folder": "Delete folder",

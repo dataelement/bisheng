@@ -8,7 +8,7 @@ import {
 import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
 import type { RelationLevel, ResourceType } from "~/api/permission";
-import { PermissionModelHelpIcon } from "./permissionModelInfo";
+import { filterPermissionModelsWithScopeItems, PermissionModelHelpIcon } from "./permissionModelInfo";
 
 export interface RelationModelOption {
   id: string;
@@ -72,6 +72,10 @@ export function RelationSelect({
     },
   ];
   const modelOptions = options ?? fallbackOptions;
+  const visibleModelOptions = resourceType
+    ? filterPermissionModelsWithScopeItems(resourceType, modelOptions)
+    : modelOptions;
+  const selectedModel = visibleModelOptions.find((model) => model.id === value);
 
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
@@ -81,14 +85,14 @@ export function RelationSelect({
           className
         )}
       >
-        <SelectValue />
+        <SelectValue>{selectedModel?.name}</SelectValue>
       </SelectTrigger>
       <SelectContent
         className="max-h-[240px] rounded-[8px] border-0 bg-white shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)]"
         sideOffset={8}
         align="start"
       >
-        {modelOptions.map((model) => (
+        {visibleModelOptions.map((model) => (
           <SelectItem
             key={model.id}
             value={model.id}

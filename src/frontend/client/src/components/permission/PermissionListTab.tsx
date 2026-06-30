@@ -27,7 +27,7 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
-import { PermissionModelHelpIcon } from "./permissionModelInfo";
+import { filterPermissionModelsWithScopeItems, PermissionModelHelpIcon } from "./permissionModelInfo";
 
 // Tooltip that only shows when the wrapped element's text is truncated.
 function TruncatedTooltip({
@@ -272,6 +272,10 @@ export function PermissionListTab({
     }
     return opts.length ? opts : DEFAULT_MODELS;
   }, [entries, grantableModelOptions]);
+  const dropdownGrantableModelOptions = useMemo(
+    () => filterPermissionModelsWithScopeItems(resourceType, grantableModelOptions),
+    [grantableModelOptions, resourceType],
+  );
 
   const visiblePermissionEntries = useMemo(
     () => entries.filter((entry) => entry.subject_type !== "user_group"),
@@ -330,10 +334,10 @@ export function PermissionListTab({
 
   const getEntryGrantableModels = useCallback(
     (entry: PermissionEntry) => {
-      if (entry.subject_type === "user") return grantableModelOptions;
-      return grantableModelOptions.filter((model) => model.relation !== "owner");
+      if (entry.subject_type === "user") return dropdownGrantableModelOptions;
+      return dropdownGrantableModelOptions.filter((model) => model.relation !== "owner");
     },
-    [grantableModelOptions],
+    [dropdownGrantableModelOptions],
   );
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {

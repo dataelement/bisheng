@@ -197,6 +197,14 @@ describe("PermissionGrantTab", () => {
         permissions_explicit: true,
         is_system: false,
       },
+      {
+        id: "folder_only",
+        name: "Folder Only",
+        relation: "editor",
+        permissions: ["view_folder"],
+        permissions_explicit: true,
+        is_system: false,
+      },
     ]);
 
     render(
@@ -208,6 +216,9 @@ describe("PermissionGrantTab", () => {
     );
 
     await screen.findByText("File Editor");
+    expect(screen.queryByText("Folder Only")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("permission-model-help-knowledge_file-custom_file_editor")).not.toBeInTheDocument();
+
     const trigger = screen.getByRole("combobox");
     trigger.focus();
     fireEvent.keyDown(trigger, {
@@ -216,14 +227,12 @@ describe("PermissionGrantTab", () => {
       keyCode: 40,
     });
 
-    const helpIcons = await screen.findAllByTestId("permission-model-help-knowledge_file-custom_file_editor");
-    expect(helpIcons.length).toBeGreaterThan(0);
-    helpIcons.forEach((help) => {
-      expect(help).toHaveAttribute(
-        "data-permission-summary",
-        "com_permission.permission_item_rename_file",
-      );
-    });
+    const helpIcon = await screen.findByTestId("permission-model-help-knowledge_file-custom_file_editor");
+    expect(helpIcon).toHaveAttribute(
+      "data-permission-summary",
+      "com_permission.permission_item_rename_file",
+    );
+    expect(screen.queryByText("Folder Only")).not.toBeInTheDocument();
   });
 
   it("submits the current include-children checkbox value for department grants", async () => {

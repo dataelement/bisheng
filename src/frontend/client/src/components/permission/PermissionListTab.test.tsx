@@ -34,7 +34,7 @@ jest.mock("~/components/ui/DropdownMenu", () => ({
   DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
   DropdownMenuItem: ({ children, onSelect, ...props }: any) => (
-    <button type="button" onClick={onSelect} {...props}>{children}</button>
+    <div role="button" tabIndex={0} onClick={onSelect} {...props}>{children}</div>
   ),
   DropdownMenuSeparator: () => <div />,
 }));
@@ -320,6 +320,14 @@ describe("Client PermissionListTab", () => {
         permissions_explicit: true,
         is_system: false,
       },
+      {
+        id: "file_only",
+        name: "File Only",
+        relation: "editor",
+        permissions: ["rename_file"],
+        permissions_explicit: true,
+        is_system: false,
+      },
     ]);
     mockedGetResourcePermissions.mockResolvedValue([
       {
@@ -350,6 +358,7 @@ describe("Client PermissionListTab", () => {
       "data-permission-summary",
       "com_permission.permission_item_rename_folder",
     );
+    expect(screen.queryByText("File Only")).not.toBeInTheDocument();
   });
 
   it("deletes department include-children grants across subtree and exact variants", async () => {

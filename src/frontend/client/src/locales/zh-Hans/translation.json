@@ -1932,8 +1932,6 @@
     "level_viewer": "查看者",
     "list_empty_for_subject": "当前类型下暂无授权对象",
     "manage_permission": "权限管理",
-    "model_scope_empty": "暂无具体授权项",
-    "model_scope_title": "授权项",
     "permission_item_create_folder": "创建文件夹",
     "permission_item_delete_file": "删除文件",
     "permission_item_delete_folder": "删除文件夹",
