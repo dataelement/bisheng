@@ -11,6 +11,7 @@
 }
 
 .spaceSidebar {
+  position: relative;
   width: 216px;
   min-width: 216px;
   height: 100%;

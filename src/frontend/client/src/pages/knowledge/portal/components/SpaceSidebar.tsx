@@ -1,4 +1,5 @@
 import type { MutableRefObject } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
     LogOut,
     MoreHorizontal,
@@ -168,6 +169,22 @@ function SpaceMenu({
     );
 }
 
+const SIDEBAR_WIDTH_KEY = "portal_knowledge_sidebar_width";
+const SIDEBAR_MIN_WIDTH = 160;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 216;
+
+function getSavedWidth(): number {
+    try {
+        const v = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+        if (v) {
+            const n = parseInt(v, 10);
+            if (n >= SIDEBAR_MIN_WIDTH && n <= SIDEBAR_MAX_WIDTH) return n;
+        }
+    } catch { /* ignore */ }
+    return SIDEBAR_DEFAULT_WIDTH;
+}
+
 export function SpaceSidebar({
     groups,
     activeSpaceId,
@@ -192,8 +209,45 @@ export function SpaceSidebar({
     onLeaveSpace,
     onGlobalSearchSelectFile,
 }: SpaceSidebarProps) {
+    const [sidebarWidth, setSidebarWidth] = useState(getSavedWidth);
+    const isDraggingRef = useRef(false);
+    const dragStartXRef = useRef(0);
+    const dragStartWidthRef = useRef(0);
+
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        isDraggingRef.current = true;
+        dragStartXRef.current = e.clientX;
+        dragStartWidthRef.current = sidebarWidth;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+
+        const onMouseMove = (ev: MouseEvent) => {
+            if (!isDraggingRef.current) return;
+            const delta = ev.clientX - dragStartXRef.current;
+            const next = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, dragStartWidthRef.current + delta));
+            setSidebarWidth(next);
+        };
+        const onMouseUp = () => {
+            isDraggingRef.current = false;
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+            setSidebarWidth(prev => {
+                try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(prev)); } catch { /* ignore */ }
+                return prev;
+            });
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+        };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+    }, [sidebarWidth]);
+
     return (
-        <aside className={`${s.spaceSidebar} ${collapsed ? s.spaceSidebarCollapsed : ""}`}>
+        <aside
+            className={`${s.spaceSidebar} ${collapsed ? s.spaceSidebarCollapsed : ""}`}
+            style={collapsed ? undefined : { width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px` }}
+        >
             {collapsed ? (
                 <div className={s.collapsedSidebar} aria-label="知识库分组快捷栏">
                     <div className={s.collapsedGroupList}>
@@ -372,6 +426,20 @@ export function SpaceSidebar({
                         })}
                     </div>
                 </>
+            )}
+            {!collapsed && (
+                <div
+                    style={{
+                        position: "absolute",
+                        top: 0,
+                        right: 0,
+                        width: "8px",
+                        height: "100%",
+                        cursor: "col-resize",
+                        zIndex: 50,
+                    }}
+                    onMouseDown={handleResizeMouseDown}
+                />
             )}
         </aside>
     );
