@@ -62,6 +62,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
     <div>
       <div
         ref={(el) => rowRef?.(node.dept_id, el)}
+        data-depth={depth}
         className={cn(
           "group flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent",
           onSelect && !disabled && "cursor-pointer",
