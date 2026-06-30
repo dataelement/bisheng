@@ -457,16 +457,21 @@ class RedisCallback(BaseCallback):
             # Insert a new session without session data
             if not MessageSessionDao.get_one(self.chat_id):
                 db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
-                self.new_session = MessageSessionDao.insert_one(MessageSession(
-                    chat_id=self.chat_id,
-                    flow_id=self.workflow_id,
-                    flow_name=db_workflow.name,
-                    flow_type=FlowType.WORKFLOW.value,
-                    user_id=self.user_id,
-                ))
-                thread_pool.submit(f"workflow_generate_title_{self.chat_id}",
-                                   self.generate_session_title,
-                                   message.message)
+                try:
+                    self.new_session = MessageSessionDao.insert_one(MessageSession(
+                        chat_id=self.chat_id,
+                        flow_id=self.workflow_id,
+                        flow_name=db_workflow.name,
+                        flow_type=FlowType.WORKFLOW.value,
+                        user_id=self.user_id,
+                    ))
+                    thread_pool.submit(f"workflow_generate_title_{self.chat_id}",
+                                    self.generate_session_title,
+                                    message.message)
+                except Exception as e:
+                    # 并发情况下可能已被其他线程插入，此处安全回退，直接获取已有的 Session
+                    logger.warning(f"Failed to insert message session (might already exist): {e}")
+                    self.new_session = MessageSessionDao.get_one(self.chat_id)
 
                 # RecordTelemetryJournal
                 telemetry_service.log_event_sync(user_id=self.user_id,
