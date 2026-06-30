@@ -108,7 +108,7 @@
   **覆盖 AC**: AC-10, AC-17, AC-18
   **手动验证**: 父部门选择/移动/角色范围/成员主属部门编辑 各打开秒开、可搜、回显当前值、不含归档
   **依赖**: T007
-  **⚠️ 测试欠账**: `departmentPageRefresh`/`systemDepartmentsArchivedDelete`/`departmentSettingsPayload` 等断言旧整树流且渲染未包 `QueryClientProvider`(react-query 必需)→ 5 个测试需补 provider 包裹 + 改懒加载断言。生产 OK(`src/index.tsx` 已全局 provider)。
+  **测试欠账已清 ✅ `5163a7353`**: `test-utils` 的 `AllProviders` 加 `QueryClientProvider`(每次 render 新 client)中心修复;3 个测试改 mock 懒加载 API + stub `LazyDepartmentTree`(其 SearchInput 引 SVG，jsdom 渲不了)保留真 hook + 去 `tree` prop。**顺带抓到真 bug**:删除选中部门后 `handleTreeChange` 在 refreshAll 完成前清选择→自动选中重选到陈旧首根(被删的那个);已改 await refreshAll 后再清(两个页面)。全套 11→8 失败文件(剩余皆 pre-existing)。
 
 - [ ] **T009b**: 迁移其余 platform 独立 picker
   **文件**: `bs-comp/selectComponent/DepartmentUsersSelect.tsx`、`bs-comp/permission/SubjectSearchDepartment.tsx`(platform 版)、`BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx`
