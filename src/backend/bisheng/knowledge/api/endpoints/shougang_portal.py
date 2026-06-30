@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -8,6 +9,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
@@ -204,8 +206,11 @@ async def get_shougang_portal_home_stats(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     _ = login_user
-    result = await PortalTelemetryEventService.count_home_events()
-    return resp_200(ShougangPortalHomeStatsResp(**result).model_dump(mode='json'))
+    result, total_files = await asyncio.gather(
+        PortalTelemetryEventService.count_home_events(),
+        KnowledgeFileDao.async_count_all_success_files(),
+    )
+    return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode='json'))
 
 
 @router.post('/files/search')
