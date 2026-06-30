@@ -1,17 +1,25 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import { getResourceGrantDepartments } from "~/api/permission";
-import type { ResourceType, SelectedSubject } from "~/api/permission";
-import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getResourceGrantDepartmentChildren,
+  searchResourceGrantDepartments,
+} from "~/api/permission";
+import type {
+  GrantDepartmentNode,
+  ResourceType,
+  SelectedSubject,
+} from "~/api/permission";
+import { ChevronDown, ChevronRight, Building2, Loader2, Search } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocalize } from "~/hooks";
+import { useGrantDepartmentTree } from "./useGrantDepartmentTree";
 
-interface DepartmentNode {
-  id: number;
-  dept_id: string;
-  name: string;
-  parent_id: number | null;
-  children?: DepartmentNode[];
-}
+/**
+ * F038: client authorization department picker. Lazy browse/search; multi-select
+ * with implicit selection determined by the materialized `path` (decision 9) and
+ * "include children" applied all-or-nothing — the grant truth is the explicit
+ * picks + the global include-children flag, the backend expands subtrees
+ * (decision 10). No client-side subtree materialization.
+ */
 
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[];
@@ -19,44 +27,10 @@ interface SubjectSearchDepartmentProps {
   resourceType: ResourceType;
   resourceId: string;
   includeChildren: boolean;
-  onIncludeChildrenChange: (v: boolean) => void;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
-  grantDepartmentsApi?: typeof getResourceGrantDepartments;
-}
-
-function collectExplicitDepartmentSelections(
-  nodes: DepartmentNode[],
-  selectedDepartmentsById: Map<number, SelectedSubject>,
-  inherited = false
-): SelectedSubject[] {
-  const out: SelectedSubject[] = [];
-  const visited = new Set<number>();
-
-  const walk = (items: DepartmentNode[], prefix: string[], ancestorSelected: boolean) => {
-    for (const node of items) {
-      const explicitSelection = selectedDepartmentsById.get(node.id);
-      const isSelected = ancestorSelected || Boolean(explicitSelection);
-      const pathSegments = [...prefix, node.name];
-      if (isSelected && !visited.has(node.id)) {
-        visited.add(node.id);
-        out.push({
-          type: "department",
-          id: node.id,
-          name: pathSegments.join("/"),
-          include_children: false,
-        });
-      }
-
-      const nextAncestorSelected = ancestorSelected || Boolean(explicitSelection?.include_children);
-      if (node.children?.length) {
-        walk(node.children, pathSegments, nextAncestorSelected);
-      }
-    }
-  };
-
-  walk(nodes, [], inherited);
-  return out;
+  grantDepartmentChildrenApi?: typeof getResourceGrantDepartmentChildren;
+  grantDepartmentSearchApi?: typeof searchResourceGrantDepartments;
 }
 
 export function SubjectSearchDepartment({
@@ -65,106 +39,76 @@ export function SubjectSearchDepartment({
   resourceType,
   resourceId,
   includeChildren,
-  onIncludeChildrenChange,
   onSelectionSummaryChange,
   disabledIds = [],
-  grantDepartmentsApi,
+  grantDepartmentChildrenApi,
+  grantDepartmentSearchApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
-  const [tree, setTree] = useState<DepartmentNode[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [keyword, setKeyword] = useState("");
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds]);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const fetchChildren = grantDepartmentChildrenApi ?? getResourceGrantDepartmentChildren;
+  const fetchSearch = grantDepartmentSearchApi ?? searchResourceGrantDepartments;
+  const tree = useGrantDepartmentTree({
+    fetchChildren: (parentId, signal) =>
+      fetchChildren(resourceType, resourceId, parentId, signal ? { signal } : undefined),
+    fetchSearch: (keyword, signal) =>
+      fetchSearch(resourceType, resourceId, keyword, 50, signal ? { signal } : undefined),
+  });
 
-    setLoading(true);
-    const getGrantDepartments = grantDepartmentsApi ?? getResourceGrantDepartments;
-    getGrantDepartments(resourceType, resourceId, { signal: controller.signal })
-      .then((res) => {
-        if (!controller.signal.aborted && res) setTree(res);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+  // Remember each selected dept's path at pick time so implicit selection can be
+  // computed by path even after a search swaps the rendered nodes.
+  const selectedPathRef = useRef<Map<number, string>>(new Map());
 
-    return () => controller.abort();
-  }, [grantDepartmentsApi, resourceId, resourceType]);
-
-  const selectedIds = new Set(value.map((s) => s.id));
-  const selectedDepartmentsById = useMemo(
-    () =>
-      new Map(
-        value
-          .filter((subject) => subject.type === "department")
-          .map((subject) => [subject.id, subject] as const)
-      ),
+  const departmentSubjects = useMemo(
+    () => value.filter((s) => s.type === "department"),
     [value]
   );
-
-  useEffect(() => {
-    onSelectionSummaryChange?.(
-      collectExplicitDepartmentSelections(tree, selectedDepartmentsById)
-    );
-  }, [onSelectionSummaryChange, selectedDepartmentsById, tree]);
-
-  const toggle = (node: DepartmentNode) => {
-    if (disabledIdSet.has(node.id)) return;
-    if (selectedIds.has(node.id)) {
-      onChange(value.filter((s) => s.id !== node.id));
-    } else {
-      onChange([
-        ...value,
-        { type: "department", id: node.id, name: node.name, include_children: includeChildren },
-      ]);
-    }
-  };
-
-  const materializeInheritedSelection = useCallback(() => {
-    const explicitDepartments = collectExplicitDepartmentSelections(
-      tree,
-      selectedDepartmentsById
-    );
-    const nonDepartmentSubjects = value.filter((subject) => subject.type !== "department");
-    onIncludeChildrenChange(false);
-    onChange([...nonDepartmentSubjects, ...explicitDepartments]);
-  }, [onChange, onIncludeChildrenChange, selectedDepartmentsById, tree, value]);
-
-  const toggleExpand = (id: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const matchesKeyword = useCallback(
-    (node: DepartmentNode): boolean => {
-      if (!keyword) return true;
-      const lower = keyword.toLowerCase();
-      if (node.name.toLowerCase().includes(lower)) return true;
-      return (node.children || []).some(matchesKeyword);
-    },
-    [keyword]
+  const selectedIdSet = useMemo(
+    () => new Set(departmentSubjects.map((s) => s.id)),
+    [departmentSubjects]
   );
+  const selectedPaths = departmentSubjects
+    .map((s) => tree.getNode(s.id)?.path ?? selectedPathRef.current.get(s.id))
+    .filter((p): p is string => !!p);
 
+  // A node is implicitly selected when "include children" is on and one of the
+  // explicitly-selected departments is its ancestor (path prefix). Decision 9.
+  const isImplicit = (node: GrantDepartmentNode): boolean =>
+    includeChildren &&
+    !selectedIdSet.has(node.id) &&
+    !!node.path &&
+    selectedPaths.some((sp) => node.path !== sp && node.path.startsWith(sp));
+
+  // Summary = the explicit department picks (decision 10: subtree coverage is
+  // conveyed by the include-children flag, not enumerated client-side).
   useEffect(() => {
-    if (!keyword) return;
-    const ids = new Set<number>();
-    const collect = (nodes: DepartmentNode[]) => {
-      for (const n of nodes) {
-        if (matchesKeyword(n)) {
-          ids.add(n.id);
-          if (n.children) collect(n.children);
-        }
-      }
-    };
-    collect(tree);
-    setExpanded(ids);
-  }, [tree, keyword, matchesKeyword]);
+    onSelectionSummaryChange?.(departmentSubjects);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, onSelectionSummaryChange]);
+
+  const toggle = (node: GrantDepartmentNode) => {
+    if (disabledIdSet.has(node.id)) return;
+    if (selectedIdSet.has(node.id)) {
+      onChange(value.filter((s) => s.id !== node.id));
+      return;
+    }
+    // Implicitly-selected children can't be picked/unpicked individually; the
+    // user toggles coverage via the parent's include-children (decision 10).
+    if (isImplicit(node)) return;
+    if (node.path) selectedPathRef.current.set(node.id, node.path);
+    onChange([
+      ...value,
+      { type: "department", id: node.id, name: node.name, include_children: includeChildren },
+    ]);
+  };
+
+  const searchMode = tree.searchMode;
+  const browseRoots = tree.rootIds
+    .map((id) => tree.getNode(id))
+    .filter((n): n is GrantDepartmentNode => !!n);
+  const roots = searchMode ? tree.searchRoots : browseRoots;
+  const busy = searchMode ? tree.searching : tree.initialLoading;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -173,90 +117,111 @@ export function SubjectSearchDepartment({
         <input
           type="text"
           placeholder={localize("com_permission.search_department")}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          value={tree.keyword}
+          onChange={(e) => tree.setKeyword(e.target.value)}
           className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
         />
       </div>
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
-        {loading && (
-          <div className="py-4 text-center text-sm text-gray-500">{localize("com_ui_loading")}</div>
+        {busy && (
+          <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {localize("com_ui_loading")}
+          </div>
         )}
-        {!loading && tree.length === 0 && (
+        {!busy && roots.length === 0 && (
           <div className="py-4 text-center text-sm text-gray-500">
             {localize("com_permission.empty_departments")}
           </div>
         )}
-        {!loading &&
-          tree.map((node) => (
-            <TreeNode
+        {!busy &&
+          roots.map((node) => (
+            <DepartmentRow
               key={node.id}
               node={node}
               depth={0}
-              expanded={expanded}
-              selectedIds={selectedIds}
-              selectedDepartmentsById={selectedDepartmentsById}
-              ancestorIncluded={false}
-              disabledIds={disabledIdSet}
-              matchesKeyword={matchesKeyword}
-              onMaterializeInheritedSelection={materializeInheritedSelection}
+              searchMode={searchMode}
+              tree={tree}
+              selectedIdSet={selectedIdSet}
+              isImplicit={isImplicit}
+              disabledIdSet={disabledIdSet}
               onToggle={toggle}
-              onExpand={toggleExpand}
             />
           ))}
+        {searchMode && tree.truncated && (
+          <div className="px-2 py-1.5 text-center text-xs text-gray-400">
+            {localize("com_permission.search_truncated")}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function TreeNode({
-  node, depth, expanded, selectedIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand,
+function DepartmentRow({
+  node,
+  depth,
+  searchMode,
+  tree,
+  selectedIdSet,
+  isImplicit,
+  disabledIdSet,
+  onToggle,
 }: {
-  node: DepartmentNode;
+  node: GrantDepartmentNode;
   depth: number;
-  expanded: Set<number>;
-  selectedIds: Set<number>;
-  selectedDepartmentsById: Map<number, SelectedSubject>;
-  ancestorIncluded: boolean;
-  disabledIds: Set<number>;
-  matchesKeyword: (n: DepartmentNode) => boolean;
-  onMaterializeInheritedSelection: () => void;
-  onToggle: (n: DepartmentNode) => void;
-  onExpand: (id: number) => void;
+  searchMode: boolean;
+  tree: ReturnType<typeof useGrantDepartmentTree>;
+  selectedIdSet: Set<number>;
+  isImplicit: (n: GrantDepartmentNode) => boolean;
+  disabledIdSet: Set<number>;
+  onToggle: (n: GrantDepartmentNode) => void;
 }) {
   const localize = useLocalize();
-  if (!matchesKeyword(node)) return null;
-  const hasChildren = node.children && node.children.length > 0;
-  const isExpanded = expanded.has(node.id);
-  const explicitSelection = selectedDepartmentsById.get(node.id);
-  const isExplicitlySelected = selectedIds.has(node.id);
-  const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected;
-  const isDisabled = disabledIds.has(node.id);
-  const isChecked = isExplicitlySelected || isImplicitlySelected;
-  const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
+
+  const childNodes: GrantDepartmentNode[] = searchMode
+    ? node.children ?? []
+    : (tree.getChildIds(node.id) ?? [])
+        .map((id) => tree.getNode(id))
+        .filter((n): n is GrantDepartmentNode => !!n);
+  const isExpanded = searchMode ? true : tree.expanded.has(node.id);
+  const isLoading = tree.loadingIds.has(node.id);
+  const explicit = selectedIdSet.has(node.id);
+  const granted = disabledIdSet.has(node.id);
+  const implicit = !explicit && !granted && isImplicit(node);
+  const isChecked = explicit || implicit;
+  const isDisabled = granted || implicit;
+
+  const handleActivate = () => {
+    if (granted || implicit) return;
+    onToggle(node);
+  };
 
   return (
     <>
       <div
+        data-depth={depth}
         className={`flex items-center gap-1 px-2 py-1.5 ${
           isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-50"
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        onClick={() => {
-          if (isDisabled) return;
-          if (isImplicitlySelected) {
-            onMaterializeInheritedSelection();
-            return;
-          }
-          onToggle(node);
-        }}
+        onClick={handleActivate}
       >
-        {hasChildren ? (
+        {node.has_children ? (
           <button
             className="rounded p-0.5 hover:bg-gray-200"
-            onClick={(e) => { e.stopPropagation(); onExpand(node.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!searchMode) tree.toggle(node);
+            }}
           >
-            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+            {isLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+            ) : isExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+            )}
           </button>
         ) : (
           <span className="w-5" />
@@ -266,39 +231,31 @@ function TreeNode({
           checked={isChecked}
           disabled={isDisabled}
           onClick={(e) => e.stopPropagation()}
-          onCheckedChange={() => {
-            if (isDisabled) return;
-            if (isImplicitlySelected) {
-              onMaterializeInheritedSelection();
-              return;
-            }
-            onToggle(node);
-          }}
+          onCheckedChange={handleActivate}
         />
         <Building2 className="h-4 w-4 text-gray-400" />
         <span className="min-w-0 truncate text-sm">{node.name}</span>
-        {isDisabled && (
+        {granted && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
             {localize("com_permission.already_granted")}
           </span>
         )}
       </div>
-      {hasChildren && isExpanded && node.children!.map((child) => (
-        <TreeNode
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          expanded={expanded}
-          selectedIds={selectedIds}
-          selectedDepartmentsById={selectedDepartmentsById}
-          ancestorIncluded={nextAncestorIncluded}
-          disabledIds={disabledIds}
-          matchesKeyword={matchesKeyword}
-          onMaterializeInheritedSelection={onMaterializeInheritedSelection}
-          onToggle={onToggle}
-          onExpand={onExpand}
-        />
-      ))}
+      {node.has_children &&
+        isExpanded &&
+        childNodes.map((child) => (
+          <DepartmentRow
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            searchMode={searchMode}
+            tree={tree}
+            selectedIdSet={selectedIdSet}
+            isImplicit={isImplicit}
+            disabledIdSet={disabledIdSet}
+            onToggle={onToggle}
+          />
+        ))}
     </>
   );
 }

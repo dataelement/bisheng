@@ -2,7 +2,7 @@ import { useToastContext, useConfirm } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
-  getResourceGrantDepartments,
+  getResourceGrantDepartmentPathTree,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -26,7 +26,6 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
 
 // Tooltip that only shows when the wrapped element's text is truncated.
@@ -80,7 +79,7 @@ export interface PermissionApiAdapter {
   getPermissions: typeof getResourcePermissions;
   authorize: typeof authorizeResource;
   getGrantableRelationModels: typeof getGrantableRelationModels;
-  getGrantDepartments?: typeof getResourceGrantDepartments;
+  getGrantDepartmentPathTree?: typeof getResourceGrantDepartmentPathTree;
 }
 
 interface PermissionListTabProps {
@@ -109,7 +108,7 @@ const DEFAULT_PERMISSION_API: PermissionApiAdapter = {
   getPermissions: getResourcePermissions,
   authorize: authorizeResource,
   getGrantableRelationModels,
-  getGrantDepartments: getResourceGrantDepartments,
+  getGrantDepartmentPathTree: getResourceGrantDepartmentPathTree,
 };
 
 export function PermissionListTab({
@@ -142,22 +141,51 @@ export function PermissionListTab({
   const [isListScrolling, setIsListScrolling] = useState(false);
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // F038: resolve the path label (父/子/孙) for each GRANTED department via the
+  // lazy per-grant path-tree endpoint (bounded by the number of grants) instead
+  // of loading the whole department tree — which doesn't scale to tens of
+  // thousands of departments.
   useEffect(() => {
+    const deptIds = Array.from(
+      new Set(
+        entries
+          .filter((e) => e.subject_type === "department")
+          .map((e) => Number(e.subject_id)),
+      ),
+    );
+    if (!deptIds.length) {
+      setDeptPathById(new Map());
+      return;
+    }
     const controller = new AbortController();
-    const getGrantDepartments = activePermissionApi.getGrantDepartments ?? getResourceGrantDepartments;
-    getGrantDepartments(resourceType, resourceId, { signal: controller.signal })
-      .then((res) => {
-        if (!controller.signal.aborted && Array.isArray(res)) {
-          setDeptPathById(buildDepartmentPathLabelMap(res));
+    let cancelled = false;
+    const getPathTree =
+      activePermissionApi.getGrantDepartmentPathTree ?? getResourceGrantDepartmentPathTree;
+    Promise.all(
+      deptIds.map((id) =>
+        getPathTree(resourceType, resourceId, id, { signal: controller.signal })
+          .then((tree) => [id, tree] as const)
+          .catch(() => [id, null] as const),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const map = new Map<number, string>();
+      for (const [id, tree] of results) {
+        const names: string[] = [];
+        let cur = tree?.roots?.[0];
+        while (cur) {
+          names.push(cur.name);
+          cur = cur.children?.[0];
         }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setDeptPathById(new Map());
-        }
-      });
-    return () => controller.abort();
-  }, [activePermissionApi, refreshKey, resourceId, resourceType]);
+        if (names.length) map.set(id, names.join("/"));
+      }
+      setDeptPathById(map);
+    });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [activePermissionApi, entries, resourceId, resourceType]);
 
   const loadData = useCallback(async () => {
     setLoading(true);

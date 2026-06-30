@@ -1,5 +1,13 @@
 import request from "./request";
-import type { GrantItem, GrantUser, PermissionEntry, RelationModel, RevokeItem } from "./permission";
+import type {
+  GrantDepartmentNode,
+  GrantDepartmentSearchResult,
+  GrantItem,
+  GrantUser,
+  PermissionEntry,
+  RelationModel,
+  RevokeItem,
+} from "./permission";
 
 // 排序方式
 export enum SortType {
@@ -384,6 +392,53 @@ export async function getChannelGrantSubjectsDepartmentsApi(
         withChannelPermissionRequestOptions(config),
     );
     return unwrapChannelPermissionArray(res);
+}
+
+// F038: lazy variants of the channel grant-department tree (browse one layer /
+// server search / locate), mirroring the resource permission endpoints so the
+// channel picker shares the lazy tree without loading the whole org at once.
+
+export async function getChannelGrantSubjectsDepartmentChildrenApi(
+    channelId: string,
+    parentId: number | null,
+    config?: ChannelPermissionRequestConfig
+): Promise<GrantDepartmentNode[]> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/departments/children`,
+        {
+            params: { parent_id: parentId ?? undefined },
+            ...withChannelPermissionRequestOptions(config),
+        },
+    );
+    return unwrapChannelPermissionArray<GrantDepartmentNode>(res);
+}
+
+export async function searchChannelGrantSubjectsDepartmentsApi(
+    channelId: string,
+    keyword: string,
+    limit = 50,
+    config?: ChannelPermissionRequestConfig
+): Promise<GrantDepartmentSearchResult> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/departments/search`,
+        {
+            params: { keyword, limit },
+            ...withChannelPermissionRequestOptions(config),
+        },
+    );
+    return unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res);
+}
+
+export async function getChannelGrantSubjectsDepartmentPathTreeApi(
+    channelId: string,
+    deptInternalId: number,
+    config?: ChannelPermissionRequestConfig
+): Promise<GrantDepartmentSearchResult> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/departments/${deptInternalId}/path-tree`,
+        withChannelPermissionRequestOptions(config),
+    );
+    return unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res);
 }
 
 export async function getChannelGrantSubjectsUserGroupsApi(

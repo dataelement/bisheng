@@ -4,16 +4,37 @@ import {
   authorizeResource,
   getGrantableRelationModels,
   getResourcePermissions,
-  getResourceGrantDepartments,
+  getResourceGrantDepartmentChildren,
+  searchResourceGrantDepartments,
   getResourceGrantUserGroups,
   getResourceGrantUsers,
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
+const deptNode = (
+  id: number,
+  name: string,
+  parent_id: number | null,
+  path: string,
+  has_children: boolean,
+) => ({
+  id,
+  dept_id: `dept-${id}`,
+  name,
+  parent_id,
+  path,
+  has_children,
+  matched: false,
+  children: [] as any[],
+});
+
+const emptyDeptSearch = { roots: [], total_matches: 0, truncated: false };
+
 const mockLocalize = (key: string) => key;
 
 jest.mock("~/hooks", () => ({
   useLocalize: () => mockLocalize,
+  usePrefersMobileLayout: () => false,
 }));
 
 jest.mock("~/Providers", () => ({
@@ -24,7 +45,8 @@ jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getGrantableRelationModels: jest.fn(),
   getResourcePermissions: jest.fn(),
-  getResourceGrantDepartments: jest.fn(),
+  getResourceGrantDepartmentChildren: jest.fn(),
+  searchResourceGrantDepartments: jest.fn(),
   getResourceGrantUserGroups: jest.fn(),
   getResourceGrantUsers: jest.fn(),
 }));
@@ -32,7 +54,8 @@ jest.mock("~/api/permission", () => ({
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
 const mockedGetResourcePermissions = jest.mocked(getResourcePermissions);
-const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
+const mockedDeptChildren = jest.mocked(getResourceGrantDepartmentChildren);
+const mockedDeptSearch = jest.mocked(searchResourceGrantDepartments);
 const mockedGetResourceGrantUserGroups = jest.mocked(getResourceGrantUserGroups);
 const mockedGetResourceGrantUsers = jest.mocked(getResourceGrantUsers);
 
@@ -96,15 +119,8 @@ describe("PermissionGrantTab", () => {
       },
     ]);
     mockedGetResourceGrantUsers.mockResolvedValue([]);
-    mockedGetResourceGrantDepartments.mockResolvedValue([
-      {
-        id: 7,
-        dept_id: "dept-7",
-        name: "测试部门",
-        parent_id: null,
-        children: [],
-      },
-    ]);
+    mockedDeptChildren.mockResolvedValue([deptNode(7, "测试部门", null, "/7/", false)] as any);
+    mockedDeptSearch.mockResolvedValue(emptyDeptSearch as any);
     mockedGetResourceGrantUserGroups.mockResolvedValue([]);
   });
 
@@ -220,31 +236,18 @@ describe("PermissionGrantTab", () => {
         [],
       );
     });
-    expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
+    expect(mockedDeptChildren).toHaveBeenCalledWith(
       "knowledge_space",
       "space-1",
+      null,
       { signal: expect.any(AbortSignal) },
     );
   });
 
-  it("shows inherited child departments in the selected department summary", async () => {
-    mockedGetResourceGrantDepartments.mockResolvedValue([
-      {
-        id: 7,
-        dept_id: "dept-7",
-        name: "测试部门",
-        parent_id: null,
-        children: [
-          {
-            id: 8,
-            dept_id: "dept-8",
-            name: "子部门",
-            parent_id: 7,
-            children: [],
-          },
-        ],
-      },
-    ]);
+  it("summarizes only the explicitly picked department, not its descendants — decision 10", async () => {
+    // 测试部门 has children, but include-children coverage is conveyed by the flag;
+    // the summary must not enumerate descendants client-side.
+    mockedDeptChildren.mockResolvedValue([deptNode(7, "测试部门", null, "/7/", true)] as any);
 
     render(
       <PermissionGrantTab
@@ -258,9 +261,11 @@ describe("PermissionGrantTab", () => {
     fireEvent.click(await screen.findByText("测试部门"));
 
     await waitFor(() => {
+      // The picked department appears both as a tree row and as a summary chip.
       expect(screen.getAllByText("测试部门").length).toBeGreaterThan(1);
-      expect(screen.getByText("测试部门/子部门")).toBeInTheDocument();
     });
+    // No materialized descendant label is ever produced.
+    expect(screen.queryByText("测试部门/子部门")).not.toBeInTheDocument();
   });
 
   it("marks already granted departments as disabled without selecting them again", async () => {
@@ -321,7 +326,9 @@ describe("PermissionGrantTab", () => {
     );
 
     const userLabel = await screen.findByText("Alice");
-    const checkbox = userLabel.parentElement?.querySelector('[role="checkbox"]');
+    // The already-granted user row has a single checkbox; the name span is nested
+    // deeper than its sibling checkbox, so query the row's checkbox by role.
+    const checkbox = screen.getByRole("checkbox");
 
     await waitFor(() => {
       expect(checkbox).toHaveAttribute("data-state", "unchecked");

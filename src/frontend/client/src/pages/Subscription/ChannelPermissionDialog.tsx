@@ -4,10 +4,12 @@ import {
     authorizeChannelApi,
     Channel,
     getChannelGrantableRelationModelsApi,
-    getChannelGrantSubjectsDepartmentsApi,
+    getChannelGrantSubjectsDepartmentChildrenApi,
+    getChannelGrantSubjectsDepartmentPathTreeApi,
     getChannelGrantSubjectsUserGroupsApi,
     getChannelGrantSubjectsUsersApi,
     getChannelPermissionsApi,
+    searchChannelGrantSubjectsDepartmentsApi,
 } from "~/api/channels";
 import type { RelationModel, SubjectType } from "~/api/permission";
 import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
@@ -71,8 +73,12 @@ export function ChannelPermissionDialog({
             getChannelGrantableRelationModelsApi(resourceId, config),
         getGrantUsers: (_resourceType, resourceId, params, config) =>
             getChannelGrantSubjectsUsersApi(resourceId, params, config),
-        getGrantDepartments: (_resourceType, resourceId, config) =>
-            getChannelGrantSubjectsDepartmentsApi(resourceId, config),
+        getGrantDepartmentChildren: (_resourceType, resourceId, parentId, config) =>
+            getChannelGrantSubjectsDepartmentChildrenApi(resourceId, parentId, config),
+        searchGrantDepartments: (_resourceType, resourceId, keyword, limit, config) =>
+            searchChannelGrantSubjectsDepartmentsApi(resourceId, keyword, limit, config),
+        getGrantDepartmentPathTree: (_resourceType, resourceId, deptId, config) =>
+            getChannelGrantSubjectsDepartmentPathTreeApi(resourceId, deptId, config),
         getGrantUserGroups: (_resourceType, resourceId, params, config) =>
             getChannelGrantSubjectsUserGroupsApi(resourceId, params, config),
     }), []);
