@@ -391,7 +391,9 @@ class LinsightWorkflowTask:
         }
         # Prepend the current-time block (same rationale as _build_agent_input):
         # per-task time awareness without busting the static system-prompt cache.
-        agent_input = {"messages": [{"role": "user", "content": f"{self._current_time_block()}\n{question}"}]}
+        agent_input = {
+            "messages": [{"role": "user", "content": f"{self._current_time_block()}\n# 用户问题\n{question}"}]
+        }
         async for chunk in agent.astream(
             agent_input,
             config=config,
@@ -904,7 +906,10 @@ class LinsightWorkflowTask:
         if history_summary:
             parts.append(history_summary)
         if session_model.question:
-            parts.append(str(session_model.question))
+            # Header the question like every other block (# 当前时间 / # 可用文件 /
+            # # 可用知识库 / # 前情回顾) so it is clearly delimited from the time
+            # block above it instead of bleeding into it.
+            parts.append(f"# 用户问题\n{session_model.question}")
         if file_list:
             # file_list is a list[str] (prepare_file_list returns a single-element
             # list holding the <uploaded_files> block). Join it — interpolating the

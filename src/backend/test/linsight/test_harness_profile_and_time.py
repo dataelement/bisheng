@@ -110,4 +110,7 @@ def test_build_agent_input_includes_time_and_question():
     out = LinsightWorkflowTask._build_agent_input(_FakeSession(), file_list=None)
     content = out["messages"][0]["content"]
     assert "# 当前时间" in content
+    # question is headed like every other block, and sits after the time block
+    assert "# 用户问题" in content
     assert _FakeSession.question in content
+    assert content.index("# 当前时间") < content.index("# 用户问题") < content.index(_FakeSession.question)
