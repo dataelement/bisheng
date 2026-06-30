@@ -260,7 +260,10 @@ export function KnowledgeSpaceSidebar({
     }, [mobileDrawerMode]);
 
     return (
-        <div className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}>
+        <div
+            className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}
+            style={mobileDrawerMode || collapsed ? undefined : { width: `${sidebarWidth}px` }}
+        >
             <div
                 className={[
                     `h-full bg-white flex flex-col overflow-hidden ${collapsed || mobileDrawerMode ? "" : "border-r border-[#e5e6eb]"}`,
@@ -416,10 +419,11 @@ export function KnowledgeSpaceSidebar({
             {/* Drag-to-resize handle */}
             {!collapsed && !mobileDrawerMode && (
                 <div
-                    className="absolute top-0 right-0 h-full w-1 z-[41] cursor-col-resize group"
+                    className="absolute top-0 h-full z-[50] cursor-col-resize select-none"
+                    style={{ right: '-5px', width: '10px' }}
                     onMouseDown={handleResizeMouseDown}
                 >
-                    <div className="h-full w-full group-hover:bg-blue-400 transition-colors duration-150" />
+                    <div className="absolute top-0 bottom-0 left-1/2 w-0.5 -translate-x-1/2 opacity-0 hover:opacity-100 bg-blue-400 transition-opacity duration-150" />
                 </div>
             )}
             <NavToggle
