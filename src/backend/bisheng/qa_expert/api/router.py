@@ -24,6 +24,9 @@ router.add_api_route("/experts/{expert_id}", endpoints.delete_expert, methods=["
 router.add_api_route("/experts/name/{expert_name}", endpoints.expertsinfo, methods=["GET"])
 router.add_api_route("/experts/userid/{user_id}", endpoints.expertsinfo_id, methods=["GET"])
 
+# 问题敏感词检查
+router.add_api_route("/check_questions", endpoints.check_question, methods=["POST"])
+
 # 问题管理
 router.add_api_route("/questions", endpoints.create_question, methods=["POST"])
 router.add_api_route("/questions", endpoints.list_questions, methods=["GET"])
