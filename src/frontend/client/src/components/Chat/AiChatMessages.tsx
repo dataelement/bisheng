@@ -291,7 +291,7 @@ export default function AiChatMessages({
             >
                 <div className="mb-6">
                     {emptyStateIllustration ?? (
-                        <ArticleQAIllustration className="size-[80px] mx-auto block" />
+                        <ArticleQAIllustration grey className="size-[80px] mx-auto block" />
                     )}
                     <p className="mt-4 text-center text-[14px] font-normal text-[#999999]">
                         {emptyStateHint ?? localize("com_knowledge.qa_current_article")}

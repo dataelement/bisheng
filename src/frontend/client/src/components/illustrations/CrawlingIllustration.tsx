@@ -15,7 +15,7 @@ import React, { useId } from 'react';
  *   #7CD0B1 (mid green)   → rgb(var(--illus-300))
  *   white                 → kept as-is
  */
-export const CrawlingIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
+export const CrawlingIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const uid = useId();
     const maskId = `crawling-mask-${uid}`;
 
@@ -25,7 +25,7 @@ export const CrawlingIllustration = ({ className, ...props }: React.SVGProps<SVG
     const lens = { fill: 'rgb(var(--illus-500))', stroke: 'rgb(var(--illus-500))' } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
             <rect x="93.0688" y="93.8433" width="242.448" height="175.532" rx="19.3958" style={fill100} />
             <rect x="52.6884" y="131.953" width="242.448" height="175.532" rx="19.3958" style={fill500} stroke="white" strokeWidth="7.37691" />
             <path d="M91.5182 176.03H207.893" stroke="white" strokeWidth="12" strokeLinecap="round" />
