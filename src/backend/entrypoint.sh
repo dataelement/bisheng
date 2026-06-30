@@ -41,7 +41,17 @@ start_min_worker(){
 
 if [ "$start_mode" = "api" ]; then
     echo "Running database migrations..."
-    alembic upgrade head || echo "WARNING: alembic migration failed, continuing startup..."
+    # Fail fast on migration errors instead of starting the API on a stale,
+    # half-migrated schema (which surfaces later as confusing "missing
+    # column/table" 500s). The most common cause is multiple alembic heads: a
+    # new migration whose down_revision was mounted on an already-applied
+    # revision instead of the current head. `alembic upgrade head` (singular)
+    # aborts on that — surface it and stop rather than swallowing the error.
+    if ! alembic upgrade head; then
+        echo "FATAL: 'alembic upgrade head' failed; refusing to start the API on a stale schema." >&2
+        echo "       If the cause is multiple heads, inspect with 'alembic heads' and run 'alembic merge heads'." >&2
+        exit 1
+    fi
     echo "Starting API server..."
     uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 2
 elif [ "$start_mode" = "knowledge" ]; then
