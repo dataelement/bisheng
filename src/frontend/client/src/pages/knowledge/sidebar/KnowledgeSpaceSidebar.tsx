@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { GroupedKnowledgeSpaces, KnowledgeSpace, SpaceLevel, SpaceRole, SpaceSortType, getGroupedSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
@@ -33,6 +33,22 @@ interface KnowledgeSpaceSidebarProps {
     mobileDrawerMode?: boolean;
     /** H5 抽屉：右上角关闭 */
     onDrawerClose?: () => void;
+}
+
+const SIDEBAR_WIDTH_KEY = "knowledge_sidebar_width";
+const SIDEBAR_MIN_WIDTH = 180;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 240;
+
+function getSavedSidebarWidth(): number {
+    try {
+        const v = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+        if (v) {
+            const n = parseInt(v, 10);
+            if (n >= SIDEBAR_MIN_WIDTH && n <= SIDEBAR_MAX_WIDTH) return n;
+        }
+    } catch { /* ignore */ }
+    return SIDEBAR_DEFAULT_WIDTH;
 }
 
 // Sort cycle: update_time → name → update_time
@@ -102,6 +118,39 @@ export function KnowledgeSpaceSidebar({
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
+    const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
+    const isDraggingRef = useRef(false);
+    const dragStartXRef = useRef(0);
+    const dragStartWidthRef = useRef(0);
+
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        isDraggingRef.current = true;
+        dragStartXRef.current = e.clientX;
+        dragStartWidthRef.current = sidebarWidth;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+
+        const onMouseMove = (ev: MouseEvent) => {
+            if (!isDraggingRef.current) return;
+            const delta = ev.clientX - dragStartXRef.current;
+            const next = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, dragStartWidthRef.current + delta));
+            setSidebarWidth(next);
+        };
+        const onMouseUp = () => {
+            isDraggingRef.current = false;
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+            setSidebarWidth(prev => {
+                try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(prev)); } catch { /* ignore */ }
+                return prev;
+            });
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+        };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+    }, [sidebarWidth]);
 
     const { data: groupedSpaces = {
         publicSpaces: [],
@@ -215,12 +264,14 @@ export function KnowledgeSpaceSidebar({
             <div
                 className={[
                     `h-full bg-white flex flex-col overflow-hidden ${collapsed || mobileDrawerMode ? "" : "border-r border-[#e5e6eb]"}`,
-                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
+                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "",
                 ].join(" ")}
-                style={mobileDrawerMode ? undefined : {
+                style={mobileDrawerMode ? undefined : collapsed ? {
                     transitionProperty: 'width',
                     transitionDuration: '300ms',
-                    transitionTimingFunction: 'ease-in-out'
+                    transitionTimingFunction: 'ease-in-out',
+                } : {
+                    width: `${sidebarWidth}px`,
                 }}
             >
                 {mobileDrawerMode ? (
@@ -362,13 +413,22 @@ export function KnowledgeSpaceSidebar({
                     </div>
                 ) : null}
             </div>
+            {/* Drag-to-resize handle */}
+            {!collapsed && !mobileDrawerMode && (
+                <div
+                    className="absolute top-0 right-0 h-full w-1 z-[41] cursor-col-resize group"
+                    onMouseDown={handleResizeMouseDown}
+                >
+                    <div className="h-full w-full group-hover:bg-blue-400 transition-colors duration-150" />
+                </div>
+            )}
             <NavToggle
                 navVisible={!collapsed}
                 onToggle={() => setCollapsed(!collapsed)}
                 isHovering={isToggleHovering}
                 setIsHovering={setIsToggleHovering}
                 className={`absolute top-1/2 left-0 z-[40] ${mobileDrawerMode ? "hidden" : ""}`}
-                translateX={240}
+                translateX={collapsed ? 0 : sidebarWidth}
             />
         </div>
     );
