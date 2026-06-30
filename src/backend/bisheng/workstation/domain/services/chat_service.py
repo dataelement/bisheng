@@ -667,7 +667,19 @@ async def _build_knowledge_search_tool(
         chunk_id = meta.get("chunk_id") or (f"{doc_id}-{chunk_idx}" if doc_id != "" else str(chunk_idx))
         file_title = meta.get("document_name") or meta.get("source") or meta.get("file_name") or ""
         file_abstract = meta.get("file_abstract") or meta.get("abstract") or ""
-        content = (getattr(doc, "page_content", "") or "").strip()
+        # page_content is stored pre-wrapped with <file_title>/<file_abstract>/<paragraph_content>
+        # by aggregate_chunk_metadata at ingest time; strip that wrapper so we don't nest it again.
+        # annotate_rag_documents_with_citations also appended a "\n\ncitation_key: ..." tail; peel it
+        # off before unwrapping and re-attach it afterwards so the LLM still sees the citation marker.
+        raw_content = (getattr(doc, "page_content", "") or "").strip()
+        citation_key = meta.get("citation_key") or ""
+        if citation_key:
+            citation_suffix = f"\n\ncitation_key: {citation_key}"
+            if raw_content.endswith(citation_suffix):
+                raw_content = raw_content[: -len(citation_suffix)].rstrip()
+        content = knowledge_imp.KnowledgeUtils.split_chunk_metadata(raw_content).strip()
+        if citation_key:
+            content = f"{content}\n\ncitation_key: {citation_key}"
         kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
         kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
         kb_name = kb_name_by_id.get(kb_id, "")
