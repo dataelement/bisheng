@@ -1,10 +1,12 @@
 """Unit tests for the deepagents prompt-assembly optimization (F035 follow-up):
 
-1. ``_ensure_linsight_harness_profile`` registers a BiSheng-owned HarnessProfile
-   that ONLY sets ``system_prompt_suffix`` (a static Chinese language block) and
-   leaves ``base_system_prompt=None`` — so the SDK English BASE is kept and the
-   researcher subagent's authored prompt is NOT clobbered (the suffix appends).
-   Registration is idempotent per provider and no-ops when no provider derives.
+1. ``_LanguageTailMiddleware`` appends the static Chinese language directive to
+   the ABSOLUTE TAIL of the system message (after every framework middleware
+   prompt). deepagents' framework middleware (TodoList / Filesystem / SubAgent)
+   append their English prompts AFTER the static base, so a HarnessProfile suffix
+   lands mid-prompt; only a middleware placed LAST reaches the true tail — the
+   strongest position to keep the model reasoning (thinking) in the user's
+   language.
 2. The current-time block is injected into the dynamic first user message
    (``_build_agent_input`` / ``_drive_continue``), never the static system
    prompt — so the system prompt stays prefix-cacheable.
@@ -14,120 +16,74 @@ Pure-function / lightweight-stub style, mirroring ``test_subagent_reintroduction
 
 from __future__ import annotations
 
-import deepagents
-from deepagents.profiles.harness.harness_profiles import _get_harness_profile
+from langchain_core.messages import SystemMessage
 
 from bisheng.linsight.domain.services.agent_factory import (
-    _LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH,
-    _REGISTERED_SUFFIX_PROVIDERS,
-    _ensure_linsight_harness_profile,
+    _LINSIGHT_LANGUAGE_DIRECTIVE_ZH,
+    _LanguageTailMiddleware,
 )
 
 
-class _FakeModel:
-    """Minimal chat-model stand-in: only ``_get_ls_params`` is consulted by
-    deepagents' ``get_model_provider``."""
+class _FakeReq:
+    """Minimal ModelRequest stand-in: only ``system_message`` + immutable
+    ``override`` are consulted by the middleware (mirrors langchain's real
+    ``ModelRequest.override`` which returns a new request)."""
 
-    def __init__(self, provider: str | None):
-        self._provider = provider
+    def __init__(self, system_message: SystemMessage):
+        self.system_message = system_message
 
-    def _get_ls_params(self, *args, **kwargs) -> dict:
-        params: dict = {"ls_model_type": "chat"}
-        if self._provider is not None:
-            params["ls_provider"] = self._provider
-        return params
+    def override(self, *, system_message):
+        return _FakeReq(system_message)
 
 
-def test_harness_profile_sets_only_suffix_not_base(monkeypatch):
-    """The registered profile carries the static Chinese suffix and explicitly
-    leaves base_system_prompt None (keeping the SDK BASE, never clobbering the
-    researcher subagent which shares this profile)."""
-    provider = "bisheng_test_suffix_only"
-    _REGISTERED_SUFFIX_PROVIDERS.discard(provider)
+def test_language_tail_middleware_appends_directive_as_last_block():
+    """The directive must be the LAST content block (tail), with prior content
+    (the framework prompts) preserved before it."""
+    mw = _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH)
+    captured: dict = {}
 
-    _ensure_linsight_harness_profile(_FakeModel(provider))
+    def handler(req):
+        captured["req"] = req
+        return "RESP"
 
-    profile = _get_harness_profile(provider)
-    assert profile is not None
-    assert profile.system_prompt_suffix == _LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH
-    # base slot untouched -> researcher subagent prompt is preserved (append-only)
-    assert profile.base_system_prompt is None
-    assert provider in _REGISTERED_SUFFIX_PROVIDERS
+    base = SystemMessage("BASE_AND_FRAMEWORK_PROMPTS_HERE")
+    out = mw.wrap_model_call(_FakeReq(base), handler)
 
-
-def test_harness_profile_registration_is_idempotent(monkeypatch):
-    """Repeated calls register the provider exactly once (static content; the
-    linsight worker builds a fresh agent per task in a long-running process)."""
-    provider = "bisheng_test_idempotent"
-    _REGISTERED_SUFFIX_PROVIDERS.discard(provider)
-
-    calls: list[str] = []
-    orig = deepagents.register_harness_profile
-
-    def _counting(key, profile):
-        calls.append(key)
-        return orig(key, profile)
-
-    monkeypatch.setattr(deepagents, "register_harness_profile", _counting)
-
-    _ensure_linsight_harness_profile(_FakeModel(provider))
-    _ensure_linsight_harness_profile(_FakeModel(provider))
-
-    assert calls == [provider]  # registered once, second call short-circuits
+    assert out == "RESP"
+    blocks = captured["req"].system_message.content_blocks
+    # our directive is the FINAL block — the absolute tail of the system message
+    assert _LINSIGHT_LANGUAGE_DIRECTIVE_ZH in blocks[-1]["text"]
+    # everything that was already there is preserved BEFORE our block
+    assert any("BASE_AND_FRAMEWORK_PROMPTS_HERE" in b.get("text", "") for b in blocks[:-1])
 
 
-def test_harness_profile_noop_without_provider(monkeypatch):
-    """No derivable provider -> no registration (inline language lines fall back)."""
-    calls: list[str] = []
-    orig = deepagents.register_harness_profile
+async def test_language_tail_middleware_async_appends_directive():
+    """The async hook (the one the linsight worker actually uses) behaves the same."""
+    mw = _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH)
+    captured: dict = {}
 
-    def _counting(key, profile):
-        calls.append(key)
-        return orig(key, profile)
+    async def handler(req):
+        captured["req"] = req
+        return "RESP"
 
-    monkeypatch.setattr(deepagents, "register_harness_profile", _counting)
+    out = await mw.awrap_model_call(_FakeReq(SystemMessage("BASE")), handler)
 
-    _ensure_linsight_harness_profile(_FakeModel(None))
-
-    assert calls == []
-
-
-def test_assembly_appends_suffix_and_preserves_researcher():
-    """Exercise the REAL deepagents prompt-assembly fn with our registered
-    profile to prove the central design claims:
-
-    - main agent: USER -> BASE -> SUFFIX, so the English BASE is KEPT and our
-      Chinese suffix lands at the very tail.
-    - researcher subagent (shares this profile): its authored prompt is
-      PRESERVED (suffix appends, base slot is None so nothing is clobbered).
-    """
-    from deepagents.graph import BASE_AGENT_PROMPT
-    from deepagents.profiles.harness.harness_profiles import _apply_profile_prompt
-
-    from bisheng.linsight.domain.services.agent_factory import _build_researcher_prompt
-
-    provider = "bisheng_test_assembly"
-    _REGISTERED_SUFFIX_PROVIDERS.discard(provider)
-    _ensure_linsight_harness_profile(_FakeModel(provider))
-    profile = _get_harness_profile(provider)
-
-    # Main agent base (deepagents passes BASE_AGENT_PROMPT here, graph.py:832).
-    main_base = _apply_profile_prompt(profile, BASE_AGENT_PROMPT)
-    assert BASE_AGENT_PROMPT in main_base  # SDK English BASE kept
-    assert main_base.endswith(_LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH)  # suffix at tail
-
-    # Researcher subagent base (deepagents passes the spec prompt, graph.py:682).
-    researcher_prompt = _build_researcher_prompt(False)
-    sub = _apply_profile_prompt(profile, researcher_prompt)
-    assert researcher_prompt in sub  # NOT clobbered — append-only
-    assert sub.endswith(_LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH)
+    assert out == "RESP"
+    assert _LINSIGHT_LANGUAGE_DIRECTIVE_ZH in captured["req"].system_message.content_blocks[-1]["text"]
 
 
-def test_suffix_block_constrains_thinking_language():
-    """The static suffix must cover thinking and assert top priority over the
-    appended English framework prompts (the tail-position language guard)."""
-    assert "thinking" in _LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH
-    assert "最高优先级" in _LINSIGHT_SYSTEM_PROMPT_SUFFIX_ZH
+def test_language_tail_middleware_registers_no_tools_and_has_stable_name():
+    mw = _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH)
+    assert mw.tools == []
+    assert mw.name == "LinsightLanguageTail"
+
+
+def test_language_directive_constrains_thinking_with_top_priority():
+    """The directive must explicitly cover thinking/reasoning and assert top
+    priority over the preceding (English) framework prompts."""
+    assert "thinking" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
+    assert "推理过程" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
+    assert "最高优先级" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
 
 
 class _FakeSession:
