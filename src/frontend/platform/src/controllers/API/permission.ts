@@ -1,5 +1,6 @@
 import type { GrantItem, PermissionEntry, RevokeItem } from "@/components/bs-comp/permission/types"
 import axios from "@/controllers/request"
+import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 
 export type RebacSchemaType = {
   type: string
@@ -142,6 +143,44 @@ export async function getResourceGrantDepartmentsApi(
   resourceId: string,
 ): Promise<any[]> {
   return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`)
+}
+
+// F038: lazy variants of the grant-subject department tree (browse one layer /
+// server search / locate). Same authorization scope as the full-tree endpoint
+// above (tenant subtree minus child-tenant mounts, optionally F033-narrowed),
+// so a large org tree never loads at once. Used by the authorization pickers.
+
+export async function getResourceGrantDepartmentChildrenApi(
+  resourceType: string,
+  resourceId: string,
+  parentId: number | null,
+): Promise<DepartmentTreeNode[]> {
+  return await axios.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/children`,
+    { params: { parent_id: parentId ?? undefined } },
+  )
+}
+
+export async function searchResourceGrantDepartmentsApi(
+  resourceType: string,
+  resourceId: string,
+  keyword: string,
+  limit = 50,
+): Promise<DepartmentSearchResult> {
+  return await axios.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/search`,
+    { params: { keyword, limit } },
+  )
+}
+
+export async function getResourceGrantDepartmentPathTreeApi(
+  resourceType: string,
+  resourceId: string,
+  deptInternalId: number,
+): Promise<DepartmentSearchResult> {
+  return await axios.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/${deptInternalId}/path-tree`,
+  )
 }
 
 export async function getResourceGrantUserGroupsApi(
