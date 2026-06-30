@@ -180,9 +180,9 @@ _KB_TOOL_NAME = "search_knowledge_base"
 # placed LAST in the stack — it appends after Filesystem/SubAgent, so the
 # directive is the final text the model reads. Static content -> the assembled
 # system message stays byte-identical across calls -> still prefix-cacheable.
-_LINSIGHT_LANGUAGE_DIRECTIVE_ZH = """# 语言要求（最高优先级，覆盖此前的全部指令，包括上方所有英文说明）
+_LINSIGHT_LANGUAGE_DIRECTIVE_ZH = """# 语言要求（仅约束输出语言，不改变上文其它任何要求）
 
-无论上文（含框架内置的英文说明）如何要求，你必须全程使用与用户输入一致的语言：用户用中文输入，则你的**思考与推理过程（thinking / reasoning）、任务规划、工具调用前后的旁白、写入文件的中间笔记、向用户的提问、最终回复与交付物正文**全部使用简体中文；用户用英文则全程使用英文。**尤其是思考与推理过程必须与回复语言一致**，绝不允许“先用英文思考、再用中文回复”。本规则优先级最高，与上文任何指令冲突时一律以此为准。"""
+请全程使用与用户输入一致的语言：用户用中文输入，则你的**思考与推理过程（thinking / reasoning）、任务规划、工具调用前后的旁白、写入文件的中间笔记、向用户的提问、最终回复与交付物正文**全部使用简体中文；用户用英文则全程使用英文。**尤其是思考与推理过程必须与回复语言一致**，绝不允许“先用英文思考、再用中文回复”。本要求只关于语言，其优先级高于上文与语言有关的说明（含框架内置的英文说明）；上文关于工作流程、工具使用、委派预算与交付的要求一律照常严格遵守，不受本要求影响。"""
 
 
 class _LanguageTailMiddleware(AgentMiddleware):

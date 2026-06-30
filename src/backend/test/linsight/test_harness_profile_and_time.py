@@ -78,12 +78,18 @@ def test_language_tail_middleware_registers_no_tools_and_has_stable_name():
     assert mw.name == "LinsightLanguageTail"
 
 
-def test_language_directive_constrains_thinking_with_top_priority():
-    """The directive must explicitly cover thinking/reasoning and assert top
-    priority over the preceding (English) framework prompts."""
+def test_language_directive_is_scoped_to_language_only():
+    """The directive must cover thinking/reasoning but be SCOPED to language —
+    it must NOT claim to override the workflow (a broad 'override everything'
+    wording can make a literal model drop the workflow / delegation budget and
+    over-delegate), and it must explicitly preserve the workflow."""
     assert "thinking" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
     assert "推理过程" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
-    assert "最高优先级" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
+    assert "仅约束输出语言" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
+    # explicitly keeps workflow/tools/delegation in force
+    assert "工作流程" in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
+    # must not carry the dangerous broad-override phrasing
+    assert "覆盖此前的全部指令" not in _LINSIGHT_LANGUAGE_DIRECTIVE_ZH
 
 
 class _FakeSession:
