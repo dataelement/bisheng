@@ -100,15 +100,26 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
   // selecting the dept's own subtree via excludeSubtreePath={dept.path} instead.
   useEffect(() => {
     let cancelled = false
-    captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null)).then((roots) => {
-      if (!cancelled) {
-        setIsVisibleRootDept(Array.isArray(roots) && roots.some((n) => n.id === dept.id))
-      }
-    })
     if (dept.parent_id == null) {
+      // Absolute root: no parent to resolve, and never a "visible-only" root.
+      setIsVisibleRootDept(false)
       setParentDisplayName("-")
-    } else {
-      captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(dept.parent_id)).then((res) => {
+      return
+    }
+    captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null)).then((roots) => {
+      if (cancelled) return
+      const visibleRoot = Array.isArray(roots) && roots.some((n) => n.id === dept.id)
+      setIsVisibleRootDept(visibleRoot)
+      // When the dept sits at the top of the viewer's visible tree, its parent is
+      // OUTSIDE the viewer's scope (e.g. a sub-tenant admin's tenant-root dept,
+      // whose parent is the global root). Fetching that parent's path-tree would
+      // be denied (21009) — skip it and leave the read-only parent field blank.
+      // A nested dept's parent is always in scope, so it is safe to resolve.
+      if (visibleRoot) {
+        setParentDisplayName("-")
+        return
+      }
+      captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(dept.parent_id!)).then((res) => {
         if (cancelled) return
         const pruned = (res as DepartmentSearchResult | null) ?? null
         let cur = pruned?.roots?.[0]
@@ -119,7 +130,7 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
         }
         setParentDisplayName(name)
       })
-    }
+    })
     return () => {
       cancelled = true
     }
