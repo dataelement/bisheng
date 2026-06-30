@@ -27,6 +27,7 @@ from ..models.user import User, UserDao
 from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
+PORTAL_RUNTIME_TOKEN_PURPOSE = 'portal_runtime'
 
 # 部门管理员：工作台 + 管理后台全量菜单（含路由用的 sys、仅 UI 的 log/system_config）
 _DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset({
@@ -478,6 +479,7 @@ class LoginUser(BaseModel):
         auth_jwt: AuthJwt,
         tenant_id: int = None,
         token_version: int = None,
+        token_purpose: str = '',
     ) -> str:
         """Create access token for user with tenant_id + token_version.
 
@@ -494,6 +496,8 @@ class LoginUser(BaseModel):
             'tenant_id': tenant_id or DEFAULT_TENANT_ID,
             'token_version': token_version,
         }
+        if token_purpose:
+            payload['token_purpose'] = token_purpose
         token = auth_jwt.create_access_token(subject=payload)
         return token
 

@@ -140,6 +140,14 @@ async def _validate_token_version(
 async def _validate_current_session_token(user_id: int, token: str) -> bool:
     if not user_id or not token:
         return True
+    subject = _decode_jwt_subject(token)
+    try:
+        from bisheng.user.domain.services.auth import PORTAL_RUNTIME_TOKEN_PURPOSE
+        if subject and subject.get('token_purpose') == PORTAL_RUNTIME_TOKEN_PURPOSE:
+            return True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug('token_purpose lookup failed for user %d: %s', user_id, exc)
+
     try:
         from bisheng.common.services.config_service import settings
         login_method = await settings.aget_system_login_method()

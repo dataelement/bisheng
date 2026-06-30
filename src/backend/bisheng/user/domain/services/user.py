@@ -41,7 +41,7 @@ from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, 
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import md5_hash, get_request_ip, generate_uuid
 from bisheng.utils.constants import RSA_KEY
-from .auth import LoginUser, AuthJwt
+from .auth import LoginUser, AuthJwt, PORTAL_RUNTIME_TOKEN_PURPOSE
 from .captcha import verify_captcha
 from ..const import USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 
@@ -444,8 +444,11 @@ class UserService:
         if no_role_resp is not None:
             return no_role_resp
 
+        is_portal_runtime_login = user.token_purpose == PORTAL_RUNTIME_TOKEN_PURPOSE
+
         if (
-            not user.force_login
+            not is_portal_runtime_login
+            and not user.force_login
             and await cls.has_other_active_session(
                 int(db_user.user_id),
                 cls._extract_request_access_token(request),
@@ -582,15 +585,17 @@ class UserService:
         access_token = LoginUser.create_access_token(
             user=db_user, auth_jwt=auth_jwt, tenant_id=tenant_id,
             token_version=fresh_token_version,
+            token_purpose=PORTAL_RUNTIME_TOKEN_PURPOSE if is_portal_runtime_login else '',
         )
 
         # set cookies
         LoginUser.set_access_cookies(access_token, auth_jwt=auth_jwt)
 
-        # Set the logged in user's currentcookie, .jwtValid for an additional hour
-        redis_client = await get_redis_client()
-        await redis_client.aset(USER_CURRENT_SESSION.format(db_user.user_id), access_token,
-                                auth_jwt.cookie_conf.jwt_token_expire_time + 3600)
+        if not is_portal_runtime_login:
+            # Set the logged in user's currentcookie, .jwtValid for an additional hour
+            redis_client = await get_redis_client()
+            await redis_client.aset(USER_CURRENT_SESSION.format(db_user.user_id), access_token,
+                                    auth_jwt.cookie_conf.jwt_token_expire_time + 3600)
 
         # Log Audit Logs
         login_user = await LoginUser.init_login_user(db_user.user_id, db_user.user_name)

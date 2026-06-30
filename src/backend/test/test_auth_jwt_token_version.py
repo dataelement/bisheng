@@ -152,3 +152,24 @@ class TestCreateAccessTokenClassmethod:
             issuer='bisheng-test', algorithms=['HS256'],
         )['sub'])
         assert subject['token_version'] == 99
+
+    def test_token_purpose_embedded_when_supplied(
+        self, auth_jwt_instance, monkeypatch,
+    ):
+        from bisheng.user.domain.services import auth as auth_mod
+        monkeypatch.setattr(
+            auth_mod.UserRoleDao, 'get_user_roles', lambda uid: [],
+        )
+        fake_user = SimpleNamespace(
+            user_id=303, user_name='runtime', token_version=0,
+        )
+        token = auth_mod.LoginUser.create_access_token(
+            user=fake_user,
+            auth_jwt=auth_jwt_instance,
+            token_purpose=auth_mod.PORTAL_RUNTIME_TOKEN_PURPOSE,
+        )
+        subject = json.loads(jwt.decode(
+            token, 'unit-test-secret',
+            issuer='bisheng-test', algorithms=['HS256'],
+        )['sub'])
+        assert subject['token_purpose'] == auth_mod.PORTAL_RUNTIME_TOKEN_PURPOSE

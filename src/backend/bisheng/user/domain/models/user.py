@@ -141,6 +141,7 @@ class UserLogin(UserBase):
     captcha_key: Optional[str] = None
     captcha: Optional[str] = None
     force_login: bool = False
+    token_purpose: Optional[str] = None
 
 
 class UserCreate(UserBase):
