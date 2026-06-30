@@ -75,8 +75,10 @@ export default function DepartmentPage() {
   // Create / move / archive / restore / rename: refresh affected (loaded) layers
   // — a move touches both old and new parent, so refresh all loaded layers (AC-05).
   const handleTreeChange = useCallback(
-    (removedDeptId?: string) => {
-      void tree.refreshAll()
+    async (removedDeptId?: string) => {
+      // Await the refresh first so, when the removed dept was selected, the
+      // auto-select effect picks the FRESH first root — not the stale one.
+      await tree.refreshAll()
       if (removedDeptId && selectedDeptId === removedDeptId) {
         setSelectedId(null)
         setSelectedSnapshot(null)

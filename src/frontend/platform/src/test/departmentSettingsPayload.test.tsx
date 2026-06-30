@@ -22,6 +22,10 @@ vi.mock("@/controllers/API/department", () => ({
   getDepartmentAdminsApi: vi.fn(),
   getDepartmentApi: vi.fn(),
   getDepartmentAssignableRolesApi: vi.fn(),
+  // F038: DepartmentSettings now resolves root-layer membership + the read-only
+  // parent name lazily; default them to empty so the effect is a no-op here.
+  getDepartmentChildrenApi: vi.fn(() => Promise.resolve([])),
+  getDepartmentPathTreeApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
   moveDepartmentApi: vi.fn(),
   purgeDepartmentApi: vi.fn(),
   restoreDepartmentApi: vi.fn(),
@@ -70,7 +74,8 @@ const dept: DepartmentTreeNode = {
   sort_order: 0,
   source: "local",
   status: "active",
-  member_count: 0,
+  is_tenant_root: false,
+  mounted_tenant_id: null,
   children: [],
 };
 

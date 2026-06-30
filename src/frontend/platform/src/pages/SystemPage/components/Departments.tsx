@@ -74,8 +74,10 @@ export default function Departments() {
   }, [tree])
 
   const handleTreeChange = useCallback(
-    (removedDeptId?: string) => {
-      void tree.refreshAll()
+    async (removedDeptId?: string) => {
+      // Await the refresh first so, when the removed dept was selected, the
+      // auto-select effect picks the FRESH first root — not the stale one.
+      await tree.refreshAll()
       setMembersRefreshSignal((n) => n + 1)
       if (removedDeptId && selectedDeptId === removedDeptId) {
         setSelectedId(null)
