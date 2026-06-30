@@ -34,15 +34,11 @@ async def create_department(
         return e.return_resp_instance()
 
 
-@router.get("/tree")
-async def get_tree(
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    try:
-        tree = await DepartmentService.aget_tree(login_user)
-        return resp_200([node.model_dump() for node in tree])
-    except BaseErrorCode as e:
-        return e.return_resp_instance()
+# F038/T012: the eager ``GET /tree`` endpoint was removed — the whole department
+# tree no longer loads at once. Clients use the lazy ``GET /children`` (one layer),
+# ``GET /search`` and ``GET /{id}/path-tree`` instead. ``DepartmentService.aget_tree``
+# is retained as the canonical visible-set reference that the lazy endpoints are
+# parity-checked against (see test_department_scope_parity).
 
 
 @router.get("/search/global-members")
