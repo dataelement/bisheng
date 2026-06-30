@@ -57,36 +57,35 @@ class KnowledgeUtils(BaseService):
     @classmethod
     def format_retrieved_chunk(cls, doc, kb_name: str = "") -> str:
         """Format a retrieved Document into the tool-output chunk string shared by
-        the workstation daily-mode search and the workflow agent knowledge tool.
+        the workstation daily-mode search, the workflow agent knowledge tool, and
+        the RAG/assistant document-stuffing paths.
+
+        <chunk_id> carries the citation_key (the source id the model cites with);
+        the legacy document-segment id was unused downstream and is dropped.
 
         page_content is stored pre-wrapped with <file_title>/<file_abstract>/
         <paragraph_content> by aggregate_chunk_metadata at ingest time; strip that
         wrapper so we don't nest it again. annotate_rag_documents_with_citations may
-        have appended a "\n\ncitation_key: ..." tail; peel it off before unwrapping
-        and re-attach it afterwards so the LLM still sees the citation marker.
+        have appended a "\n\ncitation_key: ..." tail; peel it off so paragraph_content
+        holds only the bare body (the id now lives in <chunk_id>, not the tail).
         """
         meta = getattr(doc, "metadata", {}) or {}
-        doc_id = meta.get("document_id") or ""
-        chunk_idx = meta.get("chunk_index", "")
-        chunk_id = meta.get("chunk_id") or (f"{doc_id}-{chunk_idx}" if doc_id != "" else str(chunk_idx))
         file_title = meta.get("document_name") or meta.get("source") or meta.get("file_name") or ""
         file_abstract = meta.get("file_abstract") or meta.get("abstract") or ""
-        raw_content = (getattr(doc, "page_content", "") or "").strip()
         citation_key = meta.get("citation_key") or ""
+        raw_content = (getattr(doc, "page_content", "") or "").strip()
         if citation_key:
             citation_suffix = f"\n\ncitation_key: {citation_key}"
             if raw_content.endswith(citation_suffix):
                 raw_content = raw_content[: -len(citation_suffix)].rstrip()
         content = cls.split_chunk_metadata(raw_content).strip()
-        if citation_key:
-            content = f"{content}\n\ncitation_key: {citation_key}"
         kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
         kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
         return (
             "{"
+            f"<chunk_id>{citation_key}</chunk_id>\n"
             f"<knowledge_base_id>{kb_id}</knowledge_base_id>\n"
             f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
-            f"<chunk_id>{chunk_id}</chunk_id>\n"
             f"<file_title>{file_title}</file_title>\n"
             f"<file_abstract>{file_abstract}</file_abstract>\n"
             f"<paragraph_content>{content}</paragraph_content>"

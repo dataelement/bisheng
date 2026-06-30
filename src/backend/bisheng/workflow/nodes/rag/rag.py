@@ -18,6 +18,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
@@ -98,8 +99,15 @@ class RagNode(RagUtils):
         cache_citation_registry_items_sync(citation_items)
         self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, source_documents_with_citations)
         self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+        # Feed the inner QA model the <chunk_id> chunk format (citation_key lives in
+        # <chunk_id>), consistent with the workstation/agent tool output and the citation
+        # rules in the node's system prompt. Keep source_documents_with_citations intact for
+        # the citation registry, source display and logs.
         inputs = {
-            "context": source_documents_with_citations,
+            "context": [
+                Document(page_content=KnowledgeUtils.format_retrieved_chunk(doc), metadata=doc.metadata)
+                for doc in source_documents_with_citations
+            ],
         }
         if "question" in self._qa_prompt.input_variables:
             inputs["question"] = question
