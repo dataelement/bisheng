@@ -366,15 +366,18 @@ class DepartmentDao:
             ).all()
 
     @classmethod
-    async def aget_children(cls, parent_id: int, include_archived: bool = False) -> list[Department]:
+    async def aget_children(cls, parent_id: int | None, include_archived: bool = False) -> list[Department]:
         """Direct children of ``parent_id``, ordered by sort_order then id.
 
-        F038: ``include_archived`` lets the management nav tree show archived
+        F038: ``parent_id=None`` returns the root layer (``parent_id IS NULL``) so
+        the lazy tree can fetch the tenant root(s) the same way it fetches any
+        layer. ``include_archived`` lets the management nav tree show archived
         nodes (active+archived); pickers keep the default (active only).
         """
         async with get_async_db_session() as session:
+            parent_clause = Department.parent_id.is_(None) if parent_id is None else Department.parent_id == parent_id
             stmt = select(Department).where(
-                Department.parent_id == parent_id,
+                parent_clause,
                 cls._status_clause(include_archived),
             )
             result = await session.exec(stmt.order_by(Department.sort_order, Department.id))

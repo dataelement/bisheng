@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 纯 What；用户确认 2026-06-29 |
 | design.md | ✅ 已评审 | 决策 1–12 + 接手必读；用户确认 2026-06-29；接手第一入口 |
 | tasks.md | ✅ 已拆解 | 本文件 |
-| 实现 | 🟡 进行中 | 3 / 16（T000 `b8e481872`、T002 `1af226f5d`、T001） |
+| 实现 | 🟡 进行中 | 5 / 16（T000 `b8e481872`、T002 `1af226f5d`、T001、T003+T004 children/search/path-tree） |
 
 ---
 
@@ -55,15 +55,15 @@
 
 ### Wave 2 —— platform 部门树端点族（admin 范围）
 
-- [ ] **T003**: platform children/search/path-tree Service + 端点集成测试
+- [x] **T003**: platform children/search/path-tree Service + 端点集成测试 ✅（16/16，aiosqlite + TestClient）
   **文件**: `test/department/test_department_lazy_api.py`
   **逻辑**: TestClient 测 `GET /departments/children`(根层/parent_id/include_archived)、`/departments/search`(命中+祖先剪枝树+truncated+空词)、`/departments/{id}/path-tree`；含越权 parent/定位 403 且不泄露
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-06, AC-07, AC-08, AC-09, AC-10, AC-15
   **依赖**: T001, T002
 
-- [ ] **T004**: platform children/search/path-tree Service + 端点实现
-  **文件**: `department/domain/services/department_service.py`、`department/api/endpoints/department.py`、`department/domain/schemas/department_schema.py`
-  **逻辑**: Service 用 `_aget_user_scope` 算范围 → 调 DAO 取单层/搜索/祖先 → 组装；`DepartmentTreeNode` 加 `has_children`/`matched`；端点**直建 dict + ORJSON 返回**绕过 jsonable_encoder（design 决策 7）；搜索祖先 clamp 到 admin_paths（design §5 坑4）；空词早返回（不扫全表）
+- [x] **T004**: platform children/search/path-tree Service + 端点实现 ✅
+  **文件**: `department/domain/services/department_service.py`(`aget_children_layer`/`asearch_tree`/`aget_path_tree`/`_abuild_pruned_forest` + 模块级 `_parse_path_ids`/`_path_in_scope`/`_topmost_paths`/`_dept_node_dict`)、`department/api/endpoints/department.py`(3 GET 路由 + `_orjson_ok`，置于 `GET /{dept_id}` 之前)、`database/models/department.py`(`aget_children` 支持 `parent_id=None` 根层)
+  **逻辑**: Service 用 `_aget_user_scope` 算范围 → 调 DAO 取单层/搜索/祖先 → 组装；端点**直建 dict + ORJSON 返回**绕过 jsonable_encoder（design 决策 7）；搜索/定位祖先 clamp 到 admin_paths（design §5 坑4）；空词早返回（不扫全表）；越权/缺失统一 21009 不泄露（sys-admin 缺失给 21000）。`DepartmentTreeNode` 的 `has_children`/`matched` 字段已在 schema commit 落地
   **测试**: T003 通过
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-06, AC-07, AC-08, AC-09, AC-10, AC-15
   **依赖**: T003

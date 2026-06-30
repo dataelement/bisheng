@@ -97,6 +97,12 @@ class TestAgetChildren:
             children = await DepartmentDao.aget_children(1, include_archived=True)
         assert {c.id for c in children} == {2, 3, 5, 6}
 
+    async def test_root_layer_parent_none(self, engine):
+        """F038: parent_id=None → root layer (parent_id IS NULL), i.e. the tenant root."""
+        with _patch(engine):
+            roots = await DepartmentDao.aget_children(None)
+        assert {c.id for c in roots} == {1}
+
 
 class TestAgetChildrenExistence:
     async def test_returns_only_parents_with_active_children(self, engine):
