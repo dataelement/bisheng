@@ -91,6 +91,20 @@ class TestValidateTokenVersion:
 
 class TestValidateCurrentSessionToken:
 
+    def test_portal_runtime_token_bypasses_current_session(self, monkeypatch):
+        monkeypatch.setattr(
+            hm,
+            '_decode_jwt_subject',
+            lambda _token: {
+                'user_id': 100,
+                'token_purpose': 'portal_runtime',
+            },
+        )
+
+        result = asyncio.run(hm._validate_current_session_token(100, 'old-token'))
+
+        assert result is True
+
     def test_multi_login_allowed_returns_true(self, monkeypatch):
         import sys
 
