@@ -5,7 +5,6 @@ import {
     Channel,
     getChannelGrantableRelationModelsApi,
     getChannelGrantSubjectsDepartmentChildrenApi,
-    getChannelGrantSubjectsDepartmentPathTreeApi,
     getChannelGrantSubjectsUserGroupsApi,
     getChannelGrantSubjectsUsersApi,
     getChannelPermissionsApi,
@@ -77,8 +76,6 @@ export function ChannelPermissionDialog({
             getChannelGrantSubjectsDepartmentChildrenApi(resourceId, parentId, config),
         searchGrantDepartments: (_resourceType, resourceId, keyword, limit, config) =>
             searchChannelGrantSubjectsDepartmentsApi(resourceId, keyword, limit, config),
-        getGrantDepartmentPathTree: (_resourceType, resourceId, deptId, config) =>
-            getChannelGrantSubjectsDepartmentPathTreeApi(resourceId, deptId, config),
         getGrantUserGroups: (_resourceType, resourceId, params, config) =>
             getChannelGrantSubjectsUserGroupsApi(resourceId, params, config),
     }), []);

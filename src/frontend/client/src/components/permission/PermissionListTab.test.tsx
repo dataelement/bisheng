@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   authorizeResource,
   getGrantableRelationModels,
-  getResourceGrantDepartmentPathTree,
   getResourcePermissions,
 } from "~/api/permission";
 import { PermissionListTab } from "./PermissionListTab";
@@ -20,7 +19,6 @@ jest.mock("~/Providers", () => ({
 jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getGrantableRelationModels: jest.fn(),
-  getResourceGrantDepartmentPathTree: jest.fn(),
   getResourcePermissions: jest.fn(),
 }));
 
@@ -40,7 +38,6 @@ jest.mock("~/components/ui/DropdownMenu", () => ({
 }));
 
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
-const mockedGetResourceGrantDepartmentPathTree = jest.mocked(getResourceGrantDepartmentPathTree);
 const mockedGetResourcePermissions = jest.mocked(getResourcePermissions);
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 
@@ -48,11 +45,6 @@ describe("Client PermissionListTab", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null);
-    mockedGetResourceGrantDepartmentPathTree.mockResolvedValue({
-      roots: [],
-      total_matches: 0,
-      truncated: false,
-    });
     mockedGetGrantableRelationModels.mockResolvedValue([
       {
         id: "owner",
@@ -428,9 +420,6 @@ describe("Client PermissionListTab", () => {
           is_system: true,
         },
       ]),
-      getGrantDepartmentPathTree: jest
-        .fn()
-        .mockResolvedValue({ roots: [], total_matches: 0, truncated: false }),
     };
 
     render(

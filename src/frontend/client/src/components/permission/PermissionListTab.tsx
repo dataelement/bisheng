@@ -2,7 +2,6 @@ import { useToastContext, useConfirm } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
-  getResourceGrantDepartmentPathTree,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -79,7 +78,6 @@ export interface PermissionApiAdapter {
   getPermissions: typeof getResourcePermissions;
   authorize: typeof authorizeResource;
   getGrantableRelationModels: typeof getGrantableRelationModels;
-  getGrantDepartmentPathTree?: typeof getResourceGrantDepartmentPathTree;
 }
 
 interface PermissionListTabProps {
@@ -108,7 +106,6 @@ const DEFAULT_PERMISSION_API: PermissionApiAdapter = {
   getPermissions: getResourcePermissions,
   authorize: authorizeResource,
   getGrantableRelationModels,
-  getGrantDepartmentPathTree: getResourceGrantDepartmentPathTree,
 };
 
 export function PermissionListTab({
@@ -135,57 +132,10 @@ export function PermissionListTab({
     prefetchedGrantableModels || [],
   );
   const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels);
-  const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map());
   const [userSelectedTab, setUserSelectedTab] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isListScrolling, setIsListScrolling] = useState(false);
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // F038: resolve the path label (父/子/孙) for each GRANTED department via the
-  // lazy per-grant path-tree endpoint (bounded by the number of grants) instead
-  // of loading the whole department tree — which doesn't scale to tens of
-  // thousands of departments.
-  useEffect(() => {
-    const deptIds = Array.from(
-      new Set(
-        entries
-          .filter((e) => e.subject_type === "department")
-          .map((e) => Number(e.subject_id)),
-      ),
-    );
-    if (!deptIds.length) {
-      setDeptPathById(new Map());
-      return;
-    }
-    const controller = new AbortController();
-    let cancelled = false;
-    const getPathTree =
-      activePermissionApi.getGrantDepartmentPathTree ?? getResourceGrantDepartmentPathTree;
-    Promise.all(
-      deptIds.map((id) =>
-        getPathTree(resourceType, resourceId, id, { signal: controller.signal })
-          .then((tree) => [id, tree] as const)
-          .catch(() => [id, null] as const),
-      ),
-    ).then((results) => {
-      if (cancelled) return;
-      const map = new Map<number, string>();
-      for (const [id, tree] of results) {
-        const names: string[] = [];
-        let cur = tree?.roots?.[0];
-        while (cur) {
-          names.push(cur.name);
-          cur = cur.children?.[0];
-        }
-        if (names.length) map.set(id, names.join("/"));
-      }
-      setDeptPathById(map);
-    });
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [activePermissionApi, entries, resourceId, resourceType]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -288,16 +238,12 @@ export function PermissionListTab({
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
+  // F038: the backend already resolves a department's full ancestor path into
+  // subject_name (父/子/孙), so no per-grant path-tree lookup is needed here.
   const getEntryDisplayName = useCallback(
-    (entry: PermissionEntry) => {
-      if (entry.subject_type === "department") {
-        return deptPathById.get(entry.subject_id)
-          ?? entry.subject_name
-          ?? `${entry.subject_type}:${entry.subject_id}`;
-      }
-      return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
-    },
-    [deptPathById],
+    (entry: PermissionEntry) =>
+      entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`,
+    [],
   );
 
   const visibleEntries = useMemo(() => {

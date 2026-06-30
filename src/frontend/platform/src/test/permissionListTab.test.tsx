@@ -2,7 +2,6 @@ import { PermissionListTab } from "@/components/bs-comp/permission/PermissionLis
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
-  getResourceGrantDepartmentPathTreeApi,
   getResourcePermissions,
 } from "@/controllers/API/permission";
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
@@ -15,9 +14,6 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/controllers/API/permission", () => ({
   authorizeResource: vi.fn(),
   getGrantableRelationModelsApi: vi.fn(),
-  // F038: the granted-department path label now comes from the lazy per-grant
-  // path-tree endpoint, not the removed full-tree getResourceGrantDepartmentsApi.
-  getResourceGrantDepartmentPathTreeApi: vi.fn(),
   getResourcePermissions: vi.fn(),
 }));
 
@@ -56,7 +52,6 @@ vi.mock("@/components/bs-ui/tooltip", () => ({
   Portal: ({ children }: any) => <>{children}</>,
 }));
 
-const mockedGetResourceGrantDepartmentPathTreeApi = vi.mocked(getResourceGrantDepartmentPathTreeApi);
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetResourcePermissions = vi.mocked(getResourcePermissions);
 const mockedAuthorizeResource = vi.mocked(authorizeResource);
@@ -65,11 +60,6 @@ describe("PermissionListTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null as any);
-    mockedGetResourceGrantDepartmentPathTreeApi.mockResolvedValue({
-      roots: [],
-      total_matches: 0,
-      truncated: false,
-    } as any);
     mockedGetGrantableRelationModelsApi.mockResolvedValue([
       {
         id: "viewer",
@@ -110,8 +100,6 @@ describe("PermissionListTab", () => {
       "knowledge_space",
       "3215",
     );
-    // No department entries → the per-grant path-tree endpoint is never hit.
-    expect(mockedGetResourceGrantDepartmentPathTreeApi).not.toHaveBeenCalled();
   });
 
   it("reuses prefetched grantable relation models without refetching", async () => {
@@ -332,27 +320,8 @@ describe("PermissionListTab", () => {
   });
 
   it("deletes department include-children grants across subtree and exact variants", async () => {
-    // The granted department's path label resolves through the per-grant
-    // path-tree endpoint (F038), keyed by the department's internal id.
-    mockedGetResourceGrantDepartmentPathTreeApi.mockResolvedValue({
-      roots: [
-        {
-          id: 7,
-          dept_id: "BS@7",
-          name: "研发部",
-          parent_id: null,
-          path: "/7/",
-          sort_order: 0,
-          source: "local",
-          status: "active",
-          has_children: false,
-          matched: true,
-          children: [],
-        },
-      ],
-      total_matches: 1,
-      truncated: false,
-    } as any);
+    // The granted department's label is the full path the backend already put in
+    // subject_name (F038) — no per-grant path-tree call.
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "department",
@@ -377,11 +346,6 @@ describe("PermissionListTab", () => {
     await waitFor(() => {
       expect(screen.getByText("研发部")).toBeInTheDocument();
     });
-    expect(mockedGetResourceGrantDepartmentPathTreeApi).toHaveBeenCalledWith(
-      "knowledge_space",
-      "space-1",
-      7,
-    );
     fireEvent.click(screen.getByText("action.remove"));
 
     await waitFor(() => {
