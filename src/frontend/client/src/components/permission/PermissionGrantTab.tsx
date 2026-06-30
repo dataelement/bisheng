@@ -189,6 +189,9 @@ export function PermissionGrantTab({
       ? DEFAULT_MODELS.map((model) => ({
         ...model,
         name: localize(`com_permission.level_${model.relation}`),
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
       }))
       : (Array.isArray(relationModels) ? relationModels : []).map((m) => ({
         id: m.id,
@@ -196,6 +199,9 @@ export function PermissionGrantTab({
           ? localize(`com_permission.level_${m.relation}`)
           : m.name,
         relation: m.relation as RelationLevel,
+        permissions: m.permissions,
+        permissions_explicit: m.permissions_explicit,
+        is_system: m.is_system,
       }));
     if (options.length) {
       setModels(options);
@@ -453,6 +459,7 @@ export function PermissionGrantTab({
             value={selectedModelId}
             onChange={setSelectedModelId}
             options={availableModels}
+            resourceType={resourceType}
             className="w-[132px]"
           />
         </div>

@@ -59,6 +59,7 @@ def _install_apps_endpoint_stubs() -> None:
         schemas_module.ChatList = _DummySchema
         schemas_module.FrequentlyUsedChat = _DummySchema
         schemas_module.PortalAgentFavorite = _DummySchema
+        schemas_module.PortalAgentWorkflowsQuery = _DummySchema
         schemas_module.UnifiedResponseModel = _DummySchema
         schemas_module.UsedAppPin = _DummySchema
         schemas_module.resp_200 = lambda data=None, message=None: {'data': data, 'message': message}
@@ -278,6 +279,44 @@ async def test_list_portal_agent_favorites_dedupes_workflow_ids():
 
     mock_get.assert_called_once_with(7, [module.PORTAL_AGENT_FAVORITE_TYPE])
     assert result['data'] == {'workflow_ids': ['wf-a', 'wf-b']}
+
+
+@pytest.mark.asyncio
+async def test_list_portal_agent_workflows_filters_by_use_app_and_preserves_config_order():
+    module = _load_apps_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    apps = [
+        {'id': 'wf-b', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
+        {'id': 'wf-a', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
+        {'id': 'wf-c', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
+    ]
+
+    async def filter_use_app(user, data, permission_id='use_app'):
+        assert permission_id == 'use_app'
+        return [one for one in data if one['id'] != 'wf-b']
+
+    def add_extra_field(user, data):
+        for app in data:
+            app['tags'] = [SimpleNamespace(name=f"{app['id']}-tag")]
+        return data
+
+    with patch.object(module.FlowDao, 'aget_all_apps', new_callable=AsyncMock, return_value=(apps, False), create=True) as mock_list, \
+         patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_use_app), \
+         patch.object(module.WorkFlowService, 'add_extra_field', side_effect=add_extra_field):
+        result = await module.list_portal_agent_workflows(
+            login_user=login_user,
+            data=SimpleNamespace(workflow_ids=['wf-a', 'wf-b', 'wf-a', '', 'wf-c']),
+        )
+
+    mock_list.assert_awaited_once_with(
+        id_list=['wf-a', 'wf-b', 'wf-c'],
+        status=module.FlowStatus.ONLINE.value,
+        flow_type=module.FlowType.WORKFLOW.value,
+        page=0,
+        limit=0,
+    )
+    assert [one['id'] for one in result['data']['workflows']] == ['wf-a', 'wf-c']
+    assert result['data']['workflows'][0]['tags'][0].name == 'wf-a-tag'
 
 
 @pytest.mark.asyncio

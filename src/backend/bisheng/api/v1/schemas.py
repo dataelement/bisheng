@@ -647,6 +647,11 @@ class PortalAgentFavorite(BaseModel):
     workflow_id: str = Field(..., description='Workflow ID to favorite/unfavorite')
 
 
+class PortalAgentWorkflowsQuery(BaseModel):
+    """Schema for querying portal agent workflow metadata"""
+    workflow_ids: List[str] = Field(default_factory=list, description='Workflow IDs configured in portal')
+
+
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
     model_id: int = Field(..., description='embeddingModelsID')

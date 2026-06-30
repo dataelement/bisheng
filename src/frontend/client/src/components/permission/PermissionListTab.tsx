@@ -27,6 +27,7 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
+import { PermissionModelHelpIcon } from "./permissionModelInfo";
 
 // Tooltip that only shows when the wrapped element's text is truncated.
 function TruncatedTooltip({
@@ -98,10 +99,38 @@ interface PermissionListTabProps {
 }
 
 const DEFAULT_MODELS: RelationModelOption[] = [
-  { id: "owner", name: "所有者", relation: "owner" },
-  { id: "manager", name: "可管理", relation: "manager" },
-  { id: "editor", name: "可编辑", relation: "editor" },
-  { id: "viewer", name: "可查看", relation: "viewer" },
+  {
+    id: "owner",
+    name: "所有者",
+    relation: "owner",
+    permissions: [],
+    permissions_explicit: false,
+    is_system: true,
+  },
+  {
+    id: "manager",
+    name: "可管理",
+    relation: "manager",
+    permissions: [],
+    permissions_explicit: false,
+    is_system: true,
+  },
+  {
+    id: "editor",
+    name: "可编辑",
+    relation: "editor",
+    permissions: [],
+    permissions_explicit: false,
+    is_system: true,
+  },
+  {
+    id: "viewer",
+    name: "可查看",
+    relation: "viewer",
+    permissions: [],
+    permissions_explicit: false,
+    is_system: true,
+  },
 ];
 
 const DEFAULT_PERMISSION_API: PermissionApiAdapter = {
@@ -223,6 +252,9 @@ export function PermissionListTab({
       id: m.id,
       name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
       relation: m.relation as RelationLevel,
+      permissions: m.permissions,
+      permissions_explicit: m.permissions_explicit,
+      is_system: m.is_system,
     }));
   }, [grantableModels, localize, useDefaultModels]);
 
@@ -639,7 +671,14 @@ export function PermissionListTab({
                                     void handleModify(entry, model.id);
                                   }}
                                 >
-                                  {model.name}
+                                  <span className="flex min-w-0 items-center">
+                                    <span className="truncate">{model.name}</span>
+                                    <PermissionModelHelpIcon
+                                      resourceType={resourceType}
+                                      model={model}
+                                      localize={localize}
+                                    />
+                                  </span>
                                 </DropdownMenuItem>
                               );
                             })}

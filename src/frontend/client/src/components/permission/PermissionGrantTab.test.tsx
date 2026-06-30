@@ -66,6 +66,24 @@ describe("PermissionGrantTab", () => {
       configurable: true,
       value: ResizeObserverMock,
     });
+    if (!window.PointerEvent) {
+      Object.defineProperty(window, "PointerEvent", {
+        configurable: true,
+        value: MouseEvent,
+      });
+    }
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = jest.fn();
+    }
+    if (!Element.prototype.hasPointerCapture) {
+      Element.prototype.hasPointerCapture = jest.fn(() => false);
+    }
+    if (!Element.prototype.setPointerCapture) {
+      Element.prototype.setPointerCapture = jest.fn();
+    }
+    if (!Element.prototype.releasePointerCapture) {
+      Element.prototype.releasePointerCapture = jest.fn();
+    }
   });
 
   beforeEach(() => {
@@ -167,6 +185,45 @@ describe("PermissionGrantTab", () => {
 
     expect(screen.queryByText("com_permission.level_manager")).not.toBeInTheDocument();
     expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
+  });
+
+  it("shows file-scoped permission items on grant model help", async () => {
+    mockedGetGrantableRelationModels.mockResolvedValue([
+      {
+        id: "custom_file_editor",
+        name: "File Editor",
+        relation: "editor",
+        permissions: ["rename_file", "view_folder"],
+        permissions_explicit: true,
+        is_system: false,
+      },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await screen.findByText("File Editor");
+    const trigger = screen.getByRole("combobox");
+    trigger.focus();
+    fireEvent.keyDown(trigger, {
+      key: "ArrowDown",
+      code: "ArrowDown",
+      keyCode: 40,
+    });
+
+    const helpIcons = await screen.findAllByTestId("permission-model-help-knowledge_file-custom_file_editor");
+    expect(helpIcons.length).toBeGreaterThan(0);
+    helpIcons.forEach((help) => {
+      expect(help).toHaveAttribute(
+        "data-permission-summary",
+        "com_permission.permission_item_rename_file",
+      );
+    });
   });
 
   it("submits the current include-children checkbox value for department grants", async () => {

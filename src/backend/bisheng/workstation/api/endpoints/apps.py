@@ -7,6 +7,7 @@ from bisheng.api.v1.schemas import (
     ChatList,
     FrequentlyUsedChat,
     PortalAgentFavorite,
+    PortalAgentWorkflowsQuery,
     UnifiedResponseModel,
     UsedAppPin,
     resp_200,
@@ -212,6 +213,33 @@ async def list_portal_agent_favorites(login_user=LoginUserDep):
         seen.add(workflow_id)
         workflow_ids.append(workflow_id)
     return resp_200(data={'workflow_ids': workflow_ids})
+
+
+@router.post('/app/portal-agent-workflows')
+async def list_portal_agent_workflows(login_user=LoginUserDep, data: PortalAgentWorkflowsQuery = Body(...)):
+    workflow_ids = []
+    seen = set()
+    for raw_workflow_id in data.workflow_ids:
+        workflow_id = str(raw_workflow_id or '').strip()
+        if not workflow_id or workflow_id in seen:
+            continue
+        seen.add(workflow_id)
+        workflow_ids.append(workflow_id)
+    if not workflow_ids:
+        return resp_200(data={'workflows': []})
+
+    apps, _ = await FlowDao.aget_all_apps(
+        id_list=workflow_ids,
+        status=FlowStatus.ONLINE.value,
+        flow_type=FlowType.WORKFLOW.value,
+        page=0,
+        limit=0,
+    )
+    apps = await WorkFlowService.filter_apps_by_permission_id(login_user, apps, 'use_app')
+    app_order = {workflow_id: idx for idx, workflow_id in enumerate(workflow_ids)}
+    apps.sort(key=lambda app: app_order.get(str(app.get('id')), len(workflow_ids)))
+    apps = WorkFlowService.add_extra_field(login_user, apps)
+    return resp_200(data={'workflows': apps})
 
 
 @router.post('/app/portal-agent-favorites')

@@ -302,6 +302,56 @@ describe("Client PermissionListTab", () => {
     expect(screen.queryByRole("button", { name: "com_permission.level_owner" })).not.toBeInTheDocument();
   });
 
+  it("shows folder-scoped permission items on modify model help", async () => {
+    mockedGetGrantableRelationModels.mockResolvedValue([
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+      {
+        id: "custom_folder_editor",
+        name: "Folder Editor",
+        relation: "editor",
+        permissions: ["rename_folder", "view_file"],
+        permissions_explicit: true,
+        is_system: false,
+      },
+    ]);
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="folder"
+        resourceId="folder-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+
+    const help = screen.getByTestId("permission-model-help-folder-custom_folder_editor");
+    expect(help).toHaveAttribute(
+      "data-permission-summary",
+      "com_permission.permission_item_rename_folder",
+    );
+  });
+
   it("deletes department include-children grants across subtree and exact variants", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {
