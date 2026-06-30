@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 纯 What；用户确认 2026-06-29 |
 | design.md | ✅ 已评审 | 决策 1–12 + 接手必读；用户确认 2026-06-29；接手第一入口 |
 | tasks.md | ✅ 已拆解 | 本文件 |
-| 实现 | 🟡 进行中 | 8 / 16（后端全完：T000-T006；前端 T007 可复用懒加载件已落地，T008-T011 消费方迁移待续） |
+| 实现 | 🟡 进行中 | 10 / 16（后端全完 T000-T006；前端 T007 件 + T008 两棵导航树 + T009 共享 picker 已落地&类型干净；T009b/T010/T011/T012/T013 待续，含 5 个测试需补 QueryClientProvider+懒加载断言） |
 
 ---
 
@@ -95,19 +95,20 @@
 
 ### Wave 5 —— platform 消费方迁移（每项独立小 PR）
 
-- [ ] **T008**: 迁移导航树（部门管理页 + 系统管理-部门）
-  **文件**: `pages/DepartmentPage/index.tsx`、`pages/DepartmentPage/components/DepartmentTree.tsx`、`pages/SystemPage/components/Departments.tsx`
-  **逻辑**: 接入 T007 件；移除整树加载与客户端递归过滤；变更后用 react-query 失效受影响父层（design 决策 12）
+- [x] **T008**: 迁移导航树（部门管理页 + 系统管理-部门）✅ `f1275c9d4`（类型干净，net -3 tsc）
+  **文件**: `pages/DepartmentPage/index.tsx`、`pages/SystemPage/components/Departments.tsx`（旧 `DepartmentTree.tsx` 弃用，留待 T012 删）+ 连带 `MemberTable.tsx`(祖先链改 path-tree 取)
+  **逻辑**: 接入 T007 件；移除整树加载与客户端递归过滤；选中节点由 hook 实时派生(rename/move 后右栏同步)；定位用 `getDepartmentApi(dept_id)→id→reveal`；变更后 `reloadLayer`/`refreshAll` 失效受影响父层（决策 12）
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-16
   **手动验证**: 5 万环境打开秒出根层、展开取子层、搜索定位、建/移/归档后受影响父层刷新
   **依赖**: T007
 
-- [ ] **T009**: 迁移共享 picker `TreeDepartmentSelect`（仅改内部）
-  **文件**: `bs-comp/department/TreeDepartmentSelect.tsx`（其调用方 创建部门/移动部门/角色范围/成员主属部门编辑 的 props 用法不变 → 爆炸半径最小）
-  **逻辑**: 内部改懒加载 + 搜索 + 定位回显（当前已选值用 `reveal`）；默认 `include_archived=false`
+- [x] **T009**: 迁移共享 picker `TreeDepartmentSelect`（仅改内部）✅ `f1275c9d4`
+  **文件**: `bs-comp/department/TreeDepartmentSelect.tsx`（自取数；调用方仅去掉 `nodes`/`loading`/`showMemberCount` props）+ 4 调用方 `CreateDepartmentDialog`/`DepartmentSettings`(移动,`excludeSubtreePath=dept.path`)/`OrganizationMemberEditDialog`/`Roles`
+  **逻辑**: 内部 `useLazyDepartmentTree`(autoLoad=open) + 复用 `LazyDepartmentTree`(wheelScrollFix)；trigger label 用 path-tree 取全路径；当前值 `reveal` 展开高亮；`include_archived=false`(归档值仍可经 path-tree 回显, AC-18)
   **覆盖 AC**: AC-10, AC-17, AC-18
   **手动验证**: 父部门选择/移动/角色范围/成员主属部门编辑 各打开秒开、可搜、回显当前值、不含归档
   **依赖**: T007
+  **⚠️ 测试欠账**: `departmentPageRefresh`/`systemDepartmentsArchivedDelete`/`departmentSettingsPayload` 等断言旧整树流且渲染未包 `QueryClientProvider`(react-query 必需)→ 5 个测试需补 provider 包裹 + 改懒加载断言。生产 OK(`src/index.tsx` 已全局 provider)。
 
 - [ ] **T009b**: 迁移其余 platform 独立 picker
   **文件**: `bs-comp/selectComponent/DepartmentUsersSelect.tsx`、`bs-comp/permission/SubjectSearchDepartment.tsx`(platform 版)、`BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx`

@@ -98,11 +98,7 @@ describe("DepartmentSettings payload", () => {
 
   it("does not submit admin_user_ids when only the name changes", async () => {
     render(
-      <DepartmentSettings
-        dept={dept}
-        tree={[{ ...dept, id: 1, dept_id: "BS@root", name: "Root", parent_id: null, path: "/1/", children: [dept] }]}
-        onChanged={vi.fn()}
-      />,
+      <DepartmentSettings dept={dept} onChanged={vi.fn()} />,
     );
 
     const input = await screen.findByDisplayValue("Engineering");
