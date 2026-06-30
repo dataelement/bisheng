@@ -28,6 +28,10 @@ export interface UseLazyDepartmentTreeOptions {
   /** After the root layer loads, also expand each root once (mirrors the old nav
    *  tree's "first level expanded"). Default false. */
   autoExpandRoots?: boolean
+  /** Hide a materialized-path subtree (browse + search). Used by the "move
+   *  department" picker to forbid selecting the moving dept or its descendants
+   *  as the new parent (path prefix = the moving dept's own path). */
+  excludeSubtreePath?: string
 }
 
 export interface LazyDepartmentTree {
@@ -42,6 +46,10 @@ export interface LazyDepartmentTree {
   /** Invalidate + refetch one layer after a create/move/archive (AC-05). Pass
    *  null for the root layer. */
   reloadLayer: (parentId: number | null) => Promise<void>
+  /** Invalidate + refetch every currently-loaded layer (root + expanded), keeping
+   *  expand state. Use after a mutation whose affected parents aren't all known
+   *  (e.g. a move refreshes both old and new parent if both are loaded). */
+  refreshAll: () => Promise<void>
   // search
   keyword: string
   setKeyword: (kw: string) => void
@@ -61,6 +69,14 @@ function collectMatched(roots: DepartmentTreeNode[], out: Set<number>) {
   }
 }
 
+/** Recursively drop nodes inside an excluded materialized-path subtree. */
+function pruneExcluded(nodes: DepartmentTreeNode[], excludePath?: string): DepartmentTreeNode[] {
+  if (!excludePath) return nodes
+  return nodes
+    .filter((n) => !(n.path && n.path.startsWith(excludePath)))
+    .map((n) => (n.children?.length ? { ...n, children: pruneExcluded(n.children, excludePath) } : n))
+}
+
 /** Follow a single-path pruned tree (locate response) down to its leaf, collecting
  *  the ancestor→target id chain. */
 function chainOf(roots: DepartmentTreeNode[]): number[] {
@@ -76,7 +92,7 @@ function chainOf(roots: DepartmentTreeNode[]): number[] {
 export function useLazyDepartmentTree(
   options: UseLazyDepartmentTreeOptions = {}
 ): LazyDepartmentTree {
-  const { includeArchived = false, autoLoad = true, autoExpandRoots = false } = options
+  const { includeArchived = false, autoLoad = true, autoExpandRoots = false, excludeSubtreePath } = options
   const queryClient = useQueryClient()
 
   const [nodeMap, setNodeMap] = useState<Record<number, DepartmentTreeNode>>({})
@@ -107,15 +123,21 @@ export function useLazyDepartmentTree(
     [queryClient, includeArchived]
   )
 
-  const storeLayer = useCallback((parentId: number | null, layer: DepartmentTreeNode[]) => {
-    const key = parentId ?? ROOT_KEY
-    setNodeMap((prev) => {
-      const next = { ...prev }
-      for (const n of layer) next[n.id] = { ...n, children: [] }
-      return next
-    })
-    setChildIds((prev) => ({ ...prev, [key]: layer.map((n) => n.id) }))
-  }, [])
+  const storeLayer = useCallback(
+    (parentId: number | null, layer: DepartmentTreeNode[]) => {
+      const key = parentId ?? ROOT_KEY
+      const visible = excludeSubtreePath
+        ? layer.filter((n) => !(n.path && n.path.startsWith(excludeSubtreePath)))
+        : layer
+      setNodeMap((prev) => {
+        const next = { ...prev }
+        for (const n of visible) next[n.id] = { ...n, children: [] }
+        return next
+      })
+      setChildIds((prev) => ({ ...prev, [key]: visible.map((n) => n.id) }))
+    },
+    [excludeSubtreePath]
+  )
 
   const loadChildren = useCallback(
     async (parentId: number): Promise<void> => {
@@ -158,10 +180,24 @@ export function useLazyDepartmentTree(
     [queryClient, includeArchived, fetchLayer, storeLayer]
   )
 
-  // Initial root layer.
+  const refreshAll = useCallback(async () => {
+    await queryClient.invalidateQueries(["dept-children"])
+    const keys = Object.keys(childIdsRef.current).map(Number)
+    for (const key of keys) {
+      const parentId = key === ROOT_KEY ? null : key
+      const layer = await fetchLayer(parentId)
+      if (layer) storeLayer(parentId, layer)
+    }
+  }, [queryClient, fetchLayer, storeLayer])
+
+  // Root layer — fetched when enabled (autoLoad). Tying autoLoad to e.g. a
+  // popover's open state defers the request until a picker is actually opened,
+  // so closed pickers on a page cost nothing.
   useEffect(() => {
     if (!autoLoad) return
+    if (childIdsRef.current[ROOT_KEY]) return // already loaded
     let cancelled = false
+    setInitialLoading(true)
     ;(async () => {
       const roots = await fetchLayer(null)
       if (cancelled || !roots) {
@@ -179,7 +215,7 @@ export function useLazyDepartmentTree(
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeArchived])
+  }, [autoLoad, includeArchived])
 
   // Debounced server-side search.
   useEffect(() => {
@@ -239,10 +275,11 @@ export function useLazyDepartmentTree(
     initialLoading,
     toggle,
     reloadLayer,
+    refreshAll,
     keyword,
     setKeyword,
     searchMode: !!keyword.trim(),
-    searchRoots: searchResult?.roots ?? [],
+    searchRoots: pruneExcluded(searchResult?.roots ?? [], excludeSubtreePath),
     searching,
     truncated: searchResult?.truncated ?? false,
     matchedIds,

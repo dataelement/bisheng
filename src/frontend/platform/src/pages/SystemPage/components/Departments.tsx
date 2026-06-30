@@ -1,18 +1,18 @@
-import { useCallback, useContext, useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { Loader2 } from "lucide-react"
-import { getDepartmentTreeApi } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { DepartmentTreeNode } from "@/types/api/department"
+import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
-import { DepartmentTree } from "@/pages/DepartmentPage/components/DepartmentTree"
-import { MemberTable } from "@/pages/DepartmentPage/components/MemberTable"
-import { DepartmentSettings } from "@/pages/DepartmentPage/components/DepartmentSettings"
-import { DepartmentTrafficControl } from "@/pages/DepartmentPage/components/DepartmentTrafficControl"
-import { CreateDepartmentDialog } from "@/pages/DepartmentPage/components/CreateDepartmentDialog"
-import { MountTenantDialog } from "@/pages/DepartmentPage/components/MountTenantDialog"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
+import { getDepartmentApi } from "@/controllers/API/department"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { CreateDepartmentDialog } from "@/pages/DepartmentPage/components/CreateDepartmentDialog"
+import { DepartmentSettings } from "@/pages/DepartmentPage/components/DepartmentSettings"
+import { DepartmentTrafficControl } from "@/pages/DepartmentPage/components/DepartmentTrafficControl"
+import { MemberTable } from "@/pages/DepartmentPage/components/MemberTable"
+import { MountTenantDialog } from "@/pages/DepartmentPage/components/MountTenantDialog"
+import { DepartmentTreeNode } from "@/types/api/department"
+import { Plus } from "lucide-react"
+import { useCallback, useContext, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 export default function Departments() {
   const { t } = useTranslation()
@@ -21,73 +21,38 @@ export default function Departments() {
   /** 与系统页「组织同步」一致：仅平台超级管理员（role=admin） */
   const isSuperAdmin = user?.role === "admin"
   const showTrafficControlTab = isSuperAdmin && appConfig.isPro
-  const [tree, setTree] = useState<DepartmentTreeNode[]>([])
-  // Start in loading so the first paint shows a spinner — /departments/tree
-  // can take many seconds at scale (tens of thousands of departments).
-  const [loadingTree, setLoadingTree] = useState(true)
-  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
-  const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+
+  // F038: lazy management nav tree (see DepartmentPage/index for the rationale).
+  const tree = useLazyDepartmentTree({ includeArchived: true, autoExpandRoots: true })
+
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedSnapshot, setSelectedSnapshot] = useState<DepartmentTreeNode | null>(null)
+  const selectedDept = (selectedId != null ? tree.getNode(selectedId) : null) ?? selectedSnapshot
+  const selectedDeptId = selectedDept?.dept_id ?? null
+
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
   const [mountTarget, setMountTarget] = useState<{ id: number; name: string } | null>(null)
-  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
   const [memberHighlightUserId, setMemberHighlightUserId] = useState<number | null>(null)
-  const [treeScrollRequest, setTreeScrollRequest] = useState<{
-    deptId: string
-    requestId: number
-  } | null>(null)
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
   const [leftPaneWidth, setLeftPaneWidth] = useState(280)
   const isResizingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const selectFallbackDepartment = useCallback((nodes: DepartmentTreeNode[]) => {
-    const fallback = nodes[0] ?? null
-    setSelectedDeptId(fallback?.dept_id ?? null)
-    setSelectedDept(fallback)
+  const selectNode = useCallback((node: DepartmentTreeNode) => {
+    setSelectedId(node.id)
+    setSelectedSnapshot(node)
   }, [])
-
-  const loadTree = useCallback((removedDeptId?: string) => {
-    setLoadingTree(true)
-    captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
-      .then((res) => {
-        if (res) {
-          setTree(res)
-          if (removedDeptId && selectedDeptId === removedDeptId) {
-            selectFallbackDepartment(res)
-            return
-          }
-          if (!selectedDeptId && res.length > 0) {
-            setSelectedDeptId(res[0].dept_id)
-            setSelectedDept(res[0])
-          }
-        }
-      })
-      .finally(() => {
-        setLoadingTree(false)
-      })
-  }, [selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
-    loadTree()
-  }, [])
-
-  const findNode = useCallback(
-    (nodes: DepartmentTreeNode[], deptId: string): DepartmentTreeNode | null => {
-      for (const n of nodes) {
-        if (n.dept_id === deptId) return n
-        const found = findNode(n.children || [], deptId)
-        if (found) return found
-      }
-      return null
-    },
-    []
-  )
-
-  const handleSelect = useCallback((node: DepartmentTreeNode) => {
-    setSelectedDeptId(node.dept_id)
-    setSelectedDept(node)
-  }, [])
+    if (selectedId == null && tree.rootIds.length > 0) {
+      const first = tree.getNode(tree.rootIds[0])
+      if (first) selectNode(first)
+    }
+  }, [tree.rootIds, selectedId, tree, selectNode])
 
   const handleCreateClick = useCallback((parentId?: number) => {
     setCreateParentId(parentId ?? null)
@@ -96,8 +61,8 @@ export default function Departments() {
 
   const handleCreated = useCallback(() => {
     setCreateOpen(false)
-    loadTree()
-  }, [loadTree])
+    void tree.reloadLayer(createParentId)
+  }, [tree, createParentId])
 
   const handleMarkAsTenant = useCallback((deptId: number, deptName: string) => {
     setMountTarget({ id: deptId, name: deptName })
@@ -105,56 +70,65 @@ export default function Departments() {
 
   const handleMounted = useCallback(() => {
     setMountTarget(null)
-    loadTree()
-  }, [loadTree])
+    void tree.refreshAll()
+  }, [tree])
 
-  const handleTreeChange = useCallback((removedDeptId?: string) => {
-    loadTree(removedDeptId)
-    setMembersRefreshSignal((n) => n + 1)
-  }, [loadTree])
-
-  useEffect(() => {
-    if (selectedDeptId && tree.length > 0) {
-      const node = findNode(tree, selectedDeptId)
-      if (node) {
-        setSelectedDept(node)
-      } else {
-        selectFallbackDepartment(tree)
+  const handleTreeChange = useCallback(
+    (removedDeptId?: string) => {
+      void tree.refreshAll()
+      setMembersRefreshSignal((n) => n + 1)
+      if (removedDeptId && selectedDeptId === removedDeptId) {
+        setSelectedId(null)
+        setSelectedSnapshot(null)
       }
-    }
-    if (selectedDeptId && tree.length === 0) {
-      setSelectedDeptId(null)
-      setSelectedDept(null)
-    }
-  }, [tree, selectedDeptId, findNode, selectFallbackDepartment])
-
-  const handleLocateMemberFromGlobal = useCallback(
-    ({
-      primaryDeptDeptId,
-      userId,
-    }: {
-      primaryDeptDeptId: string
-      userId: number
-    }) => {
-      setSelectedDeptId(primaryDeptDeptId)
-      const node = findNode(tree, primaryDeptDeptId)
-      if (node) setSelectedDept(node)
-      setMemberHighlightUserId(userId)
-      setTreeScrollRequest((prev) => ({
-        deptId: primaryDeptDeptId,
-        requestId: (prev?.requestId ?? 0) + 1,
-      }))
     },
-    [tree, findNode]
+    [tree, selectedDeptId]
   )
 
-  const handleTreeScrollHandled = useCallback(() => {
-    setTreeScrollRequest(null)
-  }, [])
+  const handleLocateMemberFromGlobal = useCallback(
+    async ({ primaryDeptDeptId, userId }: { primaryDeptDeptId: string; userId: number }) => {
+      setMemberHighlightUserId(userId)
+      const detail = await captureAndAlertRequestErrorHoc(getDepartmentApi(primaryDeptDeptId))
+      if (!detail) return
+      await tree.reveal(detail.id)
+      const node = tree.getNode(detail.id)
+      if (node) selectNode(node)
+      window.setTimeout(() => {
+        rowRefs.current.get(primaryDeptDeptId)?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      }, 80)
+    },
+    [tree, selectNode]
+  )
 
-  const handleMemberHighlightConsumed = useCallback(() => {
-    setMemberHighlightUserId(null)
-  }, [])
+  const handleMemberHighlightConsumed = useCallback(() => setMemberHighlightUserId(null), [])
+
+  const renderRowSuffix = useCallback(
+    (node: DepartmentTreeNode) => (
+      <>
+        {node.is_tenant_root && (
+          <span
+            className="mr-1 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary"
+            title={t("bs:tenant.mountedBadge", { defaultValue: "子租户挂载点" })}
+          >
+            {t("bs:tenant.mountedTag", { defaultValue: "子租户" })}
+          </span>
+        )}
+        {node.status !== "archived" && (
+          <button
+            className="hidden h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-gray-200 group-hover:flex"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleCreateClick(node.id)
+            }}
+            title={t("bs:department.create")}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </>
+    ),
+    [handleCreateClick, t]
+  )
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -164,7 +138,6 @@ export default function Departments() {
       const rect = container.getBoundingClientRect()
       const relativeX = event.clientX - rect.left
       const MIN_WIDTH = 240
-      // Keep enough width for right content and operation buttons.
       const MAX_WIDTH = Math.min(520, Math.max(MIN_WIDTH, rect.width - 320))
       setLeftPaneWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, relativeX)))
     }
@@ -187,24 +160,17 @@ export default function Departments() {
   return (
     <div ref={containerRef} className="flex h-[calc(100vh-140px)]">
       {/* Left tree panel */}
-      <div
-        className="flex min-w-[240px] flex-col border-r pr-4 pt-2"
-        style={{ width: leftPaneWidth }}
-      >
-        {loadingTree ? (
-          <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <DepartmentTree
-            data={tree}
-            selectedDeptId={selectedDeptId}
-            onSelect={handleSelect}
-            onCreateChild={handleCreateClick}
-            scrollRequest={treeScrollRequest}
-            onScrollRequestHandled={handleTreeScrollHandled}
-          />
-        )}
+      <div className="flex min-w-[240px] flex-col border-r pr-4 pt-2" style={{ width: leftPaneWidth }}>
+        <LazyDepartmentTree
+          controller={tree}
+          selectedDeptId={selectedDeptId}
+          onSelect={selectNode}
+          renderRowSuffix={renderRowSuffix}
+          rowRef={(deptId, el) => {
+            if (el) rowRefs.current.set(deptId, el)
+            else rowRefs.current.delete(deptId)
+          }}
+        />
         <button
           className="mt-4 w-full rounded-md border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-primary hover:text-primary"
           onClick={() => handleCreateClick()}
@@ -231,8 +197,6 @@ export default function Departments() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold">{selectedDept.name}</h3>
-                {/* F027 AC-14: per-department member-count badge removed; the
-                    tree-node response no longer carries this field. */}
               </div>
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>
@@ -247,7 +211,6 @@ export default function Departments() {
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
                 dept={selectedDept}
-                tree={tree}
                 isArchived={selectedDept.status === "archived"}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
@@ -259,7 +222,6 @@ export default function Departments() {
             <TabsContent value="settings">
               <DepartmentSettings
                 dept={selectedDept}
-                tree={tree}
                 onChanged={handleTreeChange}
                 onMarkAsTenant={multiTenantEnabled && user?.is_global_super ? handleMarkAsTenant : undefined}
               />
@@ -279,7 +241,6 @@ export default function Departments() {
 
       {createOpen && (
         <CreateDepartmentDialog
-          tree={tree}
           defaultParentId={createParentId}
           onCreated={handleCreated}
           onClose={() => setCreateOpen(false)}

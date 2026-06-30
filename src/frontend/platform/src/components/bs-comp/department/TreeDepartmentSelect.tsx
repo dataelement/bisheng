@@ -1,26 +1,26 @@
 /**
  * 树状部门选择器（TreeDepartmentSelect）
  *
- * 用于在弹层中按组织架构树选择部门，支持搜索筛选、展开/折叠。
- * 数据源为 `GET /api/v1/departments/tree` 返回的 `DepartmentTreeNode[]`。
+ * 用于在弹层中按组织架构树选择部门，支持服务端搜索、按层懒加载、按 id 定位回显。
+ * F038：数据不再由父组件传整树，而是组件内部经 `useLazyDepartmentTree` 懒加载
+ * （`GET /api/v1/departments/{children,search,{id}/path-tree}`），大组织下秒开。
  */
-import { SearchInput } from "@/components/bs-ui/input"
 import { Button } from "@/components/bs-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { getDepartmentPathTreeApi } from "@/controllers/API/department"
+import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { cn } from "@/utils"
-import { DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
-import type { MouseEvent, ReactNode } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { ChevronDown } from "lucide-react"
+import type { ReactNode } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-const TREE_INDENT_PER_LEVEL = 22
-const DEFAULT_EXPAND_MAX_DEPTH = 1
+import { LazyDepartmentTree } from "./LazyDepartmentTree"
+import { useLazyDepartmentTree } from "./useLazyDepartmentTree"
 
 export type TreeDepartmentSelectValue = number | null
 
 export interface TreeDepartmentSelectProps {
-  nodes: DepartmentTreeNode[]
   value: TreeDepartmentSelectValue
   onChange: (id: TreeDepartmentSelectValue, node: DepartmentTreeNode | null) => void
   /** 为 true 时可在面板顶部选择「无部门」（value 置为 null） */
@@ -35,22 +35,16 @@ export interface TreeDepartmentSelectProps {
   emptyText?: ReactNode
   /** 搜索框占位；默认使用部门模块文案 */
   searchPlaceholder?: string
-  /** 列表中是否显示成员数 */
-  showMemberCount?: boolean
   /**
    * Radix Popover `modal`。在 Dialog 内嵌使用时请传 `false`，避免多层焦点陷阱导致无法操作树节点。
    * @default true
    */
   modal?: boolean
-  /**
-   * Set true while the parent is still fetching department data. The popover
-   * then shows a loading row instead of the "no department" empty hint —
-   * relevant at large scale where /api/v1/departments/tree can take seconds.
-   */
-  loading?: boolean
+  /** 物化路径前缀；隐藏该子树（移动部门时禁止选自身/后代作为新父级）。 */
+  excludeSubtreePath?: string
 }
 
-/** 在树中按主键 id 查找节点 */
+/** 在树中按主键 id 查找节点（保留供仍持有整树的调用方使用）。 */
 export function findDepartmentNodeById(
   nodes: DepartmentTreeNode[],
   id: number
@@ -97,24 +91,19 @@ export function findDepartmentAncestorIds(
   return null
 }
 
-function collectDefaultExpandedIds(
-  tree: DepartmentTreeNode[],
-  maxDepth: number,
-  currentDepth = 0
-): number[] {
-  const ids: number[] = []
-  for (const n of tree) {
-    if (currentDepth >= maxDepth) continue
-    ids.push(n.id)
-    if (n.children?.length) {
-      ids.push(...collectDefaultExpandedIds(n.children, maxDepth, currentDepth + 1))
-    }
+/** Join a single-path pruned tree (path-tree response) into a `a / b / c` label. */
+function pathLabelOf(tree: DepartmentSearchResult | null): string {
+  if (!tree) return ""
+  const names: string[] = []
+  let cur: DepartmentTreeNode | undefined = tree.roots[0]
+  while (cur) {
+    names.push(cur.name)
+    cur = cur.children?.[0]
   }
-  return ids
+  return names.join(" / ")
 }
 
 export function TreeDepartmentSelect({
-  nodes,
   value,
   onChange,
   allowNone = false,
@@ -126,156 +115,55 @@ export function TreeDepartmentSelect({
   contentClassName,
   emptyText,
   searchPlaceholder,
-  showMemberCount = false,
   modal = true,
-  loading = false,
+  excludeSubtreePath,
 }: TreeDepartmentSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [keyword, setKeyword] = useState("")
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [labelPath, setLabelPath] = useState("")
+  // Pickers never offer archived departments as new picks (the backend excludes
+  // them from children/search); an archived current value can still be echoed
+  // via path-tree (AC-18). Load only while the popover is open.
+  const tree = useLazyDepartmentTree({ includeArchived: false, autoLoad: open, excludeSubtreePath })
 
   const ph = placeholder ?? t("system.treeDepartmentSelectPlaceholder")
   const searchPh = searchPlaceholder ?? t("bs:department.search")
   const noneText = noneLabel ?? t("system.scopeGlobalRole")
+  const displayLabel = value == null ? (allowNone ? String(noneText) : ph) : labelPath || ph
+  const selectedDeptId = value != null ? tree.getNode(value)?.dept_id ?? null : null
 
-  const collectDefaultExpandedIdsCb = useCallback(
-    (tree: DepartmentTreeNode[], maxDepth: number, currentDepth = 0): number[] =>
-      collectDefaultExpandedIds(tree, maxDepth, currentDepth),
-    []
-  )
-
+  // Reveal (expand + highlight) the current value each time the popover opens.
   useEffect(() => {
-    if (!open || !nodes.length) return
-    setExpanded(() => {
-      const next = new Set<number>()
-      collectDefaultExpandedIdsCb(nodes, DEFAULT_EXPAND_MAX_DEPTH).forEach((id) => next.add(id))
-      if (value != null) {
-        const chain = findDepartmentAncestorIds(nodes, value)
-        if (chain) chain.forEach((id) => next.add(id))
-      }
-      return next
-    })
-  }, [open, value, nodes, collectDefaultExpandedIdsCb])
+    if (open && value != null) void tree.reveal(value)
+    if (!open) tree.setKeyword("")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, value])
 
+  // Trigger label = the full root→value name path (one path-tree fetch, works
+  // even for a deep or archived current value without loading the whole tree).
   useEffect(() => {
-    if (!open) setKeyword("")
-  }, [open])
-
-  const matchesKeyword = useCallback(
-    (node: DepartmentTreeNode): boolean => {
-      if (!keyword) return true
-      const lower = keyword.toLowerCase()
-      if (node.name.toLowerCase().includes(lower)) return true
-      return (node.children || []).some(matchesKeyword)
-    },
-    [keyword]
-  )
-
-  useEffect(() => {
-    if (!keyword || !nodes.length) return
-    const ids = new Set<number>()
-    const collect = (arr: DepartmentTreeNode[]) => {
-      for (const n of arr) {
-        if (matchesKeyword(n) && n.children?.length) {
-          ids.add(n.id)
-          collect(n.children)
-        }
-      }
-    }
-    collect(nodes)
-    setExpanded((prev) => new Set([...prev, ...ids]))
-  }, [keyword, nodes, matchesKeyword])
-
-  const displayLabel = useMemo(() => {
     if (value == null) {
-      return allowNone ? String(noneText) : ph
+      setLabelPath("")
+      return
     }
-    const path = getDepartmentDisplayPath(nodes, value)
-    return path || ph
-  }, [value, nodes, allowNone, noneText, ph])
-
-  const toggleExpand = useCallback((id: number, e: MouseEvent) => {
-    e.stopPropagation()
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+    let cancelled = false
+    captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(value)).then((res) => {
+      if (!cancelled) setLabelPath(pathLabelOf((res as DepartmentSearchResult | null) ?? null))
     })
-  }, [])
+    return () => {
+      cancelled = true
+    }
+  }, [value])
 
-  const handlePickNode = useCallback(
-    (node: DepartmentTreeNode) => {
-      onChange(node.id, node)
-      setOpen(false)
-    },
-    [onChange]
-  )
+  const handlePick = (node: DepartmentTreeNode) => {
+    onChange(node.id, node)
+    setOpen(false)
+  }
 
-  const handlePickNone = useCallback(() => {
+  const handlePickNone = () => {
     onChange(null, null)
     setOpen(false)
-  }, [onChange])
-
-  const renderNode = useMemo(() => {
-    const Render = ({ node, depth }: { node: DepartmentTreeNode; depth: number }) => {
-      if (!matchesKeyword(node)) return null
-      if (node.status === "archived") return null
-      const hasChildren = Boolean(node.children?.length)
-      const isExpanded = expanded.has(node.id)
-      const isSelected = value != null && node.id === value
-      const gutterWidth = depth * TREE_INDENT_PER_LEVEL
-
-      return (
-        <div key={node.id}>
-          <div
-            role="option"
-            aria-selected={isSelected}
-            className={cn(
-              "group flex cursor-pointer items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent",
-              isSelected && "bg-accent font-medium",
-            )}
-            onClick={() => handlePickNode(node)}
-          >
-            <div className="relative shrink-0 self-stretch" style={{ width: gutterWidth }} aria-hidden>
-              {depth > 0 && (
-                <span
-                  className="pointer-events-none absolute bottom-1 right-0 top-1 w-px bg-border"
-                  aria-hidden
-                />
-              )}
-            </div>
-            <span
-              className="mr-1 flex h-4 w-4 shrink-0 items-center justify-center"
-              onClick={(e) => hasChildren && toggleExpand(node.id, e)}
-            >
-              {hasChildren ? (
-                isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                )
-              ) : (
-                <span className="block h-3.5 w-3.5" aria-hidden />
-              )}
-            </span>
-            <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate">{node.name}</span>
-            {/* F027 AC-14: per-department member count removed from the tree
-                response; the `showMemberCount` prop is retained as a no-op so
-                callers don't need to change yet (clean up in a follow-up). */}
-          </div>
-          {hasChildren && isExpanded && (
-            <div>{node.children!.map((child) => <Render key={child.id} node={child} depth={depth + 1} />)}</div>
-          )}
-        </div>
-      )
-    }
-    return Render
-  }, [expanded, value, matchesKeyword, toggleExpand, showMemberCount, handlePickNode])
-
-  const TreeNode = renderNode
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={modal}>
@@ -288,7 +176,7 @@ export function TreeDepartmentSelect({
             className={cn(
               "h-9 w-full justify-between px-3 font-normal text-foreground hover:bg-background",
               !value && !allowNone && "text-muted-foreground",
-              triggerClassName,
+              triggerClassName
             )}
             aria-expanded={open}
             aria-haspopup="listbox"
@@ -308,7 +196,7 @@ export function TreeDepartmentSelect({
         sideOffset={4}
         className={cn(
           "max-h-[min(70vh,420px)] w-[min(100vw-2rem,420px)] max-w-[min(100vw-2rem,420px)] p-2",
-          contentClassName,
+          contentClassName
         )}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
@@ -319,47 +207,23 @@ export function TreeDepartmentSelect({
               role="option"
               aria-selected={value == null}
               className={cn(
-                "w-full rounded-md px-2 py-2 text-left text-sm hover:bg-accent",
-                value == null && "bg-accent font-medium",
+                "w-full shrink-0 rounded-md px-2 py-2 text-left text-sm hover:bg-accent",
+                value == null && "bg-accent font-medium"
               )}
               onClick={handlePickNone}
             >
               {noneText}
             </button>
           )}
-          {loading ? (
-            <div className="flex justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : nodes.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              {emptyText ?? t("system.treeDepartmentSelectEmpty")}
-            </p>
-          ) : (
-            <>
-              <SearchInput
-                placeholder={searchPh}
-                className="mb-1 shrink-0"
-                onChange={(e) => setKeyword(e.target.value)}
-              />
-              <div
-                className="min-h-0 flex-1 overflow-y-auto pr-1"
-                // Mirror Radix Select's viewport trick: when this popover is
-                // nested inside a Radix Dialog, react-remove-scroll captures
-                // wheel events on the document and preventDefault()s native
-                // scrolling for anything outside the Dialog subtree. The
-                // bubble-phase handler still fires, so we drive scrollTop
-                // ourselves to keep mouse-wheel working.
-                onWheel={(e) => {
-                  e.currentTarget.scrollTop += e.deltaY
-                }}
-              >
-                {nodes.map((node) => (
-                  <TreeNode key={node.id} node={node} depth={0} />
-                ))}
-              </div>
-            </>
-          )}
+          <LazyDepartmentTree
+            controller={tree}
+            selectedDeptId={selectedDeptId}
+            onSelect={handlePick}
+            searchPlaceholder={searchPh}
+            emptyHint={emptyText ?? t("system.treeDepartmentSelectEmpty")}
+            wheelScrollFix
+            className="min-h-0"
+          />
         </div>
       </PopoverContent>
     </Popover>

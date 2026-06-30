@@ -16,6 +16,8 @@ import {
   getDepartmentAdminsApi,
   getDepartmentApi,
   getDepartmentAssignableRolesApi,
+  getDepartmentChildrenApi,
+  getDepartmentPathTreeApi,
   moveDepartmentApi,
   purgeDepartmentApi,
   restoreDepartmentApi,
@@ -25,14 +27,13 @@ import {
 import { isGuestDepartmentDeptId } from "@/pages/DepartmentPage/constants/systemDepartments"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type { DepartmentAdmin, DepartmentTreeNode } from "@/types/api/department"
+import type { DepartmentAdmin, DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface DepartmentSettingsProps {
   dept: DepartmentTreeNode
-  tree: DepartmentTreeNode[]
   onChanged: (removedDeptId?: string) => void
   /** Open the "mark as Child Tenant" dialog for this department. When undefined
    * (multi-tenant disabled or root dept), the action button is hidden. */
@@ -53,7 +54,7 @@ function sameIdSet(left: Array<number | string>, right: Array<number | string>):
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
 
-export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: DepartmentSettingsProps) {
+export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: DepartmentSettingsProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(dept.name)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
@@ -63,7 +64,11 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [parentIdValue, setParentIdValue] = useState<number | null>(dept.parent_id ?? null)
-  const [parentTreeNodes, setParentTreeNodes] = useState<DepartmentTreeNode[]>([])
+  // F038: the full tree is no longer passed in. ``isVisibleRootDept`` is derived
+  // from the root layer; ``parentDisplayName`` from a path-tree lookup (used for
+  // the read-only parent field when the parent can't be edited).
+  const [isVisibleRootDept, setIsVisibleRootDept] = useState(false)
+  const [parentDisplayName, setParentDisplayName] = useState("-")
 
   const adminSelectValueRef = useRef<DepartmentUserOption[]>([])
 
@@ -71,7 +76,6 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const isArchived = dept.status === "archived"
   const isAbsoluteRootDept = dept.parent_id === null || Number(dept.parent_id) === 0
   // 对部门管理员场景：当前可见树的顶层节点也视为“根节点”（即便全局树里它还有父节点）
-  const isVisibleRootDept = tree.some((n) => n.id === dept.id)
   const isRootDept = isAbsoluteRootDept || isVisibleRootDept
   /** 仅部门名称对第三方同步部门只读；管理员与默认角色仍可保存 */
   const canEditName = !isArchived && !isSynced
@@ -90,50 +94,36 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     adminSelectValueRef.current = adminSelectValue
   }, [adminSelectValue])
 
-  const gatherSubtreeIds = useCallback((node: DepartmentTreeNode | null): Set<number> => {
-    const ids = new Set<number>()
-    if (!node) return ids
-    const walk = (n: DepartmentTreeNode) => {
-      ids.add(n.id)
-      for (const c of n.children || []) walk(c)
-    }
-    walk(node)
-    return ids
-  }, [])
-
-  const findNodeByDeptId = useCallback(
-    (nodes: DepartmentTreeNode[], deptId: string): DepartmentTreeNode | null => {
-      for (const n of nodes) {
-        if (n.dept_id === deptId) return n
-        const found = findNodeByDeptId(n.children || [], deptId)
-        if (found) return found
+  // F038: resolve "is this the top of the viewer's visible tree?" from the root
+  // layer, and the parent's display name from a path-tree lookup — replacing the
+  // walks over a full tree that's no longer passed in. The move picker forbids
+  // selecting the dept's own subtree via excludeSubtreePath={dept.path} instead.
+  useEffect(() => {
+    let cancelled = false
+    captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null)).then((roots) => {
+      if (!cancelled) {
+        setIsVisibleRootDept(Array.isArray(roots) && roots.some((n) => n.id === dept.id))
       }
-      return null
-    },
-    []
-  )
-
-  const buildParentTreeNodes = useCallback(
-    (nodes: DepartmentTreeNode[], selectedDeptId: string): DepartmentTreeNode[] => {
-      const selectedNode = findNodeByDeptId(nodes, selectedDeptId)
-      const excluded = gatherSubtreeIds(selectedNode)
-      const walk = (n: DepartmentTreeNode): DepartmentTreeNode | null => {
-        // 仅可挂到当前可见树（入参 nodes）中的 active 节点；且不能选自身/子树
-        if (excluded.has(n.id) || n.status !== "active") return null
-        const nextChildren = (n.children || [])
-          .map((c) => walk(c))
-          .filter((x): x is DepartmentTreeNode => Boolean(x))
-        return {
-          ...n,
-          children: nextChildren,
+    })
+    if (dept.parent_id == null) {
+      setParentDisplayName("-")
+    } else {
+      captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(dept.parent_id)).then((res) => {
+        if (cancelled) return
+        const pruned = (res as DepartmentSearchResult | null) ?? null
+        let cur = pruned?.roots?.[0]
+        let name = "-"
+        while (cur) {
+          name = cur.name
+          cur = cur.children?.[0]
         }
-      }
-      return nodes
-        .map((root) => walk(root))
-        .filter((x): x is DepartmentTreeNode => Boolean(x))
-    },
-    [findNodeByDeptId, gatherSubtreeIds]
-  )
+        setParentDisplayName(name)
+      })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [dept.id, dept.parent_id])
 
   useEffect(() => {
     let cancelled = false
@@ -153,8 +143,6 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         setName(detailRes?.name ?? dept.name)
         const dr = (detailRes?.default_role_ids ?? []).map(String)
         setDefaultRoleIds(dr)
-        const pTreeNodes = buildParentTreeNodes(tree, dept.dept_id)
-        setParentTreeNodes(pTreeNodes)
         const pid = detailRes?.parent_id ?? dept.parent_id ?? null
         setParentIdValue(pid)
         setAssignableRoles(
@@ -182,7 +170,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     return () => {
       cancelled = true
     }
-  }, [buildParentTreeNodes, dept.dept_id, dept.name, dept.parent_id, t, tree])
+  }, [dept.dept_id, dept.name, dept.parent_id, t])
 
   const restoreBaseline = useCallback((b = baselineRef.current) => {
     if (!b) return
@@ -383,19 +371,6 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     })
   }, [dept.dept_id, onChanged, t])
 
-  const findParentDisplay = (
-    nodes: DepartmentTreeNode[],
-    parentId: number | null
-  ): string => {
-    if (parentId === null) return "-"
-    for (const n of nodes) {
-      if (n.id === parentId) return n.name
-      const found = findParentDisplay(n.children || [], parentId)
-      if (found !== "-") return found
-    }
-    return "-"
-  }
-
   return (
     <div className="max-w-3xl pb-8">
       {isArchived && (
@@ -434,20 +409,16 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
             <Label>{t("bs:department.parentDept")}</Label>
             {canEditParent ? (
               <TreeDepartmentSelect
-                nodes={parentTreeNodes}
                 value={parentIdValue}
                 onChange={(id) => setParentIdValue(id)}
+                excludeSubtreePath={dept.path}
                 className={FORM_CONTROL_WIDTH}
                 placeholder={t("bs:department.selectDept")}
                 searchPlaceholder={t("bs:department.parentDept")}
                 modal={false}
               />
             ) : (
-              <Input
-                value={findParentDisplay(tree, dept.parent_id)}
-                disabled
-                className={FORM_CONTROL_WIDTH}
-              />
+              <Input value={parentDisplayName} disabled className={FORM_CONTROL_WIDTH} />
             )}
           </div>
         )}

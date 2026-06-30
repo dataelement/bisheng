@@ -15,19 +15,16 @@ import DepartmentUsersSelect, {
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { createDepartmentApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface CreateDepartmentDialogProps {
-  tree: DepartmentTreeNode[]
   defaultParentId: number | null
   onCreated: () => void
   onClose: () => void
 }
 
 export function CreateDepartmentDialog({
-  tree,
   defaultParentId,
   onCreated,
   onClose,
@@ -88,13 +85,11 @@ export function CreateDepartmentDialog({
           <div className="space-y-2">
             <Label>{t("bs:department.parentDept")} *</Label>
             <TreeDepartmentSelect
-              nodes={tree}
               value={parentId}
               onChange={(id) => setParentId(id)}
               modal={false}
               placeholder={t("bs:department.selectParent")}
               searchPlaceholder={t("bs:department.search")}
-              showMemberCount
               className="max-w-xl"
             />
           </div>

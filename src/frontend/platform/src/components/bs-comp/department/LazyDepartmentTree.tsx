@@ -27,6 +27,9 @@ interface LazyDepartmentTreeProps {
   rowRef?: (deptId: string, el: HTMLDivElement | null) => void
   className?: string
   emptyHint?: ReactNode
+  /** Drive scrollTop from wheel deltas. Needed when nested in a Radix Popover/
+   *  Dialog whose react-remove-scroll preventDefaults native wheel scrolling. */
+  wheelScrollFix?: boolean
 }
 
 interface RowProps {
@@ -118,7 +121,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
 }
 
 export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
-  const { controller, showSearch = true, searchPlaceholder, className, emptyHint } = props
+  const { controller, showSearch = true, searchPlaceholder, className, emptyHint, wheelScrollFix } = props
   const { t } = useTranslation()
 
   const browseRoots = useMemo(
@@ -143,7 +146,16 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
           onChange={(e) => controller.setKeyword(e.target.value)}
         />
       )}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="flex-1 overflow-y-auto"
+        onWheel={
+          wheelScrollFix
+            ? (e) => {
+                e.currentTarget.scrollTop += e.deltaY
+              }
+            : undefined
+        }
+      >
         {busy ? (
           <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
