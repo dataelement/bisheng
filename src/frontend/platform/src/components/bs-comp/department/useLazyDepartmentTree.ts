@@ -32,6 +32,14 @@ export interface UseLazyDepartmentTreeOptions {
    *  department" picker to forbid selecting the moving dept or its descendants
    *  as the new parent (path prefix = the moving dept's own path). */
   excludeSubtreePath?: string
+  // Data source (default: the platform department APIs). The authorization pickers
+  // pass the grant-subject endpoints — same node shape, different (auth) scope.
+  // Provide all three together; pass them memoized (stable identity) to avoid
+  // re-fetch churn. ``cacheKey`` namespaces the react-query cache per source.
+  fetchChildren?: (parentId: number | null) => Promise<DepartmentTreeNode[]>
+  fetchSearch?: (keyword: string) => Promise<DepartmentSearchResult>
+  fetchPathTree?: (deptInternalId: number) => Promise<DepartmentSearchResult>
+  cacheKey?: string
 }
 
 export interface LazyDepartmentTree {
@@ -94,6 +102,21 @@ export function useLazyDepartmentTree(
 ): LazyDepartmentTree {
   const { includeArchived = false, autoLoad = true, autoExpandRoots = false, excludeSubtreePath } = options
   const queryClient = useQueryClient()
+  const cacheKey = options.cacheKey ?? `dept:${includeArchived}`
+
+  // Effective data source, kept in a ref so the fetch callbacks stay stable even
+  // if the caller passes inline (non-memoized) fetchers. Defaults to the platform
+  // department APIs; the authorization pickers inject the grant-subject endpoints.
+  const sourceRef = useRef({
+    children: (p: number | null) => getDepartmentChildrenApi(p, includeArchived),
+    search: (kw: string) => searchDepartmentsApi(kw, includeArchived),
+    pathTree: (id: number) => getDepartmentPathTreeApi(id, includeArchived),
+  })
+  sourceRef.current = {
+    children: options.fetchChildren ?? ((p: number | null) => getDepartmentChildrenApi(p, includeArchived)),
+    search: options.fetchSearch ?? ((kw: string) => searchDepartmentsApi(kw, includeArchived)),
+    pathTree: options.fetchPathTree ?? ((id: number) => getDepartmentPathTreeApi(id, includeArchived)),
+  }
 
   const [nodeMap, setNodeMap] = useState<Record<number, DepartmentTreeNode>>({})
   const [childIds, setChildIds] = useState<Record<number, number[]>>({})
@@ -113,14 +136,14 @@ export function useLazyDepartmentTree(
     async (parentId: number | null): Promise<DepartmentTreeNode[] | null> => {
       const res = await captureAndAlertRequestErrorHoc(
         queryClient.fetchQuery(
-          ["dept-children", parentId, includeArchived],
-          () => getDepartmentChildrenApi(parentId, includeArchived),
+          [cacheKey, "children", parentId],
+          () => sourceRef.current.children(parentId),
           { staleTime: 30_000 }
         )
       )
       return (res as DepartmentTreeNode[] | null) ?? null
     },
-    [queryClient, includeArchived]
+    [queryClient, cacheKey]
   )
 
   const storeLayer = useCallback(
@@ -173,22 +196,22 @@ export function useLazyDepartmentTree(
 
   const reloadLayer = useCallback(
     async (parentId: number | null) => {
-      await queryClient.invalidateQueries(["dept-children", parentId, includeArchived])
+      await queryClient.invalidateQueries([cacheKey, "children", parentId])
       const layer = await fetchLayer(parentId)
       if (layer) storeLayer(parentId, layer)
     },
-    [queryClient, includeArchived, fetchLayer, storeLayer]
+    [queryClient, cacheKey, fetchLayer, storeLayer]
   )
 
   const refreshAll = useCallback(async () => {
-    await queryClient.invalidateQueries(["dept-children"])
+    await queryClient.invalidateQueries([cacheKey, "children"])
     const keys = Object.keys(childIdsRef.current).map(Number)
     for (const key of keys) {
       const parentId = key === ROOT_KEY ? null : key
       const layer = await fetchLayer(parentId)
       if (layer) storeLayer(parentId, layer)
     }
-  }, [queryClient, fetchLayer, storeLayer])
+  }, [queryClient, cacheKey, fetchLayer, storeLayer])
 
   // Root layer — fetched when enabled (autoLoad). Tying autoLoad to e.g. a
   // popover's open state defers the request until a picker is actually opened,
@@ -215,7 +238,7 @@ export function useLazyDepartmentTree(
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoad, includeArchived])
+  }, [autoLoad, cacheKey])
 
   // Debounced server-side search.
   useEffect(() => {
@@ -227,20 +250,16 @@ export function useLazyDepartmentTree(
     }
     setSearching(true)
     const timer = window.setTimeout(async () => {
-      const res = await captureAndAlertRequestErrorHoc(
-        searchDepartmentsApi(kw, includeArchived)
-      )
+      const res = await captureAndAlertRequestErrorHoc(sourceRef.current.search(kw))
       setSearchResult((res as DepartmentSearchResult | null) ?? null)
       setSearching(false)
     }, SEARCH_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [keyword, includeArchived])
+  }, [keyword, cacheKey])
 
   const reveal = useCallback(
     async (deptInternalId: number): Promise<number[]> => {
-      const res = await captureAndAlertRequestErrorHoc(
-        getDepartmentPathTreeApi(deptInternalId, includeArchived)
-      )
+      const res = await captureAndAlertRequestErrorHoc(sourceRef.current.pathTree(deptInternalId))
       const tree = (res as DepartmentSearchResult | null) ?? null
       if (!tree || !tree.roots.length) return []
       const chain = chainOf(tree.roots)
@@ -260,7 +279,7 @@ export function useLazyDepartmentTree(
       })
       return chain
     },
-    [includeArchived, fetchLayer, storeLayer, loadChildren]
+    [fetchLayer, storeLayer, loadChildren]
   )
 
   const matchedIds = new Set<number>()
