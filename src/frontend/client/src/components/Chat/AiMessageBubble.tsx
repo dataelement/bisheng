@@ -130,6 +130,10 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    /** Show the export-session entry under assistant messages. Only the full
+        homepage/task chat opts in; the lightweight knowledge/file/article docks
+        and the share view leave it off. */
+    allowExport?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
@@ -325,6 +329,7 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        allowExport,
         onOpenCitationPanel,
         activeCitationMessageId,
         onPreviewFile,
@@ -352,6 +357,7 @@ const AiMessageBubble = memo(
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                allowExport={allowExport}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
                 onPreviewFile={onPreviewFile}
@@ -478,6 +484,7 @@ function AssistantBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    allowExport,
     onOpenCitationPanel,
     activeCitationMessageId,
     onPreviewFile,
@@ -490,6 +497,7 @@ function AssistantBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    allowExport?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     onPreviewFile?: (file: ArtifactFile) => void;
@@ -716,9 +724,10 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} />
-                                    {/* Export is only offered in the full homepage chat — the lightweight
-                                        knowledge/file/article docks (knowledgeChatLayout) hide it. */}
-                                    {!knowledgeChatLayout && message.conversationId && message.messageId && (
+                                    {/* Export is only offered where the host opts in via allowExport
+                                        (the full homepage/task chat). The lightweight knowledge/file/
+                                        article docks and the share view leave it off. */}
+                                    {allowExport && message.conversationId && message.messageId && (
                                         <ExportSelectionButton
                                             chatId={message.conversationId}
                                             messageId={message.messageId}
