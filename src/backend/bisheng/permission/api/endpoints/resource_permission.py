@@ -827,116 +827,10 @@ async def _list_knowledge_space_grant_users(
     ]
 
 
-async def _list_knowledge_space_grant_departments(
-    *, tenant_id: int, restrict_dept_ids: frozenset[int] | None = None
-) -> list[dict]:
-    from sqlmodel import select
-
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import Department
-    from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            tenant = (
-                await session.exec(
-                    select(Tenant).where(
-                        Tenant.id == tenant_id,
-                        Tenant.status == "active",
-                    )
-                )
-            ).first()
-            if tenant is None:
-                return []
-
-            root_dept = None
-            if getattr(tenant, "root_dept_id", None):
-                root_dept = (
-                    await session.exec(
-                        select(Department).where(
-                            Department.id == int(tenant.root_dept_id),
-                            Department.status == "active",
-                        )
-                    )
-                ).first()
-
-            if root_dept is not None:
-                stmt = select(Department).where(
-                    Department.path.like(f"{root_dept.path}%"),
-                    Department.status == "active",
-                )
-                if tenant_id == ROOT_TENANT_ID:
-                    child_roots = (
-                        await session.exec(
-                            select(Department.path).where(
-                                Department.is_tenant_root == 1,
-                                Department.mounted_tenant_id.is_not(None),
-                                Department.mounted_tenant_id != ROOT_TENANT_ID,
-                                Department.status == "active",
-                            )
-                        )
-                    ).all()
-                    for child_path in child_roots:
-                        stmt = stmt.where(~Department.path.like(f"{child_path}%"))
-            else:
-                stmt = select(Department).where(
-                    Department.tenant_id == tenant_id,
-                    Department.status == "active",
-                )
-
-            # F033: department knowledge space -> only the bound department
-            # subtree. Empty restrict set yields no rows (archived/degraded).
-            if restrict_dept_ids is not None:
-                stmt = stmt.where(Department.id.in_(restrict_dept_ids))
-
-            result = await session.exec(stmt.order_by(Department.sort_order, Department.id))
-            departments = list(result.all())
-    if not departments:
-        return []
-
-    # NOTE: per-department member_count was intentionally dropped here. Computing it
-    # required a `COUNT(*) ... WHERE department_id IN (<all subtree dept ids>) GROUP BY`,
-    # whose giant `.in_(...)` bind-param list serializes catastrophically on DM8's
-    # fake-async driver (~66s for 50k departments, vs ~3s for the rest of this call).
-    # The grant-subject picker never renders the count, so the query is pure waste.
-    nodes = {
-        int(dept.id): {
-            "id": int(dept.id),
-            "dept_id": dept.dept_id,
-            "name": dept.name,
-            "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
-            "path": dept.path,
-            "sort_order": int(getattr(dept, "sort_order", 0) or 0),
-            "source": dept.source,
-            "status": dept.status,
-            "children": [],
-        }
-        for dept in departments
-        if getattr(dept, "id", None) is not None
-    }
-
-    roots: list[dict] = []
-    for node in nodes.values():
-        parent_id = node["parent_id"]
-        if parent_id and parent_id in nodes:
-            nodes[parent_id]["children"].append(node)
-        else:
-            roots.append(node)
-
-    def _sort_tree(items: list[dict]) -> list[dict]:
-        items.sort(key=lambda item: (item["sort_order"], item["name"]))
-        for item in items:
-            item["children"] = _sort_tree(item["children"])
-        return items
-
-    return _sort_tree(roots)
-
-
 # --------------------------------------------------------------------------- #
 # F038: lazy variants of the grant-subject department tree (browse one layer /
-# search / locate). Same visible scope as ``_list_knowledge_space_grant_departments``
-# — the TENANT ROOT SUBTREE minus child-tenant mount subtrees, optionally clamped
+# search / locate). Visible scope = the TENANT ROOT SUBTREE minus child-tenant
+# mount subtrees, optionally clamped
 # to a bound department's subtree (F033) — but never loads the whole tree. The
 # F033 restriction is passed as a PATH PREFIX (``restrict_root_path``) rather than
 # an id set, so it stays a ``path LIKE`` predicate and never hits DM8's large
@@ -1014,8 +908,8 @@ def _grant_dept_node(dept, *, has_children: bool = False, matched: bool = False)
 
 async def _resolve_grant_dept_scope(session, tenant_id: int, restrict_root_path: str | None):
     """Resolve ``_GrantDeptScope`` for ``tenant_id``; ``None`` when the tenant is
-    missing/inactive (callers return empty). Mirrors the scope construction in
-    ``_list_knowledge_space_grant_departments``."""
+    missing/inactive (callers return empty). Scope = tenant root subtree minus
+    child-tenant mount subtrees (the canonical grant-subject visible set)."""
     from sqlmodel import select
 
     from bisheng.database.models.department import Department
@@ -1710,34 +1604,11 @@ async def get_grant_subject_users(
     )
 
 
-@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments")
-async def get_grant_subject_departments(
-    resource_type: str,
-    resource_id: str,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    if resource_type not in VALID_RESOURCE_TYPES:
-        return PermissionInvalidResourceError.return_resp()
-    if not await _has_resource_permission_management_access(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        login_user=login_user,
-    ):
-        return PermissionDeniedError.return_resp()
-    tenant_id = await _resolve_grant_subject_tenant_id(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        login_user=login_user,
-    )
-    if tenant_id is None:
-        return resp_200([])
-    scope = await _resolve_department_space_scope(resource_type, resource_id)
-    return resp_200(
-        await _list_knowledge_space_grant_departments(
-            tenant_id=tenant_id,
-            restrict_dept_ids=scope.subtree_dept_ids if scope else None,
-        )
-    )
+# F038/T012: the eager full-tree ``GET .../grant-subjects/departments`` was
+# removed — the grant picker uses the lazy ``…/departments/{children,search,
+# {id}/path-tree}`` endpoints below instead, so a large org tree never loads at
+# once. ``_resolve_grant_subject_tenant_id`` / ``_resolve_department_space_scope``
+# are retained; they back the lazy endpoints' shared preamble.
 
 
 # F038: empty payloads for the lazy grant-subject department endpoints, by shape.

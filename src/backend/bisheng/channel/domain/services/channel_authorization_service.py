@@ -212,15 +212,6 @@ class ChannelAuthorizationService:
             page_size=page_size,
         )
 
-    async def list_grant_departments(self, channel_id: str, login_user: UserPayload):
-        await self._require_manage_access(channel_id, login_user)
-        tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
-        if tenant_id is None:
-            return []
-        from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_departments
-
-        return await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
-
     # F038: lazy variants. Channels are never department-scoped, so restrict_root_path
     # is always None — same tenant-subtree scope as the legacy full-tree list, just one
     # layer / pruned tree at a time. Reuses the permission module's shared helpers.

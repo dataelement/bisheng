@@ -215,14 +215,9 @@ async def list_channel_grant_users(
     return resp_200(data=result)
 
 
-@router.get("/{channel_id}/grant-subjects/departments")
-async def list_channel_grant_departments(
-    channel_id: str,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.list_grant_departments(channel_id, login_user)
-    return resp_200(data=result)
+# F038/T012: the eager full-tree ``GET /{channel_id}/grant-subjects/departments``
+# was removed — the channel picker uses the lazy children/search/path-tree routes
+# below so a large org tree never loads at once.
 
 
 # F038: lazy channel department picker (browse one layer / search / locate).

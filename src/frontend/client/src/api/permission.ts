@@ -225,25 +225,6 @@ export async function getKnowledgeSpaceGrantUsers(
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);
 }
 
-export async function getResourceGrantDepartments(
-  resourceType: ResourceType,
-  resourceId: string,
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`,
-    withPermissionRequestOptions(config)
-  );
-  return unwrapArray(res);
-}
-
-export async function getKnowledgeSpaceGrantDepartments(
-  resourceId: string,
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  return getResourceGrantDepartments("knowledge_space", resourceId, config);
-}
-
 // ── Lazy grant-department tree (F038) ────────────────
 // Browse one visible layer / server search / locate-by-id, so a large org tree
 // is never loaded at once. Same authorization scope as the full-tree endpoint

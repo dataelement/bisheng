@@ -383,17 +383,6 @@ export async function getChannelGrantSubjectsUsersApi(
     return unwrapChannelPermissionArray(res);
 }
 
-export async function getChannelGrantSubjectsDepartmentsApi(
-    channelId: string,
-    config?: ChannelPermissionRequestConfig
-): Promise<any[]> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grant-subjects/departments`,
-        withChannelPermissionRequestOptions(config),
-    );
-    return unwrapChannelPermissionArray(res);
-}
-
 // F038: lazy variants of the channel grant-department tree (browse one layer /
 // server search / locate), mirroring the resource permission endpoints so the
 // channel picker shares the lazy tree without loading the whole org at once.
