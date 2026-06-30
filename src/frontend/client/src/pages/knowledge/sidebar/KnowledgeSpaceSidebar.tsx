@@ -419,11 +419,11 @@ export function KnowledgeSpaceSidebar({
             {/* Drag-to-resize handle */}
             {!collapsed && !mobileDrawerMode && (
                 <div
-                    className="absolute top-0 h-full z-[50] cursor-col-resize select-none"
-                    style={{ right: '-5px', width: '10px' }}
+                    className="absolute top-0 right-0 h-full z-[50] cursor-col-resize select-none flex items-stretch"
+                    style={{ width: '8px' }}
                     onMouseDown={handleResizeMouseDown}
                 >
-                    <div className="absolute top-0 bottom-0 left-1/2 w-0.5 -translate-x-1/2 opacity-0 hover:opacity-100 bg-blue-400 transition-opacity duration-150" />
+                    <div className="w-0.5 mx-auto h-full opacity-0 hover:opacity-100 bg-blue-400 transition-opacity duration-150" />
                 </div>
             )}
             <NavToggle
