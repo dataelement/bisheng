@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 纯 What；用户确认 2026-06-29 |
 | design.md | ✅ 已评审 | 决策 1–12 + 接手必读；用户确认 2026-06-29；接手第一入口 |
 | tasks.md | ✅ 已拆解 | 本文件 |
-| 实现 | 🟡 进行中 | 1 / 16（Wave 0 member_count 已落地 `b8e481872`） |
+| 实现 | 🟡 进行中 | 3 / 16（T000 `b8e481872`、T002 `1af226f5d`、T001） |
 
 ---
 
@@ -38,7 +38,7 @@
 
 ### Wave 1 —— 后端取数基建（无依赖，可并行）
 
-- [ ] **T001**: `DepartmentDao` 取数扩展 + 单测
+- [x] **T001**: `DepartmentDao` 取数扩展 + 单测 ✅（8/8，aiosqlite）
   **文件**: `database/models/department.py`、`test/department/test_department_dao_lazy.py`
   **逻辑**: ①`aget_children` 加 `status` 参（支持 active+archived，默认仍 active）；②新增**按名搜索**方法 `aget_by_name_like(keyword, path_prefixes, limit)`（`name LIKE` + `or_(path LIKE p%)` + limit）；③新增 **has_children 批量** `aget_children_existence(parent_ids) -> set[int]`（`GROUP BY parent_id`）。range/scope 由 Service 传入 path/ids，DAO 不含权限逻辑（design §2 C1、决策 5）
   **约束**: 仅新增/扩展查询方法，**无 DDL / 无 Alembic 迁移 / 无需回滚**（`has_children`、`matched` 是响应字段，非 DB 列）
@@ -46,7 +46,7 @@
   **覆盖 AC**: AC-02, AC-03, AC-06, AC-07, AC-16
   **依赖**: 无
 
-- [ ] **T002**: 抽取统一 scope helper `_aget_user_scope` + 等价性单测
+- [x] **T002**: 抽取统一 scope helper `_aget_user_scope` + 等价性单测 ✅ `1af226f5d`
   **文件**: `department/domain/services/department_service.py`、`test/department/test_department_scope_parity.py`
   **逻辑**: 从 `aget_tree` 抽 `_aget_user_scope(login_user) -> (is_sys_admin, admin_paths)`（复用 `_is_admin`/`aget_user_admin_departments`/`_is_tenant_admin`/`_aget_user_tenant_root_path`）；**`aget_tree` 改用同 helper**，防与新端点漂移
   **测试**: 在同一 fixture 树上断言"新 helper 算出的可见集" == "旧 aget_tree 可见集"，覆盖 系统/部门(嵌套去重)/租户管理员/非管理员(403)
