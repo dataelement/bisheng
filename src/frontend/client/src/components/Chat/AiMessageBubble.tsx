@@ -401,11 +401,16 @@ function UserBubble({
                     className="mr-auto mt-2 shrink-0"
                 />
             )}
-            <div className={cn("flex min-w-0 flex-col items-end", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
+            {/* Mobile: cap the bubble so its left edge keeps a 40px gap from the
+                content area (long URLs were overflowing off the left edge). */}
+            <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Uploaded files: icon + filename only (no preview), with soft fade
                     edges while scrolling so the 120px-clipped list never hard-cuts. */}
                 <UploadedFileList files={message.files || []} />
-                <div className="flex gap-3">
+                {/* min-w-0: without it this flex row's `min-width: auto` floors at
+                    the URL's (unbreakable) min-content width, defeating the bubble's
+                    max-width and letting long content overflow off the left edge. */}
+                <div className="flex min-w-0 gap-3">
                     {/* Avatar (hidden by style only) */}
                     <div className="hidden shrink-0 flex justify-center">
                         <Avatar className="w-6 h-6 text-xs">
@@ -420,7 +425,12 @@ function UserBubble({
                             className={cn(
                                 // w-fit: the text bubble hugs its own content and stays
                                 // independent of the (possibly wider) file card above it.
-                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap break-words rounded-[8px]",
+                                // overflow-wrap:anywhere (not break-words): break-word
+                                // doesn't shrink min-content, so w-fit/fit-content keeps
+                                // sizing the box to a long unbreakable URL and max-width
+                                // can't clamp it — `anywhere` reduces min-content so the
+                                // box shrinks and the URL wraps inside max-w-full.
+                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px]",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
