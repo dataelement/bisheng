@@ -180,6 +180,7 @@ async def check_question(
     )
     if result.enabled and result.hits:
         raise ContentSafetyViolation(result)
+    return resp_200()
 
 @router.post("/questions", response_model=QuestionDetailResponse)
 async def create_question(
