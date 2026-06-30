@@ -75,8 +75,10 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
   const isSynced = isSyncedSource(dept.source)
   const isArchived = dept.status === "archived"
   const isAbsoluteRootDept = dept.parent_id === null || Number(dept.parent_id) === 0
-  // 对部门管理员场景：当前可见树的顶层节点也视为“根节点”（即便全局树里它还有父节点）
-  const isRootDept = isAbsoluteRootDept || isVisibleRootDept
+  // 对部门管理员场景：当前可见树的顶层节点也视为“根节点”（即便全局树里它还有父节点）。
+  // 租户根部门同样按“根”对待：其父是系统根——对租户管理员越权、对任何角色都无展示意义，
+  // 故隐藏“上级部门”字段、不取父名、也不允许移动（与查看者角色无关）。
+  const isRootDept = isAbsoluteRootDept || isVisibleRootDept || !!dept.is_tenant_root
   /** 仅部门名称对第三方同步部门只读；管理员与默认角色仍可保存 */
   const canEditName = !isArchived && !isSynced
   const canEditPermissions = !isArchived
@@ -100,8 +102,11 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
   // selecting the dept's own subtree via excludeSubtreePath={dept.path} instead.
   useEffect(() => {
     let cancelled = false
-    if (dept.parent_id == null) {
-      // Absolute root: no parent to resolve, and never a "visible-only" root.
+    if (dept.parent_id == null || dept.is_tenant_root) {
+      // Absolute root, or a tenant root whose parent is the system root: there is
+      // no in-scope / meaningful parent to resolve. ``isRootDept`` already covers
+      // both via ``is_tenant_root`` so the parent field is hidden — skip the fetch
+      // entirely (a tenant admin would be denied; a super admin doesn't need it).
       setIsVisibleRootDept(false)
       setParentDisplayName("-")
       return
@@ -134,7 +139,7 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
     return () => {
       cancelled = true
     }
-  }, [dept.id, dept.parent_id])
+  }, [dept.id, dept.parent_id, dept.is_tenant_root])
 
   useEffect(() => {
     let cancelled = false

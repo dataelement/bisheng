@@ -135,6 +135,32 @@ describe("DepartmentSettings payload", () => {
     expect(mockedGetDepartmentPathTreeApi).not.toHaveBeenCalled();
   });
 
+  // A tenant-root dept is a top-level entity in the management UI: its parent is
+  // the system root — out of scope for a tenant admin, and not a meaningful
+  // "上级部门" for anyone (incl. a super admin whose visible root layer is the
+  // GLOBAL root, which excludes this sub-tenant). It must be treated as a root:
+  // the parent field is hidden and no parent path-tree is fetched, role-agnostic.
+  it("treats a tenant-root dept as a root and never fetches its out-of-scope parent", async () => {
+    const tenantRoot = { ...dept, is_tenant_root: true };
+    // Super-admin-style root layer: the global root, NOT this sub-tenant.
+    mockedGetDepartmentChildrenApi.mockResolvedValue([
+      { ...dept, id: 1, name: "Root", parent_id: null, path: "/1/" },
+    ] as any);
+    mockedGetDepartmentApi.mockResolvedValue({
+      ...dept,
+      default_role_ids: [11],
+      is_tenant_root: true,
+    } as any);
+
+    render(<DepartmentSettings dept={tenantRoot} onChanged={vi.fn()} />);
+
+    await screen.findByDisplayValue("Engineering");
+    await Promise.resolve();
+    expect(mockedGetDepartmentPathTreeApi).not.toHaveBeenCalled();
+    // The read-only "上级部门" field is hidden for a root dept.
+    expect(screen.queryByText("bs:department.parentDept")).not.toBeInTheDocument();
+  });
+
   // A dept nested below the viewer's visible root: its parent IS in scope, so the
   // read-only parent name is resolved via a parent path-tree fetch.
   it("fetches the parent path-tree for the read-only parent name when the dept is nested in the visible tree", async () => {
