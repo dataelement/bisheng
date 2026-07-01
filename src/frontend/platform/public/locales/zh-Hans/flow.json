@@ -163,6 +163,7 @@
   "required": "不可为空",
   "isRequired": "是否必填",
   "documentKnowledgeBase": "文档知识库",
+  "knowledgeSpace": "知识空间",
   "temporarySessionFiles": "临时知识库",
   "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
   "displayNameTooltip": "用户会话页面展示此名称",
@@ -214,6 +215,7 @@
   "userInputContent": "用户输入内容",
   "advancedSearchSettings": "高级检索设置",
   "userAuthVerification": "用户知识库权限校验",
+  "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识空间文件查看权限过滤，每人只能检索到自己有权查看的文件；关闭时，按配置者的可见范围检索，所有使用者共享配置者能看到的文件（配置者无权查看的文件同样不会被检索）。文档知识库不受细粒度文件权限影响。",
   "enableToVerifyUserAccessToKnowledgeBase": "开启后将验证用户对知识库的访问权限",
   "retrieverWeightSettings": "检索器权重设置",
   "adjustWeightForVectorOrKeywordSearch": "通过调整权重，确定优先使用向量检索还是优先使用关键词检索。",
@@ -494,7 +496,7 @@
       }
     },
     "rag": {
-      "name": "文档知识库问答",
+      "name": "知识库问答",
       "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
       "知识库检索设置": "知识库检索设置",
       "AI回复生成设置": "AI回复生成设置",
@@ -542,7 +544,7 @@
       }
     },
     "knowledge_retriever": {
-      "name": "文档知识库检索",
+      "name": "知识库检索",
       "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
       "知识库检索设置": "知识库检索设置",
       "输出": "输出",

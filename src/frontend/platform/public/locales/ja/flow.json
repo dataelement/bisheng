@@ -163,6 +163,7 @@
   "required": "必須",
   "isRequired": "必須入力項目",
   "documentKnowledgeBase": "ドキュメント知識ベース",
+  "knowledgeSpace": "ナレッジスペース",
   "temporarySessionFiles": "一時セッションファイル",
   "storeFilesSentInCurrentSession": "現在のセッションで送信されたファイルを保存",
   "displayNameTooltip": "ユーザーセッションページにこの名前が表示されます",
@@ -214,6 +215,7 @@
   "userInputContent": "ユーザー入力内容",
   "advancedSearchSettings": "高度な検索設定",
   "userAuthVerification": "ユーザー知識ベース認証",
+  "userAuthVerificationTips": "有効にすると、検索結果は現在の利用者本人のナレッジスペースファイルの閲覧権限でフィルタされ、各利用者は閲覧権限のあるファイルのみ検索できます。無効の場合は設定者の可視範囲で検索し、すべての利用者が設定者の見えるファイルを共有します（設定者が閲覧できないファイルは検索されません）。ドキュメント知識ベースはきめ細かなファイル権限の影響を受けません。",
   "enableToVerifyUserAccessToKnowledgeBase": "オンにすると、ユーザーの知識ベースへのアクセス権を検証します",
   "retrieverWeightSettings": "リトリーバー重み設定",
   "adjustWeightForVectorOrKeywordSearch": "重みを調整して、ベクター検索とキーワード検索の優先度を決定します",
@@ -494,7 +496,7 @@
       }
     },
     "rag": {
-      "name": "文書知識ベースQA",
+      "name": "知識ベースQA",
       "description": "ユーザーの質問に基づき知識ベースから関連内容を検索し、検索結果を用いて大規模モデルで最終結果を生成します。複数の質問を並行して処理できます。",
       "知识库检索设置": "知識ベース検索設定",
       "AI回复生成设置": "AI応答生成設定",
@@ -542,7 +544,7 @@
       }
     },
     "knowledge_retriever": {
-      "name": "文書知識ベース検索",
+      "name": "知識ベース検索",
       "description": "ユーザーの質問に基づき知識ベースから関連内容を検索し、検索結果を使用して大規模モデルで最終結果を生成します。複数の質問を並行して実行できます。",
       "知识库检索设置": "知識ベース検索設定",
       "输出": "出力",
