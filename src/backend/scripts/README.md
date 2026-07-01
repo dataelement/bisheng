@@ -415,6 +415,10 @@ Usage (from `src/backend/`):
 ```bash
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py            # dry-run（默认，不写库）
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py --apply    # 写入
+
+# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
+bash scripts/backfill_departments_under_single_root.sh          # dry-run
+bash scripts/backfill_departments_under_single_root.sh apply    # 写入
 ```
 
 ### `backfill_user_tenant_associations.py`
