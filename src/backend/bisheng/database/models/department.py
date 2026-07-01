@@ -547,6 +547,36 @@ class DepartmentDao:
             await session.commit()
 
     @classmethod
+    async def areparent_root_under(
+        cls,
+        dept_id: int,
+        old_path: str,
+        new_path: str,
+        new_parent_id: int,
+    ) -> int:
+        """Collapse a mis-rooted department subtree under ``new_parent_id``,
+        atomically.
+
+        Rewrites every row whose ``path`` starts with ``old_path`` (the
+        subtree, including the department itself) to the ``new_path``
+        prefix AND sets the department's own ``parent_id`` in one
+        transaction so path and parent never diverge. Mount state
+        (``is_tenant_root`` / ``mounted_tenant_id``) is untouched.
+
+        Used only by the single-root backfill script. Returns the number
+        of subtree rows whose path changed.
+        """
+        async with get_async_db_session() as session:
+            res = await session.execute(
+                update(Department)
+                .where(Department.path.like(f"{old_path}%"))
+                .values(path=func.replace(Department.path, old_path, new_path))
+            )
+            await session.execute(update(Department).where(Department.id == dept_id).values(parent_id=new_parent_id))
+            await session.commit()
+            return res.rowcount or 0
+
+    @classmethod
     def get_root_by_tenant(cls, tenant_id: int) -> Department | None:
         """Get the root department for a specific tenant.
 
@@ -572,6 +602,31 @@ class DepartmentDao:
                     Department.status == "active",
                 )
             )
+            return result.first()
+
+    @classmethod
+    async def aget_tenant_root_via_pointer(
+        cls,
+        tenant_id: int,
+    ) -> Department | None:
+        """Resolve a tenant's root department via the authoritative
+        ``tenant.root_dept_id`` pointer instead of ``parent_id IS NULL``.
+
+        SSO sync must keep the platform at exactly one root, but while
+        legacy mis-rooted rows still exist (pre-backfill) a
+        ``parent_id IS NULL`` query is ambiguous — it returns an arbitrary
+        sibling root. The pointer set at init is unambiguous. Returns
+        ``None`` when the tenant has no ``root_dept_id`` yet (legacy
+        v2.5.0 env), letting callers fall back to the no-root behaviour.
+        """
+        from bisheng.database.models.tenant import Tenant
+
+        async with get_async_db_session() as session:
+            row = (await session.exec(select(Tenant.root_dept_id).where(Tenant.id == tenant_id))).first()
+            root_dept_id = row[0] if isinstance(row, tuple) else row
+            if root_dept_id is None:
+                return None
+            result = await session.exec(select(Department).where(Department.id == root_dept_id))
             return result.first()
 
     @classmethod
