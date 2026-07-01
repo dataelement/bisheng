@@ -2997,6 +2997,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visible_space_ids: List[int] = []
         has_content_permission_map: Dict[int, bool] = {}
         error_map: Dict[int, ShougangPortalSpaceInfoError] = {}
+        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, 'is_admin', None)) else False
         for space_id in unique_space_ids:
             space = space_map.get(space_id)
             if not space:
@@ -3004,6 +3005,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     code=SpaceNotFoundError.Code,
                     message=SpaceNotFoundError.Msg,
                 )
+                continue
+            if is_admin:
+                visible_space_ids.append(space_id)
+                has_content_permission_map[space_id] = True
                 continue
             permission_result = permission_map.get(space_id)
             if isinstance(permission_result, Exception):
