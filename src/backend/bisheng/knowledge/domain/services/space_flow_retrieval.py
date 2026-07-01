@@ -177,6 +177,7 @@ async def aretrieve_space_documents(
     sort_by_source_and_index: bool = True,
     version_repo: Any = None,
     request: Any = None,
+    access_scope: str = "per_user",
 ) -> list[Document]:
     """Retrieve view_file-filtered chunks across one or more knowledge spaces.
 
@@ -184,6 +185,10 @@ async def aretrieve_space_documents(
     ``AssistantAgent``. ``identity_user`` decides the filter identity (runtime user
     ON / config author OFF). Returns Documents in the same shape as document-KB
     retrieval, so the caller can reuse the unified citation path (6.3).
+
+    ``access_scope`` (``per_user`` when the permission toggle is ON, ``shared`` when
+    OFF) is stamped onto each doc's metadata so the downstream citation registry
+    (T008) records it — the resolve endpoint then honors the same gate (T009).
 
     ``identity_user is None`` (e.g. author could not be resolved) → empty result,
     treated as "no visible files".
@@ -215,6 +220,11 @@ async def aretrieve_space_documents(
                 request=request,
             )
         )
+    # Stamp the access gate so the citation registry (T008) persists it per source.
+    for d in docs:
+        if d.metadata is None:
+            d.metadata = {}
+        d.metadata["access_scope"] = access_scope
     return docs
 
 
@@ -227,6 +237,7 @@ async def _aretrieve_space_with_session(
     max_content: int,
     rrf_weights: list | None,
     rerank: Any,
+    access_scope: str = "per_user",
 ) -> list[Document]:
     """Resolve identity + open a version-repo session, then retrieve. Shared by the
     tool-based entries (agent node / assistant)."""
@@ -248,6 +259,7 @@ async def _aretrieve_space_with_session(
             rrf_weights=rrf_weights,
             rerank=rerank,
             version_repo=version_repo,
+            access_scope=access_scope,
         )
 
 
@@ -264,6 +276,7 @@ class SpaceKnowledgeRetrieverTool(KnowledgeRetrieverTool):
     space_ids: list = Field(default_factory=list)
     identity_user_id: int | None = None
     space_tenant_id: int | None = None
+    access_scope: str = "per_user"
 
     def _run(self, query: str, **kwargs: Any) -> list[Document]:
         from bisheng.utils.async_utils import run_async_safe
@@ -282,6 +295,7 @@ class SpaceKnowledgeRetrieverTool(KnowledgeRetrieverTool):
             max_content=self.max_content,
             rrf_weights=self.rrf_weights,
             rerank=self.rerank,
+            access_scope=self.access_scope,
         )
 
 
@@ -296,11 +310,13 @@ def build_space_knowledge_tool(
     max_content: int = 15000,
     rrf_weights: list | None = None,
     rerank: Any = None,
+    access_scope: str = "per_user",
 ) -> KnowledgeRagTool:
     """Build an LLM-facing knowledge tool backed by knowledge-space retrieval.
 
-    ``identity_user_id`` is chosen by the caller from the permission toggle:
-    runtime user when ON, config author when OFF.
+    ``identity_user_id`` and ``access_scope`` are chosen by the caller from the
+    permission toggle: runtime user + ``per_user`` when ON, config author +
+    ``shared`` when OFF.
     """
     space_retriever = SpaceKnowledgeRetrieverTool(
         space_ids=list(space_ids),
@@ -309,6 +325,7 @@ def build_space_knowledge_tool(
         max_content=max_content,
         rrf_weights=rrf_weights,
         rerank=rerank,
+        access_scope=access_scope,
     )
     return KnowledgeRagTool(
         name=name,

@@ -353,6 +353,7 @@ class AgentNode(BaseNode):
                 identity_user_id=identity_user_id,
                 tenant_id=self.tenant_id,
                 max_content=knowledge_retriever.get("max_content", 15000),
+                access_scope="per_user" if self._knowledge_auth else "shared",
             )
             return [space_tool]
         tools = []

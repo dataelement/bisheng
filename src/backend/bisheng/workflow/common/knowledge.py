@@ -319,6 +319,7 @@ class RagUtils(BaseNode):
                 rrf_weights=[self._vector_weight, self._keyword_weight],
                 rerank=self._rerank_model,
                 version_repo=version_repo,
+                access_scope="per_user" if self._knowledge_auth else "shared",
             )
 
     def _retrieve_space_question(self, question: str) -> list[Document]:

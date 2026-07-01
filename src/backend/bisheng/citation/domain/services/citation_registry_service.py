@@ -268,6 +268,7 @@ class CitationRegistryService:
         cls,
         citation_id: str,
         payload: RagCitationPayloadSchema,
+        access_scope: str = "per_user",
     ) -> list[CitationRegistryItemSchema]:
         """Flatten a grouped RAG payload into item-level registry entries."""
         registry_items: list[CitationRegistryItemSchema] = []
@@ -284,6 +285,7 @@ class CitationRegistryService:
                     citationId=citation_id,
                     type=CitationType.RAG,
                     itemId=item.itemId,
+                    accessScope=access_scope,
                     sourcePayload=item_payload,
                 )
             )
@@ -332,7 +334,12 @@ class CitationRegistryService:
         for grouped_docs in grouped_documents.values():
             citation_id = cls.generate_rag_citation_id()
             payload = cls._build_rag_payload_with_knowledge_names(grouped_docs, knowledge_names)
-            registry_items.extend(cls._flatten_rag_payload(citation_id, payload))
+            # F041: the retrieval stamps ``access_scope`` on each doc's metadata
+            # ('shared' for toggle-OFF knowledge-space sources, else 'per_user').
+            access_scope = (
+                cls._parse_metadata(grouped_docs[0]).get("access_scope") if grouped_docs else None
+            ) or "per_user"
+            registry_items.extend(cls._flatten_rag_payload(citation_id, payload, access_scope=access_scope))
         return registry_items
 
     @classmethod

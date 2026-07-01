@@ -309,6 +309,7 @@ class AssistantAgent(AssistantUtils):
                     identity_user_id=identity_user_id,
                     tenant_id=self.assistant.tenant_id,
                     max_content=self.knowledge_retriever.get("max_content", 15000),
+                    access_scope="per_user" if self.assistant.knowledge_auth else "shared",
                 )
             )
         self.tools = [self.wrap_citation_tool(tool) for tool in tools]
