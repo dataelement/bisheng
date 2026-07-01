@@ -26,6 +26,7 @@ import { ChannelPinIcon } from "~/components/icons/channels";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolderTree";
+import { isFavoriteSpace } from "../portal/favoriteView";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -67,6 +68,8 @@ export default function KnowledgeSpaceItem({
     const navigate = useNavigate();
     const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
     const showDangerAction = canDeleteSpace || Boolean(space.canUnsubscribe);
+    // 『我的收藏』为系统知识库：只可查看/取消收藏，不提供设置、置顶、删除、重命名等任何操作
+    const isFavorite = isFavoriteSpace(space);
 
     const { data: bsConfig } = useGetBsConfig();
     const treeEnabled =
@@ -155,7 +158,7 @@ export default function KnowledgeSpaceItem({
                         />
                     ) : (
                         <div className="flex flex-1 min-w-0 items-center gap-1">
-                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
+                            <span onDoubleClick={() => canEditSpace && !isFavorite && setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
                                 {space.name}
                             </span>
                             {space.isPinned && (
@@ -165,6 +168,7 @@ export default function KnowledgeSpaceItem({
                     )}
                 </div>
 
+                {!isFavorite && (
                 <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
                     <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
@@ -251,6 +255,7 @@ export default function KnowledgeSpaceItem({
                         </SidebarListMoreMenuContent>
                     </DropdownMenu>
                 </div>
+                )}
             </div>
 
             {expanded && treeEnabled && (
