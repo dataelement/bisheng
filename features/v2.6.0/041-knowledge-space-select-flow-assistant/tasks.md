@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | `/sdd-review spec` 通过；CONFLICT(INV-7) 经登记例外解除 |
 | design.md | ✅ 已评审 | `/sdd-review design` 通过；C3 隐患按"不切租户"消解；接手第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 通过（2 轮自修：补 AC-13/AC-15 覆盖、去范围写法、修 T005 AC 标注、补 T001 回滚） |
-| 实现 | 🔲 未开始 | 0 / 17 完成。偏差处理见 design.md 顶部原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 后端 12/12 完成并单测(19 passing)：T001-T009 全部；前端 T010/T011/T013/T015 完成、T012/T014 待办(助手应用选择器 + 开关 config 存取，需 dev 环境验证)；T016/T017 e2e/手动待运行环境。迁移 f046/f047 需 `alembic upgrade head` |
 | 契约登记 | ✅ 已完成 | `release-contract.md` 表1/表2(INV-7 例外)/表3/变更历史 已登记 F041 |
 
 ---
