@@ -358,12 +358,12 @@ class SgDepartmentsSyncService:
     @staticmethod
     def _parse_status(value: str) -> int:
         raw = (value or "").strip()
-        if raw in {"0", "01"}:
+        if raw == "01":
             return 0
-        if raw in {"1", "00"}:
+        if raw == "02":
             return 1
         raise ValueError(
-            "state must be 0/01(enabled) or 1/00(disabled)",
+            "state must be 01(enabled) or 02(disabled)",
         )
 
     @staticmethod

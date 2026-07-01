@@ -433,6 +433,7 @@ class ShougangPortalHomeStatsResp(BaseModel):
     read_count: int = 0
     favorite_count: int = 0
     qa_count: int = 0
+    total_files: int = 0
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

@@ -242,6 +242,20 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return {row[0]: row[1] for row in rows}
 
     @classmethod
+    async def async_count_all_success_files(cls) -> int:
+        """Async: Count all SUCCESS files across all knowledge spaces."""
+        statement = (
+            select(func.count())
+            .where(
+                KnowledgeFile.file_type == 1,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            )
+        )
+        async with get_async_db_session() as session:
+            result = (await session.exec(statement)).one()
+        return int(result or 0)
+
+    @classmethod
     async def async_count_files_by_domain_codes(cls, codes: List[str]) -> dict:
         """Async: count SUCCESS document files per business-domain code across ALL knowledge bases.
 
