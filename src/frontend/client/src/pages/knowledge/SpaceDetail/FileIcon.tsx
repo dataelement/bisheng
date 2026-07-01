@@ -1,6 +1,6 @@
 import React from 'react';
 import { Colored } from 'bisheng-icons';
-import { FileStatus } from '~/api/knowledge';
+import { FileStatus, FileType } from '~/api/knowledge';
 import { TxtIcon, FolderIcon } from '~/components/icons';
 import { cn } from '~/utils';
 
@@ -18,6 +18,7 @@ const FILE_TYPE_BG = {
     csv: 'bg-[linear-gradient(180deg,rgba(226,245,234,0.05)_0%,rgba(0,198,80,0.05)_100%)]',
     txt: 'bg-[linear-gradient(180deg,rgba(225,227,230,0.05)_0%,rgba(52,64,84,0.05)_100%)]',
     md: 'bg-[linear-gradient(180deg,rgba(225,227,230,0.05)_0%,rgba(52,64,84,0.05)_100%)]',
+    media: 'bg-[linear-gradient(180deg,rgba(223,238,255,0.05)_0%,rgba(0,114,255,0.05)_100%)]',
 } as const;
 
 type FileTypeKey = keyof typeof FILE_TYPE_BG;
@@ -33,6 +34,17 @@ const EXTENSION_TO_TYPE: Record<string, FileTypeKey> = {
     txt: 'txt',
     md: 'md',
     markdown: 'md',
+    mp3: 'media',
+    wav: 'media',
+    m4a: 'media',
+    aac: 'media',
+    flac: 'media',
+    ogg: 'media',
+    mp4: 'media',
+    mov: 'media',
+    avi: 'media',
+    mkv: 'media',
+    webm: 'media',
 };
 
 const TYPE_TO_ICON: Record<FileTypeKey, React.ReactNode> = {
@@ -43,6 +55,7 @@ const TYPE_TO_ICON: Record<FileTypeKey, React.ReactNode> = {
     csv: <Colored.FileCsv className={iconSlotClass} />,
     txt: <Colored.FileTxt className={iconSlotClass} />,
     md: <Colored.FileMd className={iconSlotClass} />,
+    media: <Colored.FileTxt className={iconSlotClass} />,
 };
 
 const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transparentBg }: { file: any; isFolder: boolean; iconClassName?: string; thumbBordered?: boolean; transparentBg?: boolean }) => {
@@ -59,7 +72,10 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     }
 
     const extension: string = file.name?.split('.').pop()?.toLowerCase() ?? '';
-    const typeKey: FileTypeKey | undefined = EXTENSION_TO_TYPE[extension];
+    const typeKey: FileTypeKey | undefined =
+        file.type === FileType.WEB ? 'md'
+            : file.type === FileType.AUDIO || file.type === FileType.VIDEO ? 'media'
+                : EXTENSION_TO_TYPE[extension];
 
     // Plain-text / structured-text formats (txt / md / csv) never render a
     // thumbnail. Once parsed they show their colored placeholder icon; before

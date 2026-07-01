@@ -2,9 +2,9 @@ import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, ty
 import { useRecoilValue } from "recoil";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Link2 } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDownloadApi, batchRetryApi, getFileDownloadApi, importWebLinkApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
@@ -15,6 +15,15 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    Input,
+    Label,
+} from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
@@ -23,9 +32,14 @@ import {
     DEFAULT_MAX_FILE_SIZE_MB,
     getAllowedExtensions,
     getFileInputAccept,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
     isKnowledgeItemUploading,
+    resolveUploadSizeLimits,
     triggerUrlDownload,
+    type UploadSizeLimits,
 } from "../knowledgeUtils";
+import { resolveLocalizedKnowledgeImportError } from "../webLinkI18n";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
@@ -72,7 +86,7 @@ interface KnowledgeSpaceContentProps {
     onUploadFile: (files?: FileList | File[]) => void;
     onUploadFolder: (
         fileList: FileList | File[],
-        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
     ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
@@ -107,6 +121,12 @@ interface KnowledgeSpaceContentProps {
     onCloseSearch?: () => void;
     /** Notify the page when a mobile batch selection is active, so it can hide the AI dock. */
     onSelectionActiveChange?: (active: boolean) => void;
+}
+
+function normalizeWebLinkTitle(title: string): string | undefined {
+    const trimmed = title.trim();
+    if (!trimmed) return undefined;
+    return /\.html$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
 
 export function KnowledgeSpaceContent({
@@ -364,7 +384,7 @@ export function KnowledgeSpaceContent({
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
-    const canUseAddActions = canCreateFolder && !isSearching;
+    const canUseAddActions = (canCreateFolder || canUploadFile) && !isSearching;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -502,8 +522,8 @@ export function KnowledgeSpaceContent({
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
-    const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
-    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const uploadSizeLimits = resolveUploadSizeLimits(bishengConfig);
+    const maxFileSizeMB = uploadSizeLimits.defaultMaxMB;
     const enableEtl4lm = bishengConfig?.enable_etl4lm ?? false;
     const allowedExtensions = getAllowedExtensions(enableEtl4lm);
     const fileInputAccept = getFileInputAccept(enableEtl4lm);
@@ -520,6 +540,83 @@ export function KnowledgeSpaceContent({
     const triggerUploadFolder = () => {
         if (!canUploadFile) return;
         folderInputRef.current?.click();
+    };
+
+    const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
+    const [webLinkUrl, setWebLinkUrl] = useState("");
+    const [webLinkTitle, setWebLinkTitle] = useState("");
+    const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
+
+    const triggerWebLink = () => {
+        if (!canUploadFile) return;
+        setWebLinkDialogOpen(true);
+    };
+
+    const refreshAfterWebLinkImport = () => {
+        queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+        dispatchKnowledgeSpaceFilesRefresh(space.id);
+        onDeleteFile("");
+    };
+
+    const resetWebLinkDialog = () => {
+        setWebLinkUrl("");
+        setWebLinkTitle("");
+    };
+
+    const submitWebLink = async (overwrite = false) => {
+        const trimmedUrl = webLinkUrl.trim();
+        const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
+        if (!trimmedUrl) {
+            showToast({ message: localize("com_knowledge.web_link_url_required"), status: "error" });
+            return;
+        }
+        try {
+            const parsed = new URL(trimmedUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                showToast({ message: localize("com_knowledge.web_link_http_only"), status: "error" });
+                return;
+            }
+        } catch {
+            showToast({ message: localize("com_knowledge.web_link_invalid"), status: "error" });
+            return;
+        }
+
+        setWebLinkSubmitting(true);
+        try {
+            await importWebLinkApi(space.id, {
+                url: trimmedUrl,
+                title: normalizedTitle,
+                parent_id: currentFolderId ? Number(currentFolderId) : null,
+                overwrite,
+            });
+            showToast({ message: localize("com_knowledge.web_link_import_success"), status: "success" });
+            setWebLinkDialogOpen(false);
+            resetWebLinkDialog();
+            refreshAfterWebLinkImport();
+        } catch (error: any) {
+            const statusCode = error?.status_code ?? error?.statusCode;
+            if (!overwrite && (statusCode === 18021 || statusCode === 18023)) {
+                const confirmed = await confirm({
+                    description: localize(
+                        statusCode === 18021
+                            ? "com_knowledge.web_link_duplicate_content_confirm"
+                            : "com_knowledge.web_link_duplicate_name_confirm"
+                    ),
+                    confirmText: localize("com_knowledge.overwrite"),
+                    cancelText: localize("com_knowledge.cancel"),
+                });
+                if (confirmed) {
+                    await submitWebLink(true);
+                }
+                return;
+            }
+            showToast({
+                message: resolveLocalizedKnowledgeImportError(error, localize, "com_knowledge.web_link_import_failed"),
+                status: "error",
+            });
+        } finally {
+            setWebLinkSubmitting(false);
+        }
     };
 
     useEffect(() => {
@@ -549,8 +646,10 @@ export function KnowledgeSpaceContent({
             }
 
             for (let f of filesList) {
-                if (f.size > maxFileSizeBytes) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: maxFileSizeMB }), status: "error" });
+                const fileMaxSizeMB = getMaxFileSizeMBForFile(f.name, uploadSizeLimits);
+                const fileMaxSizeBytes = getMaxFileSizeBytesForFile(f.name, uploadSizeLimits);
+                if (f.size > fileMaxSizeBytes) {
+                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: fileMaxSizeMB }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
@@ -575,7 +674,7 @@ export function KnowledgeSpaceContent({
     const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const filesList = e.target.files;
         if (filesList && filesList.length > 0 && canUploadFile) {
-            onUploadFolder(filesList, { allowedExtensions, maxSizeMB: maxFileSizeMB });
+            onUploadFolder(filesList, { allowedExtensions, maxSizeMB: maxFileSizeMB, limits: uploadSizeLimits });
         }
         if (folderInputRef.current) folderInputRef.current.value = "";
     };
@@ -589,6 +688,7 @@ export function KnowledgeSpaceContent({
         // nothing. Gate on canUploadFile like onUploadFile.
         onUploadFolder: canUploadFile ? onUploadFolder : undefined,
         maxFileSizeMB,
+        uploadSizeLimits,
         enableEtl4lm,
     });
 
@@ -1116,6 +1216,12 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
                                         </DropdownMenuItem>
                                     )}
+                                    {canUploadFile && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerWebLink}>
+                                            <Link2 className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.web_link")}</span>
+                                        </DropdownMenuItem>
+                                    )}
                                     {canCreateFolder && (
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onCreateFolder()}>
                                             <FolderPlus className={sidebarListMoreMenuIconClassName} />
@@ -1177,6 +1283,7 @@ export function KnowledgeSpaceContent({
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
+                onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(
@@ -1223,10 +1330,24 @@ export function KnowledgeSpaceContent({
                             />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                <FolderPlus className="mr-2 size-4" />
-                                {localize("com_knowledge.new_folder")}
-                            </DropdownMenuItem>
+                            {canUploadFile && (
+                                <DropdownMenuItem onClick={triggerUpload} className="cursor-pointer">
+                                    <Outlined.Upload className="mr-2 size-4" />
+                                    {localize("com_knowledge.upload_file")}
+                                </DropdownMenuItem>
+                            )}
+                            {canUploadFile && (
+                                <DropdownMenuItem onClick={triggerWebLink} className="cursor-pointer">
+                                    <Link2 className="mr-2 size-4" />
+                                    {localize("com_knowledge.web_link")}
+                                </DropdownMenuItem>
+                            )}
+                            {canCreateFolder && (
+                                <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                    <FolderPlus className="mr-2 size-4" />
+                                    {localize("com_knowledge.new_folder")}
+                                </DropdownMenuItem>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                     {suppressList ? (
@@ -1450,6 +1571,60 @@ export function KnowledgeSpaceContent({
                         : []
                 }
             />
+
+            <Dialog
+                open={webLinkDialogOpen}
+                onOpenChange={(open) => {
+                    setWebLinkDialogOpen(open);
+                    if (!open) resetWebLinkDialog();
+                }}
+            >
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="knowledge-web-link-url">{localize("com_knowledge.web_link_url")}</Label>
+                            <Input
+                                id="knowledge-web-link-url"
+                                value={webLinkUrl}
+                                onChange={(e) => setWebLinkUrl(e.target.value)}
+                                placeholder="https://example.com/article"
+                                disabled={webLinkSubmitting}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="knowledge-web-link-title">{localize("com_knowledge.web_link_title")}</Label>
+                            <Input
+                                id="knowledge-web-link-title"
+                                value={webLinkTitle}
+                                onChange={(e) => setWebLinkTitle(e.target.value)}
+                                placeholder={localize("com_knowledge.web_link_title_placeholder")}
+                                disabled={webLinkSubmitting}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <button
+                            type="button"
+                            className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
+                            onClick={() => setWebLinkDialogOpen(false)}
+                            disabled={webLinkSubmitting}
+                        >
+                            {localize("com_knowledge.cancel")}
+                        </button>
+                        <button
+                            type="button"
+                            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => submitWebLink(false)}
+                            disabled={webLinkSubmitting}
+                        >
+                            {webLinkSubmitting ? localize("com_knowledge.importing") : localize("com_knowledge.import")}
+                        </button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {permTarget && (
                 <KnowledgeSpaceShareDialog

@@ -4,7 +4,7 @@ from functools import cached_property
 from langchain_core.documents import BaseDocumentTransformer
 
 from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileSource, KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
@@ -24,6 +24,9 @@ from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.file import download_minio_file
 
+_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
+_WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
+
 
 class KnowledgeFilePipeline(BaseFilePipeline):
 
@@ -33,12 +36,24 @@ class KnowledgeFilePipeline(BaseFilePipeline):
         if db_file.split_rule and isinstance(db_file.split_rule, str):
             split_rule = FileProcessBase(**json.loads(db_file.split_rule))
         split_rule.knowledge_id = db_file.knowledge_id
+        if db_file.file_source == FileSource.WEB_LINK.value:
+            split_rule.separator = _WEB_LINK_SEPARATORS
+            split_rule.separator_rule = _WEB_LINK_SEPARATOR_RULES
+            split_rule.chunk_overlap = 0
 
         super().__init__(invoke_user_id, db_file.file_name, split_rule, **kwargs)
         self.db_file = db_file
         self.preview_cache_key = preview_cache_key
         self.no_summary = no_summary
         self.need_thumbnail = need_thumbnail
+
+    @cached_property
+    def file_extension(self):
+        if self.db_file.file_source == FileSource.WEB_LINK.value:
+            return "md"
+        if self.file_name:
+            return self.file_name.split(".")[-1].lower()
+        return None
 
     @cached_property
     def file_metadata(self) -> dict:

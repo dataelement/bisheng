@@ -27,6 +27,12 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+export {
+    isWebLinkKnowledgeFile,
+    resolveWebLinkDisplayName,
+    toWebLinkFileName,
+} from "~/api/knowledge";
+
 /**
  * True while a file body is still being uploaded (frontend placeholder row)
  * or a folder row is a not-yet-committed inline-create placeholder. These
@@ -66,12 +72,14 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
 export const ALLOWED_EXTENSIONS = [
     "pdf", "ofd", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
-    "wps", "dps", "et",
+    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "mp4", "mov", "avi", "mkv", "webm",
 ] as const;
 
 /** Subset used when ETL4LM is NOT deployed — drops images. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
     "pdf", "ofd", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
+    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm",
 ];
 
 /**
@@ -89,6 +97,9 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
     "image/png", "image/jpeg", "image/bmp",
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a",
+    "audio/aac", "audio/flac", "audio/ogg",
+    "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/x-matroska", "video/webm",
     "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
     "application/vnd.wps-presentation", "application/kswps", // dps
     "application/vnd.ms-excel", "application/kset", // et
@@ -120,6 +131,44 @@ export function getFileInputAccept(enableEtl4lm: boolean): string {
 /** Default maximum single file size in MB (used when env config is not available) */
 export const DEFAULT_MAX_FILE_SIZE_MB = 200;
 
+/** Default maximum media file size in MB when env config is not available */
+export const DEFAULT_MEDIA_MAX_FILE_SIZE_MB = 1024;
+
+export const MEDIA_FILE_EXTENSIONS = [
+    "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "mp4", "mov", "avi", "mkv", "webm",
+] as const;
+
+export interface UploadSizeLimits {
+    defaultMaxMB: number;
+    mediaMaxMB: number;
+}
+
+export interface UploadSizeEnvConfig {
+    uploaded_files_maximum_size?: number;
+    uploaded_media_maximum_size?: number;
+}
+
+export function resolveUploadSizeLimits(config?: UploadSizeEnvConfig | null): UploadSizeLimits {
+    return {
+        defaultMaxMB: config?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB,
+        mediaMaxMB: config?.uploaded_media_maximum_size ?? DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
+    };
+}
+
+export function isMediaFileName(name: string): boolean {
+    const ext = name.split(".").pop()?.toLowerCase();
+    return Boolean(ext && (MEDIA_FILE_EXTENSIONS as readonly string[]).includes(ext));
+}
+
+export function getMaxFileSizeMBForFile(name: string, limits: UploadSizeLimits): number {
+    return isMediaFileName(name) ? limits.mediaMaxMB : limits.defaultMaxMB;
+}
+
+export function getMaxFileSizeBytesForFile(name: string, limits: UploadSizeLimits): number {
+    return getMaxFileSizeMBForFile(name, limits) * 1024 * 1024;
+}
+
 /** Maximum number of files per upload batch */
 export const MAX_UPLOAD_COUNT = 50;
 
@@ -148,6 +197,19 @@ export function getFileTypeFromName(name: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "mp3":
+        case "wav":
+        case "m4a":
+        case "aac":
+        case "flac":
+        case "ogg":
+            return FileType.AUDIO;
+        case "mp4":
+        case "mov":
+        case "avi":
+        case "mkv":
+        case "webm":
+            return FileType.VIDEO;
         case "wps": return FileType.WPS;
         case "dps": return FileType.DPS;
         case "et": return FileType.ET;
@@ -250,16 +312,16 @@ export interface FolderUploadFilterResult {
 
 export function filterFolderUploadFiles(
     files: File[],
-    options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+    options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
 ): FolderUploadFilterResult {
-    const maxBytes = options.maxSizeMB * 1024 * 1024;
+    const limits = options.limits ?? { defaultMaxMB: options.maxSizeMB, mediaMaxMB: options.maxSizeMB };
     const valid: File[] = [];
     let oversizeCount = 0;
     let unsupportedCount = 0;
     for (const file of files) {
         const rel = file.webkitRelativePath || file.name;
         if (isHiddenPath(rel)) continue; // hidden: silent drop
-        if (file.size > maxBytes) {
+        if (file.size > getMaxFileSizeBytesForFile(file.name, limits)) {
             oversizeCount++;
             continue;
         }
@@ -279,10 +341,17 @@ export function filterFolderUploadFiles(
  * @param maxSizeMB - Maximum file size in MB (from env config or default 200)
  * Returns an error message string, or null if valid.
  */
-export function validateFileForUpload(file: File, maxSizeMB: number = DEFAULT_MAX_FILE_SIZE_MB): string | null {
-    const maxSizeBytes = maxSizeMB * 1024 * 1024;
-    if (file.size > maxSizeBytes) {
-        return i18next.t("com_knowledge.file_exceeds_limit", { name: file.name, size: maxSizeMB });
+export function validateFileForUpload(
+    file: File,
+    maxSizeMB: number = DEFAULT_MAX_FILE_SIZE_MB,
+    limits?: UploadSizeLimits,
+): string | null {
+    const resolvedLimits = limits ?? { defaultMaxMB: maxSizeMB, mediaMaxMB: maxSizeMB };
+    if (file.size > getMaxFileSizeBytesForFile(file.name, resolvedLimits)) {
+        return i18next.t("com_knowledge.file_exceeds_limit", {
+            name: file.name,
+            size: getMaxFileSizeMBForFile(file.name, resolvedLimits),
+        });
     }
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {

@@ -8,12 +8,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import { Button, DropdownMenu, DropdownMenuTrigger } from "~/components";
 import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { PermissionDialog } from "~/components/permission";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
 import FilePreview from "./index";
+import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { useLocalize } from "~/hooks";
 
 /**
@@ -35,6 +37,30 @@ function extractExtFromUrl(url: string, fallback: string): string {
     return fallback;
 }
 
+function resolvePreviewUrl(url: string): string {
+    if (!url) return "";
+    return /^https?:\/\//.test(url)
+        ? url
+        : `${window.location.origin}${__APP_ENV__.BASE_URL}${url}`;
+}
+
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+
+function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
+    if (!data) return false;
+    const ext = extractExtFromUrl(data.original_url || data.preview_url || "", "");
+    return (
+        data.file_source === "web_link"
+        || data.file_source === "audio_transcript"
+        || data.file_source === "video_transcript"
+        || data.media_kind === "audio"
+        || data.media_kind === "video"
+        || AUDIO_EXTENSIONS.has(ext)
+        || VIDEO_EXTENSIONS.has(ext)
+    );
+}
+
 export default function FilePreviewPage() {
     const localize = useLocalize();
     const { fileId } = useParams<{ fileId: string }>();
@@ -45,6 +71,7 @@ export default function FilePreviewPage() {
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
     const [fileType, setFileType] = useState<string>("pdf");
+    const [previewData, setPreviewData] = useState<KnowledgeFilePreview | null>(null);
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
     const [canDownload, setCanDownload] = useState(false);
@@ -55,8 +82,24 @@ export default function FilePreviewPage() {
         if (!fileId || !spaceId) { setLoading(false); return; }
         setLoading(true);
         setConversionFailed(false);
+        setPreviewData(null);
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
+                const resolvedPreview = {
+                    ...data,
+                    original_url: resolvePreviewUrl(data.original_url),
+                    preview_url: resolvePreviewUrl(data.preview_url),
+                    html_preview_url: resolvePreviewUrl(data.html_preview_url),
+                };
+                setPreviewData(resolvedPreview);
+
+                if (isRichPreviewData(data)) {
+                    const richUrl = resolvedPreview.preview_url || resolvedPreview.html_preview_url || resolvedPreview.original_url;
+                    setFileUrl(richUrl);
+                    setFileType(data.file_source === "web_link" ? "html" : extractExtFromUrl(data.original_url, "md"));
+                    return;
+                }
+
                 // Prefer preview_url, fallback to original_url
                 const chosenUrl = data.preview_url || data.original_url;
                 if (!chosenUrl) {
@@ -75,10 +118,7 @@ export default function FilePreviewPage() {
                     return;
                 }
 
-                const resolvedUrl = /^https?:\/\//.test(chosenUrl)
-                    ? chosenUrl
-                    : `${window.location.origin}${__APP_ENV__.BASE_URL}${chosenUrl}`;
-                setFileUrl(resolvedUrl);
+                setFileUrl(resolvePreviewUrl(chosenUrl));
                 setFileType(ext);
             })
             .catch((err) => console.error("Failed to load preview URL:", err))
@@ -207,6 +247,35 @@ export default function FilePreviewPage() {
         </DropdownMenu>
     ) : null;
 
+    const renderPreview = (compactMode = false) => {
+        if (previewData && isRichPreviewData(previewData)) {
+            return (
+                <RichKnowledgePreview
+                    fileName={fileName}
+                    preview={previewData}
+                    actions={compactMode ? undefined : topBarActions}
+                    allowDownload={canDownload}
+                    onDownloadFile={handleDownloadFile}
+                    compactMode={compactMode}
+                />
+            );
+        }
+        return (
+            <FilePreview
+                fileName={fileName}
+                fileType={fileType}
+                fileUrl={fileUrl}
+                actions={compactMode ? undefined : topBarActions}
+                conversionFailed={conversionFailed}
+                allowDownload={canDownload}
+                onDownloadFile={handleDownloadFile}
+                hideHeader={compactMode}
+                hideSidebar={compactMode}
+                hideHeaderDownload={!compactMode}
+            />
+        );
+    };
+
     // Loading state while fetching preview URL
     if (loading) {
         return (
@@ -217,7 +286,7 @@ export default function FilePreviewPage() {
     }
 
     // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
-    if (!fileUrl && !conversionFailed) {
+    if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
             <div className="h-screen flex items-center justify-center bg-white">
                 <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
@@ -243,16 +312,7 @@ export default function FilePreviewPage() {
 
                 {/* Bare preview — header hidden, viewer fills the container. */}
                 <div className="absolute inset-0">
-                    <FilePreview
-                        fileName={fileName}
-                        fileType={fileType}
-                        fileUrl={fileUrl}
-                        conversionFailed={conversionFailed}
-                        allowDownload={canDownload}
-                        onDownloadFile={handleDownloadFile}
-                        hideHeader
-                        hideSidebar
-                    />
+                    {renderPreview(true)}
                 </div>
 
                 {/* Floating top-right download button — styled like ArticlePage's menu button. */}
@@ -287,16 +347,7 @@ export default function FilePreviewPage() {
             )}
 
             <div className="min-h-0 flex-1">
-                <FilePreview
-                    fileName={fileName}
-                    fileType={fileType}
-                    fileUrl={fileUrl}
-                    actions={topBarActions}
-                    conversionFailed={conversionFailed}
-                    allowDownload={canDownload}
-                    hideHeaderDownload
-                    onDownloadFile={handleDownloadFile}
-                />
+                {renderPreview(false)}
             </div>
 
             {spaceId && fileId && <FileAiDock spaceId={spaceId} fileId={fileId} />}
