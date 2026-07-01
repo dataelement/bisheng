@@ -582,6 +582,61 @@ class TestPermissionApiIntegration:
         assert body["data"][0]["user_name"] == "Alice"
         mock_list_users.assert_awaited_once_with(tenant_id=3, keyword="Ali", page=1, page_size=1000)
 
+    async def test_list_grant_users_resolves_paths_without_whole_department_table(self):
+        """F038 perf regression: the primary-department full-path label must be resolved
+        via bounded ``aget_by_ids`` (this page's primary depts + their ancestors), NEVER
+        via ``aget_active_by_tenant`` — on the 50k-department load-test tenant that whole-
+        table load was ~2.8s / ~94% of the endpoint latency for at most page_size labels.
+        """
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.permission.api.endpoints import resource_permission as rp
+
+        users = [SimpleNamespace(user_id=8, user_name="Alice", external_id="a", delete=0)]
+
+        class _Result:
+            def all(self):
+                return users
+
+        class _Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def exec(self, _stmt):
+                return _Result()
+
+        primary_rows = [SimpleNamespace(user_id=8, department_id=106, is_primary=1)]
+        pool = {
+            1: SimpleNamespace(id=1, name="总部", path="/1/"),
+            21: SimpleNamespace(id=21, name="研发部", path="/1/21/"),
+            106: SimpleNamespace(id=106, name="平台组", path="/1/21/106/"),
+        }
+
+        async def _fake_aget_by_ids(ids):
+            return [pool[i] for i in ids if i in pool]
+
+        async def _forbidden_whole_table(*_a, **_k):
+            raise AssertionError("aget_active_by_tenant must not be called (whole-table load)")
+
+        with (
+            patch("bisheng.core.database.get_async_db_session", lambda: _Session()),
+            patch.object(UserDepartmentDao, "aget_by_user_ids", AsyncMock(return_value=primary_rows)),
+            patch.object(DepartmentDao, "aget_by_ids", AsyncMock(side_effect=_fake_aget_by_ids)),
+            patch.object(DepartmentDao, "aget_active_by_tenant", AsyncMock(side_effect=_forbidden_whole_table)),
+        ):
+            result = await rp._list_knowledge_space_grant_users(tenant_id=1, keyword="Ali", page=1, page_size=50)
+
+        assert result == [
+            {
+                "user_id": 8,
+                "user_name": "Alice",
+                "external_id": "a",
+                "primary_department_path": "总部/研发部/平台组",
+            }
+        ]
+
     def test_knowledge_space_grant_subject_user_groups_endpoint_returns_tenant_scoped_groups(self):
         app = _make_app(_ViewerUser)
 

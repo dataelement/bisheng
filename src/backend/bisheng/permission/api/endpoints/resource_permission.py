@@ -792,8 +792,22 @@ async def _list_knowledge_space_grant_users(
     user_ids = [int(user.user_id) for user in active_users if getattr(user, "user_id", None) is not None]
     dept_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
     primary_rows = [row for row in dept_rows if int(getattr(row, "is_primary", 0) or 0) == 1]
-    departments = await DepartmentDao.aget_active_by_tenant(tenant_id)
-    dept_map = {int(dept.id): dept for dept in departments if getattr(dept, "id", None) is not None}
+    # F038 perf: resolve the full-path label for ONLY the primary departments shown on
+    # this page (+ their ancestors), never the whole tenant department table. On the 50k-
+    # department load-test tenant, aget_active_by_tenant loaded ~50k rows in ~2.8s on DM8
+    # and was ~94% of this endpoint's latency — yet dept_map only labels <= page_size users.
+    primary_dept_ids = {
+        int(row.department_id) for row in primary_rows if getattr(row, "department_id", None) is not None
+    }
+    primary_depts = await DepartmentDao.aget_by_ids(list(primary_dept_ids)) if primary_dept_ids else []
+    dept_map = {int(dept.id): dept for dept in primary_depts if getattr(dept, "id", None) is not None}
+    ancestor_ids = {
+        i for dept in primary_depts for i in _grant_path_ids(getattr(dept, "path", None)) if i not in dept_map
+    }
+    if ancestor_ids:
+        for ancestor in await DepartmentDao.aget_by_ids(list(ancestor_ids)) or []:
+            if getattr(ancestor, "id", None) is not None:
+                dept_map[int(ancestor.id)] = ancestor
     primary_by_user = {
         int(row.user_id): dept_map.get(int(row.department_id))
         for row in primary_rows
