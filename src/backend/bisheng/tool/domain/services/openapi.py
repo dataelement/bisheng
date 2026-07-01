@@ -70,7 +70,7 @@ class OpenApiSchema:
                     continue
 
                 if 'requestBody' in method_info:
-                    for _, content in method_info['requestBody']['content'].items():
+                    for content_type, content in method_info['requestBody']['content'].items():
                         if '$ref' in content['schema']:
                             schema_ref = content['schema']['$ref']
                             schema_name = schema_ref.split('/')[-1]
@@ -80,16 +80,22 @@ class OpenApiSchema:
 
                         if 'properties' in schema:
                             for param_name, param_info in schema['properties'].items():
+                                param_schema = {
+                                    'type': param_info.get('type', 'string'),
+                                    'title': param_info.get('title', param_name),
+                                    'properties': param_info.get('properties', {})
+                                }
+                                if param_info.get('format'):
+                                    param_schema['format'] = param_info.get('format')
+                                if param_info.get('items'):
+                                    param_schema['items'] = param_info.get('items')
                                 param = {
                                     'name': param_name,
                                     'description': param_info.get('description', ''),
-                                    'in': 'body',
+                                    'in': 'formData' if content_type == 'multipart/form-data' else 'body',
+                                    'content_type': content_type,
                                     'required': param_name in schema.get('required', []),
-                                    'schema': {
-                                        'type': param_info.get('type', 'string'),
-                                        'title': param_info.get('title', param_name),
-                                        'properties': param_info.get('properties', {})
-                                    },
+                                    'schema': param_schema,
                                 }
                                 one_api_info['parameters'].append(param)
                 else:

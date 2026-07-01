@@ -73,6 +73,10 @@ export function initNode(node, nds, t) {
 }
 
 // 工具节点tree
+const isOpenApiFileParam = (param) => {
+    return param?.content_type === 'multipart/form-data' && param?.schema?.format === 'binary';
+}
+
 export function getToolTree(temp) {
     const children = temp.children.map(item => {
         return {
@@ -87,7 +91,7 @@ export function getToolTree(temp) {
                     params: item.api_params.map(el => ({
                         key: el.name,
                         label: el.name,
-                        type: 'var_textarea',
+                        type: isOpenApiFileParam(el) ? 'api_file_upload' : 'var_textarea',
                         test: "input",
                         desc: el.description,
                         required: el.required,

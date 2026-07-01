@@ -1,4 +1,5 @@
 import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
+import ApiFileUploadItem from "./component/ApiFileUploadItem";
 import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";
 import CodePythonItem from "./component/CodePythonItem";
@@ -112,6 +113,13 @@ export default function Parameter({
                 onValidate={bindValidate}
                 onVarEvent={bindVarValidate}
                 i18nPrefix={i18nPrefix}
+            />
+        case 'api_file_upload':
+            return <ApiFileUploadItem
+                node={node}
+                data={item}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
             />
         case 'output_form':
             return <OutputItem

@@ -61,7 +61,10 @@ class ToolNode(BaseNode):
 
         return ret
 
-    def parse_template_msg(self, msg: str):
+    def parse_template_msg(self, msg: Any):
+        if not isinstance(msg, str):
+            return msg
+
         msg_template = PromptTemplateParser(template=msg)
         variables = msg_template.extract()
         if len(variables) > 0:

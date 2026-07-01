@@ -66,6 +66,8 @@ class InputNode(BaseNode):
 
         self.node_params = new_node_params
         self._image_ext = ['png', 'jpg', 'jpeg', 'bmp']
+        self._audio_ext = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac']
+        self._video_ext = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv']
 
         self._vector_client = None
         self._es_client = None
@@ -163,6 +165,10 @@ class InputNode(BaseNode):
         if file_parse_mode == ParseModeEnum.KEEP_RAW:
             if key_info.get("file_type") in ["image", "all"]:
                 ret[key_info['image_file']] = key_value.get(key_info['image_file'], [])
+            if key_info.get("file_type") in ["audio", "all"]:
+                ret['audio_files'] = key_value.get('audio_files', [])
+            if key_info.get("file_type") in ["video", "all"]:
+                ret['video_files'] = key_value.get('video_files', [])
             ret[key_info['file_path']] = key_value.get(key_info['file_path'], [])
         elif file_parse_mode == ParseModeEnum.EXTRACT_TEXT:
             ret[key_info['file_content']] = key_value.get(key_info['file_content'], "")
@@ -282,13 +288,17 @@ class InputNode(BaseNode):
         all_file_content = ''
         original_file_path = []
         image_files_path = []
+        audio_files_path = []
+        video_files_path = []
         if not value:
             logger.warning(f"{self.id}.{key} value is None")
             return {
                 key_info['key']: all_metadata,
                 key_info['file_content']: all_file_content,
                 key_info['file_path']: original_file_path,
-                key_info['image_file']: image_files_path
+                key_info['image_file']: image_files_path,
+                'audio_files': audio_files_path,
+                'video_files': video_files_path,
             }
 
         file_parse_mode = key_info.get('file_parse_mode', ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE)
@@ -319,6 +329,10 @@ class InputNode(BaseNode):
             original_file_path.append(one_file_url)
             if file_ext in self._image_ext:
                 image_files_path.append(one_file_url)
+            elif file_ext in self._audio_ext:
+                audio_files_path.append(one_file_url)
+            elif file_ext in self._video_ext:
+                video_files_path.append(one_file_url)
 
             if file_parse_mode == ParseModeEnum.KEEP_RAW:
                 continue
@@ -359,5 +373,7 @@ class InputNode(BaseNode):
             key_info['key']: all_metadata,
             key_info['file_content']: all_file_content,
             key_info['file_path']: original_file_path,
-            key_info['image_file']: image_files_path
+            key_info['image_file']: image_files_path,
+            'audio_files': audio_files_path,
+            'video_files': video_files_path,
         }
