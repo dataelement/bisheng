@@ -86,6 +86,10 @@ function getUpdateTimeDisplay(updatedAt?: string | null) {
     return formatTime(updatedAt);
 }
 
+function getPersonDisplay(name?: string | null) {
+    return isNonEmptyText(name) ? name : EMPTY_FIELD_PLACEHOLDER;
+}
+
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
 // ============================================================
@@ -97,6 +101,8 @@ const COLUMN_CONFIG = {
     tags: { minWidth: 140, initialWidth: 200 },
     businessDomain: { minWidth: 140, initialWidth: 170 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
+    uploader: { minWidth: 100, initialWidth: 140 },
+    updater: { minWidth: 100, initialWidth: 140 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
@@ -590,6 +596,28 @@ function FileTableHeader({
                         <ResizeHandle columnKey="fileEncoding" onResizeStart={onResizeStart} />
                     </TableHead>
                 )}
+
+                {/* 上传人 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{ width: columnWidths.uploader, minWidth: columnWidths.uploader, maxWidth: columnWidths.uploader }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        上传人
+                    </div>
+                    <ResizeHandle columnKey="uploader" onResizeStart={onResizeStart} />
+                </TableHead>
+
+                {/* 更新人 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{ width: columnWidths.updater, minWidth: columnWidths.updater, maxWidth: columnWidths.updater }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        更新人
+                    </div>
+                    <ResizeHandle columnKey="updater" onResizeStart={onResizeStart} />
+                </TableHead>
 
                 {/* 更新时间 */}
                 <SortableHeader
@@ -1456,6 +1484,26 @@ function FileRow({
                     </div>
                 </TableCell>
             )}
+
+            {/* 上传人 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.uploader, minWidth: columnWidths.uploader, maxWidth: columnWidths.uploader }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getPersonDisplay(file.user_name)}
+                </span>
+            </TableCell>
+
+            {/* 更新人 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.updater, minWidth: columnWidths.updater, maxWidth: columnWidths.updater }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {getPersonDisplay(file.updater_name || file.user_name)}
+                </span>
+            </TableCell>
 
             {/* 更新时间 — 操作按钮改到行末占位列，避免盖住文字 */}
             <TableCell

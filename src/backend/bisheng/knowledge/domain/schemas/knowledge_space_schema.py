@@ -1,9 +1,10 @@
 from enum import Enum
-from typing import Optional, List, Dict, Literal
+from typing import Any, Optional, List, Dict, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -499,6 +500,35 @@ class FileCreateReq(BaseModel):
     file_path: List[str] = Field(..., description="File Path")
     parent_id: Optional[int] = Field(None, description="Parent Folder ID")
     file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
+    business_domain_code: Optional[str] = Field(None, max_length=16, description="Selected business domain code")
+    manual_tag_ids: List[int] = Field(default_factory=list, description="Selected existing tag IDs")
+    manual_tag_names: List[str] = Field(default_factory=list, description="Selected tag names")
+
+    @field_validator("business_domain_code", mode="before")
+    @classmethod
+    def normalize_business_domain_code_field(cls, value: Any):
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError("business_domain_code is invalid")
+        return normalized
+
+    @field_validator("manual_tag_ids", mode="before")
+    @classmethod
+    def normalize_manual_tag_ids(cls, value: Any):
+        if value is None:
+            return []
+        return value
+
+    @field_validator("manual_tag_names", mode="before")
+    @classmethod
+    def normalize_manual_tag_names(cls, value: Any):
+        if value is None:
+            return []
+        return value
 
 
 class WebLinkCreateReq(BaseModel):

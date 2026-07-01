@@ -592,6 +592,9 @@ async def add_file(
         file_path=req.file_path,
         parent_id=req.parent_id,
         file_category_code=req.file_category_code,
+        business_domain_code=req.business_domain_code,
+        manual_tag_ids=req.manual_tag_ids,
+        manual_tag_names=req.manual_tag_names,
     )
     return resp_200(file_record)
 

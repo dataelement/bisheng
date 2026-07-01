@@ -7433,6 +7433,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_path: List[str],
         parent_id: Optional[int] = None,
         file_category_code: Optional[str] = None,
+        business_domain_code: Optional[str] = None,
+        manual_tag_ids: Optional[List[int]] = None,
+        manual_tag_names: Optional[List[str]] = None,
         file_source: FileSource = None,
         skip_approval: bool = False,
     ) -> List[KnowledgeSpaceFileResponse]:
@@ -7500,6 +7503,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_file_category_code = self.normalize_file_category_code(file_category_code)
         if normalized_file_category_code:
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code
+        normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
+        if normalized_business_domain_code:
+            split_rule_dict[self.business_domain_code_key] = normalized_business_domain_code
         process_files = []
         failed_files = []
         preview_cache_keys = []
@@ -7600,6 +7606,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     parent_type,
                     parent_resource_id,
                 )
+            await KnowledgeService.apply_manual_upload_tags(
+                login_user=self.login_user,
+                knowledge=db_knowledge,
+                files=process_files,
+                manual_tag_ids=manual_tag_ids,
+                manual_tag_names=manual_tag_names,
+            )
         except Exception:
             try:
                 await cleanup_created_files()
@@ -7919,11 +7932,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_file_retry:
             return []
         file_category_code = self.normalize_file_category_code(req_data.get("file_category_code"))
+        business_domain_code = self.normalize_business_domain_code(req_data.get("business_domain_code"))
         if file_category_code:
             for retry_file in db_file_retry:
                 retry_file["split_rule"] = self.with_file_category_code_in_split_rule(
                     retry_file.get("split_rule"),
                     file_category_code,
+                )
+        if business_domain_code:
+            for retry_file in db_file_retry:
+                retry_file["split_rule"] = self.with_business_domain_code_in_split_rule(
+                    retry_file.get("split_rule"),
+                    business_domain_code,
                 )
 
         id2input = {file.get("id"): file for file in db_file_retry}
@@ -7939,6 +7959,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         tmp, file_level_path = await self.process_retry_files(
             db_files, id2input, self.login_user
+        )
+        await KnowledgeService.apply_manual_upload_tags(
+            login_user=self.login_user,
+            knowledge=space,
+            files=tmp,
+            manual_tag_ids=req_data.get("manual_tag_ids"),
+            manual_tag_names=req_data.get("manual_tag_names"),
         )
         if tmp:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async([one.id for one in tmp])
