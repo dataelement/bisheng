@@ -85,7 +85,9 @@ async def test_aretrieve_returns_empty_when_no_identity_or_spaces():
 
 
 def _mock_retrieval(
-    vis_instance, docs, retriever_cls_target="bisheng.tool.domain.langchain.knowledge.KnowledgeRetrieverTool"
+    vis_instance,
+    docs,
+    retriever_cls_target="bisheng.knowledge.domain.services.space_flow_retrieval.KnowledgeRetrieverTool",
 ):
     """Patch the heavy retrieval deps of _aretrieve_one_space (Milvus/ES = 测试降级)."""
     vector = MagicMock()

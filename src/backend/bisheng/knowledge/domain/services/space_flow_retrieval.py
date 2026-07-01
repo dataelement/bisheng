@@ -21,9 +21,11 @@ from typing import Any
 
 from langchain_core.documents import Document
 from loguru import logger
+from pydantic import Field
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -74,8 +76,7 @@ async def _aretrieve_one_space(
     query: str,
     identity_user: UserPayload,
     max_content: int,
-    extra_milvus_expr: str | None,
-    extra_es_filter: list | None,
+    metadata_filter_fn: Any,
     rrf_weights: list | None,
     rerank: Any,
     sort_by_source_and_index: bool,
@@ -94,7 +95,6 @@ async def _aretrieve_one_space(
     from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
         KnowledgeFileVisibilityService,
     )
-    from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 
     visibility = KnowledgeFileVisibilityService(request, identity_user)
     visibility.version_repo = version_repo
@@ -107,6 +107,13 @@ async def _aretrieve_one_space(
             identity_user.user_id,
         )
         return []
+
+    # Per-space metadata filter (AC-08) — conditions are keyed by knowledge_id, so
+    # each space resolves its own expr/filter rather than one flat filter for all.
+    extra_milvus_expr: str | None = None
+    extra_es_filter: list | None = None
+    if metadata_filter_fn is not None:
+        extra_milvus_expr, extra_es_filter = metadata_filter_fn(space)
 
     base_milvus = _and_milvus_expr(index_filter.milvus_expr, extra_milvus_expr)
     base_es = _merge_es_clauses(index_filter.es_filter, extra_es_filter)
@@ -164,8 +171,7 @@ async def aretrieve_space_documents(
     query: str,
     identity_user: UserPayload | None,
     max_content: int,
-    extra_milvus_expr: str | None = None,
-    extra_es_filter: list | None = None,
+    metadata_filter_fn: Any = None,
     rrf_weights: list | None = None,
     rerank: Any = None,
     sort_by_source_and_index: bool = True,
@@ -201,8 +207,7 @@ async def aretrieve_space_documents(
                 query=query,
                 identity_user=identity_user,
                 max_content=max_content,
-                extra_milvus_expr=extra_milvus_expr,
-                extra_es_filter=extra_es_filter,
+                metadata_filter_fn=metadata_filter_fn,
                 rrf_weights=rrf_weights,
                 rerank=rerank,
                 sort_by_source_and_index=sort_by_source_and_index,
@@ -211,3 +216,103 @@ async def aretrieve_space_documents(
             )
         )
     return docs
+
+
+async def _aretrieve_space_with_session(
+    *,
+    space_ids: list[int | str],
+    query: str,
+    identity_user_id: int | None,
+    tenant_id: int | None,
+    max_content: int,
+    rrf_weights: list | None,
+    rerank: Any,
+) -> list[Document]:
+    """Resolve identity + open a version-repo session, then retrieve. Shared by the
+    tool-based entries (agent node / assistant)."""
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+
+    identity_user = await abuild_scoped_login_user(identity_user_id, tenant_id)
+    if identity_user is None:
+        return []
+    async with get_async_db_session() as session:
+        version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
+        return await aretrieve_space_documents(
+            space_ids=space_ids,
+            query=query,
+            identity_user=identity_user,
+            max_content=max_content,
+            rrf_weights=rrf_weights,
+            rerank=rerank,
+            version_repo=version_repo,
+        )
+
+
+class SpaceKnowledgeRetrieverTool(KnowledgeRetrieverTool):
+    """F041 drop-in replacement for ``KnowledgeRetrieverTool`` that retrieves from
+    knowledge spaces through the F029 view_file filter.
+
+    Exposes the same ``invoke({"query": ...})`` / ``ainvoke`` contract so the agent
+    node and assistant (which reach into ``tool.knowledge_retriever_tool``) work
+    unchanged. Sync ``_run`` hops onto the single persistent loop via
+    ``run_async_safe`` (never ``asyncio.run`` — gotcha 5.2); ``_arun`` awaits directly.
+    """
+
+    space_ids: list = Field(default_factory=list)
+    identity_user_id: int | None = None
+    space_tenant_id: int | None = None
+
+    def _run(self, query: str, **kwargs: Any) -> list[Document]:
+        from bisheng.utils.async_utils import run_async_safe
+
+        return run_async_safe(self._aretrieve(query), timeout=120)
+
+    async def _arun(self, query: str, **kwargs: Any) -> list[Document]:
+        return await self._aretrieve(query)
+
+    async def _aretrieve(self, query: str) -> list[Document]:
+        return await _aretrieve_space_with_session(
+            space_ids=self.space_ids,
+            query=query,
+            identity_user_id=self.identity_user_id,
+            tenant_id=self.space_tenant_id,
+            max_content=self.max_content,
+            rrf_weights=self.rrf_weights,
+            rerank=self.rerank,
+        )
+
+
+def build_space_knowledge_tool(
+    *,
+    name: str,
+    description: str,
+    llm: Any,
+    space_ids: list[int | str],
+    identity_user_id: int | None,
+    tenant_id: int | None,
+    max_content: int = 15000,
+    rrf_weights: list | None = None,
+    rerank: Any = None,
+) -> KnowledgeRagTool:
+    """Build an LLM-facing knowledge tool backed by knowledge-space retrieval.
+
+    ``identity_user_id`` is chosen by the caller from the permission toggle:
+    runtime user when ON, config author when OFF.
+    """
+    space_retriever = SpaceKnowledgeRetrieverTool(
+        space_ids=list(space_ids),
+        identity_user_id=identity_user_id,
+        space_tenant_id=tenant_id,
+        max_content=max_content,
+        rrf_weights=rrf_weights,
+        rerank=rerank,
+    )
+    return KnowledgeRagTool(
+        name=name,
+        description=description,
+        llm=llm,
+        knowledge_retriever_tool=space_retriever,
+    )
