@@ -106,10 +106,10 @@ async def run(apply: bool) -> int:
         for child_id, parent_id in edges:
             ops.extend(DepartmentChangeHandler.on_created(child_id, parent_id))
 
-        logger.info("待回填部门父边 %d 条（additive，幂等）。", len(ops))
+        logger.info("待回填部门父边 {} 条（additive，幂等）。", len(ops))
         sample = edges[:8]
         logger.info(
-            "样本(child->parent): %s",
+            "样本(child->parent): {}",
             ", ".join(f"{c}->{p}" for c, p in sample),
         )
 
@@ -118,7 +118,7 @@ async def run(apply: bool) -> int:
             return 0
 
         await PermissionService.batch_write_tuples(ops, crash_safe=False)
-        logger.info("完成。已写入 %d 条 department#parent 边。", len(ops))
+        logger.info("完成。已写入 {} 条 department#parent 边。", len(ops))
         return 0
 
 
