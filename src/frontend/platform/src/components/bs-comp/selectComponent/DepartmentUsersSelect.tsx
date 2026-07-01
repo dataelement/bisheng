@@ -1,13 +1,17 @@
+import { useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
-import { getDepartmentMembersApi, getDepartmentTreeApi } from "@/controllers/API/department"
+import {
+  getDepartmentChildrenApi,
+  getDepartmentMembersApi,
+  getDepartmentPathTreeApi,
+} from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type { DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight, User as UserIcon, X } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
+import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export type DepartmentUserOption = {
@@ -29,10 +33,8 @@ interface DepartmentUsersSelectProps {
   searchPlaceholder?: string
   className?: string
   /** When set, the picker only renders the subtree rooted at this department's
-   * internal id. Search results outside the subtree are hidden. Used by Tenant
-   * admin/member pickers to enforce that selections stay within the Tenant's
-   * department subtree (write-side guard for the FGA `admin tenant:X` /
-   * tenant-membership relations). */
+   * internal id (Tenant admin/member pickers). F038: the lazy tree is rooted at
+   * this id instead of the scope root. */
   rootDeptId?: number | null
   /** Optional message shown when the (sub)tree has no selectable members. */
   emptyMessage?: string
@@ -44,38 +46,12 @@ type UserListItem = {
   external_id?: string | null
   dept_id?: number | string | null
   department_id?: number | null
-}
-
-function resolveTreeDepartmentId(
-  u: UserListItem,
-  deptBusinessKeyToId: Map<string, number>,
-): number | null {
-  const primary = u.department_id
-  if (primary != null && Number.isFinite(Number(primary))) return Math.trunc(Number(primary))
-
-  const raw = u.dept_id
-  if (raw == null || raw === "") return null
-  if (typeof raw === "number" && Number.isFinite(raw)) return Math.trunc(raw)
-  const s = String(raw).trim()
-  const asNum = Number(s)
-  if (Number.isFinite(asNum) && String(asNum) === s) return Math.trunc(asNum)
-  const hit = deptBusinessKeyToId.get(s)
-  return hit != null ? hit : null
+  // F038: primary-department full path resolved by the backend (with_department_path),
+  // so the flat user search shows the org path without per-department path-tree calls.
+  department_path?: string | null
 }
 
 const TREE_INDENT_PER_LEVEL = 22
-
-function findSubtreeRoot(
-  nodes: DepartmentTreeNode[],
-  rootId: number,
-): DepartmentTreeNode | null {
-  for (const n of nodes) {
-    if (n.id === rootId) return n
-    const found = findSubtreeRoot(n.children || [], rootId)
-    if (found) return found
-  }
-  return null
-}
 
 export default function DepartmentUsersSelect({
   value,
@@ -91,10 +67,7 @@ export default function DepartmentUsersSelect({
 }: DepartmentUsersSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   const [keyword, setKeyword] = useState("")
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
-  const [loadingTree, setLoadingTree] = useState(false)
   const [searchingUsers, setSearchingUsers] = useState(false)
   const [searchedUsers, setSearchedUsers] = useState<UserListItem[]>([])
   const [deptUsersMap, setDeptUsersMap] = useState<Record<number, DepartmentUserOption[]>>({})
@@ -102,6 +75,32 @@ export default function DepartmentUsersSelect({
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchAbortRef = useRef<AbortController | null>(null)
+
+  // F038: lazy department tree (browse). When rootDeptId is set, the root layer
+  // is that department itself (resolved via path-tree), so the picker is scoped
+  // to its subtree without slicing a full client-side tree.
+  const tree = useLazyDepartmentTree(
+    rootDeptId != null
+      ? {
+          autoLoad: open,
+          autoExpandRoots: true,
+          cacheKey: `dept-users:${rootDeptId}`,
+          fetchChildren: async (parentId) => {
+            if (parentId === null) {
+              const pt = await getDepartmentPathTreeApi(rootDeptId, false)
+              let cur = (pt as DepartmentSearchResult | null)?.roots?.[0]
+              while (cur?.children?.[0]) cur = cur.children[0]
+              return cur ? [cur] : []
+            }
+            return getDepartmentChildrenApi(parentId, false)
+          },
+          // The hook's own (department-name) search is unused here — this picker
+          // runs its own user-name search — so this is a never-called no-op.
+          fetchSearch: () => Promise.resolve({ roots: [], total_matches: 0, truncated: false }),
+          fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
+        }
+      : { autoLoad: open, autoExpandRoots: true, cacheKey: "dept-users" }
+  )
 
   const selectedMap = useMemo(() => {
     const map = new Map<number, DepartmentUserOption>()
@@ -111,79 +110,29 @@ export default function DepartmentUsersSelect({
 
   const lockedSet = useMemo(() => new Set(lockedValues.map((x) => Number(x))), [lockedValues])
 
-  const loadTree = useCallback(async () => {
-    setLoadingTree(true)
-    try {
-      const res = await captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
-      if (Array.isArray(res)) {
-        const visible = res.filter((n) => n.status !== "archived")
-        // When a rootDeptId is supplied, narrow the tree to that subtree so
-        // every selectable user is structurally guaranteed to live inside it.
-        // Backend ``/departments/tree`` does not accept a root parameter, so
-        // we slice client-side.
-        const next =
-          rootDeptId != null
-            ? (() => {
-              const sub = findSubtreeRoot(visible, rootDeptId)
-              return sub ? [sub] : []
-            })()
-            : visible
-        setTree(next)
-        const rootIds = new Set<number>()
-        for (const n of next) rootIds.add(n.id)
-        setExpanded(rootIds)
+  const loadDeptUsers = useCallback(
+    async (node: DepartmentTreeNode) => {
+      const did = Number(node.id)
+      if (!did || loadingDeptIds.has(did) || deptUsersMap[did]) return
+      setLoadingDeptIds((prev) => new Set(prev).add(did))
+      try {
+        const res = await getDepartmentMembersApi(node.dept_id, { page: 1, limit: 200, keyword: "" })
+        const users = (res?.data || []).map((u) => ({
+          value: Number(u.user_id),
+          label: u.user_name,
+          external_id: u.person_id ?? null,
+        }))
+        setDeptUsersMap((prev) => ({ ...prev, [did]: users }))
+      } finally {
+        setLoadingDeptIds((prev) => {
+          const next = new Set(prev)
+          next.delete(did)
+          return next
+        })
       }
-    } finally {
-      setLoadingTree(false)
-    }
-  }, [rootDeptId])
-
-  const loadDeptUsers = useCallback(async (node: DepartmentTreeNode) => {
-    const did = Number(node.id)
-    if (!did) return
-    if (loadingDeptIds.has(did)) return
-    if (deptUsersMap[did]) return
-    setLoadingDeptIds((prev) => new Set([...prev, did]))
-    try {
-      const res = await getDepartmentMembersApi(node.dept_id, {
-        page: 1,
-        limit: 200,
-        keyword: "",
-      })
-      const users = (res?.data || []).map((u) => ({
-        value: Number(u.user_id),
-        label: u.user_name,
-        external_id: u.person_id ?? null,
-      }))
-      setDeptUsersMap((prev) => ({ ...prev, [did]: users }))
-    } finally {
-      setLoadingDeptIds((prev) => {
-        const next = new Set(prev)
-        next.delete(did)
-        return next
-      })
-    }
-  }, [deptUsersMap, loadingDeptIds])
-
-  useEffect(() => {
-    if (!open) return
-    if (tree.length === 0) void loadTree()
-  }, [open, tree.length, loadTree])
-
-  // Reset cached tree + per-dept members when the subtree root changes so the
-  // next open re-fetches under the new scope.
-  useEffect(() => {
-    setTree([])
-    setDeptUsersMap({})
-    setExpanded(new Set())
-  }, [rootDeptId])
-
-  useEffect(() => {
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-      searchAbortRef.current?.abort()
-    }
-  }, [])
+    },
+    [deptUsersMap, loadingDeptIds],
+  )
 
   const runUserSearch = useCallback(async (q: string) => {
     searchAbortRef.current?.abort()
@@ -192,12 +141,12 @@ export default function DepartmentUsersSelect({
     setSearchingUsers(true)
     try {
       const res = await getUsersApi(
-        { name: q, page: 1, pageSize: 200 },
-        { signal: ac.signal }
+        { name: q, page: 1, pageSize: 200, withDepartmentPath: true },
+        { signal: ac.signal },
       )
       if (!ac.signal.aborted) setSearchedUsers((res?.data || []) as UserListItem[])
     } catch {
-      // ignore abort/network
+      // ignore abort / network
     } finally {
       if (!ac.signal.aborted) setSearchingUsers(false)
     }
@@ -211,40 +160,37 @@ export default function DepartmentUsersSelect({
       setSearchingUsers(false)
       return
     }
-    searchTimerRef.current = setTimeout(() => {
-      void runUserSearch(next.trim())
-    }, 300)
+    searchTimerRef.current = setTimeout(() => void runUserSearch(next.trim()), 300)
   }
 
-  const toggleExpand = (id: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+      searchAbortRef.current?.abort()
+    }
+  }, [])
 
   const setPicked = (user: DepartmentUserOption, departmentPath: string) => {
     const id = Number(user.value)
     if (lockedSet.has(id)) return
-    const pathTrim = departmentPath.trim()
-    const withPath = (row: DepartmentUserOption): DepartmentUserOption => ({
-      ...row,
+    const row: DepartmentUserOption = {
       value: id,
       label: user.label,
-      department_path: pathTrim || undefined,
-    })
+      external_id: user.external_id ?? null,
+      department_path: departmentPath.trim() || undefined,
+    }
     if (multiple) {
-      if (selectedMap.has(id)) {
-        onChange((value || []).filter((x) => Number(x.value) !== id))
-      } else {
-        onChange([...(value || []), withPath(user)])
-      }
+      if (selectedMap.has(id)) onChange((value || []).filter((x) => Number(x.value) !== id))
+      else onChange([...(value || []), row])
       return
     }
-    onChange([withPath(user)])
+    onChange([row])
     setOpen(false)
+  }
+
+  const handleExpand = (node: DepartmentTreeNode) => {
+    tree.toggle(node)
+    void loadDeptUsers(node)
   }
 
   const displayText = useMemo(() => {
@@ -255,93 +201,57 @@ export default function DepartmentUsersSelect({
 
   const keywordTrim = keyword.trim()
 
-  const deptBusinessKeyToId = useMemo(() => {
-    const m = new Map<string, number>()
-    const walk = (nodes: DepartmentTreeNode[]) => {
-      for (const n of nodes) {
-        m.set(String(n.dept_id), n.id)
-        if (n.children?.length) walk(n.children)
-      }
-    }
-    walk(tree)
-    return m
-  }, [tree])
+  const renderUserRow = (u: DepartmentUserOption, depth: number, departmentPath: string) => {
+    const selected = selectedMap.has(Number(u.value))
+    const locked = lockedSet.has(Number(u.value))
+    return (
+      <div
+        key={`u-${u.value}-${departmentPath}`}
+        className={`flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm ${
+          locked ? "opacity-60" : "cursor-pointer hover:bg-accent"
+        }`}
+        onClick={() => setPicked(u, departmentPath)}
+      >
+        <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden />
+        <Checkbox checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
+        <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate">{u.label}</span>
+        <span className="ml-1 shrink-0 text-xs text-muted-foreground">（{u.external_id ?? u.value}）</span>
+      </div>
+    )
+  }
 
-  const searchedByDept = useMemo(() => {
-    const map = new Map<number, DepartmentUserOption[]>()
-    if (!keywordTrim) return map
-    for (const u of searchedUsers || []) {
-      const did = resolveTreeDepartmentId(u, deptBusinessKeyToId)
-      if (did == null) continue
-      const row: DepartmentUserOption = {
-        value: Number(u.user_id),
-        label: u.user_name,
-        external_id: u.external_id ?? null,
-      }
-      const arr = map.get(did) || []
-      if (!arr.some((x) => x.value === row.value)) arr.push(row)
-      map.set(did, arr)
-    }
-    return map
-  }, [deptBusinessKeyToId, keywordTrim, searchedUsers])
-
-  /** 有搜索词时：只按「用户名」命中（getUsersApi 的 name + 返回行的 department_id / dept_id 挂树），不按部门名过滤 */
-  const nodeMatches = useCallback((n: DepartmentTreeNode): boolean => {
-    if (!keywordTrim) return true
-    const direct = (searchedByDept.get(n.id) || []).length > 0
-    if (direct) return true
-    return (n.children || []).some(nodeMatches)
-  }, [keywordTrim, searchedByDept])
-
-  useEffect(() => {
-    if (!keywordTrim) return
-    const ids = new Set<number>()
-    const walk = (nodes: DepartmentTreeNode[]) => {
-      for (const n of nodes) {
-        if (nodeMatches(n)) {
-          ids.add(n.id)
-          if (n.children?.length) walk(n.children)
-        }
-      }
-    }
-    walk(tree)
-    setExpanded(ids)
-  }, [keywordTrim, nodeMatches, tree])
-
-  const renderNode = (node: DepartmentTreeNode, depth: number, ancestorNames: string[]): ReactNode => {
-    if (node.status === "archived") return null
-    if (!nodeMatches(node)) return null
-
+  // Browse render: a dept node + (when expanded) its users and child depts.
+  const renderDeptNode = (node: DepartmentTreeNode, depth: number, ancestorNames: string[]) => {
     const did = Number(node.id)
-    const displayPathForNode = [...ancestorNames, node.name].filter(Boolean).join(" / ")
-    const hasChildren = Boolean(node.children?.length)
-    const isExpanded = expanded.has(did)
-    const shouldShowRows = !hasChildren || isExpanded
-    const users = keywordTrim ? (searchedByDept.get(did) || []) : (deptUsersMap[did] || [])
-
-    if (!keywordTrim && shouldShowRows && !deptUsersMap[did] && !loadingDeptIds.has(did)) {
-      void loadDeptUsers(node)
-    }
+    const isExpanded = tree.expanded.has(did)
+    const pathLabel = [...ancestorNames, node.name].filter(Boolean).join(" / ")
+    const childIds = tree.getChildIds(did)
+    const childNodes = (childIds ?? [])
+      .map((id) => tree.getNode(id))
+      .filter((n): n is DepartmentTreeNode => !!n)
+    const users = deptUsersMap[did] || []
+    if (isExpanded && !deptUsersMap[did] && !loadingDeptIds.has(did)) void loadDeptUsers(node)
 
     return (
-      <div key={did}>
-        <div
-          className="group flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent"
-        >
-          <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden>
-            {depth > 0 && (
-              <span className="pointer-events-none absolute bottom-1 right-0 top-1 w-px bg-border" aria-hidden />
-            )}
-          </div>
-          {hasChildren ? (
+      <div key={`d-${did}`}>
+        <div className="group flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent">
+          <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden />
+          {node.has_children ? (
             <button
               className="mr-1 flex h-4 w-4 shrink-0 items-center justify-center rounded p-0.5 hover:bg-muted"
               onClick={(e) => {
                 e.stopPropagation()
-                toggleExpand(did)
+                handleExpand(node)
               }}
             >
-              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {tree.loadingIds.has(did) ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
             </button>
           ) : (
             <span className="mr-1 block h-4 w-4 shrink-0" />
@@ -349,44 +259,25 @@ export default function DepartmentUsersSelect({
           <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate font-medium">{node.name}</span>
         </div>
-
-        {shouldShowRows && (
+        {isExpanded && (
           <>
-            {(loadingDeptIds.has(did) && !keywordTrim) && (
-              <div
-                className="flex items-center py-1 pl-1.5 pr-2 text-xs text-muted-foreground"
-              >
-                <div className="relative shrink-0 self-stretch" style={{ width: (depth + 1) * TREE_INDENT_PER_LEVEL }} aria-hidden>
-                  <span className="pointer-events-none absolute bottom-1 right-0 top-1 w-px bg-border" aria-hidden />
-                </div>
+            {loadingDeptIds.has(did) && (
+              <div className="flex items-center py-1 pl-1.5 text-xs text-muted-foreground">
+                <div className="shrink-0" style={{ width: (depth + 1) * TREE_INDENT_PER_LEVEL }} aria-hidden />
                 {t("loading", { ns: "bs" })}
               </div>
             )}
-            {users.map((u) => {
-              const selected = selectedMap.has(Number(u.value))
-              const locked = lockedSet.has(Number(u.value))
-              return (
-                <div
-                  key={`${did}-${u.value}`}
-                  className={`flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm ${locked ? "opacity-60" : "cursor-pointer hover:bg-accent"}`}
-                  onClick={() => setPicked(u, displayPathForNode)}
-                >
-                  <div className="relative shrink-0 self-stretch" style={{ width: (depth + 1) * TREE_INDENT_PER_LEVEL }} aria-hidden>
-                    <span className="pointer-events-none absolute bottom-1 right-0 top-1 w-px bg-border" aria-hidden />
-                  </div>
-                  <Checkbox checked={selected} disabled={locked} onCheckedChange={() => setPicked(u, displayPathForNode)} />
-                  <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="truncate">{u.label}</span>
-                  <span className="shrink-0">（{u.external_id ?? u.value}）</span>
-                </div>
-              )
-            })}
-            {hasChildren && node.children!.map((c) => renderNode(c, depth + 1, [...ancestorNames, node.name]))}
+            {users.map((u) => renderUserRow(u, depth + 1, pathLabel))}
+            {childNodes.map((c) => renderDeptNode(c, depth + 1, [...ancestorNames, node.name]))}
           </>
         )}
       </div>
     )
   }
+
+  const browseRoots = tree.rootIds
+    .map((id) => tree.getNode(id))
+    .filter((n): n is DepartmentTreeNode => !!n)
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={false}>
@@ -430,15 +321,11 @@ export default function DepartmentUsersSelect({
         sideOffset={4}
         collisionPadding={12}
         className="w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[calc(100vw_-_2rem)] overflow-hidden p-2"
-        style={{
-          maxHeight: "min(520px, var(--radix-popover-content-available-height, 520px))",
-        }}
+        style={{ maxHeight: "min(520px, var(--radix-popover-content-available-height, 520px))" }}
       >
         <div
           className="flex min-h-0 flex-col gap-2 overflow-hidden"
-          style={{
-            maxHeight: "min(504px, calc(var(--radix-popover-content-available-height, 520px) - 1rem))",
-          }}
+          style={{ maxHeight: "min(504px, calc(var(--radix-popover-content-available-height, 520px) - 1rem))" }}
         >
           <SearchInput
             placeholder={searchPlaceholder || t("system.searchUser")}
@@ -448,28 +335,58 @@ export default function DepartmentUsersSelect({
           />
           <div
             className="min-h-0 flex-1 overflow-y-auto rounded-md border"
-            // When this picker opens inside a Radix Dialog, its content is
-            // portaled outside the Dialog's react-remove-scroll shard, which
-            // preventDefaults wheel events at the document level. Driving
-            // scrollTop manually bypasses that block; pointer-drag works
-            // already because react-remove-scroll only intercepts wheel.
+            // Radix popover portaled outside the Dialog's react-remove-scroll
+            // shard preventDefaults wheel; drive scrollTop manually.
             onWheel={(e) => {
               e.currentTarget.scrollTop += e.deltaY
             }}
           >
-            {loadingTree ? (
+            {keywordTrim ? (
+              // Search mode: a flat list of matched users (by name), each labeled
+              // with its resolved department path (lazy, no full tree to bucket into).
+              searchingUsers ? (
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
+              ) : searchedUsers.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  {emptyMessage || t("system.treeDepartmentSelectEmpty")}
+                </div>
+              ) : (
+                searchedUsers.map((u) => {
+                  const deptLabel = u.department_path ?? ""
+                  return (
+                    <div
+                      key={`su-${u.user_id}`}
+                      className={`flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm ${
+                        lockedSet.has(Number(u.user_id)) ? "opacity-60" : "cursor-pointer hover:bg-accent"
+                      }`}
+                      onClick={() =>
+                        setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
+                      }
+                    >
+                      <Checkbox
+                        checked={selectedMap.has(Number(u.user_id))}
+                        disabled={lockedSet.has(Number(u.user_id))}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={() =>
+                          setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
+                        }
+                      />
+                      <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{u.user_name}</span>
+                      <span className="ml-1 shrink-0 text-xs text-muted-foreground">（{u.external_id ?? u.user_id}）</span>
+                      {deptLabel && <span className="ml-auto truncate pl-2 text-xs text-muted-foreground">{deptLabel}</span>}
+                    </div>
+                  )
+                })
+              )
+            ) : tree.initialLoading ? (
               <div className="py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
-            ) : tree.length === 0 ? (
+            ) : browseRoots.length === 0 ? (
               <div className="py-4 text-center text-sm text-muted-foreground">
                 {emptyMessage || t("system.treeDepartmentSelectEmpty")}
               </div>
             ) : (
-              <>
-                {searchingUsers && keywordTrim ? (
-                  <div className="px-2 py-1 text-xs text-muted-foreground">{t("loading", { ns: "bs" })}</div>
-                ) : null}
-                {tree.map((n) => renderNode(n, 0, []))}
-              </>
+              browseRoots.map((n) => renderDeptNode(n, 0, []))
             )}
           </div>
         </div>

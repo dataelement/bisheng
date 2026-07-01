@@ -165,6 +165,24 @@ html {
   --search-input: hsla(152, 40%, 99%, 1);
 }
 
+/* Illustration grey mode — THEME-INDEPENDENT. Add `illus-grey` to an illustration
+   itself (via the `grey` prop) or to any ancestor (e.g. <html> for a global,
+   code-only toggle) and the empty-state illustrations render greyscale regardless
+   of the blue/green brand theme. Defined AFTER .theme-green so it wins when both
+   land on the same element. Only the brand greens move to grey; white accents stay
+   white (they don't use --illus-*); the whole illustration dims to 80% (per design).
+   Mapping: #19B476→#BCBCBC, #BDE6D3→#E5E5E5, #7CD0B1→#FFFFFF (the element's own
+   opacity, e.g. 60%, still applies). */
+.illus-grey {
+  --illus-100: 229 229 229;  /* #E5E5E5 */
+  --illus-300: 255 255 255;  /* #FFFFFF */
+  --illus-500: 188 188 188;  /* #BCBCBC */
+}
+.illus-grey.brand-illustration,
+.illus-grey .brand-illustration {
+  opacity: 0.8;
+}
+
 /* Brand primary button — GREEN theme override only.
    Design diverges the primary button in the green theme to a green fill (#19B476)
    with white text/icon (#FFF). Add the `btn-brand-primary` class to any primary

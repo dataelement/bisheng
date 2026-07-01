@@ -93,7 +93,7 @@
 | AC-13 | 任意已登录用户 | `GET /api/v1/departments/tree` | 响应中每个节点 **不再含** `member_count` 字段；`UserDepartment` 上的 `GROUP BY COUNT(*)` 查询被移除（`count_result`、`count_map` 等本地变量同步删除） |
 | AC-14 | 任意已登录用户 | 「系统管理 → 部门」(`SystemPage/components/Departments.tsx`) 与「部门知识空间」(`DepartmentPage/index.tsx`) | UI 右侧详情面板上不再显示「成员数: N」字样；前端 `Department` 类型不再含 `member_count` |
 | AC-15 | 任意已登录用户 | `GET /api/v1/departments/{id}`（单部门详情） | **保留** `member_count` 字段（PRD 未要求移除；保持现状） |
-| AC-16 | 任意已登录用户 | 资源授权页部门树（`resource_permission.py` 相关端点） | **保留** `member_count`（PRD 未要求移除；保持现状） |
+| AC-16 | 任意已登录用户 | 资源授权页部门树（`resource_permission.py` 相关端点） | **保留** `member_count`（PRD 未要求移除；保持现状）。⚠️ **已被 F038 推翻**：5 万部门实测该统计的大 `.in_()` 计数在达梦约 66s（占该接口 ~96%），F038 移除之（提交 `b8e481872`） |
 
 ### 2.6 前端无限滚动行为
 

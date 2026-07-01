@@ -4,6 +4,7 @@ import {
   DepartmentCreateForm,
   DepartmentDetail,
   DepartmentMember,
+  DepartmentSearchResult,
   DepartmentTreeNode,
   DepartmentUpdateForm,
 } from "@/types/api/department"
@@ -13,10 +14,43 @@ function depSeg(deptId: string): string {
   return encodeURIComponent(deptId)
 }
 
-// ── Tree ───────────────────────────────────────────────
+// ── Lazy tree (F038) ───────────────────────────────────
+// Per-layer browse / server-side search / locate-by-id, so large org trees never
+// load all nodes at once. `parent_id=null` returns the root layer; nodes carry
+// `has_children` for the expand arrow. `include_archived` is true only for the
+// management nav tree (AC-16); pickers leave it false (archived not selectable).
 
-export async function getDepartmentTreeApi(): Promise<DepartmentTreeNode[]> {
-  return await axios.get(`/api/v1/departments/tree`)
+export async function getDepartmentChildrenApi(
+  parentId: number | null,
+  includeArchived = false
+): Promise<DepartmentTreeNode[]> {
+  return await axios.get(`/api/v1/departments/children`, {
+    params: {
+      parent_id: parentId ?? undefined,
+      include_archived: includeArchived,
+    },
+  })
+}
+
+export async function searchDepartmentsApi(
+  keyword: string,
+  includeArchived = false,
+  limit = 50
+): Promise<DepartmentSearchResult> {
+  return await axios.get(`/api/v1/departments/search`, {
+    params: { keyword, include_archived: includeArchived, limit },
+  })
+}
+
+/** Locate/reveal a (possibly deep) department by its internal id → a pruned tree
+ *  from the visible root down to it, for echoing a selected value. */
+export async function getDepartmentPathTreeApi(
+  deptInternalId: number,
+  includeArchived = false
+): Promise<DepartmentSearchResult> {
+  return await axios.get(`/api/v1/departments/${deptInternalId}/path-tree`, {
+    params: { include_archived: includeArchived },
+  })
 }
 
 // ── CRUD ───────────────────────────────────────────────

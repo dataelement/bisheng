@@ -1,5 +1,6 @@
 import { render, RenderOptions } from '@testing-library/react';
 import { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from 'react-query';
 import { BrowserRouter } from 'react-router-dom';
 
 /**
@@ -7,7 +8,17 @@ import { BrowserRouter } from 'react-router-dom';
  * Add more providers (theme, auth context, etc.) as needed.
  */
 function AllProviders({ children }: { children: React.ReactNode }) {
-  return <BrowserRouter>{children}</BrowserRouter>;
+  // Fresh react-query client per render so cache never leaks across tests; the
+  // app provides one at its root (src/index.tsx), so components using
+  // useQuery/useQueryClient (e.g. the F038 lazy department tree) need it here too.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>{children}</BrowserRouter>
+    </QueryClientProvider>
+  );
 }
 
 /**

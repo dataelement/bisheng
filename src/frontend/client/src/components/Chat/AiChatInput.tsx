@@ -159,6 +159,17 @@ const AiChatInput = memo(
         // selection is refilled as a chip. Keyed 'new' to match the landing page.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
 
+        // Exiting task mode discards the skill selection so the panel's checkboxes
+        // reset in sync with the (now-hidden) skill chips. Track the previous value
+        // to fire only on a true→false transition, not on mount or re-entry.
+        const prevTaskModeRef = useRef(taskMode);
+        useEffect(() => {
+            if (prevTaskModeRef.current && !taskMode) {
+                setDailySkills((prev) => (prev.length ? [] : prev));
+            }
+            prevTaskModeRef.current = taskMode;
+        }, [taskMode, setDailySkills]);
+
         const isControlled = externalValue !== undefined;
         const [internalText, setInternalText] = useState("");
         const text = isControlled ? externalValue : internalText;
@@ -449,12 +460,14 @@ const AiChatInput = memo(
                                     showTaskModeEntry={taskModeEntry || taskMode}
                                     onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
                                     taskModeActive={taskMode}
-                                    renderSkillSubmenu={showAddSkill ? (close) => (
+                                    skillSelected={taskMode && dailySkills.length > 0}
+                                    renderSkillSubmenu={showAddSkill ? () => (
                                         <SkillSelector
                                             selected={dailySkills}
                                             onChange={(next) => {
                                                 setDailySkills(next);
-                                                close();
+                                                // Keep the panel open on toggle (matches the
+                                                // knowledge-space panel); it closes on outside click.
                                                 // Picking a skill ENTERS task mode only when not
                                                 // already in it. onToggleTaskMode is a toggle, so
                                                 // calling it while already active would flip it OFF —
@@ -576,11 +589,11 @@ const AiChatInput = memo(
                                         sendDisabled ||
                                         fileUploading
                                     }
-                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
-                                    <SendIcon size={24} />
+                                    <SendIcon size={18} />
                                 </button>
                             )}
                         </div>

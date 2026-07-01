@@ -14,13 +14,13 @@ import React from 'react';
  *   #7CD0B1 (mid green)   → rgb(var(--illus-300))
  *   white / black-opacity → kept as-is
  */
-export const ListWebLinkIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
+export const ListWebLinkIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const fill100 = { fill: 'rgb(var(--illus-100))' } as React.CSSProperties;
     const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
     const stroke300 = { stroke: 'rgb(var(--illus-300))' } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
             <path d="M126.129 155.525C129.22 142.289 141.021 132.925 154.613 132.925H349.95C362.832 132.925 372.355 144.927 369.426 157.472L337.773 293.044C334.682 306.28 322.881 315.643 309.289 315.643H119.467C103.766 315.643 92.1603 301.016 95.7301 285.726L126.129 155.525Z" style={fill100} />
             <rect x="53.9067" y="88.1436" width="277.158" height="230.69" rx="25.1126" style={fill100} stroke="white" strokeWidth="7" />
             <path d="M292.984 88.1436C298.978 88.1436 303.685 88.1404 307.464 88.4492C311.285 88.7614 314.466 89.4097 317.353 90.8809C322.078 93.2885 325.92 97.1304 328.328 101.855C329.799 104.743 330.446 107.923 330.758 111.743C331.067 115.523 331.064 120.229 331.064 126.224V155.659H53.9067V126.224C53.9067 120.229 53.9036 115.523 54.2124 111.743C54.5246 107.923 55.173 104.743 56.644 101.855C59.0517 97.1302 62.8934 93.2885 67.6187 90.8809C70.5058 89.4098 73.6862 88.7614 77.5063 88.4492C81.2859 88.1404 85.9925 88.1436 91.9868 88.1436H292.984Z" style={fill100} />

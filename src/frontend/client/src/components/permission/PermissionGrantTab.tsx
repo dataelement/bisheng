@@ -4,7 +4,8 @@ import { useToastContext } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
-  getResourceGrantDepartments,
+  getResourceGrantDepartmentChildren,
+  searchResourceGrantDepartments,
   getResourceGrantUserGroups,
   getResourceGrantUsers,
   getResourcePermissions,
@@ -45,7 +46,8 @@ export interface PermissionGrantApiAdapter {
   authorize: typeof authorizeResource;
   getGrantableRelationModels: typeof getGrantableRelationModels;
   getGrantUsers?: typeof getResourceGrantUsers;
-  getGrantDepartments?: typeof getResourceGrantDepartments;
+  getGrantDepartmentChildren?: typeof getResourceGrantDepartmentChildren;
+  searchGrantDepartments?: typeof searchResourceGrantDepartments;
   getGrantUserGroups?: typeof getResourceGrantUserGroups;
 }
 
@@ -139,7 +141,8 @@ const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
   authorize: authorizeResource,
   getGrantableRelationModels,
   getGrantUsers: getResourceGrantUsers,
-  getGrantDepartments: getResourceGrantDepartments,
+  getGrantDepartmentChildren: getResourceGrantDepartmentChildren,
+  searchGrantDepartments: searchResourceGrantDepartments,
   getGrantUserGroups: getResourceGrantUserGroups,
 };
 
@@ -404,10 +407,10 @@ export function PermissionGrantTab({
             resourceType={resourceType}
             resourceId={resourceId}
             includeChildren={includeChildren}
-            onIncludeChildrenChange={handleIncludeChildrenChange}
             onSelectionSummaryChange={setSelectedDepartmentSummary}
             disabledIds={grantedSubjectIds.department}
-            grantDepartmentsApi={activePermissionApi.getGrantDepartments}
+            grantDepartmentChildrenApi={activePermissionApi.getGrantDepartmentChildren}
+            grantDepartmentSearchApi={activePermissionApi.searchGrantDepartments}
           />
         )}
         {subjectType === "user_group" && (

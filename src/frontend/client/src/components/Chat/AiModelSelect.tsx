@@ -71,7 +71,7 @@ const AiModelSelect = memo(
                     very long ones. `auto` (see SelectContent) keeps the popup
                     from being forced to the trigger's width. No flash on open:
                     the model list is already in memory via `options`. */}
-                <SelectContent auto className="bg-white w-auto min-w-[140px] max-w-[280px]">
+                <SelectContent auto className="bg-white w-auto min-w-[100px] max-w-[280px]">
                     {uniqueOptions.map((opt) => (
                         <SelectItem key={opt.id + ""} value={opt.id + ""}>
                             {opt.displayName}

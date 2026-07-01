@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { getResourceGrantDepartments } from "~/api/permission";
+import {
+  getResourceGrantDepartmentChildren,
+  searchResourceGrantDepartments,
+} from "~/api/permission";
 import type { SelectedSubject } from "~/api/permission";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 
@@ -8,42 +11,74 @@ jest.mock("~/hooks", () => ({
   useLocalize: () => (key: string) => key,
 }));
 
+// F038: the client picker is now a lazy tree fed by the resource-scoped grant
+// endpoints (children / search). No full-tree load.
 jest.mock("~/api/permission", () => ({
-  getResourceGrantDepartments: jest.fn(),
+  getResourceGrantDepartmentChildren: jest.fn(),
+  searchResourceGrantDepartments: jest.fn(),
 }));
 
-const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
+const mockedChildren = jest.mocked(getResourceGrantDepartmentChildren);
+const mockedSearch = jest.mocked(searchResourceGrantDepartments);
 
-describe("SubjectSearchDepartment", () => {
+const node = (
+  id: number,
+  name: string,
+  parent_id: number | null,
+  path: string,
+  has_children: boolean,
+  matched = false,
+) => ({
+  id,
+  dept_id: `dept-${id}`,
+  name,
+  parent_id,
+  path,
+  has_children,
+  matched,
+  children: [] as any[],
+});
+
+const emptySearch = { roots: [], total_matches: 0, truncated: false };
+
+describe("SubjectSearchDepartment (lazy, F038 decision 9/10)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedGetResourceGrantDepartments.mockResolvedValue([
-      {
-        id: 1,
-        dept_id: "dept-1",
-        name: "全集团",
-        parent_id: null,
-        children: [
-          {
-            id: 2,
-            dept_id: "dept-2",
-            name: "子部门",
-            parent_id: 1,
-            children: [],
-          },
-        ],
-      },
-    ]);
+    // Root layer = 全集团 (has children); search returns its pruned subtree.
+    mockedChildren.mockResolvedValue([node(1, "全集团", null, "/1/", true)] as any);
+    mockedSearch.mockResolvedValue(emptySearch as any);
   });
 
-  it("shows descendants as checked when an ancestor grant includes child departments", async () => {
+  it("lazy-loads the grant root layer via the resource-scoped children endpoint", async () => {
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+        includeChildren
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedChildren).toHaveBeenCalledWith("workflow", "wf-1", null, {
+        signal: expect.any(AbortSignal),
+      });
+    });
+    expect(await screen.findByText("全集团")).toBeInTheDocument();
+  });
+
+  it("shows descendants as checked + disabled (implicit) when an ancestor grant includes children — decision 9 (path-based)", async () => {
+    mockedSearch.mockResolvedValue({
+      roots: [
+        { ...node(1, "全集团", null, "/1/", true), children: [node(2, "子部门", 1, "/1/2/", false, true)] },
+      ],
+      total_matches: 1,
+      truncated: false,
+    } as any);
+
     const value: SelectedSubject[] = [
-      {
-        type: "department",
-        id: 1,
-        name: "全集团",
-        include_children: true,
-      },
+      { type: "department", id: 1, name: "全集团", include_children: true },
     ];
 
     render(
@@ -53,118 +88,43 @@ describe("SubjectSearchDepartment", () => {
         resourceType="workflow"
         resourceId="wf-1"
         includeChildren
-        onIncludeChildrenChange={jest.fn()}
       />,
     );
 
-    await waitFor(() => {
-      expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
-        "workflow",
-        "wf-1",
-        { signal: expect.any(AbortSignal) },
-      );
-    });
-
+    // Root load primes the ancestor's path so implicit selection resolves.
+    await screen.findByText("全集团");
     fireEvent.change(screen.getByPlaceholderText("com_permission.search_department"), {
       target: { value: "子部门" },
     });
 
     const childLabel = await screen.findByText("子部门");
     const childCheckbox = within(childLabel.parentElement as HTMLElement).getByRole("checkbox");
-
     expect(childCheckbox).toHaveAttribute("data-state", "checked");
+    expect(childCheckbox).toBeDisabled();
   });
 
-  it("materializes inherited selections before removing parent inheritance", async () => {
-    const onChange = jest.fn();
-    const onIncludeChildrenChange = jest.fn();
-
-    render(
-      <SubjectSearchDepartment
-        value={[
-          {
-            type: "department",
-            id: 1,
-            name: "全集团",
-            include_children: true,
-          },
-        ]}
-        onChange={onChange}
-        resourceType="workflow"
-        resourceId="wf-1"
-        includeChildren
-        onIncludeChildrenChange={onIncludeChildrenChange}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mockedGetResourceGrantDepartments).toHaveBeenCalledTimes(1);
-    });
-
-    fireEvent.change(screen.getByPlaceholderText("com_permission.search_department"), {
-      target: { value: "子部门" },
-    });
-
-    fireEvent.click(await screen.findByText("子部门"));
-
-    expect(onIncludeChildrenChange).toHaveBeenCalledWith(false);
-    expect(onChange).toHaveBeenCalledWith([
-      {
-        type: "department",
-        id: 1,
-        name: "全集团",
-        include_children: false,
-      },
-      {
-        type: "department",
-        id: 2,
-        name: "全集团/子部门",
-        include_children: false,
-      },
-    ]);
-  });
-
-  it("reports selected descendant names for include-children department summaries", async () => {
+  it("summarizes only the explicit picks, never the materialized subtree — decision 10", async () => {
     const onSelectionSummaryChange = jest.fn();
 
     render(
       <SubjectSearchDepartment
-        value={[
-          {
-            type: "department",
-            id: 1,
-            name: "全集团",
-            include_children: true,
-          },
-        ]}
+        value={[{ type: "department", id: 1, name: "全集团", include_children: true }]}
         onChange={jest.fn()}
         resourceType="workflow"
         resourceId="wf-1"
         includeChildren
-        onIncludeChildrenChange={jest.fn()}
         onSelectionSummaryChange={onSelectionSummaryChange}
       />,
     );
 
     await waitFor(() => {
       expect(onSelectionSummaryChange).toHaveBeenLastCalledWith([
-        {
-          type: "department",
-          id: 1,
-          name: "全集团",
-          include_children: false,
-        },
-        {
-          type: "department",
-          id: 2,
-          name: "全集团/子部门",
-          include_children: false,
-        },
+        { type: "department", id: 1, name: "全集团", include_children: true },
       ]);
     });
   });
 
-  it("shows already granted departments as disabled without selecting them", async () => {
+  it("shows already granted departments as disabled and unchecked without selecting them", async () => {
     render(
       <SubjectSearchDepartment
         value={[]}
@@ -172,7 +132,6 @@ describe("SubjectSearchDepartment", () => {
         resourceType="workflow"
         resourceId="wf-1"
         includeChildren
-        onIncludeChildrenChange={jest.fn()}
         disabledIds={[1]}
       />,
     );
@@ -185,36 +144,23 @@ describe("SubjectSearchDepartment", () => {
     expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
   });
 
-  it("uses resource-scoped department candidates when a resource is provided", async () => {
-    mockedGetResourceGrantDepartments.mockResolvedValue([
-      {
-        id: 3,
-        dept_id: "dept-3",
-        name: "应用授权部门",
-        parent_id: null,
-        children: [],
-      },
-    ]);
+  it("adds a department carrying the current include-children flag when toggled on", async () => {
+    const onChange = jest.fn();
 
     render(
       <SubjectSearchDepartment
         value={[]}
-        onChange={jest.fn()}
-        includeChildren
-        onIncludeChildrenChange={jest.fn()}
+        onChange={onChange}
         resourceType="workflow"
         resourceId="wf-1"
+        includeChildren
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText("应用授权部门")).toBeInTheDocument();
-    });
+    fireEvent.click(await screen.findByText("全集团"));
 
-    expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
-      "workflow",
-      "wf-1",
-      { signal: expect.any(AbortSignal) },
-    );
+    expect(onChange).toHaveBeenCalledWith([
+      { type: "department", id: 1, name: "全集团", include_children: true },
+    ]);
   });
 });

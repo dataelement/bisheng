@@ -27,7 +27,7 @@ import {
 } from "@/components/bs-ui/table/useResizableColumns"
 import { cname } from "@/components/bs-ui/utils"
 import { userContext } from "@/contexts/userContext"
-import { getDepartmentTreeApi } from "@/controllers/API/department"
+import { getDepartmentChildrenApi } from "@/controllers/API/department"
 import {
   createRoleV2Api,
   deleteRoleV2Api,
@@ -36,7 +36,7 @@ import {
   updateRoleV2Api,
 } from "@/controllers/API/user"
 import { message } from "@/components/bs-ui/toast/use-toast"
-import { TreeDepartmentSelect, getDepartmentDisplayPath } from "@/components/bs-comp/department"
+import { TreeDepartmentSelect } from "@/components/bs-comp/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { ROLE } from "@/types/api/user"
@@ -226,7 +226,9 @@ export default function Roles() {
   })
 
   const loadDepartments = async () => {
-    const res = await captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
+    // F038: only the root layer is needed here (default role-scope selection);
+    // the scope picker itself lazy-loads. Avoids fetching the whole org tree.
+    const res = await captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null))
     if (res) setDeptTree(res)
   }
 
@@ -497,7 +499,10 @@ export default function Roles() {
     if (!el.department_id) return t("system.scopeGlobal")
     const fromApi = (el.department_scope_path || "").trim()
     if (fromApi) return fromApi
-    return getDepartmentDisplayPath(deptTree, el.department_id) || el.department_name || "-"
+    // F038: no full tree on hand for an ancestor-path lookup; fall back to the
+    // role's own department_name. The backend department_scope_path above is the
+    // authoritative full-path source and is unaffected.
+    return el.department_name || "-"
   }
 
   const creatorLabel = (el: ROLE) => {
@@ -780,7 +785,6 @@ export default function Roles() {
               <TreeDepartmentSelect
                 modal={false}
                 className="mt-1"
-                nodes={deptTree}
                 value={departmentId === "none" ? null : Number(departmentId)}
                 onChange={(id) => setDepartmentId(id == null ? "none" : String(id))}
                 allowNone={isPlatformAdmin}

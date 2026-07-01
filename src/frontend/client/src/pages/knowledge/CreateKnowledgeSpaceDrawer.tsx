@@ -116,6 +116,15 @@ export function CreateKnowledgeSpaceDrawer({
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
     const nameComposingRef = useRef(false);
     const descComposingRef = useRef(false);
+    // True only while the "转为私有" confirm dialog is open and for the one tick
+    // after it closes. The confirm AlertDialog is portaled outside this Sheet, so
+    // its button taps count as "outside" interactions; on touch Radix defers that
+    // check to a trailing click evaluated after the dialog closes, which would
+    // otherwise dismiss the whole drawer before the user can Save (no update API
+    // call ever fires). When set, the Sheet's outside-dismiss is suppressed; when
+    // unset (no confirm showing), a genuine overlay tap still closes the drawer.
+    const suppressOutsideCloseRef = useRef(false);
+    const suppressReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const needPublishOption = useMemo(
         () => joinPolicy === "review" || joinPolicy === "public",
@@ -338,6 +347,11 @@ export function CreateKnowledgeSpaceDrawer({
             <SheetContent
                 side="right"
                 hideClose
+                // Suppress outside-dismiss only while a confirm dialog is open (see
+                // suppressOutsideCloseRef). Inert otherwise, so tapping the overlay
+                // still closes the drawer.
+                onPointerDownOutside={(e) => { if (suppressOutsideCloseRef.current) e.preventDefault(); }}
+                onInteractOutside={(e) => { if (suppressOutsideCloseRef.current) e.preventDefault(); }}
                 className={cn(
                     "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                 )}
@@ -493,11 +507,22 @@ export function CreateKnowledgeSpaceDrawer({
                                     value={joinPolicy}
                                     onValueChange={async (v) => {
                                         if (mode === "edit" && v === "private" && joinPolicy !== "private") {
+                                            // Guard the drawer against the confirm dialog's outside-tap
+                                            // dismissing it on touch (see suppressOutsideCloseRef).
+                                            suppressOutsideCloseRef.current = true;
                                             const confirmed = await confirm({
                                                 description: localize("com_subscription.confirm_knowledge_change_to_private"),
                                                 confirmText: localize("com_subscription.change_to_private"),
                                                 cancelText: localize("com_subscription.cancel"),
                                             });
+                                            // Keep the guard up for the trailing click Radix defers on
+                                            // touch, then release on the next macrotask so later genuine
+                                            // overlay taps still close the drawer.
+                                            if (suppressReleaseTimerRef.current) clearTimeout(suppressReleaseTimerRef.current);
+                                            suppressReleaseTimerRef.current = setTimeout(() => {
+                                                suppressOutsideCloseRef.current = false;
+                                                suppressReleaseTimerRef.current = null;
+                                            }, 0);
                                             if (!confirmed) return;
                                         }
                                         setJoinPolicy(v as JoinPolicy);

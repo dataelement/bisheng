@@ -5,8 +5,10 @@ export type User = {
     phone_number: string | null;
     /** 历史/业务侧部门标识，字符串居多；与组织树节点 ``id`` 不一定一致 */
     dept_id?: number | string | null;
-    /** 主部门在 ``department`` 表中的内部主键，与 ``/departments/tree`` 的 ``id`` 对齐（/user/list 补充） */
+    /** 主部门在 ``department`` 表中的内部主键，与 ``/departments/children`` 的 ``id`` 对齐（/user/list 补充） */
     department_id?: number | null;
+    /** 主部门全路径（``总公司/研发部/平台组``），仅 /user/list?with_department_path 返回 */
+    department_path?: string | null;
     remark: string | null;
     delete: number;
     create_time: string;

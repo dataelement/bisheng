@@ -13,12 +13,12 @@ import React from 'react';
  *   #BDE6D3 (light green) → rgb(var(--illus-100))
  *   white                 → kept as-is
  */
-export const SystemMaintenanceIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
+export const SystemMaintenanceIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const fill100 = { fill: 'rgb(var(--illus-100))' } as React.CSSProperties;
     const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
             <ellipse cx="181.687" cy="155.079" rx="106.687" ry="23.8642" style={fill500} />
             <rect x="74.9999" y="100.332" width="213.374" height="55.2151" style={fill500} />
             <circle cx="99.7018" cy="143.766" r="10.266" fill="white" />

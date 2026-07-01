@@ -119,6 +119,9 @@ export function KnowledgeSpaceHeader({
     const selectedThreshold = isH5 ? 0 : 1;
     const showAddMenu = canCreateFolder || canUploadFile;
     const showViewModeTabs = enableCardMode && !isNarrow576;
+    const showFilterButton = space.role !== SpaceRole.MEMBER;
+    const showSortButton = showViewModeTabs && viewMode === "card";
+    const showFilterSortCluster = showFilterButton || showSortButton;
     // Include the view-mode toggle here so the trailing button group still renders for
     // viewers (no add menu, not admin, no selection) who only have the toggle to show.
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold || showViewModeTabs;
@@ -135,9 +138,9 @@ export function KnowledgeSpaceHeader({
         </Button>
     ) : null;
 
-    const viewFilterSortCluster = (
+    const viewFilterSortCluster = showFilterSortCluster && (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
-            {space.role !== SpaceRole.MEMBER && (
+            {showFilterButton && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -214,7 +217,7 @@ export function KnowledgeSpaceHeader({
                 </DropdownMenu>
             )}
 
-            {showViewModeTabs && viewMode === "card" && (
+            {showSortButton && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button

@@ -134,16 +134,20 @@ export function DepartmentSpaceDialog({
 
           <div className="space-y-2">
             <Label>{t("departmentSpace.selectionLabel")}</Label>
-            <SubjectSearchDepartment
-              value={selected}
-              onChange={setSelected}
-              allowOrganizationTree
-              includeChildren={false}
-              onIncludeChildrenChange={() => undefined}
-              showIncludeChildrenToggle={false}
-              disabledIds={existingDepartmentIds}
-              disabledLabel={t("departmentSpace.createdBadge")}
-            />
+            {/* Cap the height so the lazy tree's inner list scrolls instead of
+                growing the dialog when the org tree is deeply expanded. */}
+            <div className="flex h-[320px] flex-col">
+              <SubjectSearchDepartment
+                value={selected}
+                onChange={setSelected}
+                allowOrganizationTree
+                includeChildren={false}
+                onIncludeChildrenChange={() => undefined}
+                showIncludeChildrenToggle={false}
+                disabledIds={existingDepartmentIds}
+                disabledLabel={t("departmentSpace.createdBadge")}
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
               {t("departmentSpace.selectedCount", { count: selectedDepartmentIds.length })}
             </p>

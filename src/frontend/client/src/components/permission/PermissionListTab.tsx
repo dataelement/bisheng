@@ -2,7 +2,6 @@ import { useToastContext, useConfirm } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
-  getResourceGrantDepartments,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -26,7 +25,6 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
 
 // Tooltip that only shows when the wrapped element's text is truncated.
@@ -80,7 +78,6 @@ export interface PermissionApiAdapter {
   getPermissions: typeof getResourcePermissions;
   authorize: typeof authorizeResource;
   getGrantableRelationModels: typeof getGrantableRelationModels;
-  getGrantDepartments?: typeof getResourceGrantDepartments;
 }
 
 interface PermissionListTabProps {
@@ -109,7 +106,6 @@ const DEFAULT_PERMISSION_API: PermissionApiAdapter = {
   getPermissions: getResourcePermissions,
   authorize: authorizeResource,
   getGrantableRelationModels,
-  getGrantDepartments: getResourceGrantDepartments,
 };
 
 export function PermissionListTab({
@@ -136,28 +132,10 @@ export function PermissionListTab({
     prefetchedGrantableModels || [],
   );
   const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels);
-  const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map());
   const [userSelectedTab, setUserSelectedTab] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isListScrolling, setIsListScrolling] = useState(false);
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const getGrantDepartments = activePermissionApi.getGrantDepartments ?? getResourceGrantDepartments;
-    getGrantDepartments(resourceType, resourceId, { signal: controller.signal })
-      .then((res) => {
-        if (!controller.signal.aborted && Array.isArray(res)) {
-          setDeptPathById(buildDepartmentPathLabelMap(res));
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setDeptPathById(new Map());
-        }
-      });
-    return () => controller.abort();
-  }, [activePermissionApi, refreshKey, resourceId, resourceType]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -260,16 +238,12 @@ export function PermissionListTab({
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
+  // F038: the backend already resolves a department's full ancestor path into
+  // subject_name (父/子/孙), so no per-grant path-tree lookup is needed here.
   const getEntryDisplayName = useCallback(
-    (entry: PermissionEntry) => {
-      if (entry.subject_type === "department") {
-        return deptPathById.get(entry.subject_id)
-          ?? entry.subject_name
-          ?? `${entry.subject_type}:${entry.subject_id}`;
-      }
-      return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
-    },
-    [deptPathById],
+    (entry: PermissionEntry) =>
+      entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`,
+    [],
   );
 
   const visibleEntries = useMemo(() => {

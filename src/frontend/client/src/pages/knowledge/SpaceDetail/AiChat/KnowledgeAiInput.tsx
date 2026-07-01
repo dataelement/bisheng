@@ -284,13 +284,13 @@ export function KnowledgeAiInput({
             {isStreaming ? (
                 <button
                     type="button"
-                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
+                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200"
                     onClick={onStop}
                     aria-label="Stop generating"
                 >
                     <svg
-                        width="24"
-                        height="24"
+                        width="18"
+                        height="18"
                         viewBox="0 0 24 24"
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
@@ -304,11 +304,11 @@ export function KnowledgeAiInput({
                     type="button"
                     onClick={handleSend}
                     disabled={disabled || !inputText.trim()}
-                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
+                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
                     aria-label="Send message"
                     data-testid="send-button"
                 >
-                    <SendIcon size={24} />
+                    <SendIcon size={18} />
                 </button>
             )}
         </div>

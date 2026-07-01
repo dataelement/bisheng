@@ -33,6 +33,7 @@ import {
 import {
   getDepartmentAdminsApi,
   getDepartmentMembersApi,
+  getDepartmentPathTreeApi,
   searchGlobalMembersApi,
   type GlobalMemberSearchRow,
 } from "@/controllers/API/department"
@@ -40,7 +41,12 @@ import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal"
-import type { DepartmentAdmin, DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
+import type {
+  DepartmentAdmin,
+  DepartmentMember,
+  DepartmentSearchResult,
+  DepartmentTreeNode,
+} from "@/types/api/department"
 import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
 import { Loader2 } from "lucide-react"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
@@ -52,7 +58,6 @@ interface MemberTableProps {
   deptId: string
   deptName: string
   dept?: DepartmentTreeNode | null
-  tree?: DepartmentTreeNode[]
   isArchived?: boolean
   onChanged: () => void
   /** 父级在部门设置等变更后递增，用于在不切换部门时强制重新拉取成员（如部门管理员 FGA 更新后刷新「角色」列） */
@@ -67,13 +72,10 @@ interface MemberTableProps {
   }) => void
 }
 
-const EMPTY_DEPARTMENT_TREE: DepartmentTreeNode[] = []
-
 export function MemberTable({
   deptId,
   deptName,
   dept = null,
-  tree = EMPTY_DEPARTMENT_TREE,
   isArchived = false,
   onChanged,
   membersRefreshSignal = 0,
@@ -115,29 +117,33 @@ export function MemberTable({
     [members]
   )
 
-  const ancestorDepartments = useMemo(() => {
-    const nodeById = new Map<number, DepartmentTreeNode>()
-    const walk = (nodes: DepartmentTreeNode[]) => {
-      for (const n of nodes) {
-        nodeById.set(n.id, n)
-        if (n.children?.length) walk(n.children)
+  // F038: ancestors (for inherited-admin lookup) come from a path-tree fetch
+  // instead of walking a full tree that's no longer passed in. The chain is
+  // root→self; everything but the leaf is an ancestor (order doesn't matter —
+  // loadAdminSummary flattens + dedups).
+  const [ancestorDepartments, setAncestorDepartments] = useState<DepartmentTreeNode[]>([])
+  useEffect(() => {
+    const internalId = dept?.id
+    if (internalId == null) {
+      setAncestorDepartments([])
+      return
+    }
+    let cancelled = false
+    captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(internalId)).then((res) => {
+      if (cancelled) return
+      const pruned = (res as DepartmentSearchResult | null) ?? null
+      const chain: DepartmentTreeNode[] = []
+      let cur = pruned?.roots?.[0]
+      while (cur) {
+        chain.push(cur)
+        cur = cur.children?.[0]
       }
+      setAncestorDepartments(chain.slice(0, -1))
+    })
+    return () => {
+      cancelled = true
     }
-    walk(tree)
-
-    const current = dept ?? [...nodeById.values()].find((n) => n.dept_id === deptId)
-    const ancestors: DepartmentTreeNode[] = []
-    let parentId = current?.parent_id ?? null
-    const seen = new Set<number>()
-    while (parentId != null && !seen.has(parentId)) {
-      seen.add(parentId)
-      const parent = nodeById.get(parentId)
-      if (!parent) break
-      ancestors.push(parent)
-      parentId = parent.parent_id
-    }
-    return ancestors
-  }, [dept, deptId, tree])
+  }, [dept?.id])
 
   const loadAdminSummary = useCallback(() => {
     let cancelled = false

@@ -115,10 +115,10 @@ function DockInput({
                 type="button"
                 onClick={submit}
                 disabled={!value.trim() || disabled || isStreaming}
-                className="btn-brand-primary rounded-full bg-primary p-1 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                 aria-label="Send message"
             >
-                <SendIcon size={24} />
+                <SendIcon size={18} />
             </button>
         </div>
     );
@@ -362,7 +362,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         flatMode
                         knowledgeChatLayout
                         contentWidthClassName="max-w-none px-4"
-                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                        emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
                     />
@@ -531,7 +531,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             flatMode
                             knowledgeChatLayout
                             contentWidthClassName="max-w-none px-4"
-                            emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                            emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                             onPresetClick={(q) => setInputText(q)}
                             onRegenerate={regenerate}
                         />
