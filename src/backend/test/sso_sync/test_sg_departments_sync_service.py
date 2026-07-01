@@ -54,7 +54,7 @@ class TestSgDepartmentsSyncService:
         )
 
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Engineering", state="0"),
+            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Engineering", state="01"),
         )
         with ExitStack() as stack:
             _enter_dao_patches(stack)
@@ -88,13 +88,13 @@ class TestSgDepartmentsSyncService:
         )
 
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="01"),
             SgDepartmentFieldItem(
                 uuid="u2",
                 code="C1",
                 pid="P1",
                 remark="Child",
-                state="0",
+                state="01",
             ),
         )
         parent = _dept(dept_id=10, path="/1/10/")
@@ -169,13 +169,13 @@ class TestSgDepartmentsSyncService:
         assert response.esb.code == "0"
         archive.assert_not_awaited()
 
-    async def test_sg_state_00_triggers_archive(self):
+    async def test_sg_state_02_triggers_archive(self):
         from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
             SgDepartmentsSyncService,
         )
 
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="00"),
+            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="02"),
         )
         with ExitStack() as stack:
             _enter_dao_patches(stack)
@@ -202,7 +202,7 @@ class TestSgDepartmentsSyncService:
         )
 
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="1"),
+            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="02"),
         )
         with ExitStack() as stack:
             _enter_dao_patches(stack)
@@ -250,7 +250,7 @@ class TestSgDepartmentsSyncService:
         assert response.esb.code == "1"
         info = response.esb.data.data_infos.data_info[0]
         assert info.status == "1"
-        assert "state must be 0/01(enabled) or 1/00(disabled)" in info.error_text
+        assert "state must be 01(enabled) or 02(disabled)" in info.error_text
 
     async def test_child_inserted_before_parent_exists(self):
         from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
@@ -263,7 +263,7 @@ class TestSgDepartmentsSyncService:
                 code="C1",
                 pid="MISSING",
                 remark="Child",
-                state="0",
+                state="01",
             ),
         )
         with ExitStack() as stack:
@@ -306,7 +306,7 @@ class TestSgDepartmentsSyncService:
             sync_parent_external_id="P1",
         )
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="01"),
         )
 
         with ExitStack() as stack:
@@ -352,13 +352,13 @@ class TestSgDepartmentsSyncService:
         )
 
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="01"),
             SgDepartmentFieldItem(
                 uuid="u2",
                 code="C1",
                 pid="P1",
                 remark="Child",
-                state="0",
+                state="01",
             ),
         )
         parent = _dept(dept_id=10, path="/1/10/")
@@ -421,7 +421,7 @@ class TestSgDepartmentsSyncService:
         )
 
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="00"),
+            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Archived", state="02"),
         )
         archived = SimpleNamespace(id=99, parent_id=10)
         with ExitStack() as stack:
@@ -470,7 +470,7 @@ class TestSgDepartmentsSyncService:
         )
         relinked = SimpleNamespace(id=11, parent_id=10, path="/1/10/11/")
         payload = _request(
-            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="0"),
+            SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="01"),
         )
 
         with ExitStack() as stack:
