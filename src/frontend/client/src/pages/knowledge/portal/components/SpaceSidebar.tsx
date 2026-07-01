@@ -28,15 +28,28 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import type { KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
 import {
-    CREATE_KNOWLEDGE_SPACE_ICON_SRC,
-    KNOWLEDGE_SPACE_ICON_SRC,
     PORTAL_SIDEBAR_TITLE_ICON_SRC,
-    SIDEBAR_TOGGLE_ICON_SRC,
 } from "../constants";
+import {
+    DepartmentSpaceGroupIcon,
+    KnowledgeSpaceIcon,
+    NewKnowledgeSpaceIcon,
+    PersonalSpaceGroupIcon,
+    PublicSpaceGroupIcon,
+    SidebarCollapseIcon,
+    TeamSpaceGroupIcon,
+} from "./SpaceIcons";
 import type { SpaceGroup, SpaceGroupKey } from "../types";
 import { isFavoriteSpace } from "../favoriteView";
 import { resolveAssetUrl } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
+
+const SPACE_GROUP_ICONS = {
+    public: PublicSpaceGroupIcon,
+    department: DepartmentSpaceGroupIcon,
+    team: TeamSpaceGroupIcon,
+    personal: PersonalSpaceGroupIcon,
+} satisfies Record<SpaceGroupKey, React.ComponentType<React.SVGProps<SVGSVGElement>>>;
 
 interface SpacePermissions {
     canEditSpace: boolean;
@@ -173,7 +186,7 @@ function SpaceMenu({
 const SIDEBAR_WIDTH_KEY = "portal_knowledge_sidebar_width";
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;
-const SIDEBAR_DEFAULT_WIDTH = 216;
+const SIDEBAR_DEFAULT_WIDTH = 280;
 
 function getSavedWidth(): number {
     try {
@@ -251,6 +264,22 @@ export function SpaceSidebar({
         >
             {collapsed ? (
                 <div className={s.collapsedSidebar} aria-label="知识库分组快捷栏">
+                    <div className={s.collapsedHeader}>
+                        <button
+                            type="button"
+                            className={s.spaceHeaderCollapse}
+                            aria-label="展开知识库侧栏"
+                            title="展开"
+                            onClick={() => onRestoreSidebar()}
+                        >
+                            <SidebarCollapseIcon
+                                className={s.spaceHeaderCollapseIcon}
+                                style={{ transform: "scaleX(-1)" }}
+                                aria-hidden="true"
+                                data-testid="space-sidebar-expand-icon"
+                            />
+                        </button>
+                    </div>
                     <div className={s.collapsedGroupList}>
                         {groups.map((group) => (
                             <button
@@ -262,25 +291,10 @@ export function SpaceSidebar({
                                 data-testid={`collapsed-space-group-${group.key}`}
                                 onClick={() => onRestoreSidebar(group.key)}
                             >
-                                <img className={s.collapsedGroupIcon} src={resolveAssetUrl(group.iconSrc.collapsed)} alt="" aria-hidden="true" />
+                                {(() => { const Icon = SPACE_GROUP_ICONS[group.key]; return <Icon className={s.collapsedGroupIcon} aria-hidden="true" />; })()}
                             </button>
                         ))}
                     </div>
-                    <button
-                        type="button"
-                        className={s.collapsedExpandButton}
-                        aria-label="展开知识库侧栏"
-                        title="展开"
-                        onClick={() => onRestoreSidebar()}
-                    >
-                        <img
-                            className={s.sidebarToggleIcon}
-                            src={resolveAssetUrl(SIDEBAR_TOGGLE_ICON_SRC.expand)}
-                            alt=""
-                            aria-hidden="true"
-                            data-testid="space-sidebar-expand-icon"
-                        />
-                    </button>
                 </div>
             ) : (
                 <>
@@ -301,10 +315,8 @@ export function SpaceSidebar({
                             title="收起"
                             onClick={onCollapseSidebar}
                         >
-                            <img
+                            <SidebarCollapseIcon
                                 className={s.spaceHeaderCollapseIcon}
-                                src={resolveAssetUrl(SIDEBAR_TOGGLE_ICON_SRC.collapse)}
-                                alt=""
                                 aria-hidden="true"
                                 data-testid="space-sidebar-collapse-icon"
                             />
@@ -337,16 +349,10 @@ export function SpaceSidebar({
                                         </button>
                                         <button
                                             type="button"
-                                            className={s.groupToggleButton}
+                                            className={`${s.groupToggleButton} ${expanded ? s.groupToggleButtonExpanded : ""}`}
                                             onClick={() => onToggleGroup(group.key)}
                                         >
-                                            <img
-                                                className={s.groupIcon}
-                                                src={resolveAssetUrl(expanded ? group.iconSrc.expanded : group.iconSrc.collapsed)}
-                                                alt=""
-                                                aria-hidden="true"
-                                                data-testid={`space-group-icon-${group.key}`}
-                                            />
+                                            {(() => { const Icon = SPACE_GROUP_ICONS[group.key]; return <Icon className={`${s.groupIcon} ${expanded ? s.groupIconExpanded : ""}`} aria-hidden="true" data-testid={`space-group-icon-${group.key}`} />; })()}
                                             <strong>{group.title}</strong>
                                         </button>
                                         <button
@@ -377,13 +383,7 @@ export function SpaceSidebar({
                                                             className={s.spaceSelectButton}
                                                             onClick={() => onSelectSpace(space)}
                                                         >
-                                                            <img
-                                                                className={s.spaceIcon}
-                                                                src={resolveAssetUrl(activeSpaceId === space.id ? KNOWLEDGE_SPACE_ICON_SRC.active : KNOWLEDGE_SPACE_ICON_SRC.default)}
-                                                                alt=""
-                                                                aria-hidden="true"
-                                                                data-testid={`space-row-icon-${space.id}`}
-                                                            />
+                                                            <KnowledgeSpaceIcon className={s.spaceIcon} aria-hidden="true" data-testid={`space-row-icon-${space.id}`} />
                                                             <span className={s.spaceName} title={space.name}>{space.name}</span>
                                                         </button>
                                                         {/* 『我的收藏』为系统库：只可查看/取消收藏，不提供设置/置顶/删除等操作 */}
@@ -414,12 +414,7 @@ export function SpaceSidebar({
                                                     className={s.createSpaceRow}
                                                     onClick={() => onOpenCreateSpace(group)}
                                                 >
-                                                    <img
-                                                        className={s.spaceIcon}
-                                                        src={resolveAssetUrl(CREATE_KNOWLEDGE_SPACE_ICON_SRC)}
-                                                        alt=""
-                                                        aria-hidden="true"
-                                                    />
+                                                    <NewKnowledgeSpaceIcon className={s.spaceIcon} aria-hidden="true" />
                                                     <span className={s.spaceName}>新建知识库</span>
                                                 </button>
                                             ) : null}

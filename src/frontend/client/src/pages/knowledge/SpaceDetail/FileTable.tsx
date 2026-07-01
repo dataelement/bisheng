@@ -491,7 +491,7 @@ function FileTableHeader({
                 >
                     <div className="flex h-full items-center justify-center">
                         <Checkbox
-                            className="rounded-[3px] border-[#AEB7C0] data-[state=checked]:border-primary"
+                            className="size-[14px] rounded-[2px] border-[#AEB7C0] data-[state=checked]:border-primary"
                             checked={isIndeterminate ? "indeterminate" : isAllSelected}
                             onCheckedChange={onSelectAll}
                         />
@@ -1232,7 +1232,7 @@ function FileRow({
                     <Checkbox
                         checked={isSelected}
                         onCheckedChange={onSelect}
-                        className={`size-4 rounded-[3px] border-[#AEB7C0] ${isSelected ? "border-primary" : ""}`}
+                        className={`size-[14px] rounded-[2px] border-[#AEB7C0] ${isSelected ? "border-primary" : ""}`}
                     />
                 </div>
             </TableCell>

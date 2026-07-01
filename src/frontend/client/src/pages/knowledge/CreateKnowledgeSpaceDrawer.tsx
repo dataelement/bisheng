@@ -467,12 +467,12 @@ export function CreateKnowledgeSpaceDrawer({
                 side="right"
                 hideClose
                 className={cn(
-                    "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-4 sm:max-w-[1000px]"
+                    "flex w-full max-w-[800px] flex-col gap-0 overflow-hidden bg-white px-4 sm:max-w-[800px]"
                 )}
             >
-                <SheetHeader className="sticky top-0 z-10 mx-0 bg-white pb-4 pt-6">
+                <SheetHeader className="sticky top-0 z-10 bg-white px-0">
                     <div className="flex items-center justify-between gap-3">
-                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                        <SheetTitle className="text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                             {mode === "edit" ? localize("com_knowledge.edit_space") : localize("com_knowledge.create_knowledge_space")}
                         </SheetTitle>
                         <button
@@ -520,7 +520,7 @@ export function CreateKnowledgeSpaceDrawer({
                     </div>
                 ) : (
                     <div className="scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                        <div className="mx-auto w-full max-w-[800px] space-y-7 overflow-visible px-0 py-5 touch-mobile:max-w-none">
+                        <div className="w-full space-y-7 overflow-visible pb-5">
                             {/* 空间层级 */}
                             <div className="space-y-3">
                                 <Label className="text-sm text-[#1D2129] font-medium">
@@ -824,130 +824,130 @@ export function CreateKnowledgeSpaceDrawer({
                                         onValueChange={handleAutoTagModeChange}
                                         className="space-y-3"
                                     >
-                                            <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
-                                                <TabsTrigger
-                                                    value="library"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
-                                                >
-                                                    {localize("com_knowledge.auto_tag_mode_library")}
-                                                </TabsTrigger>
-                                                <TabsTrigger
-                                                    value="custom"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
-                                                >
-                                                    {localize("com_knowledge.auto_tag_mode_custom")}
-                                                </TabsTrigger>
-                                            </TabsList>
+                                        <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
+                                            <TabsTrigger
+                                                value="library"
+                                                className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
+                                            >
+                                                {localize("com_knowledge.auto_tag_mode_library")}
+                                            </TabsTrigger>
+                                            <TabsTrigger
+                                                value="custom"
+                                                className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
+                                            >
+                                                {localize("com_knowledge.auto_tag_mode_custom")}
+                                            </TabsTrigger>
+                                        </TabsList>
 
-                                            <TabsContent value="library" className="space-y-2">
+                                        <TabsContent value="library" className="space-y-2">
+                                            <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                <span className="mr-1 text-[#F53F3F]">*</span>
+                                                {localize("com_knowledge.auto_tag_library")}
+                                            </Label>
+                                            <Select
+                                                value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
+                                                onValueChange={(value) => setAutoTagLibraryId(Number(value))}
+                                                disabled={true}
+                                            >
+                                                <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
+                                                    <SelectValue
+                                                        placeholder={
+                                                            tagLibrariesLoading
+                                                                ? localize("com_knowledge.loading")
+                                                                : localize("com_knowledge.select_auto_tag_library")
+                                                        }
+                                                    />
+                                                </SelectTrigger>
+                                                <SelectContent className="z-[150] bg-white">
+                                                    {tagLibraries.map((library) => (
+                                                        <SelectItem key={library.id} value={String(library.id)}>
+                                                            {library.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {tagLibraries.length === 0 && !tagLibrariesLoading && (
+                                                <p className="text-[12px] text-[#F53F3F]">
+                                                    {localize("com_knowledge.no_auto_tag_library")}
+                                                </p>
+                                            )}
+                                            {autoTagLibraryId && (
+                                                <div className="space-y-1.5 pt-1">
+                                                    <div className="text-[12px] text-[#86909C]">
+                                                        {localize("com_knowledge.auto_tag_library_preview")}
+                                                    </div>
+                                                    {autoTagLibraryTagsLoading ? (
+                                                        <div className="text-[12px] text-[#86909C]">
+                                                            {localize("com_knowledge.loading")}
+                                                        </div>
+                                                    ) : autoTagLibraryTags.length === 0 ? (
+                                                        <div className="text-[12px] text-[#86909C]">
+                                                            {localize("com_knowledge.auto_tag_library_preview_empty")}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-wrap items-center">
+                                                            {(autoTagPreviewExpanded
+                                                                ? autoTagLibraryTags
+                                                                : autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT)
+                                                            ).map((tag, idx) => (
+                                                                <span
+                                                                    key={`${tag}-${idx}`}
+                                                                    className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
+                                                                >
+                                                                    {tag}
+                                                                </span>
+                                                            ))}
+                                                            {autoTagLibraryTags.length > AUTO_TAG_PREVIEW_LIMIT && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="mb-1.5 text-[12px] text-[#165DFF] hover:underline"
+                                                                    onClick={() => setAutoTagPreviewExpanded((prev) => !prev)}
+                                                                >
+                                                                    {autoTagPreviewExpanded
+                                                                        ? localize("com_knowledge.collapse")
+                                                                        : `${localize("com_knowledge.expand_more")} (+${autoTagLibraryTags.length - AUTO_TAG_PREVIEW_LIMIT})`}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </TabsContent>
+
+                                        <TabsContent value="custom" className="space-y-2">
+                                            <div className="flex items-center justify-between">
                                                 <Label className="text-[14px] font-medium text-[#1D2129]">
                                                     <span className="mr-1 text-[#F53F3F]">*</span>
-                                                    {localize("com_knowledge.auto_tag_library")}
+                                                    {localize("com_knowledge.auto_tag_mode_custom")}
                                                 </Label>
-                                                <Select
-                                                    value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
-                                                    onValueChange={(value) => setAutoTagLibraryId(Number(value))}
-                                                    disabled={true}
+                                                <span className="text-[12px] text-[#86909C]">
+                                                    {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
+                                                </span>
+                                            </div>
+                                            <div className="relative">
+                                                <Textarea
+                                                    value={autoTagCustomTagsText}
+                                                    onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
+                                                    placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
+                                                    className="min-h-[120px] resize-none rounded-[6px] border-[#E5E6EB] bg-white pr-24 text-[14px]"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => txtInputRef.current?.click()}
+                                                    className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-[#165DFF] hover:underline"
                                                 >
-                                                    <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
-                                                        <SelectValue
-                                                            placeholder={
-                                                                tagLibrariesLoading
-                                                                    ? localize("com_knowledge.loading")
-                                                                    : localize("com_knowledge.select_auto_tag_library")
-                                                            }
-                                                        />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="z-[150] bg-white">
-                                                        {tagLibraries.map((library) => (
-                                                            <SelectItem key={library.id} value={String(library.id)}>
-                                                                {library.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                {tagLibraries.length === 0 && !tagLibrariesLoading && (
-                                                    <p className="text-[12px] text-[#F53F3F]">
-                                                        {localize("com_knowledge.no_auto_tag_library")}
-                                                    </p>
-                                                )}
-                                                {autoTagLibraryId && (
-                                                    <div className="space-y-1.5 pt-1">
-                                                        <div className="text-[12px] text-[#86909C]">
-                                                            {localize("com_knowledge.auto_tag_library_preview")}
-                                                        </div>
-                                                        {autoTagLibraryTagsLoading ? (
-                                                            <div className="text-[12px] text-[#86909C]">
-                                                                {localize("com_knowledge.loading")}
-                                                            </div>
-                                                        ) : autoTagLibraryTags.length === 0 ? (
-                                                            <div className="text-[12px] text-[#86909C]">
-                                                                {localize("com_knowledge.auto_tag_library_preview_empty")}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex flex-wrap items-center">
-                                                                {(autoTagPreviewExpanded
-                                                                    ? autoTagLibraryTags
-                                                                    : autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT)
-                                                                ).map((tag, idx) => (
-                                                                    <span
-                                                                        key={`${tag}-${idx}`}
-                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
-                                                                    >
-                                                                        {tag}
-                                                                    </span>
-                                                                ))}
-                                                                {autoTagLibraryTags.length > AUTO_TAG_PREVIEW_LIMIT && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className="mb-1.5 text-[12px] text-[#165DFF] hover:underline"
-                                                                        onClick={() => setAutoTagPreviewExpanded((prev) => !prev)}
-                                                                    >
-                                                                        {autoTagPreviewExpanded
-                                                                            ? localize("com_knowledge.collapse")
-                                                                            : `${localize("com_knowledge.expand_more")} (+${autoTagLibraryTags.length - AUTO_TAG_PREVIEW_LIMIT})`}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </TabsContent>
-
-                                            <TabsContent value="custom" className="space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <Label className="text-[14px] font-medium text-[#1D2129]">
-                                                        <span className="mr-1 text-[#F53F3F]">*</span>
-                                                        {localize("com_knowledge.auto_tag_mode_custom")}
-                                                    </Label>
-                                                    <span className="text-[12px] text-[#86909C]">
-                                                        {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
-                                                    </span>
-                                                </div>
-                                                <div className="relative">
-                                                    <Textarea
-                                                        value={autoTagCustomTagsText}
-                                                        onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
-                                                        placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
-                                                        className="min-h-[120px] resize-none rounded-[6px] border-[#E5E6EB] bg-white pr-24 text-[14px]"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => txtInputRef.current?.click()}
-                                                        className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-[#165DFF] hover:underline"
-                                                    >
-                                                        <Upload className="h-3 w-3" />
-                                                        {localize("com_knowledge.upload_txt")}
-                                                    </button>
-                                                    <input
-                                                        ref={txtInputRef}
-                                                        type="file"
-                                                        accept=".txt"
-                                                        className="hidden"
-                                                        onChange={handleUploadTxt}
-                                                    />
-                                                </div>
-                                            </TabsContent>
+                                                    <Upload className="h-3 w-3" />
+                                                    {localize("com_knowledge.upload_txt")}
+                                                </button>
+                                                <input
+                                                    ref={txtInputRef}
+                                                    type="file"
+                                                    accept=".txt"
+                                                    className="hidden"
+                                                    onChange={handleUploadTxt}
+                                                />
+                                            </div>
+                                        </TabsContent>
                                     </Tabs>
                                 )}
                             </div>
@@ -956,8 +956,8 @@ export function CreateKnowledgeSpaceDrawer({
                 )}
 
                 {!showSuccess && (
-                    <div className="sticky bottom-0 z-10 mt-auto mx-0 flex justify-end gap-3 bg-white px-0 pb-5 pt-10 touch-mobile:gap-2 touch-mobile:pt-4">
-                        <div className="mx-auto flex w-full max-w-[800px] justify-end gap-3 touch-mobile:max-w-none">
+                    <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 bg-white pb-5 pt-10 touch-mobile:gap-2 touch-mobile:pt-4">
+                        <div className="flex w-full justify-end gap-3">
                             <Button
                                 variant="secondary"
                                 className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
