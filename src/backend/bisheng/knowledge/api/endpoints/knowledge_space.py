@@ -57,7 +57,6 @@ router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 async def create_space(
     req: KnowledgeSpaceCreateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     space = await svc.create_knowledge_space(
         name=req.name,
@@ -72,7 +71,7 @@ async def create_space(
         auto_tag_library_id=req.auto_tag_library_id,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
     )
-    return resp_200(await svc.get_space_info(space.id))
+    return resp_200(svc.build_created_space_info(space))
 
 
 @router.get('/create-options')

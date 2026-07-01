@@ -675,7 +675,8 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge,
-                              skip_hook: bool = False) -> Knowledge:
+                              skip_hook: bool = False,
+                              initialize_indices: bool = True) -> Knowledge:
         # generate index_name and collection_name
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
@@ -687,7 +688,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # qa knowledge will be init index when add question
         # todo change qa and other knowledge one metadata_schema
-        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+        if initialize_indices and db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
                 vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
                                                                                     knowledge=db_knowledge,
@@ -711,7 +712,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def acreate_knowledge_base(
-        cls, request, login_user: UserPayload, db_knowledge: Knowledge, skip_hook: bool = False
+        cls,
+        request,
+        login_user: UserPayload,
+        db_knowledge: Knowledge,
+        skip_hook: bool = False,
+        initialize_indices: bool = True,
     ) -> Knowledge:
         from bisheng.permission.domain.services.owner_service import OwnerService
 
@@ -721,7 +727,7 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
 
-        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+        if initialize_indices and db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
                 vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(
                     login_user.user_id,

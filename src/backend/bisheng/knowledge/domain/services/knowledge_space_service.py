@@ -388,6 +388,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: Optional["KnowledgeDocumentRepository"] = None
+        self._created_space_scope_by_id: Dict[
+            int,
+            tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
+        ] = {}
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -749,6 +753,79 @@ class KnowledgeSpaceService(KnowledgeUtils):
             grants=[grant],
             enforce_fga_success=True,
         )
+
+    def build_created_space_info(
+        self,
+        space: Knowledge,
+        *,
+        level: KnowledgeSpaceLevelEnum | str | None = None,
+        owner_type: KnowledgeSpaceOwnerTypeEnum | str | None = None,
+        owner_id: Optional[int] = None,
+    ) -> KnowledgeSpaceInfoResp:
+        result = KnowledgeSpaceInfoResp(**space.model_dump())
+        result.user_name = self.login_user.user_name
+        result.user_role = UserRoleEnum.CREATOR
+        result.follower_num = 1
+        result.file_num = 0
+        result.can_unsubscribe = False
+        cached_scope = self._created_space_scope_by_id.get(int(space.id)) if space.id else None
+        if cached_scope is not None:
+            cached_level, cached_owner_type, cached_owner_id = cached_scope
+            level = level or cached_level
+            owner_type = owner_type or cached_owner_type
+            owner_id = owner_id if owner_id is not None else cached_owner_id
+        result.space_level = self._normalize_space_level(level)
+        if owner_type is not None and not isinstance(owner_type, KnowledgeSpaceOwnerTypeEnum):
+            owner_type = KnowledgeSpaceOwnerTypeEnum(owner_type)
+        result.owner_type = owner_type
+        result.owner_id = owner_id
+        if owner_type == KnowledgeSpaceOwnerTypeEnum.USER:
+            result.owner_name = self.login_user.user_name
+        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+        return result
+
+    @staticmethod
+    def _enqueue_knowledge_space_index_init(space_id: int, invoke_user_id: int) -> None:
+        try:
+            from bisheng.worker.knowledge.space_init_worker import init_knowledge_space_indices
+
+            init_knowledge_space_indices.delay(space_id, invoke_user_id)
+        except Exception:
+            _logger.exception(
+                "Failed to enqueue knowledge space index init: space_id=%s user_id=%s",
+                space_id,
+                invoke_user_id,
+            )
+            raise
+
+    @staticmethod
+    def _enqueue_default_scope_permissions(
+        *,
+        level: KnowledgeSpaceLevelEnum,
+        owner_id: int,
+        space_id: int,
+    ) -> None:
+        if level not in {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+        }:
+            return
+        try:
+            from bisheng.worker.knowledge.space_init_worker import grant_knowledge_space_scope_permissions
+
+            grant_knowledge_space_scope_permissions.delay(
+                space_id=space_id,
+                level=level.value,
+                owner_id=owner_id,
+            )
+        except Exception:
+            _logger.exception(
+                "Failed to enqueue knowledge space scope permissions: space_id=%s level=%s owner_id=%s",
+                space_id,
+                level.value,
+                owner_id,
+            )
+            raise
 
     async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
         return KnowledgeSpaceCreateOptionsResp(
@@ -2061,6 +2138,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
+        perf_start = time.perf_counter()
+        perf_last = perf_start
+
+        def log_perf_stage(stage: str) -> None:
+            nonlocal perf_last
+            now = time.perf_counter()
+            _logger.info(
+                "knowledge_space_create_perf stage=%s elapsed_ms=%.2f total_ms=%.2f user_id=%s",
+                stage,
+                (now - perf_last) * 1000,
+                (now - perf_start) * 1000,
+                self.login_user.user_id,
+            )
+            perf_last = now
+
         name = self._normalize_space_name(name)
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
@@ -2085,6 +2177,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_type=owner_type,
             owner_id=owner_id,
         )
+        log_perf_stage("validate")
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
         # a private library, so defer the auto-tag fields until after insert.
@@ -2100,9 +2193,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_id=None,
         )
 
-        knowledge_space = KnowledgeService.create_knowledge_base(
-            self.request, self.login_user, db_knowledge, skip_hook=True
+        knowledge_space = await KnowledgeService.acreate_knowledge_base(
+            self.request,
+            self.login_user,
+            db_knowledge,
+            skip_hook=True,
+            initialize_indices=False,
         )
+        log_perf_stage("db_create")
+        self._enqueue_knowledge_space_index_init(
+            int(knowledge_space.id),
+            int(self.login_user.user_id),
+        )
+        log_perf_stage("enqueue_index_init")
 
         if auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None:
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
@@ -2117,6 +2220,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_enabled = resolved_enabled
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
+            log_perf_stage("auto_tag")
 
         member = SpaceChannelMember(
             business_id=str(knowledge_space.id),
@@ -2140,6 +2244,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.id,
                 e,
             )
+        log_perf_stage("owner_tuple")
 
         await self._create_space_scope(
             space_id=int(knowledge_space.id),
@@ -2147,15 +2252,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_type=owner_type,
             owner_id=owner_id,
         )
-        await self._grant_default_scope_permissions(
+        self._created_space_scope_by_id[int(knowledge_space.id)] = (level, owner_type, owner_id)
+        log_perf_stage("scope_create")
+        self._enqueue_default_scope_permissions(
             level=level,
             owner_id=owner_id,
             space_id=int(knowledge_space.id),
         )
+        log_perf_stage("enqueue_scope_permission")
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
             self.login_user, self.request, knowledge_space
+        )
+        log_perf_stage("audit")
+        _logger.info(
+            "knowledge_space_create_perf stage=total total_ms=%.2f user_id=%s space_id=%s",
+            (time.perf_counter() - perf_start) * 1000,
+            self.login_user.user_id,
+            knowledge_space.id,
         )
 
         return knowledge_space

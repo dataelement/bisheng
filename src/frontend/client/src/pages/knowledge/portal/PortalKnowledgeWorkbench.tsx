@@ -1816,12 +1816,12 @@ export default function PortalKnowledgeWorkbench() {
 
             if (result.created && result.space) {
                 setActiveSpace(result.space);
-                await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
 
-            await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
             return { showSuccess: false };
         } catch (error) {

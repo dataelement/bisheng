@@ -95,6 +95,12 @@ jest.mock("~/hooks/queries/endpoints/queries", () => ({
             },
         },
     }),
+    useGetPortalMetadataConfig: () => ({
+        data: {
+            document_types: [],
+            business_domain_options: [],
+        },
+    }),
 }));
 
 jest.mock("~/components/ui", () => ({
@@ -467,13 +473,14 @@ function renderWorkbench(initialEntry = "/knowledge-portal") {
         },
     });
 
-    return render(
+    const view = render(
         <QueryClientProvider client={queryClient}>
             <RecoilRoot>
                 <PortalKnowledgeWorkbench />
             </RecoilRoot>
         </QueryClientProvider>,
     );
+    return { ...view, queryClient };
 }
 
 function openMyUploadsFromPortalShell() {
@@ -901,8 +908,10 @@ describe("PortalKnowledgeWorkbench", () => {
             teamSpaces: [],
             personalSpaces: [],
         } as any);
-
-        renderWorkbench();
+        const { queryClient } = renderWorkbench();
+        const neverSettlingInvalidate = jest
+            .spyOn(queryClient, "invalidateQueries")
+            .mockImplementation(() => new Promise(() => undefined) as any);
 
         const personalGroup = screen.getByTestId("space-group-personal");
         fireEvent.click(await within(personalGroup).findByRole("button", { name: "新建知识库" }));
@@ -918,6 +927,7 @@ describe("PortalKnowledgeWorkbench", () => {
             space_level: SpaceLevel.PERSONAL,
         }));
         expect(submitShougangKnowledgeSpaceCreateApprovalApi).not.toHaveBeenCalled();
+        expect(neverSettlingInvalidate).toHaveBeenCalledWith({ queryKey: ["knowledgeSpaces"] });
         expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "创建知识库成功" }));
         await waitFor(() => {
             expect(mockCreateSpaceConfirmResult).toBe(true);
