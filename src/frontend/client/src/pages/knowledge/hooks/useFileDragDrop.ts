@@ -4,6 +4,9 @@ import {
     DEFAULT_MAX_FILE_SIZE_MB,
     getAllowedMimeTypes,
     getAllowedExtensions,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
+    type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
@@ -22,10 +25,11 @@ interface UseFileDragDropOptions {
      */
     onUploadFolder?: (
         files: File[],
-        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
     ) => void;
     /** Maximum single file size in MB (from env config). Falls back to DEFAULT_MAX_FILE_SIZE_MB. */
     maxFileSizeMB?: number;
+    uploadSizeLimits?: UploadSizeLimits;
     /** Whether ETL4LM service is deployed; controls which extensions/MIME types are accepted. */
     enableEtl4lm?: boolean;
 }
@@ -100,12 +104,16 @@ export function useFileDragDrop({
     onUploadFile,
     onUploadFolder,
     maxFileSizeMB,
+    uploadSizeLimits,
     enableEtl4lm = false,
 }: UseFileDragDropOptions) {
     const localize = useLocalize();
     const dragCounter = useRef(0);
     const limitMB = maxFileSizeMB ?? DEFAULT_MAX_FILE_SIZE_MB;
-    const limitBytes = limitMB * 1024 * 1024;
+    const limits = useMemo(
+        () => uploadSizeLimits ?? { defaultMaxMB: limitMB, mediaMaxMB: limitMB },
+        [uploadSizeLimits, limitMB],
+    );
     const allowedMime = useMemo(() => getAllowedMimeTypes(enableEtl4lm), [enableEtl4lm]);
     const allowedExt = useMemo(() => getAllowedExtensions(enableEtl4lm), [enableEtl4lm]);
 
@@ -193,7 +201,11 @@ export function useFileDragDrop({
                     onDragStateChange?.(false);
                     void readFolderFilesRecursive(dirEntry, "").then((files) => {
                         if (files.length > 0) {
-                            onUploadFolder(files, { allowedExtensions: allowedExt, maxSizeMB: limitMB });
+                            onUploadFolder(files, {
+                                allowedExtensions: allowedExt,
+                                maxSizeMB: limits.defaultMaxMB,
+                                limits,
+                            });
                         }
                     });
                     return;
@@ -209,8 +221,11 @@ export function useFileDragDrop({
                 }
 
                 for (const f of filesList) {
-                    if (f.size > limitBytes) {
-                        onDragStateChange?.(true, localize("com_knowledge.file_exceeds_limit", { name: f.name, size: limitMB }));
+                    if (f.size > getMaxFileSizeBytesForFile(f.name, limits)) {
+                        onDragStateChange?.(true, localize("com_knowledge.file_exceeds_limit", {
+                            name: f.name,
+                            size: getMaxFileSizeMBForFile(f.name, limits),
+                        }));
                         setTimeout(() => onDragStateChange?.(false), 2000);
                         return;
                     }
@@ -228,7 +243,7 @@ export function useFileDragDrop({
                 onDragStateChange?.(false);
             }
         },
-        [onDragStateChange, onUploadFile, onUploadFolder, limitBytes, limitMB, allowedExt, localize]
+        [onDragStateChange, onUploadFile, onUploadFolder, limits, allowedExt, localize]
     );
 
     return {
@@ -238,4 +253,3 @@ export function useFileDragDrop({
         handleDrop,
     };
 }
-

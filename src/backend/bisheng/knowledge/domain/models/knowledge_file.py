@@ -46,6 +46,16 @@ class FileSource(Enum):
     UPLOAD = "upload"  # user upload
     CHANNEL = "channel"
     SPACE_UPLOAD = "space_upload"
+    AUDIO_TRANSCRIPT = "audio_transcript"
+    VIDEO_TRANSCRIPT = "video_transcript"
+    WEB_LINK = "web_link"
+
+
+PORTAL_USER_UPLOAD_FILE_SOURCES = (
+    FileSource.SPACE_UPLOAD.value,
+    FileSource.AUDIO_TRANSCRIPT.value,
+    FileSource.VIDEO_TRANSCRIPT.value,
+)
 
 
 class FileType(int, Enum):

@@ -9,17 +9,22 @@ export default function DropZone({ onDrop }) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
     const xinChuangFormats = ['.WPS', '.ET', '.DPS'];
+    const mediaFormats = ['.MP3', '.WAV', '.M4A', '.AAC', '.FLAC', '.OGG', '.MP4', '.MOV', '.AVI', '.MKV', '.WEBM'];
 
     // Define supported file formats (for display purposes only, not for filtering)
     const supportedFormats = appConfig.enableEtl4lm
-        ? ['.PDF', '.OFD', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP', ...xinChuangFormats]
-        : ['.PDF', '.OFD', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', ...xinChuangFormats];
+        ? ['.PDF', '.OFD', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP', ...xinChuangFormats, ...mediaFormats]
+        : ['.PDF', '.OFD', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', ...xinChuangFormats, ...mediaFormats];
     const allowedExts = new Set(
         supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
     );
     const { getRootProps, getInputProps } = useDropzone({
         accept: {
-            'application/*': supportedFormats
+            'application/*': supportedFormats,
+            'text/*': supportedFormats,
+            'image/*': supportedFormats,
+            'audio/*': supportedFormats,
+            'video/*': supportedFormats
         },
         useFsAccessApi: false,
         onDrop: (acceptedFiles, disAcceptedFiles) => {

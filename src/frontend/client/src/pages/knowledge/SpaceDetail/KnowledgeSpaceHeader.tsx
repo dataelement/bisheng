@@ -1,4 +1,4 @@
-import { FolderPlus, FolderUp } from "lucide-react";
+import { FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -35,6 +35,7 @@ interface KnowledgeSpaceHeaderProps {
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
     onTriggerUploadFolder: () => void;
+    onTriggerWebLink: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
     /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
@@ -85,6 +86,7 @@ export function KnowledgeSpaceHeader({
     onCreateFolder,
     onTriggerUpload,
     onTriggerUploadFolder,
+    onTriggerWebLink,
     canCreateFolder = false,
     canUploadFile = false,
     supportedFormatsLabel,
@@ -331,6 +333,11 @@ export function KnowledgeSpaceHeader({
                                 </button>
                             </DropdownMenuTrigger>
                             <ActionMenuContent align="end">
+                                <ActionMenuItem
+                                    onClick={onTriggerWebLink}
+                                    icon={<Link2 />}
+                                    label={localize("com_knowledge.web_link")}
+                                />
                                 <ActionMenuItem
                                     onClick={onTriggerUploadFolder}
                                     icon={<FolderUp />}

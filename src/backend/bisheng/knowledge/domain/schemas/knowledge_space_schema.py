@@ -133,6 +133,13 @@ class FileCreateReq(BaseModel):
     parent_id: int | None = Field(None, description="Parent Folder ID")
 
 
+class WebLinkCreateReq(BaseModel):
+    url: str = Field(..., min_length=1, max_length=2048, description="Web link URL")
+    title: str | None = Field(None, max_length=200, description="Optional display title")
+    parent_id: int | None = Field(None, description="Parent Folder ID")
+    overwrite: bool = Field(default=False, description="Overwrite existing duplicate web link")
+
+
 class FileRenameReq(BaseModel):
     name: str = Field(..., description="New File Name")
 

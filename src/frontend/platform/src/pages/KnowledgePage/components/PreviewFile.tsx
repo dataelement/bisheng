@@ -10,6 +10,7 @@ import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
 import ExcelPreview from "./ExcelPreview";
+import RichPreviewFile, { isRichKnowledgePreview } from "./RichPreviewFile";
 
 export default function PreviewFile({
   urlState,
@@ -22,7 +23,8 @@ export default function PreviewFile({
   edit = false,
   resultFiles,
   etl,
-  previewUrl
+  previewUrl,
+  previewData
 }: {
   urlState: { load: boolean; url: string };
   file: any;
@@ -31,6 +33,7 @@ export default function PreviewFile({
   rawFiles: any[];
   setChunks: any;
   edit?: boolean;
+  previewData?: any;
 }) {
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
@@ -225,6 +228,9 @@ export default function PreviewFile({
     // 加载状态处理
     if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
+    if (isRichKnowledgePreview(previewData)) {
+      return <RichPreviewFile file={file} previewData={previewData} />;
+    }
 
     // 新版文件预览
     switch (suffix) {
