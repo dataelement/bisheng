@@ -603,7 +603,7 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* 状态 — 管理员始终可见；普通成员仅在存在审批状态时展示 */}
+                {/* 状态 */}
                 {showStatusColumn && (
                     <TableHead
                         className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
@@ -682,7 +682,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
-    const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
+    const showStatusColumn = true;
     const localize = useLocalize();
     const { showToast } = useToastContext();
 
@@ -1465,29 +1465,25 @@ function FileRow({
                 <span className="block truncate whitespace-nowrap">{getUpdateTimeDisplay(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态：管理员看解析状态；普通成员只看审批状态 */}
+            {/* 状态 */}
             {showStatusColumn && (
                 <TableCell
                     className={cn("relative overflow-visible py-3 align-middle", rowBg)}
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
                     {isFolder ? (
-                        isAdmin ? (
-                            file.folderStatsLoading ? (
-                                <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
-                            ) : file.folderStatsError ? (
-                                <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
-                            ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
-                                <span className="whitespace-nowrap text-sm">
-                                    <span className="text-[#00b42a]">{file.successFileNum}</span>
-                                    <span className="text-[#86909c]">/{file.fileNum}</span>
-                                </span>
-                            ) : null
+                        file.folderStatsLoading ? (
+                            <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
+                        ) : file.folderStatsError ? (
+                            <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
+                        ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
+                            <span className="whitespace-nowrap text-sm">
+                                <span className="text-[#00b42a]">{file.successFileNum}</span>
+                                <span className="text-[#86909c]">/{file.fileNum}</span>
+                            </span>
                         ) : null
                     ) : (
-                        isAdmin || file.approvalStatus
-                            ? <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
-                            : null
+                        <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
                     )}
                 </TableCell>
             )}

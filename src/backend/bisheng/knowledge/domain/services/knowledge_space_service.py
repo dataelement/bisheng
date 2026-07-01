@@ -4983,10 +4983,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             required_permission_id="view_space",
         )
 
-    async def get_grouped_spaces(
+    async def _list_accessible_spaces(
         self,
         order_by: str = 'update_time',
-    ) -> GroupedKnowledgeSpacesResp:
+    ) -> List[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
         space_ids = {
             int(member.business_id)
@@ -5014,12 +5014,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             space_ids.update(int(space_id) for space_id in accessible_ids if str(space_id).isdigit())
 
-        spaces = await self._format_accessible_spaces(
+        return await self._format_accessible_spaces(
             list(space_ids),
             order_by,
             memberships=members,
             required_permission_id='view_space',
         )
+
+    async def get_grouped_spaces(
+        self,
+        order_by: str = 'update_time',
+    ) -> GroupedKnowledgeSpacesResp:
+        spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
         for space in spaces:
             if space.space_level == KnowledgeSpaceLevelEnum.PUBLIC:
@@ -5031,6 +5037,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 grouped.personal_spaces.append(space)
         return grouped
+
+    async def get_spaces_by_level(
+        self,
+        space_level: KnowledgeSpaceLevelEnum | str,
+        order_by: str = 'update_time',
+    ) -> List[KnowledgeRead]:
+        target_level = self._normalize_space_level(space_level)
+        favorite_space_id: Optional[int] = None
+        if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
+            favorite_space = await self._ensure_favorite_space()
+            favorite_space_id = int(favorite_space.id)
+
+        spaces = await self._list_accessible_spaces(order_by)
+        result = [
+            space
+            for space in spaces
+            if space.space_level == target_level
+        ]
+
+        if favorite_space_id is not None:
+            for space in result:
+                if int(space.id) == favorite_space_id:
+                    space.is_favorite = True
+            result.sort(key=lambda space: (not bool(getattr(space, 'is_favorite', False))))
+
+        return result
 
     async def global_search_files(
         self,

@@ -21,6 +21,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.update_time": "更新时间",
             "com_knowledge.status": "状态",
             "com_knowledge.success": "成功",
+            "com_knowledge.parsing_status": "解析中",
             "com_permission.manage_permission": "权限管理",
             "com_knowledge.version.menu_version_management": "版本管理",
             "com_knowledge.version.menu_version_history": "版本历史",
@@ -203,6 +204,26 @@ describe("普通知识空间文件发布入口", () => {
         fireEvent.click(screen.getByRole("button", { name: "发布" }));
 
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
+    });
+
+    test("普通成员卡片展示文件解析状态", () => {
+        render(
+            <FileCard
+                file={{ ...baseFile, status: FileStatus.PROCESSING }}
+                userRole={SpaceRole.MEMBER}
+                isSelected={false}
+                onSelect={jest.fn()}
+                onDownload={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onEditTags={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+            />
+        );
+
+        expect(screen.getByText("解析中")).toBeInTheDocument();
     });
 
     test("移动端卡片菜单展示发布并触发发布回调", () => {

@@ -985,6 +985,17 @@ export async function getDepartmentSpacesApi(params?: {
     return extractKnowledgeSpaceList(res).map(mapSpace);
 }
 
+export async function getSpacesByLevelApi(spaceLevel: SpaceLevel, params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/level/${spaceLevel}`, {
+        params: {
+            order_by: params?.order_by,
+        },
+    });
+    return extractKnowledgeSpaceList(res).map(mapSpace);
+}
+
 export async function getGroupedSpacesApi(params?: {
     order_by?: string;
 }): Promise<GroupedKnowledgeSpaces> {

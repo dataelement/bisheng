@@ -41,6 +41,7 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
@@ -207,6 +208,16 @@ async def get_grouped_spaces(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_grouped_spaces(order_by)
+    return resp_200(spaces)
+
+
+@router.get("/level/{space_level}")
+async def get_spaces_by_level(
+    space_level: KnowledgeSpaceLevelEnum,
+    order_by: str = "update_time",
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    spaces = await svc.get_spaces_by_level(space_level, order_by)
     return resp_200(spaces)
 
 

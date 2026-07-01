@@ -154,9 +154,9 @@ export default function PortalKnowledgeWorkbench() {
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [spaceSidebarCollapsed, setSpaceSidebarCollapsed] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<Record<SpaceGroupKey, boolean>>({
-        public: true,
-        department: true,
-        team: true,
+        public: false,
+        department: false,
+        team: false,
         personal: true,
     });
     const [selectedFile, setSelectedFile] = useState<KnowledgeFile | null>(null);
@@ -236,6 +236,13 @@ export default function PortalKnowledgeWorkbench() {
         activeGroup,
         getSpacePermissions,
     } = usePortalSpaces({ activeSpace, setActiveSpace });
+
+    useEffect(() => {
+        if (!activeGroup) return;
+        setExpandedGroups((prev) => (
+            prev[activeGroup.key] ? prev : { ...prev, [activeGroup.key]: true }
+        ));
+    }, [activeGroup?.key]);
 
     const scrollToGroup = useCallback((groupKey: SpaceGroupKey) => {
         const run = () => {

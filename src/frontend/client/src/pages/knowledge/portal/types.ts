@@ -19,6 +19,7 @@ export interface SpaceGroup {
         expanded: string;
     };
     spaces: KnowledgeSpace[];
+    loading?: boolean;
 }
 
 export interface PreviewState {

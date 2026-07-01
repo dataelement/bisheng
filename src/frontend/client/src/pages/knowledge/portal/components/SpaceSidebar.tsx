@@ -406,7 +406,7 @@ export function SpaceSidebar({
                                                     </div>
                                                 ))
                                             ) : (
-                                                <div className={s.emptySpace}>{spaceLoading ? "加载中..." : "暂无知识库"}</div>
+                                                <div className={s.emptySpace}>{(group.loading ?? spaceLoading) ? "加载中..." : "暂无知识库"}</div>
                                             )}
                                             {canCreate ? (
                                                 <button

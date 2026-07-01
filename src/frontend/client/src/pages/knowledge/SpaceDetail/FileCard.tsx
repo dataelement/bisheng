@@ -126,7 +126,7 @@ export function FileCard({
         : "text-[#999]";
 
     const renderStatusBadge = () => {
-        if (!isAdmin || isFolder) return null;
+        if (isFolder) return null;
 
         const approvalLabel = approvalStatusLabel;
         const statusReason = failureMessage || approvalReason;
@@ -240,7 +240,7 @@ export function FileCard({
             </button>
         );
 
-        if ((!isAdmin && !approvalStatusLabel) || isFolder) {
+        if (isFolder) {
             return (
                 <div className="flex min-w-0 items-center gap-2">
                     {versionBadge}

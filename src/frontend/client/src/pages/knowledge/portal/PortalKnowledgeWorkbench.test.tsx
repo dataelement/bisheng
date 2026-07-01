@@ -36,6 +36,7 @@ import {
     getKnowledgeSpaceTagLibraryDetailApi,
     getSimilarCandidatesApi,
     getMineSpacesApi,
+    getSpacesByLevelApi,
     getSpaceChildrenApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
@@ -44,9 +45,11 @@ import {
     linkAsNewVersionApi,
     listMyUploadedFilesApi,
     listKnowledgeFolders,
+    listPortalFavoritesApi,
     moveUploadedFileFolderApi,
     pinSpaceApi,
     recommendUploadFoldersApi,
+    removePortalFavoriteApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
     updateFileEncoding,
@@ -367,6 +370,7 @@ jest.mock("~/api/knowledge", () => ({
         APPROVAL: "approval",
     },
     getGroupedSpacesApi: jest.fn(),
+    getSpacesByLevelApi: jest.fn(),
     getKnowledgeSpaceTagLibrariesApi: jest.fn(),
     getKnowledgeSpaceTagLibraryDetailApi: jest.fn(),
     getCreateSpaceOptionsApi: jest.fn(),
@@ -390,7 +394,9 @@ jest.mock("~/api/knowledge", () => ({
     addFilesApi: jest.fn(),
     recommendUploadFoldersApi: jest.fn(),
     listMyUploadedFilesApi: jest.fn(),
+    listPortalFavoritesApi: jest.fn(),
     moveUploadedFileFolderApi: jest.fn(),
+    removePortalFavoriteApi: jest.fn(),
     getSimilarCandidatesApi: jest.fn(),
     linkAsNewVersionApi: jest.fn(),
     batchDownloadApi: jest.fn(),
@@ -434,6 +440,28 @@ const makeSpace = (id: string, name: string, overrides: Record<string, any> = {}
     spaceLevel: SpaceLevel.PERSONAL,
     ...overrides,
 });
+
+const makeDefaultFavoriteSpace = () => makeSpace("favorite-space", "我的收藏", {
+    role: SpaceRole.CREATOR,
+    spaceLevel: SpaceLevel.PERSONAL,
+    isFavorite: true,
+});
+
+const makeGroupedSpaces = (overrides: Record<string, any> = {}) => ({
+    publicSpaces: [],
+    departmentSpaces: [],
+    teamSpaces: [],
+    personalSpaces: [],
+    ...overrides,
+});
+
+async function resolveMockSpacesByLevel(spaceLevel: SpaceLevel, params?: { order_by?: string }) {
+    const groupedSpaces = await jest.mocked(getGroupedSpacesApi)(params);
+    if (spaceLevel === SpaceLevel.PUBLIC) return groupedSpaces.publicSpaces;
+    if (spaceLevel === SpaceLevel.DEPARTMENT) return groupedSpaces.departmentSpaces;
+    if (spaceLevel === SpaceLevel.TEAM) return groupedSpaces.teamSpaces;
+    return groupedSpaces.personalSpaces;
+}
 
 const makeFile = (id: string, name: string, overrides: Record<string, any> = {}) => ({
     id,
@@ -518,6 +546,8 @@ describe("PortalKnowledgeWorkbench", () => {
             userGroups: [],
             defaultSpaceLevel: SpaceLevel.PERSONAL,
         } as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue(makeGroupedSpaces() as any);
+        jest.mocked(getSpacesByLevelApi).mockImplementation(resolveMockSpacesByLevel as any);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
@@ -550,6 +580,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(addFilesApi).mockResolvedValue([] as any);
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
         jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(listPortalFavoritesApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(removePortalFavoriteApi).mockResolvedValue(undefined as any);
         jest.mocked(moveUploadedFileFolderApi).mockResolvedValue(makeFile("501", "测试文档.pdf") as any);
         jest.mocked(createFolderApi).mockResolvedValue(makeFile("folder-1", "上传文件夹", {
             type: FileType.FOLDER,
@@ -579,21 +611,27 @@ describe("PortalKnowledgeWorkbench", () => {
         canOpenPermissionDialog.mockResolvedValue(true);
     });
 
-    test("renders knowledge space groups from grouped API without recomputing joined spaces", async () => {
-        const publicSpace = makeSpace("public-1", "公共空间01");
-        const teamSpace = makeSpace("team-1", "团队空间01");
+    test("loads personal spaces first, keeps other groups collapsed, and requests levels separately", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const publicSpace = makeSpace("public-1", "公共空间01", { spaceLevel: SpaceLevel.PUBLIC });
+        const teamSpace = makeSpace("team-1", "团队空间01", { spaceLevel: SpaceLevel.TEAM });
 
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [publicSpace],
             departmentSpaces: [],
             teamSpaces: [teamSpace],
-            personalSpaces: [],
+            personalSpaces: [favoriteSpace],
         } as any);
 
         renderWorkbench();
 
         await waitFor(() => {
-            expect(getGroupedSpacesApi).toHaveBeenCalledWith({ order_by: SpaceSortType.UPDATE_TIME });
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PERSONAL, { order_by: SpaceSortType.UPDATE_TIME });
+        });
+        await waitFor(() => {
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME });
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
         });
 
         expect(getMineSpacesApi).not.toHaveBeenCalled();
@@ -601,11 +639,9 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(getDepartmentSpacesApi).not.toHaveBeenCalled();
 
         const publicGroup = screen.getByTestId("space-group-public");
-        const teamGroup = screen.getByTestId("space-group-team");
 
-        expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
-        expect(within(teamGroup).getByText("团队空间01")).toBeInTheDocument();
-        expect(within(teamGroup).queryByText("公共空间01")).not.toBeInTheDocument();
+        expect(screen.getByTestId("portal-favorites-panel")).toBeInTheDocument();
+        expect(within(publicGroup).queryByText("公共空间01")).not.toBeInTheDocument();
 
         expect(screen.getByTestId("space-sidebar-title-icon")).toHaveAttribute(
             "src",
@@ -613,36 +649,33 @@ describe("PortalKnowledgeWorkbench", () => {
         );
         expect(screen.getByTestId("space-group-icon-public")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/group-public-expanded.png",
+            "/assets/knowledge-portal/group-public-collapsed.png",
         );
         expect(screen.getByTestId("space-group-icon-department")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/group-department-expanded.png",
+            "/assets/knowledge-portal/group-department-collapsed.png",
         );
-        expect(screen.getByRole("button", { name: "收起部门知识库" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "展开部门知识库" })).toBeInTheDocument();
         expect(screen.getByTestId("space-group-icon-team")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/group-team-expanded.png",
+            "/assets/knowledge-portal/group-team-collapsed.png",
         );
         expect(screen.getByTestId("space-group-icon-personal")).toHaveAttribute(
             "src",
             "/assets/knowledge-portal/group-personal-expanded.png",
         );
         await waitFor(() => {
-            expect(screen.getByTestId("space-row-icon-public-1")).toHaveAttribute(
+            expect(screen.getByTestId("space-row-icon-favorite-space")).toHaveAttribute(
                 "src",
                 "/assets/knowledge-portal/knowledge-space-active.png",
             );
         });
-        expect(screen.getByTestId("space-row-icon-team-1")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/knowledge-space.png",
-        );
 
-        fireEvent.click(within(publicGroup).getByRole("button", { name: "收起公共知识库" }));
+        fireEvent.click(within(publicGroup).getByRole("button", { name: "展开公共知识库" }));
+        expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
         expect(screen.getByTestId("space-group-icon-public")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/group-public-collapsed.png",
+            "/assets/knowledge-portal/group-public-expanded.png",
         );
     });
 
@@ -724,8 +757,8 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("selects the clicked collapsed group first space when restoring the sidebar", async () => {
-        const publicSpace = makeSpace("public-1", "公共空间01");
-        const teamSpace = makeSpace("team-1", "团队空间01");
+        const publicSpace = makeSpace("public-1", "公共空间01", { spaceLevel: SpaceLevel.PUBLIC });
+        const teamSpace = makeSpace("team-1", "团队空间01", { spaceLevel: SpaceLevel.TEAM });
 
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [publicSpace],
@@ -738,6 +771,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         await waitFor(() => {
             expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
+        });
+        await waitFor(() => {
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
         });
 
         fireEvent.click(screen.getByRole("button", { name: "收起知识库侧栏" }));
@@ -796,7 +832,9 @@ describe("PortalKnowledgeWorkbench", () => {
         });
 
         const publicGroup = screen.getByTestId("space-group-public");
-        expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
+        await waitFor(() => {
+            expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
+        });
 
         fireEvent.click(screen.getByRole("button", { name: "新增公共知识库" }));
 
@@ -1047,6 +1085,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
         });
 
+        fireEvent.click(screen.getByRole("button", { name: "展开团队知识库" }));
         const teamRow = screen.getByTestId("space-row-team-1");
         fireEvent.click(within(teamRow).getByRole("button", { name: "更多团队空间01操作" }));
 
@@ -1236,7 +1275,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(folderRow).getByRole("checkbox", { name: "选择技术文档" })).toBeInTheDocument();
         expect(within(folderRow).getByText("(1/7)")).toBeInTheDocument();
         expect(within(fileRow).getByRole("checkbox", { name: "选择后端开发.md" })).toBeInTheDocument();
-        expect(within(fileRow).getByText("成功")).toBeInTheDocument();
+        expect(within(fileRow).getByText(/成功|Success/)).toBeInTheDocument();
         expect(screen.getAllByText("解析中").length).toBeGreaterThan(0);
         expect(within(noStatusRow).queryByText("成功")).not.toBeInTheDocument();
         expect(within(noStatusRow).queryByText("0/0")).not.toBeInTheDocument();
@@ -2122,6 +2161,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const folderRow = await screen.findByTestId("file-tree-row-101");
         const fileRow = screen.getByTestId("file-tree-row-201");
+        expect(within(folderRow).getByText("0")).toBeInTheDocument();
+        expect(within(folderRow).getByText("/1")).toBeInTheDocument();
+        expect(within(fileRow).getByText(/成功|Success/)).toBeInTheDocument();
         fireEvent.click(within(folderRow).getByRole("checkbox"));
         fireEvent.click(within(fileRow).getByRole("checkbox"));
 
