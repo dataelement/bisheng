@@ -2,16 +2,18 @@ import { PermissionListTab } from "@/components/bs-comp/permission/PermissionLis
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
-  getResourceGrantDepartmentsApi,
   getResourcePermissions,
 } from "@/controllers/API/permission";
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
 vi.mock("@/controllers/API/permission", () => ({
   authorizeResource: vi.fn(),
   getGrantableRelationModelsApi: vi.fn(),
-  getResourceGrantDepartmentsApi: vi.fn(),
   getResourcePermissions: vi.fn(),
 }));
 
@@ -27,6 +29,8 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: ({ onOk }: any) => onOk?.(vi.fn()),
 }));
 
+// Render the dropdown fully (trigger + content) so the action items are queryable
+// without driving Radix open state. DropdownMenuSeparator is new in this view.
 vi.mock("@/components/bs-ui/dropdownMenu", () => ({
   DropdownMenu: ({ children }: any) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
@@ -34,9 +38,20 @@ vi.mock("@/components/bs-ui/dropdownMenu", () => ({
   DropdownMenuItem: ({ children, onSelect }: any) => (
     <button type="button" onClick={onSelect}>{children}</button>
   ),
+  DropdownMenuSeparator: () => <hr />,
 }));
 
-const mockedGetResourceGrantDepartmentsApi = vi.mocked(getResourceGrantDepartmentsApi);
+// The row name/caption are wrapped in a truncation Tooltip; stub the tooltip
+// primitives so they render their children without needing a TooltipProvider.
+vi.mock("@/components/bs-ui/tooltip", () => ({
+  Tooltip: ({ children }: any) => <>{children}</>,
+  TooltipTrigger: ({ children }: any) => <>{children}</>,
+  // Render nothing for the (hover-only) tooltip body so the row label is not
+  // duplicated in the DOM — the visible text lives in the trigger.
+  TooltipContent: () => null,
+  Portal: ({ children }: any) => <>{children}</>,
+}));
+
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetResourcePermissions = vi.mocked(getResourcePermissions);
 const mockedAuthorizeResource = vi.mocked(authorizeResource);
@@ -45,7 +60,6 @@ describe("PermissionListTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null as any);
-    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([]);
     mockedGetGrantableRelationModelsApi.mockResolvedValue([
       {
         id: "viewer",
@@ -83,10 +97,6 @@ describe("PermissionListTab", () => {
     });
     expect(mockedGetGrantableRelationModelsApi).toHaveBeenCalledTimes(1);
     expect(mockedGetGrantableRelationModelsApi).toHaveBeenCalledWith(
-      "knowledge_space",
-      "3215",
-    );
-    expect(mockedGetResourceGrantDepartmentsApi).toHaveBeenCalledWith(
       "knowledge_space",
       "3215",
     );
@@ -140,7 +150,7 @@ describe("PermissionListTab", () => {
     );
 
     await screen.findByText("Alice");
-    expect(screen.queryByLabelText("action.revoke")).not.toBeInTheDocument();
+    expect(screen.queryByText("action.remove")).not.toBeInTheDocument();
   });
 
   it("allows owner actions when another owner remains", async () => {
@@ -182,7 +192,7 @@ describe("PermissionListTab", () => {
     );
 
     await screen.findByText("Alice");
-    expect(screen.getAllByLabelText("action.revoke")).toHaveLength(2);
+    expect(screen.getAllByText("action.remove")).toHaveLength(2);
   });
 
   it("does not expose existing models outside the grantable set as actions", async () => {
@@ -224,7 +234,7 @@ describe("PermissionListTab", () => {
     );
 
     await screen.findByText("Alice");
-    expect(screen.queryByLabelText("action.revoke")).not.toBeInTheDocument();
+    expect(screen.queryByText("action.remove")).not.toBeInTheDocument();
     expect(mockedAuthorizeResource).not.toHaveBeenCalled();
   });
 
@@ -284,7 +294,9 @@ describe("PermissionListTab", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     });
-    fireEvent.click(screen.getAllByLabelText("action.revoke")[0]);
+    // The first delete item belongs to Alice's first row; deleting a subject
+    // revokes every relation it holds.
+    fireEvent.click(screen.getAllByText("action.remove")[0]);
 
     await waitFor(() => {
       expect(mockedAuthorizeResource).toHaveBeenCalledWith(
@@ -308,20 +320,8 @@ describe("PermissionListTab", () => {
   });
 
   it("deletes department include-children grants across subtree and exact variants", async () => {
-    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
-      {
-        id: 7,
-        dept_id: "BS@7",
-        name: "研发部",
-        parent_id: null,
-        path: "/7/",
-        sort_order: 0,
-        source: "local",
-        status: "active",
-        member_count: 0,
-        children: [],
-      },
-    ] as any);
+    // The granted department's label is the full path the backend already put in
+    // subject_name (F038) — no per-grant path-tree call.
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "department",
@@ -346,7 +346,7 @@ describe("PermissionListTab", () => {
     await waitFor(() => {
       expect(screen.getByText("研发部")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByLabelText("action.revoke"));
+    fireEvent.click(screen.getByText("action.remove"));
 
     await waitFor(() => {
       expect(mockedAuthorizeResource).toHaveBeenCalledWith(

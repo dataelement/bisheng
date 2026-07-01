@@ -39,13 +39,16 @@ export async function registerApi(userName, personId, pwd, captcha_key?, captcha
   });
 }
 // 用户列表
-export async function getUsersApi({ name = '', page, pageSize, groupId, roleId, simple }: {
+export async function getUsersApi({ name = '', page, pageSize, groupId, roleId, simple, withDepartmentPath }: {
   name: string,
   page: number,
   pageSize: number,
   groupId?: number[],
   roleId?: number[],
   simple?: boolean,
+  // F038: ask the backend to resolve each user's primary-department full path so
+  // a picker needn't fire one path-tree call per distinct department.
+  withDepartmentPath?: boolean,
 },
   config?: { signal?: AbortSignal }): Promise<{ data: User[]; total: number }> {
 
@@ -59,6 +62,7 @@ export async function getUsersApi({ name = '', page, pageSize, groupId, roleId, 
         group_id: groupId,
         role_id: roleId,
         simple,
+        with_department_path: withDepartmentPath,
       },
       paramsSerializer,
       signal: config?.signal, // 绑定 AbortSignal

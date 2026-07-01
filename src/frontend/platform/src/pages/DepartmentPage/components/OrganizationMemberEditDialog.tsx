@@ -25,7 +25,6 @@ import {
   deleteDepartmentLocalMemberApi,
   getDepartmentAssignableRolesApi,
   getDepartmentMemberEditFormApi,
-  getDepartmentTreeApi,
   type DepartmentMemberEditForm,
 } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
@@ -57,7 +56,6 @@ export function OrganizationMemberEditDialog({
   const [primaryRoles, setPrimaryRoles] = useState<Set<number>>(new Set())
   const [affRoleByDept, setAffRoleByDept] = useState<Record<string, Set<number>>>({})
   const [ctxRoles, setCtxRoles] = useState<Set<number>>(new Set())
-  const [treeNodes, setTreeNodes] = useState<DepartmentTreeNode[]>([])
   const [primaryDeptInternalId, setPrimaryDeptInternalId] = useState<number | null>(null)
   const [primaryAssignableList, setPrimaryAssignableList] = useState<
     { id: number; role_name: string }[]
@@ -70,7 +68,6 @@ export function OrganizationMemberEditDialog({
     setPrimaryRoles(new Set())
     setAffRoleByDept({})
     setCtxRoles(new Set())
-    setTreeNodes([])
     setPrimaryDeptInternalId(null)
     setPrimaryAssignableList([])
   }, [])
@@ -112,8 +109,6 @@ export function OrganizationMemberEditDialog({
               role_name: r.role_name,
             }))
           )
-          const tree = await captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
-          setTreeNodes(Array.isArray(tree) ? tree : [])
         } else {
           setPrimaryDeptInternalId(null)
           setPrimaryAssignableList(
@@ -410,11 +405,9 @@ export function OrganizationMemberEditDialog({
                       <TreeDepartmentSelect
                         className="mt-1"
                         modal={false}
-                        nodes={treeNodes}
                         value={primaryDeptInternalId}
                         onChange={(id, node) => void handlePrimaryDeptChange(id, node)}
                         placeholder={t("bs:department.memberEditPrimaryPlaceholder")}
-                        showMemberCount
                       />
                     ) : (
                       <>

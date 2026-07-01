@@ -225,24 +225,76 @@ export async function getKnowledgeSpaceGrantUsers(
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);
 }
 
-export async function getResourceGrantDepartments(
-  resourceType: ResourceType,
-  resourceId: string,
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`,
-    withPermissionRequestOptions(config)
-  );
-  return unwrapArray(res);
+// ── Lazy grant-department tree (F038) ────────────────
+// Browse one visible layer / server search / locate-by-id, so a large org tree
+// is never loaded at once. Same authorization scope as the full-tree endpoint
+// above (tenant subtree minus child-tenant mounts). `path` is the materialized
+// ancestor path (`/1/21/106/`, ending with the node's own id); `has_children`
+// drives the expand arrow; `matched` flags search hits.
+
+export interface GrantDepartmentNode {
+  id: number;
+  dept_id: string;
+  name: string;
+  parent_id: number | null;
+  path: string;
+  sort_order?: number;
+  source?: string;
+  status?: string;
+  is_tenant_root?: boolean;
+  mounted_tenant_id?: number | null;
+  has_children?: boolean;
+  matched?: boolean;
+  children?: GrantDepartmentNode[];
 }
 
-export async function getKnowledgeSpaceGrantDepartments(
-  resourceId: string,
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  return getResourceGrantDepartments("knowledge_space", resourceId, config);
+export interface GrantDepartmentSearchResult {
+  roots: GrantDepartmentNode[];
+  total_matches: number;
+  truncated: boolean;
 }
+
+const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
+  roots: [],
+  total_matches: 0,
+  truncated: false,
+};
+
+export async function getResourceGrantDepartmentChildren(
+  resourceType: ResourceType,
+  resourceId: string,
+  parentId: number | null,
+  config?: { signal?: AbortSignal }
+): Promise<GrantDepartmentNode[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/children`,
+    {
+      params: { parent_id: parentId ?? undefined },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray<GrantDepartmentNode>(res);
+}
+
+export async function searchResourceGrantDepartments(
+  resourceType: ResourceType,
+  resourceId: string,
+  keyword: string,
+  limit = 50,
+  config?: { signal?: AbortSignal }
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+}
+
+// (no client consumer needs locate/path-tree: the picker browses+searches only,
+// and the permission list reads the backend-resolved full-path subject_name.)
 
 export async function getUserGroups(
   config?: { signal?: AbortSignal }

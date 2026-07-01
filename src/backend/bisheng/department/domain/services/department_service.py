@@ -212,6 +212,91 @@ async def _aget_user_tenant_root_path(login_user) -> str | None:
     return mount.path
 
 
+async def _aget_user_scope(login_user) -> tuple[bool, set[str]]:
+    """Three-tier visibility scope, shared by ``aget_tree`` and the F038 lazy
+    children/search/path-tree endpoints so they cannot drift.
+
+    Returns ``(is_sys_admin, admin_paths)``:
+    - system admin → ``(True, set())`` (full tree; no path filter, no FGA lookup)
+    - otherwise → ``(False, {materialized paths the user may see})`` = union of the
+      dept-admin subtree roots and the tenant-admin mount point.
+
+    Raises :class:`DepartmentPermissionDeniedError` when a non-sys-admin has no
+    admin departments and is not a tenant admin (same point/timing as the old
+    inline check in ``aget_tree``).
+
+    A node ``d`` is visible iff ``is_sys_admin`` or
+    ``any(d.path.startswith(p) for p in admin_paths)``.
+    """
+    if _is_admin(login_user):
+        return True, set()
+    admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+    is_tenant_admin = await _is_tenant_admin(login_user)
+    if not admin_depts and not is_tenant_admin:
+        raise DepartmentPermissionDeniedError()
+    admin_paths: set[str] = {d.path for d in admin_depts if d.path}
+    if is_tenant_admin:
+        tenant_root_path = await _aget_user_tenant_root_path(login_user)
+        if tenant_root_path:
+            admin_paths.add(tenant_root_path)
+    return False, admin_paths
+
+
+def _parse_path_ids(path: str | None) -> list[int]:
+    """Ancestor→self id chain parsed from a materialized path ``/1/21/106/``.
+
+    Returns ``[1, 21, 106]`` — the last segment is the node's OWN id (paths are
+    built as ``parent.path + self.id + '/'``). Empty/garbage segments skipped. F038.
+    """
+    ids: list[int] = []
+    for part in (path or "").split("/"):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError:
+            continue
+    return ids
+
+
+def _path_in_scope(path: str | None, is_sys_admin: bool, admin_paths: set[str]) -> bool:
+    """F038 visibility predicate, identical to ``aget_tree``'s
+    ``d.path.startswith(p)``: system admin sees all; otherwise a node is visible
+    iff its path is at/under one admin path (path ends with the node's own id, so
+    siblings never match)."""
+    if is_sys_admin:
+        return True
+    return bool(path) and any(path.startswith(p) for p in admin_paths)
+
+
+def _topmost_paths(paths: set[str]) -> set[str]:
+    """Keep only subtree-root paths, dropping any nested under another (AC-12:
+    a user who admins both an ancestor and its descendant sees only the topmost
+    as a root-layer node)."""
+    return {p for p in paths if not any(p != q and p.startswith(q) for q in paths)}
+
+
+def _dept_node_dict(d, *, has_children: bool = False, matched: bool = False) -> dict:
+    """Plain-dict tree node (F038 decision 7: build dict + ORJSON, bypassing
+    pydantic/jsonable_encoder). Field set mirrors :class:`DepartmentTreeNode`."""
+    return {
+        "id": d.id,
+        "dept_id": d.dept_id,
+        "name": d.name,
+        "parent_id": d.parent_id,
+        "path": d.path,
+        "sort_order": d.sort_order,
+        "source": d.source,
+        "status": d.status,
+        "is_tenant_root": bool(getattr(d, "is_tenant_root", 0)),
+        "mounted_tenant_id": getattr(d, "mounted_tenant_id", None),
+        "has_children": has_children,
+        "matched": matched,
+        "children": [],
+    }
+
+
 def _get_dept_id_prefix() -> str:
     from bisheng.common.services.config_service import settings
 
@@ -413,16 +498,9 @@ class DepartmentService:
         # dept-admin subtrees and tenant-admin mount subtree (PRD §4.5).
         # Both flags are queried independently so a user who is both
         # gets the union, not just the first hit.
-        is_sys_admin = _is_admin(login_user)
-        is_tenant_admin = False
-        admin_depts = []
-        if not is_sys_admin:
-            admin_depts = await DepartmentDao.aget_user_admin_departments(
-                login_user.user_id,
-            )
-            is_tenant_admin = await _is_tenant_admin(login_user)
-            if not admin_depts and not is_tenant_admin:
-                raise DepartmentPermissionDeniedError()
+        # F038: scope computed via the shared helper so the lazy children/search
+        # endpoints can't drift from the tree's visibility (see _aget_user_scope).
+        is_sys_admin, admin_paths = await _aget_user_scope(login_user)
 
         async with get_async_db_session() as session:
             # Get all departments (including archived) for current tenant
@@ -434,16 +512,10 @@ class DepartmentService:
 
             # Subtree filter for non-sys-admin: union of dept-admin subtrees
             # and the tenant-admin mount subtree (Child Admin per PRD §4.5).
-            if not is_sys_admin:
-                admin_paths: set[str] = {d.path for d in admin_depts if d.path}
-                if is_tenant_admin:
-                    tenant_root_path = await _aget_user_tenant_root_path(login_user)
-                    if tenant_root_path:
-                        admin_paths.add(tenant_root_path)
-                if admin_paths:
-                    depts = [d for d in depts if d.path and any(d.path.startswith(p) for p in admin_paths)]
-                    if not depts:
-                        return []
+            if not is_sys_admin and admin_paths:
+                depts = [d for d in depts if d.path and any(d.path.startswith(p) for p in admin_paths)]
+                if not depts:
+                    return []
 
         # F027 AC-13: per-node user-count field removed from the tree response.
         # The previous batched ``COUNT(UserDepartment.id) GROUP BY department_id``
@@ -478,6 +550,140 @@ class DepartmentService:
             node_list.sort(key=lambda n: n.sort_order)
             for n in node_list:
                 _sort(n.children)
+
+        _sort(roots)
+        return roots
+
+    @classmethod
+    async def aget_children_layer(
+        cls, login_user, parent_id: int | None = None, include_archived: bool = False
+    ) -> list[dict]:
+        """F038: ONE visible layer of the tree (lazy load).
+
+        - ``parent_id is None`` → root layer: system admin gets the tenant root(s)
+          (``parent_id IS NULL``); a dept/tenant admin gets their topmost admin
+          departments (AC-12), i.e. the scope roots themselves.
+        - ``parent_id`` given → that node's direct children, after a scope check
+          that raises :class:`DepartmentPermissionDeniedError` (or
+          :class:`DepartmentNotFoundError` for sys-admin on a missing node)
+          WITHOUT leaking out-of-scope existence/name (AC-15).
+
+        Each node carries ``has_children`` from one batched existence query (no
+        N+1). Returns plain dicts (decision 7).
+        """
+        is_sys_admin, admin_paths = await _aget_user_scope(login_user)
+
+        if parent_id is None:
+            if is_sys_admin:
+                depts = await DepartmentDao.aget_children(None, include_archived=include_archived)
+            else:
+                topmost_ids = [ids[-1] for p in _topmost_paths(admin_paths) if (ids := _parse_path_ids(p))]
+                depts = await DepartmentDao.aget_by_ids(topmost_ids)
+                depts = sorted(depts, key=lambda d: (d.sort_order, d.id))
+        else:
+            parent = await DepartmentDao.aget_by_id(parent_id)
+            if parent is None:
+                if is_sys_admin:
+                    raise DepartmentNotFoundError()
+                raise DepartmentPermissionDeniedError()
+            if not _path_in_scope(parent.path, is_sys_admin, admin_paths):
+                raise DepartmentPermissionDeniedError()
+            depts = await DepartmentDao.aget_children(parent_id, include_archived=include_archived)
+
+        if not depts:
+            return []
+        existence = await DepartmentDao.aget_children_existence(
+            [d.id for d in depts], include_archived=include_archived
+        )
+        return [_dept_node_dict(d, has_children=d.id in existence) for d in depts]
+
+    @classmethod
+    async def asearch_tree(cls, login_user, keyword: str, limit: int = 50, include_archived: bool = False) -> dict:
+        """F038: server-side name search → pruned tree (matches + their in-scope
+        ancestors), so the frontend can expand/locate without loading the whole
+        tree (decision 4).
+
+        Blank/whitespace keyword returns empty WITHOUT a query (AC-08). Ancestors
+        are clamped to the user's scope so names above it never leak (AC-13 /
+        gotcha 4). ``truncated`` is set when matches exceed ``limit``.
+        """
+        is_sys_admin, admin_paths = await _aget_user_scope(login_user)
+        kw = (keyword or "").strip()
+        if not kw:
+            return {"roots": [], "total_matches": 0, "truncated": False}
+        # Non-sys-admin with an EMPTY visible scope sees nothing — return empty
+        # WITHOUT a query (mirrors aget_children_layer's root layer). Otherwise the
+        # empty ``admin_paths`` would degrade to an UNSCOPED ``name LIKE`` (the DAO
+        # treats ``[]`` like ``None``), and although _abuild_pruned_forest then drops
+        # every out-of-scope row, ``total_matches`` would still leak a tenant-wide
+        # match count.
+        if not is_sys_admin and not admin_paths:
+            return {"roots": [], "total_matches": 0, "truncated": False}
+        limit = max(1, min(limit, 200))
+        path_prefixes = None if is_sys_admin else list(admin_paths)
+        matched = await DepartmentDao.aget_by_name_like(
+            kw, path_prefixes=path_prefixes, limit=limit + 1, include_archived=include_archived
+        )
+        truncated = len(matched) > limit
+        matched = matched[:limit]
+        matched_ids = {d.id for d in matched}
+        roots = await cls._abuild_pruned_forest(matched, matched_ids, is_sys_admin, admin_paths, include_archived)
+        return {"roots": roots, "total_matches": len(matched), "truncated": truncated}
+
+    @classmethod
+    async def aget_path_tree(cls, login_user, dept_id: int, include_archived: bool = False) -> dict:
+        """F038: locate/reveal — pruned tree from the (in-scope) root down to
+        ``dept_id`` (internal id), for echoing a deep selected value. Missing or
+        out-of-scope target raises :class:`DepartmentPermissionDeniedError`
+        without leaking (AC-15); sys-admin gets NotFound on a truly missing id.
+        """
+        is_sys_admin, admin_paths = await _aget_user_scope(login_user)
+        target = await DepartmentDao.aget_by_id(dept_id)
+        if target is None or not _path_in_scope(target.path, is_sys_admin, admin_paths):
+            if is_sys_admin and target is None:
+                raise DepartmentNotFoundError()
+            raise DepartmentPermissionDeniedError()
+        roots = await cls._abuild_pruned_forest([target], {target.id}, is_sys_admin, admin_paths, include_archived)
+        return {"roots": roots, "total_matches": 1, "truncated": False}
+
+    @classmethod
+    async def _abuild_pruned_forest(
+        cls, seeds, matched_ids: set[int], is_sys_admin: bool, admin_paths: set[str], include_archived: bool
+    ) -> list[dict]:
+        """Assemble the minimal forest containing ``seeds`` and their ancestors,
+        clamped to the visible scope; ``matched_ids`` get ``matched=True``.
+
+        ``has_children`` reflects REAL child existence (one batched query), so a
+        node on the pruned path still shows an expand affordance to load its full
+        child layer beyond what the search surfaced. F038 decisions 4 & 5.
+        """
+        if not seeds:
+            return []
+        # Every id on each seed→root chain (the path already lists ancestors+self).
+        needed: set[int] = set()
+        for d in seeds:
+            needed.update(_parse_path_ids(d.path))
+        depts = await DepartmentDao.aget_by_ids(list(needed))
+        # Clamp to scope: ancestors above the admin boundary are dropped (no leak).
+        visible = [d for d in depts if _path_in_scope(d.path, is_sys_admin, admin_paths)]
+        if not visible:
+            return []
+        existence = await DepartmentDao.aget_children_existence(
+            [d.id for d in visible], include_archived=include_archived
+        )
+        nodes = {d.id: _dept_node_dict(d, has_children=d.id in existence, matched=d.id in matched_ids) for d in visible}
+        roots: list[dict] = []
+        for d in visible:
+            parent_node = nodes.get(d.parent_id) if d.parent_id is not None else None
+            if parent_node is not None:
+                parent_node["children"].append(nodes[d.id])
+            else:
+                roots.append(nodes[d.id])
+
+        def _sort(layer: list[dict]):
+            layer.sort(key=lambda n: (n["sort_order"], n["id"]))
+            for n in layer:
+                _sort(n["children"])
 
         _sort(roots)
         return roots
