@@ -17,6 +17,7 @@ Usage:
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --include-inflight
+    PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --only-inflight
 """
 
 from __future__ import annotations
@@ -167,6 +168,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=(
             "also select and reparse files whose status is WAITING or PROCESSING; "
             "by default these are skipped to avoid interfering with an active parse run"
+        ),
+    )
+    parser.add_argument(
+        "--only-inflight",
+        dest="only_inflight",
+        action="store_true",
+        help=(
+            "select ONLY files whose status is WAITING or PROCESSING, "
+            "skipping SUCCESS/FAILED/TIMEOUT/VIOLATION files"
         ),
     )
     return parser.parse_args(argv)
@@ -532,7 +542,13 @@ async def run(args: argparse.Namespace) -> int:
     import functools
 
     include_inflight: bool = getattr(args, "include_inflight", False)
-    effective_statuses = ELIGIBLE_STATUSES + IN_FLIGHT_STATUSES if include_inflight else ELIGIBLE_STATUSES
+    only_inflight: bool = getattr(args, "only_inflight", False)
+    if only_inflight:
+        effective_statuses = IN_FLIGHT_STATUSES
+    elif include_inflight:
+        effective_statuses = ELIGIBLE_STATUSES + IN_FLIGHT_STATUSES
+    else:
+        effective_statuses = ELIGIBLE_STATUSES
 
     try:
         with bypass_tenant_filter():
@@ -546,7 +562,9 @@ async def run(args: argparse.Namespace) -> int:
                 )
 
         print_selection_report(selection)
-        if include_inflight:
+        if only_inflight:
+            print("[INFO] --only-inflight is active: selecting ONLY WAITING/PROCESSING files.")
+        elif include_inflight:
             print("[INFO] --include-inflight is active: WAITING/PROCESSING files are included.")
 
         if not args.apply:
@@ -559,7 +577,7 @@ async def run(args: argparse.Namespace) -> int:
 
         reparse_func = (
             functools.partial(reparse_one_file, force_inflight=True)
-            if include_inflight
+            if (include_inflight or only_inflight)
             else reparse_one_file
         )
         run_report = await run_reparse_files(
