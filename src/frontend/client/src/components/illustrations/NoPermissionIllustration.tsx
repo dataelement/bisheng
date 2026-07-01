@@ -13,13 +13,13 @@ import React from 'react';
  *   #BDE6D3 (light green) → rgb(var(--illus-100))
  *   white                 → kept as-is
  */
-export const NoPermissionIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
+export const NoPermissionIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const fill100 = { fill: 'rgb(var(--illus-100))' } as React.CSSProperties;
     const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
     const stroke100 = { stroke: 'rgb(var(--illus-100))' } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
             <path d="M139 262V136.5C139 103.087 166.087 76 199.5 76C232.913 76 260 103.087 260 136.5V207.5" style={stroke100} strokeWidth="34" strokeLinecap="round" />
             <rect x="95.0232" y="152.981" width="208.977" height="151.299" rx="18.4818" style={fill500} stroke="white" strokeWidth="7.0235" />
             <rect x="233.5" y="203.5" width="116" height="116" rx="58" style={fill100} stroke="white" strokeWidth="7" />

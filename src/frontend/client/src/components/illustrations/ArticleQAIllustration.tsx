@@ -12,12 +12,12 @@ import React from 'react';
  *   #BDE6D3 (light green) → rgb(var(--illus-100))
  *   white                 → kept as-is
  */
-export const ArticleQAIllustration = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => {
+export const ArticleQAIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const fill100 = { fill: 'rgb(var(--illus-100))' } as React.CSSProperties;
     const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
             <path d="M145 219.5L172 246L225 193" stroke="white" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
             <rect x="43" y="90" width="204" height="138" rx="24" style={fill500} />
             <path opacity="0.4" d="M138 172H208.5" stroke="white" strokeWidth="12" strokeLinecap="round" />

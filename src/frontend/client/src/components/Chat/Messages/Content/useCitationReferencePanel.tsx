@@ -105,7 +105,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
                     handleCloseCitationPanel();
                   }
                 }}
-                panelClassName="h-full w-full overflow-hidden rounded-[12px] border border-[#ECECEC] bg-[#FBFBFB]"
+                panelClassName="h-full w-full overflow-hidden rounded-[8px] border border-[#ECECEC] bg-[#FBFBFB]"
                 messageId={citationPanelPayload.messageId}
                 content={citationPanelPayload.content}
                 webContent={citationPanelPayload.webContent}
@@ -147,7 +147,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
           data-citation-popover-surface
           className={cn(
             'fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300',
-            'rounded-tl-xl',
+            'rounded-tl-[8px]',
             'min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]',
           )}
           onClick={(event) => event.stopPropagation()}
@@ -168,7 +168,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
           data-citation-popover-surface
           className={cn(
             'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
-            'rounded-tl-xl',
+            'rounded-tl-[8px]',
             useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
           )}
           onClick={(event) => event.stopPropagation()}

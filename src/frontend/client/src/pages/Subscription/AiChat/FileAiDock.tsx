@@ -340,7 +340,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                         flatMode
                         knowledgeChatLayout
                         contentWidthClassName="max-w-none px-4"
-                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                        emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
                     />
@@ -493,7 +493,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                 flatMode
                                 knowledgeChatLayout
                                 contentWidthClassName="max-w-none px-4"
-                                emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                                emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                 onPresetClick={(q) => setInputText(q)}
                                 onRegenerate={regenerate}
                             />

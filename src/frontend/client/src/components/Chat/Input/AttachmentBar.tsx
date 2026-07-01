@@ -20,7 +20,7 @@ import {
     useRef,
     useState,
 } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
@@ -80,7 +80,7 @@ const CardShell = ({
     onRemove?: () => void;
 }) => (
     <div
-        className="group flex h-[30px] shrink-0 items-center gap-1 rounded-md border border-[#ebebeb] bg-white px-2 text-xs text-[#212121]"
+        className="group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]"
         style={{ width: CARD_WIDTH }}
     >
         <span className="flex size-4 shrink-0 items-center justify-center text-[#999]">{icon}</span>
@@ -95,7 +95,7 @@ const CardShell = ({
                 className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex touch-mobile:flex"
                 aria-label="Remove"
             >
-                <X className="size-3" />
+                <Outlined.Close size={12} />
             </button>
         )}
     </div>
@@ -147,7 +147,12 @@ const ArrowButton = ({
             type="button"
             onClick={onClick}
             aria-label={direction === "left" ? "Scroll back" : "Scroll forward"}
-            className="flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-[#212121]"
+            // 8px gap only on the outer side (strip edge); the side facing the cards
+            // stays flush at 0.
+            className={cn(
+                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-[#212121]",
+                direction === "left" ? "ml-2" : "mr-2",
+            )}
         >
             <Icon size={16} />
         </button>
@@ -250,7 +255,7 @@ export const AttachmentBar = ({
     }, []);
 
     return (
-        <div className="relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.5)] px-4 pb-6 pt-2">
+        <div className="relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.55)] px-2 pb-6 pt-2">
             <div className="flex items-center">
                 {canLeft && <ArrowButton direction="left" onClick={() => pageScroll("left")} />}
                 <div className="relative min-w-0 flex-1">

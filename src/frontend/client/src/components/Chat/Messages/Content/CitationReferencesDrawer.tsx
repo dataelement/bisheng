@@ -121,7 +121,7 @@ function CitationReferenceCard({
     'text-[14px] font-normal leading-[22px] text-[#1D2129]';
 
   return (
-    <div className="flex min-h-[92px] flex-col gap-2 rounded-[8px] border border-[#ECECEC] bg-white p-2">
+    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] border border-[#ECECEC] bg-white p-2">
       <div className="flex items-center">
         <SourceTypeBadge preview={preview} type={item.data.type} />
       </div>
@@ -151,7 +151,10 @@ function CitationReferenceCard({
           target="_blank"
           rel="noreferrer"
           className={cn(
-            'flex w-full min-w-0 items-center gap-1 rounded-[4px] hover:text-blue-500',
+            // Web links are generic external links, not a brand action — pin the
+            // hover to a fixed blue (matches the web hover arrow #1B61E6) so it
+            // doesn't follow the blue⇄green brand theme.
+            'flex w-full min-w-0 items-center gap-1 rounded-[4px] hover:text-[#1B61E6]',
             nameRowTextClass,
           )}
           title={title}
@@ -736,7 +739,7 @@ export default function CitationReferencesDrawer({
             <aside
               className={cn(
                 'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
-                'rounded-tl-xl',
+                'rounded-tl-[8px]',
               )}
               aria-label="参考资料"
               onClick={(event) => event.stopPropagation()}

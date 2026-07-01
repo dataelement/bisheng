@@ -610,6 +610,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
+                          allowExport
                           contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={onOpenCitationPanel}
