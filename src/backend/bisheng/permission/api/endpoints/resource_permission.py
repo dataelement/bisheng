@@ -780,7 +780,10 @@ async def _list_knowledge_space_grant_users(
                     .distinct()
                 )
             if keyword:
-                stmt = stmt.where(User.user_name.like(f"%{keyword}%"))
+                # Prefix match (``keyword%``) so the user_name index (Field(index=True))
+                # can be used — a leading-wildcard ``%keyword%`` forces a full scan of the
+                # users table (~160ms over 150k rows on the DM8 load-test tenant).
+                stmt = stmt.where(User.user_name.like(f"{keyword}%"))
             if page and page_size:
                 stmt = stmt.offset((page - 1) * page_size).limit(page_size)
             result = await session.exec(stmt)
