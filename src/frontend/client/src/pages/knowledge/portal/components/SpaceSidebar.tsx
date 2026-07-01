@@ -34,6 +34,7 @@ import {
     SIDEBAR_TOGGLE_ICON_SRC,
 } from "../constants";
 import type { SpaceGroup, SpaceGroupKey } from "../types";
+import { isFavoriteSpace } from "../favoriteView";
 import { resolveAssetUrl } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -385,20 +386,23 @@ export function SpaceSidebar({
                                                             />
                                                             <span className={s.spaceName} title={space.name}>{space.name}</span>
                                                         </button>
-                                                        <div className={s.spaceMenuArea}>
-                                                            <SpaceMenu
-                                                                space={space}
-                                                                group={group}
-                                                                open={spaceMenuOpenId === space.id}
-                                                                permissions={getSpacePermissions(space)}
-                                                                onOpenChange={(open) => onSpaceMenuOpenChange(space.id, open)}
-                                                                onOpenSpaceSettings={onOpenSpaceSettings}
-                                                                onOpenSpaceMembers={onOpenSpaceMembers}
-                                                                onPinSpace={onPinSpace}
-                                                                onDeleteSpace={onDeleteSpace}
-                                                                onLeaveSpace={onLeaveSpace}
-                                                            />
-                                                        </div>
+                                                        {/* 『我的收藏』为系统库：只可查看/取消收藏，不提供设置/置顶/删除等操作 */}
+                                                        {!isFavoriteSpace(space) ? (
+                                                            <div className={s.spaceMenuArea}>
+                                                                <SpaceMenu
+                                                                    space={space}
+                                                                    group={group}
+                                                                    open={spaceMenuOpenId === space.id}
+                                                                    permissions={getSpacePermissions(space)}
+                                                                    onOpenChange={(open) => onSpaceMenuOpenChange(space.id, open)}
+                                                                    onOpenSpaceSettings={onOpenSpaceSettings}
+                                                                    onOpenSpaceMembers={onOpenSpaceMembers}
+                                                                    onPinSpace={onPinSpace}
+                                                                    onDeleteSpace={onDeleteSpace}
+                                                                    onLeaveSpace={onLeaveSpace}
+                                                                />
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                 ))
                                             ) : (
