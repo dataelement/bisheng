@@ -37,7 +37,7 @@
 - **选定**：A。
 - **原因**：① 结果格式与 citation **自动一致**（走的是同一个 `KnowledgeRetrieverTool` → `List[Document]` → 同一套 annotate/collect），6.3 天然满足，无需另写一份 citation 组装；② `aretrieve_chunks` 的空间路径 `_aretrieve_chunks_for_kb` **只校 `view_space`、不做 F029 双层 `view_file` 过滤**，且不产节点风格 citation，用它反而要补更多；③ blast radius 更小——只在 `RagUtils` / 助手工具加空间分支，不动 F030 对外 RPC 语义。
 - **何时重新考虑**：若未来 `aretrieve_chunks` 的空间路径补齐了 view_file 双层过滤 + 统一 citation，则可收敛为单一入口。
-- **arch-guard 注**：`RagUtils` 在 `workflow/common/knowledge.py`，新增 import `knowledge/domain` 的 `KnowledgeFileVisibilityService` 属 common→domain；`RagUtils` 已 import `KnowledgeRag`（同属 knowledge/domain），是既有模式，预期不触发 arch-guard RULE-1（RULE-1 针对顶层 `bisheng/common`，非 `workflow/common`）——实现期以 hook 输出为准确认。
+- **arch-guard 注（实测修正）**：`workflow/common/knowledge.py` 路径含 `/common/`，且**顶部本就** `from bisheng.knowledge.domain...`（KnowledgeRag/KnowledgeFileDao 等，F041 之前即存在）→ arch-guard **RULE-1 是既有违规**（该文件是错放在 common 的领域耦合工具）。F041 的空间分支一律用**函数内缩进懒导入**（`space_flow_retrieval` / `run_async_safe` 等），git diff 零新增顶层领域导入 → **不加重**违规。彻底修复需把 `RagUtils` 迁出 common，超出 F041 范围（另立技术债 feature）。
 
 ### 决策 2：过滤身份按开关切换（本 feature 的核心）
 
