@@ -44,7 +44,7 @@ export function TaskErrorCard({ errorType, detail, fallbackMessage }: TaskErrorC
     const rawDetail = detail || fallbackMessage || '';
 
     return (
-        <div className="my-2 rounded-xl border border-red-100 bg-red-50/60 p-4 text-sm">
+        <div className="my-2 rounded-2xl border border-red-100 bg-red-50/60 p-4 text-sm">
             <div className="flex items-start gap-2.5">
                 <CircleAlert size={18} className="mt-0.5 shrink-0 text-red-500" />
                 <div className="min-w-0 flex-1">
