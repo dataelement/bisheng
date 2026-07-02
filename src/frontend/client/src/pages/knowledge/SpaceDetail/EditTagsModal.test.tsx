@@ -40,6 +40,29 @@ jest.mock("~/api/knowledge", () => ({
             return !libraryNames.has(name);
         }).length;
     },
+    countBoundLibraryTagNamesForLimit: (
+        tags: Array<{ business_type?: string; name?: string; review_status?: number }>,
+        recommended: Array<{ name?: string }> = [],
+    ) => {
+        const libraryNames = new Set(recommended.map((item) => String(item.name ?? "").trim().toLowerCase()).filter(Boolean));
+        const names = new Set<string>();
+        for (const tag of tags) {
+            const isLibrary = tag.business_type === "tag_library" || libraryNames.has(String(tag.name ?? "").trim().toLowerCase());
+            if (!isLibrary) continue;
+            if (tag.review_status === 0 || tag.review_status === 2) continue;
+            const name = String(tag.name ?? "").trim().toLowerCase();
+            if (name) names.add(name);
+        }
+        return names.size;
+    },
+    isBoundLibraryTagForLimit: (
+        tag: { business_type?: string; name?: string },
+        recommended: Array<{ name?: string }> = [],
+    ) => {
+        if (tag.business_type === "tag_library") return true;
+        const normalized = String(tag.name ?? "").trim().toLowerCase();
+        return recommended.some((item) => item.name?.trim().toLowerCase() === normalized);
+    },
     isBoundLibraryTagName: (tagName: string, recommended: Array<{ name?: string }> = []) => {
         const normalized = tagName.trim().toLowerCase();
         return recommended.some((item) => item.name?.trim().toLowerCase() === normalized);
@@ -124,6 +147,33 @@ describe("EditTagsModal recommended tags", () => {
 
         await waitFor(() => {
             expect(addSpaceTagApi).toHaveBeenCalledWith("100", "人工C");
+        });
+    });
+
+    it("saves manually created tags into review_tag_ids", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(addSpaceTagApi).mockResolvedValue({ id: 99, name: "新手动" });
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+
+        const input = screen.getByRole("textbox");
+        await user.type(input, "新手动");
+        await user.keyboard("{Enter}");
+        await user.click(screen.getByText("com_knowledge.confirm"));
+
+        await waitFor(() => {
+            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [], [99]);
         });
     });
 

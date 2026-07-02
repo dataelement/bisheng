@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent, useEffect, useMemo } from "react";
+import { useState, KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Tag, Network, PencilLine } from "lucide-react";
 import {
@@ -14,7 +14,7 @@ import {
     SpaceTag,
     FileTag,
     KnowledgeSpaceTagLibraryTagItem,
-    countSpaceNativeTags,
+    countBoundLibraryTagNamesForLimit,
     isBoundLibraryTagName,
     getSpaceTagsApi,
     addSpaceTagApi,
@@ -67,6 +67,42 @@ function isPendingReviewSpaceTag(tag: SpaceTag): boolean {
     return tag.review_status === 0;
 }
 
+function normalizeCreatedSpaceTag(tag: SpaceTag, reviewTagEnabled: boolean): SpaceTag {
+    if (!reviewTagEnabled || isLibrarySpaceTag(tag)) {
+        return tag;
+    }
+    if (tag.review_status === 0) {
+        return tag;
+    }
+    // add_space_tag creates ReviewTag rows; API may omit review_status in the payload.
+    if (tag.review_status === undefined || tag.review_status === null) {
+        return { ...tag, review_status: 0, resource_type: tag.resource_type || "manual_tag" };
+    }
+    return tag;
+}
+
+function splitSelectedTagIds(
+    selectedTagIds: Set<number>,
+    spaceTags: SpaceTag[],
+    tagMetaRef: React.MutableRefObject<Map<number, SpaceTag>>,
+): { approvedTagIds: number[]; reviewTagIds: number[] } {
+    const approved: number[] = [];
+    const review: number[] = [];
+    for (const id of selectedTagIds) {
+        const tag = tagMetaRef.current.get(id) ?? spaceTags.find((item) => item.id === id);
+        if (tag && isPendingReviewSpaceTag(tag)) {
+            review.push(id);
+        } else {
+            approved.push(id);
+        }
+    }
+    return { approvedTagIds: approved, reviewTagIds: review };
+}
+
+function isLibrarySpaceTag(tag: SpaceTag): boolean {
+    return tag.business_type === "tag_library";
+}
+
 function isApprovedSpaceTag(tag: SpaceTag): boolean {
     if (tag.review_status === undefined || tag.review_status === null) {
         return true;
@@ -105,8 +141,27 @@ export function EditTagsModal({
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
+    // Synchronous metadata for tags added in this session (React state may lag behind save).
+    const tagMetaRef = useRef<Map<number, SpaceTag>>(new Map());
+    const selectedTagIdsRef = useRef<Set<number>>(new Set());
+    const selectedReviewTagIdsRef = useRef<Set<number>>(new Set());
+
+    const rememberSpaceTag = (tag: SpaceTag) => {
+        tagMetaRef.current.set(tag.id, tag);
+    };
+
+    const syncSelectedTagIds = (next: Set<number>) => {
+        selectedTagIdsRef.current = next;
+        setSelectedTagIds(next);
+    };
+
+    const syncSelectedReviewTagIds = (next: Set<number>) => {
+        selectedReviewTagIdsRef.current = next;
+        setSelectedReviewTagIds(next);
+    };
+
     const isBatchMode = !!(fileIds && fileIds.length > 0);
-    const spaceNativeTagCount = countSpaceNativeTags(spaceTags, recommendedTags);
+    const boundLibraryTagNameCount = countBoundLibraryTagNamesForLimit(spaceTags, recommendedTags);
 
     const isTagInputDisabled = reviewTagConfigLoading || !reviewTagEnabled;
 
@@ -114,8 +169,9 @@ export function EditTagsModal({
     useEffect(() => {
         if (!isOpen || !spaceId) return;
         setInputValue("");
-        setSelectedTagIds(new Set(initialTagIds));
-        setSelectedReviewTagIds(new Set());
+        syncSelectedTagIds(new Set(initialTagIds));
+        syncSelectedReviewTagIds(new Set());
+        tagMetaRef.current = new Map();
         setRecommendedTags([]);
         setRecommendedLoading(true);
         setSpaceTagsLoading(true);
@@ -128,7 +184,10 @@ export function EditTagsModal({
             .finally(() => setReviewTagConfigLoading(false));
 
         getSpaceTagsApi(spaceId)
-            .then(setSpaceTags)
+            .then((tags) => {
+                setSpaceTags(tags);
+                tags.forEach(rememberSpaceTag);
+            })
             .catch(() => {
                 showToast({ message: localize("com_knowledge.fetch_tags_failed"), status: "error" });
             })
@@ -142,6 +201,17 @@ export function EditTagsModal({
             .finally(() => setRecommendedLoading(false));
     }, [isOpen, spaceId]);
 
+    // Restore pending review tag ids from initial selection once tags are loaded.
+    useEffect(() => {
+        if (!isOpen || reviewTagConfigLoading || spaceTagsLoading || !reviewTagEnabled) return;
+        const pendingInitial = initialTagIds.filter((id) => {
+            const tag = spaceTags.find((item) => item.id === id);
+            return tag && isPendingReviewSpaceTag(tag);
+        });
+        if (pendingInitial.length === 0) return;
+        syncSelectedReviewTagIds(new Set(pendingInitial));
+    }, [isOpen, reviewTagConfigLoading, spaceTagsLoading, reviewTagEnabled, spaceTags, initialTagIds]);
+
     // When review is off, drop pending/rejected tags from the current selection.
     useEffect(() => {
         if (!isOpen || reviewTagConfigLoading || spaceTagsLoading || reviewTagEnabled) return;
@@ -152,9 +222,11 @@ export function EditTagsModal({
                 return tag && isApprovedSpaceTag(tag);
             });
             if (approvedIds.length === prev.size) return prev;
-            return new Set(approvedIds);
+            const next = new Set(approvedIds);
+            selectedTagIdsRef.current = next;
+            return next;
         });
-        setSelectedReviewTagIds(new Set());
+        syncSelectedReviewTagIds(new Set());
     }, [isOpen, reviewTagConfigLoading, spaceTagsLoading, reviewTagEnabled, spaceTags]);
 
     const isRecommendedTagSelected = (item: KnowledgeSpaceTagLibraryTagItem) =>
@@ -188,48 +260,48 @@ export function EditTagsModal({
             showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
             return;
         }
-        setSelectedTagIds((prev) => {
-            if (prev.has(tag.id)) return prev;
-            if (prev.size >= 10) {
-                showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
-                return prev;
-            }
-            return new Set(prev).add(tag.id);
-        });
+        rememberSpaceTag(tag);
+        const current = selectedTagIdsRef.current;
+        if (current.has(tag.id)) return;
+        if (current.size >= 10) {
+            showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
+            return;
+        }
+        const next = new Set(current).add(tag.id);
+        syncSelectedTagIds(next);
         if (isPendingReviewSpaceTag(tag)) {
-            setSelectedReviewTagIds((prev) => new Set(prev).add(tag.id));
+            syncSelectedReviewTagIds(new Set(selectedReviewTagIdsRef.current).add(tag.id));
         }
     };
 
     // Toggle a space tag selection
     const toggleTag = (tag: SpaceTag) => {
-        if (!reviewTagEnabled && isPendingReviewSpaceTag(tag) && !selectedTagIds.has(tag.id)) {
+        if (!reviewTagEnabled && isPendingReviewSpaceTag(tag) && !selectedTagIdsRef.current.has(tag.id)) {
             showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
             return;
         }
-        setSelectedTagIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(tag.id)) {
-                next.delete(tag.id);
-                if (isPendingReviewSpaceTag(tag)) {
-                    setSelectedReviewTagIds((reviewPrev) => {
-                        const reviewNext = new Set(reviewPrev);
-                        reviewNext.delete(tag.id);
-                        return reviewNext;
-                    });
-                }
-            } else {
-                if (next.size >= 10) {
-                    showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
-                    return prev;
-                }
-                next.add(tag.id);
-                if (isPendingReviewSpaceTag(tag)) {
-                    setSelectedReviewTagIds((reviewPrev) => new Set(reviewPrev).add(tag.id));
-                }
+        rememberSpaceTag(tag);
+        const current = selectedTagIdsRef.current;
+        const next = new Set(current);
+        if (next.has(tag.id)) {
+            next.delete(tag.id);
+            syncSelectedTagIds(next);
+            if (isPendingReviewSpaceTag(tag)) {
+                const reviewNext = new Set(selectedReviewTagIdsRef.current);
+                reviewNext.delete(tag.id);
+                syncSelectedReviewTagIds(reviewNext);
             }
-            return next;
-        });
+        } else {
+            if (next.size >= 10) {
+                showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
+                return;
+            }
+            next.add(tag.id);
+            syncSelectedTagIds(next);
+            if (isPendingReviewSpaceTag(tag)) {
+                syncSelectedReviewTagIds(new Set(selectedReviewTagIdsRef.current).add(tag.id));
+            }
+        }
     };
 
     const resolveCreateTagErrorMessage = (err: any) => {
@@ -260,22 +332,26 @@ export function EditTagsModal({
 
         const fromBoundLibrary = isBoundLibraryTagName(trimmed, recommendedTags);
 
-        if (selectedTagIds.size >= 10) {
+        if (selectedTagIdsRef.current.size >= 10) {
             showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
             return;
         }
 
-        if (!fromBoundLibrary && spaceNativeTagCount >= 50) {
+        if (fromBoundLibrary && boundLibraryTagNameCount >= 50) {
             showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
             return;
         }
 
         try {
             const newTag = await addSpaceTagApi(spaceId, trimmed);
-            const enrichedTag: SpaceTag = {
-                ...newTag,
-                resource_type: resourceType || newTag.resource_type,
-            };
+            const enrichedTag = normalizeCreatedSpaceTag(
+                {
+                    ...newTag,
+                    resource_type: resourceType || newTag.resource_type,
+                },
+                reviewTagEnabled,
+            );
+            rememberSpaceTag(enrichedTag);
             setSpaceTags((prev) => {
                 if (findSpaceTagByName(prev, trimmed)) return prev;
                 return [...prev, enrichedTag];
@@ -325,7 +401,7 @@ export function EditTagsModal({
             return;
         }
 
-        if (selectedTagIds.size >= 10) {
+        if (selectedTagIdsRef.current.size >= 10) {
             showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
             return;
         }
@@ -338,11 +414,6 @@ export function EditTagsModal({
             return;
         }
 
-        if (spaceNativeTagCount >= 50) {
-            showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
-            return;
-        }
-
         await selectOrCreateSpaceTag(trimmed);
         setInputValue("");
     };
@@ -351,7 +422,7 @@ export function EditTagsModal({
     const handleSave = async () => {
         const pendingText = inputValue.trim();
 
-        if (!reviewTagEnabled && selectedReviewTagIds.size > 0) {
+        if (!reviewTagEnabled && selectedReviewTagIdsRef.current.size > 0) {
             showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
             return;
         }
@@ -359,25 +430,37 @@ export function EditTagsModal({
         setLoading(true);
 
         try {
-            const tagIds = Array.from(selectedTagIds) as number[];
-            const newReviewTagIds = Array.from(selectedReviewTagIds) as number[];
+            if (pendingText && reviewTagEnabled) {
+                if (getFullWidthLength(pendingText) > 8) {
+                    showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
+                    return;
+                }
+                await selectOrCreateSpaceTag(pendingText);
+                setInputValue("");
+            }
+
+            const { approvedTagIds, reviewTagIds } = splitSelectedTagIds(
+                selectedTagIdsRef.current,
+                spaceTags,
+                tagMetaRef,
+            );
             if (isBatchMode && fileIds) {
                 // Batch append mode
                 await batchUpdateTagsApi(spaceId, {
                     file_ids: fileIds.map(Number),
-                    tag_ids: tagIds,
+                    tag_ids: approvedTagIds,
                 });
                 showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
                 // Batch mode spans multiple files — let the parent decide how to refresh.
                 onSaved?.();
             } else if (fileId) {
                 // Single file overwrite mode
-                await updateFileTagsApi(spaceId, fileId, tagIds, newReviewTagIds);
+                await updateFileTagsApi(spaceId, fileId, approvedTagIds, reviewTagIds);
                 !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
                 // Hand the updated tag list back so the parent can patch this
                 // file's tags in place without reloading the whole list.
                 const savedTags: FileTag[] = spaceTags
-                    .filter((t) => selectedTagIds.has(t.id))
+                    .filter((t) => selectedTagIdsRef.current.has(t.id))
                     .map((t) => ({ id: t.id, name: t.name }));
                 onSaved?.(savedTags);
             }

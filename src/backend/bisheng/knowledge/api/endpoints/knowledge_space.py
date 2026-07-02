@@ -730,8 +730,6 @@ async def update_file_tags(
     review_tag_ids: list[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
-    if not tag_ids and not review_tag_ids and len(tag_ids) == 0 and len(review_tag_ids) == 0:
-        return resp_500("tag_ids or review_tag_ids is required")
     result = await svc.update_file_tags(space_id, file_id, tag_ids, review_tag_ids)
     return resp_200(result)
 
@@ -767,8 +765,8 @@ async def batch_update_tags(
     review_tag_ids: list[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    if not tag_ids and not review_tag_ids and len(tag_ids) == 0 and len(review_tag_ids) == 0:
-        return resp_500("tag_ids or review_tag_ids is required")
+    if not tag_ids and not review_tag_ids:
+        return resp_500(500, message="tag_ids or review_tag_ids is required")
     result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids, review_tag_ids)
     return resp_200(result)
 

@@ -41,7 +41,7 @@ function formatTagSourceLabel(resourceType: string, t: (key: string, defaultValu
     if (resourceType === "ai_auto_tag") {
         return t("build.tagSourceAi", "AI标签");
     }
-    if (resourceType === "system_tag" || resourceType === "manual_tag") {
+    if (resourceType === "system_tag") {
         return t("build.tagSourceSystem", "系统标签");
     }
     return t("build.tagSourceManual", "人工标签");

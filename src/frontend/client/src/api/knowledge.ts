@@ -321,6 +321,37 @@ export function countSpaceNativeTags(
     ).length;
 }
 
+/** Whether a tag counts toward the 50-name limit (bound tag-library tags only). */
+export function isBoundLibraryTagForLimit(
+    tag: SpaceTag,
+    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+): boolean {
+    if (isLibrarySpaceTag(tag)) return true;
+    return isBoundLibraryTagName(tag.name, recommendedTags);
+}
+
+function isApprovedTagNameForLimit(tag: SpaceTag): boolean {
+    if (tag.review_status === undefined || tag.review_status === null) {
+        return true;
+    }
+    return tag.review_status === 1;
+}
+
+/** Count distinct approved bound tag-library tag names (pending review tags are excluded). */
+export function countBoundLibraryTagNamesForLimit(
+    tags: SpaceTag[],
+    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+): number {
+    const names = new Set<string>();
+    for (const tag of tags) {
+        if (!isBoundLibraryTagForLimit(tag, recommendedTags)) continue;
+        if (!isApprovedTagNameForLimit(tag)) continue;
+        const name = tag.name.trim().toLowerCase();
+        if (name) names.add(name);
+    }
+    return names.size;
+}
+
 /** Space member entity used by member-management dialog */
 export interface SpaceMember {
     user_id: number;
@@ -1727,10 +1758,10 @@ export async function updateFileTagsApi(
         "update-file-tags",
         { method: "POST", space_id, file_id, tag_ids, review_tag_ids },
         async () => {
-            const payload: Record<string, number[]> = { tag_ids };
-            if (review_tag_ids && review_tag_ids.length > 0) {
-                payload.review_tag_ids = review_tag_ids;
-            }
+            const payload: Record<string, number[]> = {
+                tag_ids,
+                review_tag_ids: review_tag_ids ?? [],
+            };
             await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, payload);
         }
     );

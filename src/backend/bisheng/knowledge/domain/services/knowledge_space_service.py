@@ -68,7 +68,10 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
-from bisheng.common.schemas.telemetry.event_data_schema import PortalDocumentDownloadEventData, PortalDocumentReadEventData
+from bisheng.common.schemas.telemetry.event_data_schema import (
+    PortalDocumentDownloadEventData,
+    PortalDocumentReadEventData,
+)
 from bisheng.common.telemetry.portal_event_service import (
     PORTAL_BFF_TELEMETRY_SOURCE_HEADER,
     PortalTelemetryEventService,
@@ -6210,10 +6213,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             KnowledgeFileStatus.REBUILDING.value,
         }
         permission_context = await self._build_child_permission_context(int(space.id))
-        success_files = [
-            file for file in filtered_files
-            if file.status == KnowledgeFileStatus.SUCCESS.value
-        ]
+        success_files = [file for file in filtered_files if file.status == KnowledgeFileStatus.SUCCESS.value]
         visible_success_files = (
             await self._filter_visible_child_items(
                 success_files,
@@ -6229,23 +6229,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             folder_id = int(folder.id)
             prefix = f"{folder.file_level_path or ''}/{folder.id}"
             descendants = [
-                file for file in filtered_files
+                file
+                for file in filtered_files
                 if file.file_level_path == prefix or str(file.file_level_path or "").startswith(f"{prefix}/")
             ]
             folder_counts[folder_id] = {
                 "file_num": len(descendants),
-                "success_file_num": sum(
-                    1 for file in descendants
-                    if file.status == KnowledgeFileStatus.SUCCESS.value
-                ),
-                "visible_success_file_num": sum(
-                    1 for file in descendants
-                    if int(file.id) in visible_success_ids
-                ),
-                "processing_file_num": sum(
-                    1 for file in descendants
-                    if file.status in in_progress_statuses
-                ),
+                "success_file_num": sum(1 for file in descendants if file.status == KnowledgeFileStatus.SUCCESS.value),
+                "visible_success_file_num": sum(1 for file in descendants if int(file.id) in visible_success_ids),
+                "processing_file_num": sum(1 for file in descendants if file.status in in_progress_statuses),
             }
         return folder_counts
 
@@ -8256,6 +8248,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         approved_names = {(tag.name or "").strip().lower() for tag in tags if (tag.name or "").strip()}
         merged: list[Tag | ReviewTag] = list(tags)
         for review_tag in review_tags:
+            if getattr(review_tag, "review_status", 0) != 0:
+                continue
             name = (review_tag.name or "").strip()
             if name and name.lower() not in approved_names:
                 merged.append(review_tag)
@@ -8319,14 +8313,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
         new_tag = ReviewTag(
             name=tag_name,
             user_id=self.login_user.user_id,
+            tenant_id=int(self.login_user.tenant_id),
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
             business_id=str(space_id),
             resource_type=TagResourceTypeEnum.MANUAL_TAG,
             is_deleted=False,
+            review_status=0,
             create_time=datetime.now(),
             update_time=datetime.now(),
         )
         return await ReviewTagDao.ainsert_review_tag(new_tag)
+
+    async def _partition_file_tag_ids_for_update(
+        self, tag_ids: list[int], review_tag_ids: list[int]
+    ) -> tuple[list[int], list[int]]:
+        """Route ReviewTag ids into review_tag_ids even when the client misclassified them."""
+        normalized_tags = list(dict.fromkeys(tag_ids or []))
+        normalized_review = list(dict.fromkeys(review_tag_ids or []))
+        if not normalized_tags:
+            return normalized_tags, normalized_review
+
+        async with get_async_db_session() as session:
+            review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(normalized_tags)))).all()
+        review_id_set = {int(row) for row in review_rows}
+        if not review_id_set:
+            return normalized_tags, normalized_review
+
+        normalized_review = list(dict.fromkeys(normalized_review + list(review_id_set)))
+        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in review_id_set]
+        return normalized_tags, normalized_review
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
@@ -8343,13 +8358,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
-        if tag_ids and len(tag_ids) > 0:
-            await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
-        if review_tag_ids and len(review_tag_ids) > 0:
+        normalized_tag_ids, normalized_review_tag_ids = await self._partition_file_tag_ids_for_update(
+            tag_ids, review_tag_ids
+        )
+        tenant_id = int(self.login_user.tenant_id)
+        await TagDao.aupdate_resource_tags(normalized_tag_ids, resource_id, resource_type, self.login_user.user_id)
+        if normalized_review_tag_ids:
             await self._require_review_tag_feature_enabled()
-            await ReviewTagDao.aupdate_resource_tags(
-                review_tag_ids, resource_id, resource_type, self.login_user.user_id
-            )
+        await ReviewTagDao.aupdate_resource_tags(
+            normalized_review_tag_ids,
+            resource_id,
+            resource_type,
+            self.login_user.user_id,
+            tenant_id=tenant_id,
+        )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def batch_add_file_tags(
@@ -8363,13 +8385,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         files = await self._get_space_files_or_raise(space_id, file_ids)
 
         resource_type = ResourceTypeEnum.SPACE_FILE
+        tenant_id = int(self.login_user.tenant_id)
         for file_record in files:
             await self._require_permission_id("knowledge_file", file_record.id, "rename_file", space_id=space_id)
             if tag_ids and len(tag_ids) > 0:
                 await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
             if review_tag_ids and len(review_tag_ids) > 0:
                 await self._require_review_tag_feature_enabled()
-                await ReviewTagDao.add_tags(review_tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
+                await ReviewTagDao.add_tags(
+                    review_tag_ids,
+                    str(file_record.id),
+                    resource_type,
+                    self.login_user.user_id,
+                    tenant_id=tenant_id,
+                )
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
