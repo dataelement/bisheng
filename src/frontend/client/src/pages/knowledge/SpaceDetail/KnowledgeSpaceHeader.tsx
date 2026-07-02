@@ -237,13 +237,6 @@ export function KnowledgeSpaceHeader({
                             {localize("com_knowledge.parsing_status")}
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.REBUILDING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.rebuilding_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
                             checked={statusFilter.includes(FileStatus.SUCCESS)}
                             onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
                             onSelect={(e) => e.preventDefault()}
