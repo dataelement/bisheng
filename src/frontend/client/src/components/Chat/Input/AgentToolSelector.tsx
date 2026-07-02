@@ -115,7 +115,11 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
+          // Tools Select never sets a value (selection is via inner switches), so
+          // Radix keeps the trigger in [data-placeholder] state; without this the
+          // base `data-[placeholder]:text-gray-500` would override to #595959 and
+          // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
+          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] data-[placeholder]:text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
