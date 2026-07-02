@@ -656,7 +656,10 @@ export const ChatKnowledge = ({
           // Mobile width override only applies to the knowledge variant — the
           // "+" menu shows short action items and matches the desktop 160px
           // width on phones too. (knowledge needs more room for search + list)
-          isMobile && variant === 'knowledge' && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
+          // Mobile knowledge popup: match desktop's `pt-2 px-2 pb-0` so the
+          // scroll list's own `pb-2` handles the last-item spacing and there's
+          // no dead padding strip below the visible list edge.
+          isMobile && variant === 'knowledge' && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
@@ -686,9 +689,14 @@ export const ChatKnowledge = ({
           </DropdownMenuItem>
         )}
 
-        {/* Knowledge pill (mobile): show the SPACES list directly — no drill. */}
+        {/* Knowledge pill (mobile): show the SPACES list directly — no drill.
+            Matches the desktop layout (title + list) so both surfaces feel the
+            same; only the outer width / position adapt to the smaller screen. */}
         {variant === 'knowledge' && isMobile && (
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+          <div className="flex min-h-0 w-full flex-1 flex-col">
+            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+              {localize('com_ui_knowledge_space')}
+            </p>
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
