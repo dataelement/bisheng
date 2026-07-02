@@ -68,7 +68,6 @@ export const STATUS_FILTER_OPTIONS: Array<{ status: FileStatus; label: string }>
     { status: FileStatus.UPLOADING, label: "上传中" },
     { status: FileStatus.WAITING, label: "排队中" },
     { status: FileStatus.PROCESSING, label: "解析中" },
-    { status: FileStatus.REBUILDING, label: "重建中" },
     { status: FileStatus.SUCCESS, label: "成功" },
     { status: FileStatus.FAILED, label: "失败" },
     { status: FileStatus.VIOLATION, label: "违规" },
