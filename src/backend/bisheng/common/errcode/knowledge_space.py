@@ -72,6 +72,11 @@ class SpaceFileEncodingDuplicateError(BaseErrorCode):
     Msg: str = '文件编码已存在'
 
 
+class SpaceBusinessDomainCodeInvalidError(BaseErrorCode):
+    Code: int = 18026
+    Msg: str = 'Invalid business domain code'
+
+
 # ── Subscribe ────────────────────────────────────────────────────────────────
 
 class SpaceSubscribePrivateError(BaseErrorCode):

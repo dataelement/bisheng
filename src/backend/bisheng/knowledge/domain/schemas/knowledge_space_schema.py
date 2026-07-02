@@ -56,6 +56,10 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     id: int = Field(..., description="Knowledge Space ID")
+    business_domain_codes: List[str] = Field(
+        default_factory=list,
+        description="Portal business-domain codes bound to this knowledge space",
+    )
     is_pinned: bool = Field(
         default=False, description="Knowledge Space pinned by current user or not"
     )
@@ -116,6 +120,15 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=None,
         description="Populated only when auto_tag_mode == 'custom'; mirrors the private library's tag list.",
     )
+
+    @field_validator("business_domain_codes", mode="before")
+    @classmethod
+    def normalize_business_domain_codes(cls, value: Any):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item).strip().upper() for item in value if str(item).strip()]
+        return value
 
 
 class ShougangPortalSpaceInfoReq(BaseModel):
@@ -335,6 +348,19 @@ class ShougangPortalDomainFileCountReq(BaseModel):
 
 class ShougangPortalDomainFileCountResp(BaseModel):
     counts: Dict[str, int] = Field(default_factory=dict)
+
+
+class ShougangPortalSpaceBusinessDomainCodesItem(BaseModel):
+    space_id: int = Field(..., gt=0)
+    business_domain_codes: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ShougangPortalSpaceBusinessDomainCodesSyncReq(BaseModel):
+    bindings: List[ShougangPortalSpaceBusinessDomainCodesItem] = Field(default_factory=list, max_length=500)
+
+
+class ShougangPortalSpaceBusinessDomainCodesSyncResp(BaseModel):
+    updated: int = 0
 
 
 class ShougangPortalFileSearchReq(BaseModel):

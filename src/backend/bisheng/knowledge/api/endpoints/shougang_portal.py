@@ -33,6 +33,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalShareLinkCreateResp,
     ShougangPortalShareLinkMetaResp,
     ShougangPortalShareLinkVerifyReq,
+    ShougangPortalSpaceBusinessDomainCodesSyncReq,
+    ShougangPortalSpaceBusinessDomainCodesSyncResp,
     ShougangPortalSpaceInfoReq,
     ShougangPortalSpaceInfoResp,
     ShougangPortalSpaceLevelsResp,
@@ -154,6 +156,18 @@ async def get_shougang_portal_space_infos(
 ) -> Any:
     spaces = await svc.get_shougang_portal_space_infos(req.space_ids)
     return resp_200(ShougangPortalSpaceInfoResp(spaces=spaces).model_dump(mode='json'))
+
+
+@router.put('/spaces/business-domain-codes')
+async def sync_shougang_portal_space_business_domain_codes(
+        req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        result = await svc.sync_shougang_portal_space_business_domain_codes(req)
+        return resp_200(ShougangPortalSpaceBusinessDomainCodesSyncResp(**result).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
 
 
 @router.post('/tags/search')

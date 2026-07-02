@@ -44,6 +44,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileSizeLimitError,
     SpaceInvalidLevelError,
     SpaceInvalidScopeOwnerError,
+    SpaceBusinessDomainCodeInvalidError,
     SpaceCreatePublicDeniedError,
     SpaceCreateDepartmentDeniedError,
     SpaceNameDuplicateError,
@@ -78,6 +79,7 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -154,6 +156,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalSharePermissions,
     ShougangPortalShareType,
     ShougangPortalShareVisibility,
+    ShougangPortalSpaceBusinessDomainCodesSyncReq,
     ShougangPortalSpaceInfoError,
     ShougangPortalSpaceInfoItemResp,
     ShougangPortalUploadedFileResp,
@@ -3286,6 +3289,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     )
                 )
         return items
+
+    @classmethod
+    def _normalize_shougang_portal_business_domain_codes(cls, codes: List[str]) -> List[str]:
+        normalized_codes: List[str] = []
+        seen: set[str] = set()
+        for raw_code in codes or []:
+            code = normalize_business_domain_code(raw_code)
+            if code is None:
+                raise SpaceBusinessDomainCodeInvalidError()
+            if code not in seen:
+                normalized_codes.append(code)
+                seen.add(code)
+        return normalized_codes
+
+    async def sync_shougang_portal_space_business_domain_codes(
+        self,
+        req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
+    ) -> Dict[str, int]:
+        if not req.bindings:
+            return {"updated": 0}
+
+        bindings: Dict[int, List[str]] = {}
+        for item in req.bindings:
+            bindings[int(item.space_id)] = self._normalize_shougang_portal_business_domain_codes(
+                item.business_domain_codes
+            )
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(list(bindings.keys()), order_by='update_time')
+        existing_space_ids = {int(space.id) for space in spaces}
+        if existing_space_ids != set(bindings.keys()):
+            raise SpaceNotFoundError()
+
+        updated = await KnowledgeDao.async_update_space_business_domain_codes(bindings)
+        return {"updated": updated}
 
     async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> Dict:
         perf = PortalSearchPerfContext(started_at=time.monotonic())
