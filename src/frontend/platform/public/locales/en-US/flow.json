@@ -459,6 +459,10 @@
         "label": "Knowledge Base Range",
         "placeholder": "Select knowledge base"
       },
+      "user_auth": {
+        "label": "User knowledge permission check",
+        "help": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions."
+      },
       "sql_agent": {
         "label": "Database Configuration"
       },

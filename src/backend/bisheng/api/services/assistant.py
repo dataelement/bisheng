@@ -526,6 +526,9 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.temperature = req.temperature
         assistant.update_time = datetime.now()
         assistant.max_token = req.max_token
+        # F041: persist the 用户知识库权限校验 toggle (None = untouched, keep current value)
+        if req.knowledge_auth is not None:
+            assistant.knowledge_auth = req.knowledge_auth
         AssistantDao.update_assistant(assistant)
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
