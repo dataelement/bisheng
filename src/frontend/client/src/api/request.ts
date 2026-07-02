@@ -125,6 +125,15 @@ export const translateApiErrorMessage = (data: any) => {
 
 customAxios.interceptors.response.use(
   (response) => {
+    // Backend service exception surfaced as HTTP 200 + business code 500:
+    // gateways often wrap upstream 5xx into a 200 envelope, so mirror the
+    // HTTP-500 branch below and raise the global maintenance overlay here too.
+    // Return early — the overlay covers the screen, no toast needed underneath.
+    if (response.data?.status_code === 500) {
+      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
+      return response;
+    }
+
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
     // explicitly opts out via skip403Redirect.
     if (response.data.status_code === 403 && !response.config.skip403Redirect) {
