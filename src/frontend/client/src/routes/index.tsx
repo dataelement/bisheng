@@ -10,6 +10,7 @@ import AppChatEntry from '@/pages/appChat/AppChatEntry';
 import AgentCenter from '@/pages/apps';
 import ExplorePlaza from '@/pages/apps/explore';
 import Share from '@/pages/share';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
@@ -97,6 +98,24 @@ const baseConfig = {
   //@ts-ignore
   basename: __APP_ENV__.BASE_URL
 }
+
+// DEV-ONLY component gallery for the UI unification effort (docs-ui-refactor/).
+// `import.meta.env.DEV` is statically false in production builds, so both the lazy
+// import and the route below are tree-shaken out — the gallery never ships to users.
+const GalleryApp = import.meta.env.DEV
+  ? lazy(() => import('~/pages/_gallery/GalleryApp'))
+  : null;
+
+const devGalleryRoutes = import.meta.env.DEV && GalleryApp
+  ? [{
+      path: '/gallery',
+      element: (
+        <Suspense fallback={null}>
+          <GalleryApp />
+        </Suspense>
+      ),
+    }]
+  : [];
 
 export const router = createBrowserRouter([
   {
@@ -219,6 +238,7 @@ export const router = createBrowserRouter([
   { path: 'chat/flow/:flowId', element: <StandaloneChatPage mode="guest" flowType="workflow" />, errorElement: <RouteErrorBoundary /> },
   { path: 'chat/assistant/:flowId', element: <StandaloneChatPage mode="guest" flowType="assistant" />, errorElement: <RouteErrorBoundary /> },
   { path: '/html', element: <WebView /> },
+  ...devGalleryRoutes,
   { path: '/__dev/login', element: <DevLogin /> },
   { path: '/404', element: <Page404 /> },
   { path: '/403', element: <Page403 /> },

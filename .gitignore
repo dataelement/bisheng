@@ -290,3 +290,6 @@ src/backend/scripts/migrate_dm.yaml
 
 # Git worktrees (claude code)
 .worktrees/
+
+# UI component refactor working docs (local handoff notes; never commit / ship)
+docs-ui-refactor/
