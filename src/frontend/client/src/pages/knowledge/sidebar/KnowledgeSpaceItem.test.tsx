@@ -114,11 +114,14 @@ describe("KnowledgeSpaceItem 收藏库操作门控", () => {
         expect(screen.getByText("删除空间")).toBeInTheDocument();
     });
 
-    it("『我的收藏』空间完全隐藏 ... 操作菜单", () => {
+    it("『我的收藏』保留菜单与置顶，隐藏 空间设置/删除空间", async () => {
+        const user = userEvent.setup();
         const { container } = renderItem({ isFavorite: true, name: "我的收藏" });
-        expect(container.querySelector("button")).toBeNull();
+        const trigger = container.querySelector("button");
+        expect(trigger).not.toBeNull();
+        await user.click(trigger as HTMLButtonElement);
+        expect(await screen.findByText("置顶空间")).toBeInTheDocument();
         expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
-        expect(screen.queryByText("置顶空间")).not.toBeInTheDocument();
         expect(screen.queryByText("删除空间")).not.toBeInTheDocument();
     });
 

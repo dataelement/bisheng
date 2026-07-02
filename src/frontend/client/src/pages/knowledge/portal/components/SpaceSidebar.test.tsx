@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { MutableRefObject } from "react";
 import { KnowledgeSpace, SpaceLevel, SpaceRole } from "~/api/knowledge";
 import type { SpaceGroup, SpaceGroupKey } from "../types";
@@ -70,13 +71,23 @@ function renderSidebar() {
 }
 
 describe("SpaceSidebar 收藏库操作门控（portal 内嵌工作台）", () => {
-    it("普通知识库渲染 ... 操作菜单按钮", () => {
+    it("普通知识库菜单含 空间设置/置顶空间/删除空间", async () => {
+        const user = userEvent.setup();
         renderSidebar();
-        expect(screen.getByLabelText("更多普通库操作")).toBeInTheDocument();
+        await user.click(screen.getByLabelText("更多普通库操作"));
+        expect(await screen.findByText("空间设置")).toBeInTheDocument();
+        expect(screen.getByText("置顶空间")).toBeInTheDocument();
+        expect(screen.getByText("删除空间")).toBeInTheDocument();
     });
 
-    it("『我的收藏』空间不渲染 ... 操作菜单按钮", () => {
+    it("『我的收藏』保留菜单按钮与置顶，隐藏 空间设置/删除空间", async () => {
+        const user = userEvent.setup();
         renderSidebar();
-        expect(screen.queryByLabelText("更多我的收藏操作")).not.toBeInTheDocument();
+        const trigger = screen.getByLabelText("更多我的收藏操作");
+        expect(trigger).toBeInTheDocument();
+        await user.click(trigger);
+        expect(await screen.findByText("置顶空间")).toBeInTheDocument();
+        expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
+        expect(screen.queryByText("删除空间")).not.toBeInTheDocument();
     });
 });

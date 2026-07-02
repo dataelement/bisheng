@@ -168,7 +168,6 @@ export default function KnowledgeSpaceItem({
                     )}
                 </div>
 
-                {!isFavorite && (
                 <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
                     <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
@@ -184,7 +183,7 @@ export default function KnowledgeSpaceItem({
                         </DropdownMenuTrigger>
 
                         <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                            {canEditSpace && (
+                            {canEditSpace && !isFavorite && (
                                 <DropdownMenuItem
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onSettings?.(space)}
@@ -195,7 +194,7 @@ export default function KnowledgeSpaceItem({
                                     </span>
                                 </DropdownMenuItem>
                             )}
-                            {canManageMembers && (
+                            {canManageMembers && !isFavorite && (
                                 <DropdownMenuItem
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onManageMembers?.(space)}
@@ -223,9 +222,9 @@ export default function KnowledgeSpaceItem({
                                 )}
                             </DropdownMenuItem>
 
-                            <SidebarListMoreMenuDivider />
+                            {showDangerAction && !isFavorite && <SidebarListMoreMenuDivider />}
 
-                            {showDangerAction && (
+                            {showDangerAction && !isFavorite && (
                                 <DropdownMenuItem
                                     onClick={async () => {
                                         const description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
@@ -255,7 +254,6 @@ export default function KnowledgeSpaceItem({
                         </SidebarListMoreMenuContent>
                     </DropdownMenu>
                 </div>
-                )}
             </div>
 
             {expanded && treeEnabled && (
