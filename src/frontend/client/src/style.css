@@ -1459,7 +1459,7 @@ button {
 
 /* Webkit scrollbar */
 ::-webkit-scrollbar {
-  height: 0.1em;
+  height: 0.5rem;
   width: 0.5rem;
 }
 
