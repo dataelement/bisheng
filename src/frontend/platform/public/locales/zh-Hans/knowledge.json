@@ -198,6 +198,7 @@
   "webLinkRequestFailed": "网页链接请求失败",
   "mediaFileMissing": "音视频文件不存在",
   "mediaAsrEmpty": "语音识别结果为空",
+  "mediaNoRecognizableAudio": "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。",
   "mediaAsrApiKeyMissing": "ASR API Key 未配置",
   "mediaFfmpegMissing": "服务器未安装 ffmpeg",
   "mediaAudioExtractionFailed": "音视频音轨提取失败",

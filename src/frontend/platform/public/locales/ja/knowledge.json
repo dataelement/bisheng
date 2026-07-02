@@ -203,6 +203,7 @@
   "webLinkRequestFailed": "Webリンクのリクエストに失敗しました",
   "mediaFileMissing": "メディアファイルが存在しません",
   "mediaAsrEmpty": "ASR の結果が空です",
+  "mediaNoRecognizableAudio": "認識可能な音声が検出されませんでした。明瞭な音声を含む音声または動画ファイルをアップロードしてください。",
   "mediaAsrApiKeyMissing": "ASR API Key が未設定です",
   "mediaFfmpegMissing": "サーバーに ffmpeg がインストールされていません",
   "mediaAudioExtractionFailed": "メディアの音声抽出に失敗しました",

@@ -7,12 +7,38 @@ import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
+function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
+    const trimmedRemark = typeof remark === "string" ? remark.trim() : "";
+    if (!trimmedRemark) return t("parseFailed");
+    if (!trimmedRemark.startsWith("{")) return trimmedRemark;
+
+    try {
+        const parsed = JSON.parse(trimmedRemark);
+        if (parsed?.status_code === 10956) {
+            return t("mediaNoRecognizableAudio");
+        }
+
+        const exception = String(parsed?.data?.exception ?? "").trim().toLowerCase();
+        if (exception === "media audio extraction failed" || exception === "asr returned empty text") {
+            return t("mediaNoRecognizableAudio");
+        }
+
+        return t(`bs:errors.${parsed.status_code}`, parsed.data);
+    } catch {
+        return trimmedRemark;
+    }
+}
+
 export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const { t } = useTranslation('knowledge');
+    const { message } = useToast();
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
@@ -23,6 +49,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const processingRef = useRef(new Set()); // Track processing file IDs
     const isPollingRef = useRef(false); // Prevent polling concurrency
     const hasInitialized = useRef(false);
+    const notifiedFailedFileIdsRef = useRef(new Set());
     const [premainingFileIds, setPremainingFileIds] = useState([]); // Track remaining file IDs
 
     // Initialize file status (executed only once)
@@ -44,6 +71,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
             const frontEndFileIds = initialFiles.map(file => file.fileId);
             fileIdsRef.current = frontEndFileIds;
             processingRef.current.clear();
+            notifiedFailedFileIdsRef.current.clear();
             frontEndFileIds.forEach(id => processingRef.current.add(id)); // Use same batch of IDs
 
             setFinish(false);
@@ -95,7 +123,12 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                                 processingRef.current.delete(file.id);
                                 console.log(`移除待处理ID: ${file.id}（失败），剩余待处理: ${processingRef.current.size}`);
                             }
-                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason: resItem.remark || t('parseFailed') };
+                            const reason = resolveParseFailureReason(resItem.remark, t);
+                            if (!notifiedFailedFileIdsRef.current.has(file.id)) {
+                                notifiedFailedFileIdsRef.current.add(file.id);
+                                message({ variant: 'error', description: reason });
+                            }
+                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason };
                         }
                     });
 
@@ -131,7 +164,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [kid, kId, t, data]); // Add t to dependencies
+    }, [kid, kId, t, data, message]); // Add t to dependencies
 
     useEffect(() => {
         return () => {

@@ -105,6 +105,11 @@ class KnowledgeMediaTranscriptionError(BaseErrorCode):
     Msg: str = "Media transcription failed"
 
 
+class KnowledgeMediaNoRecognizableAudioError(BaseErrorCode):
+    Code: int = 10956
+    Msg: str = "No recognizable audio detected"
+
+
 class KnowledgeWebLinkImportError(BaseErrorCode):
     Code: int = 10955
     Msg: str = "Web link import failed"
