@@ -154,13 +154,14 @@ function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: Ta
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[520px] bg-background-login">
-                <DialogHeader>
+            <DialogContent className="gap-0 p-0 sm:max-w-[520px] bg-background-login">
+                <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>
                 <form
+                    id="tag-library-form"
                     autoComplete="off"
-                    className="space-y-5 py-2"
+                    className="space-y-5 px-6 py-5"
                     onSubmit={(event) => {
                         event.preventDefault();
                         void handleSave();
@@ -208,15 +209,15 @@ function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: Ta
                             onChange={(e) => setDescription(e.target.value)}
                         />
                     </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
-                            {t("cancel", { ns: "bs" })}
-                        </Button>
-                        <Button type="submit" className="px-8" disabled={saving}>
-                            {t("confirm", { ns: "bs" })}
-                        </Button>
-                    </DialogFooter>
                 </form>
+                <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
+                    <Button type="button" variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
+                        {t("cancel", { ns: "bs" })}
+                    </Button>
+                    <Button type="submit" form="tag-library-form" className="px-8" disabled={saving}>
+                        {t("confirm", { ns: "bs" })}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );
@@ -320,13 +321,13 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[920px] bg-background-login">
-                <DialogHeader>
+            <DialogContent className="gap-0 p-0 sm:max-w-[920px] bg-background-login">
+                <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
                     <DialogTitle>
                         {t("build.tagLibraryTagsTitle", "标签库标签")} — {library?.name || ""}
                     </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-2">
+                <div className="space-y-4 px-6 py-5">
                     <div className="flex items-center gap-2">
                         <Input
                             id="tag-library-tag-name"
@@ -418,7 +419,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                         {tagItems.length}/{TAG_LIMIT}
                     </p>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
                     <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
                         {t("close", { ns: "bs", defaultValue: "关闭" })}
                     </Button>

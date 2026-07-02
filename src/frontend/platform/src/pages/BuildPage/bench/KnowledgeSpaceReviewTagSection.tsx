@@ -102,11 +102,11 @@ function ApproveReviewTagDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[480px] bg-background-login">
-                <DialogHeader>
+            <DialogContent className="gap-0 p-0 sm:max-w-[480px] bg-background-login">
+                <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
                     <DialogTitle>{t("build.reviewTagApproveTitle", "审核通过")}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-2">
+                <div className="space-y-4 px-6 py-5">
                     <p className="text-sm text-muted-foreground">
                         {t(
                             "build.reviewTagApproveDesc",
@@ -144,7 +144,7 @@ function ApproveReviewTagDialog({
                         )}
                     </div>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
                     <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
                         {t("cancel", { ns: "bs" })}
                     </Button>
