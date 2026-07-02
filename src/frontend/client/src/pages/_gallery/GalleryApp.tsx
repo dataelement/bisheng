@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { cn } from '~/utils';
 import { OverviewSection } from './sections/OverviewSection';
 import { ModalSection } from './sections/ModalSection';
+import { ConfirmDialogSection } from './sections/ConfirmDialogSection';
 import { ButtonSection } from './sections/ButtonSection';
 
 interface NavItem {
@@ -23,6 +24,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { id: 'overview', label: '总览' },
   { id: 'modal', label: 'Modal 弹窗', status: 'wip' },
+  { id: 'confirm', label: '二次确认弹窗', status: 'wip' },
   { id: 'button', label: 'Button 按钮', status: 'todo' },
 ];
 
@@ -77,6 +79,7 @@ export default function GalleryApp() {
         <div className="mx-auto max-w-5xl px-8 py-8">
           <OverviewSection />
           <ModalSection />
+          <ConfirmDialogSection />
           <ButtonSection />
         </div>
       </main>
