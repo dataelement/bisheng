@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import i18next from "i18next";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
@@ -101,14 +102,18 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
         setError("");
         fetch(resolveKnowledgePreviewUrl(fileUrl))
             .then((response) => {
-                if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
+                if (!response.ok) {
+                    throw new Error(i18next.t("com_knowledge.failure_status", { 0: response.status }));
+                }
                 return response.text();
             })
             .then((text) => {
                 if (!cancelled) setContent(text);
             })
             .catch((err: Error) => {
-                if (!cancelled) setError(err.message || localize("com_knowledge.load_file_failed"));
+                if (!cancelled) {
+                    setError(err.message || i18next.t("com_knowledge.load_file_failed"));
+                }
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -116,7 +121,7 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
         return () => {
             cancelled = true;
         };
-    }, [fileUrl, localize]);
+    }, [fileUrl]);
 
     if (loading) {
         return (
