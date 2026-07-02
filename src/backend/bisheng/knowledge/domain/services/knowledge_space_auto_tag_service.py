@@ -136,13 +136,14 @@ class KnowledgeSpaceAutoTagService:
         manual_tags: list[str] = []
         ai_tags: list[str] = []
         for library_id in library_ids:
-            manual, ai = TagLibraryTagService.list_tag_names_sync(library_id)
-            if not manual and not ai:
+            system, manual, ai = TagLibraryTagService.list_tag_names_sync(library_id)
+            if not system and not manual and not ai:
                 library = KnowledgeSpaceTagLibraryDao.get(library_id)
                 if library:
-                    manual = list(library.tags or [])
+                    system = list(library.tags or [])
                     ai = list(library.ai_tags or [])
-            for tag in manual:
+            non_ai = TagLibraryTagService.non_ai_tag_names(system, manual)
+            for tag in non_ai:
                 if tag not in manual_tags:
                     manual_tags.append(tag)
             for tag in ai:

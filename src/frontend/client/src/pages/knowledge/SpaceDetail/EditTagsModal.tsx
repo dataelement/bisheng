@@ -489,15 +489,12 @@ export function EditTagsModal({
             && (reviewTagEnabled || reviewTagConfigLoading || isApprovedSpaceTag(tag)),
     );
 
-    const systemTags = visibleRecommendedTags.filter(
-        (t) => t.resource_type === "system_tag" || t.resource_type === "manual_tag",
-    );
+    const systemTags = visibleRecommendedTags.filter((t) => t.resource_type === "system_tag");
     const aiTags = visibleRecommendedTags.filter((t) => t.resource_type === "ai_auto_tag");
     const manualTags = visibleRecommendedTags.filter(
         (t) =>
-            t.resource_type !== "system_tag"
-            && t.resource_type !== "manual_tag"
-            && t.resource_type !== "ai_auto_tag",
+            t.resource_type === "manual_tag"
+            || (t.resource_type !== "system_tag" && t.resource_type !== "ai_auto_tag"),
     );
 
     const renderRecommendedTagItem = (item: KnowledgeSpaceTagLibraryTagItem) => {

@@ -279,7 +279,7 @@ async def test_decorate_private_library_masks_id_and_returns_tags():
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.list_tag_names",
-            new=AsyncMock(return_value=(["合同", "制度"], [])),
+            new=AsyncMock(return_value=(["合同", "制度"], [], [])),
         ),
     ):
         await KnowledgeSpaceService._decorate_auto_tag_for_info(result)

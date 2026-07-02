@@ -517,10 +517,11 @@ export interface KnowledgeSpaceTagLibraryTagItem {
 
 /** Tag-library manual_tag entries are displayed as system tags (matches Platform). */
 export function normalizeTagLibraryResourceType(resourceType: string): string {
-    if (resourceType === "manual_tag") {
-        return "system_tag";
+    const normalized = String(resourceType || "").trim();
+    if (normalized === "ai_auto_tag" || normalized === "system_tag" || normalized === "manual_tag") {
+        return normalized;
     }
-    return resourceType;
+    return normalized || "manual_tag";
 }
 
 export interface KnowledgeSpaceTagLibraryPage {
@@ -1547,7 +1548,7 @@ export async function getBoundTagLibraryTagsForKnowledgeApi(
             const normalizedItem = {
                 ...item,
                 name,
-                resource_type: normalizeTagLibraryResourceType(String(item.resource_type ?? "system_tag")),
+                resource_type: normalizeTagLibraryResourceType(String(item.resource_type ?? "manual_tag")),
             };
             const key = `${normalizedItem.resource_type}:${name}`;
             if (seen.has(key)) continue;

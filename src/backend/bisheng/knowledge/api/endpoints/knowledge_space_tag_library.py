@@ -81,6 +81,7 @@ async def update_tag_library(
             name=req.name,
             description=req.description,
             tags=req.tags,
+            manual_tags=req.manual_tags,
             ai_tags=req.ai_tags,
         )
     )

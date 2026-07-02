@@ -43,7 +43,7 @@ async def test_update_library_rejects_tag_existing_in_other_library():
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.list_tag_names",
-            new=AsyncMock(return_value=([], [])),
+            new=AsyncMock(return_value=([], [], [])),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service."

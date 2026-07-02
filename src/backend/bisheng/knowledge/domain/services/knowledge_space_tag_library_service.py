@@ -142,9 +142,9 @@ class KnowledgeSpaceTagLibraryService:
         if not normalized_name:
             raise KnowledgeSpaceTagLibraryInvalidError(msg="标签名称不能为空")
 
-        manual, ai = await TagLibraryTagService.list_tag_names(library_id)
-        if not manual and not ai:
-            manual = list(library.tags or [])
+        system, manual, ai = await TagLibraryTagService.list_tag_names(library_id)
+        if not system and not manual and not ai:
+            system = list(library.tags or [])
             ai = list(library.ai_tags or [])
 
         if review_resource_type == TagResourceTypeEnum.AI_AUTO_TAG.value:
@@ -155,50 +155,62 @@ class KnowledgeSpaceTagLibraryService:
                     exclude_library_id=library_id,
                 )
                 ai.append(normalized_name)
-        elif normalized_name not in manual:
+        elif review_resource_type == TagResourceTypeEnum.MANUAL_TAG.value:
+            if normalized_name not in manual:
+                await self._ensure_global_tag_names_available(
+                    tenant_id=library.tenant_id,
+                    tag_names=[normalized_name],
+                    exclude_library_id=library_id,
+                )
+                manual.append(normalized_name)
+        elif normalized_name not in system:
             await self._ensure_global_tag_names_available(
                 tenant_id=library.tenant_id,
                 tag_names=[normalized_name],
                 exclude_library_id=library_id,
             )
-            manual.append(normalized_name)
+            system.append(normalized_name)
 
-        if len(manual) + len(ai) > MAX_LIBRARY_TAGS:
+        non_ai = TagLibraryTagService.non_ai_tag_names(system, manual)
+        if len(non_ai) + len(ai) > MAX_LIBRARY_TAGS:
             raise KnowledgeSpaceTagLibraryInvalidError(message=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
 
         await TagLibraryTagService.replace_tags(
             library_id=library_id,
             tenant_id=library.tenant_id,
             user_id=self.login_user.user_id,
+            system_tags=system,
             manual_tags=manual,
             ai_tags=ai,
         )
         await KnowledgeSpaceTagLibraryDao.aupdate(
             library_id,
-            tags=manual,
+            tags=non_ai,
             ai_tags=ai,
-            tag_count=len(manual) + len(ai),
+            tag_count=len(non_ai) + len(ai),
         )
 
     @staticmethod
     async def _resolve_library_tags(
         library: KnowledgeSpaceTagLibrary,
     ) -> tuple[list[str], int]:
-        manual, ai = await TagLibraryTagService.list_tag_names(int(library.id))
-        if not manual and not ai:
-            manual = list(library.tags or [])
+        system, manual, ai = await TagLibraryTagService.list_tag_names(int(library.id))
+        if not system and not manual and not ai:
+            system = list(library.tags or [])
             ai = list(library.ai_tags or [])
-        return manual + ai, len(manual) + len(ai)
+        non_ai = TagLibraryTagService.non_ai_tag_names(system, manual)
+        return non_ai + ai, len(non_ai) + len(ai)
 
     async def to_list_item(
         self,
         library: KnowledgeSpaceTagLibrary,
     ) -> KnowledgeSpaceTagLibraryListItem:
-        manual, ai = await TagLibraryTagService.list_tag_names(int(library.id))
-        if not manual and not ai:
-            manual = list(library.tags or [])
+        system, manual, ai = await TagLibraryTagService.list_tag_names(int(library.id))
+        if not system and not manual and not ai:
+            system = list(library.tags or [])
             ai = list(library.ai_tags or [])
-        tag_count = len(manual) + len(ai)
+        non_ai = TagLibraryTagService.non_ai_tag_names(system, manual)
+        tag_count = len(non_ai) + len(ai)
         bound_space_names: list[str] = []
         if library.owner_knowledge_id is None:
             bound_space_names = await KnowledgeTagLibraryLinkDao.alist_bound_space_names(int(library.id))
@@ -206,6 +218,7 @@ class KnowledgeSpaceTagLibraryService:
         used_knowledge_count = await TagLibraryTagService.count_total_usage(
             library_id=int(library.id),
             tenant_id=library.tenant_id,
+            system_tags=system,
             manual_tags=manual,
             ai_tags=ai,
         )
@@ -225,16 +238,16 @@ class KnowledgeSpaceTagLibraryService:
         tags = await TagLibraryTagService.list_tags(int(library.id))
         if tags:
             return
-        manual = list(library.tags or [])
+        system = list(library.tags or [])
         ai = list(library.ai_tags or [])
-        if not manual and not ai:
+        if not system and not ai:
             return
         owner_id = library.user_id or self.login_user.user_id
         await TagLibraryTagService.replace_tags(
             library_id=int(library.id),
             tenant_id=library.tenant_id,
             user_id=owner_id,
-            manual_tags=manual,
+            system_tags=system,
             ai_tags=ai,
         )
 
@@ -259,7 +272,7 @@ class KnowledgeSpaceTagLibraryService:
             items.append(
                 KnowledgeSpaceTagLibraryTagItem(
                     name=name,
-                    resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
+                    resource_type=TagResourceTypeEnum.SYSTEM_TAG.value,
                     create_time=library.create_time,
                     creator_name=creator_name,
                 )
@@ -318,6 +331,7 @@ class KnowledgeSpaceTagLibraryService:
         library: KnowledgeSpaceTagLibrary,
     ) -> KnowledgeSpaceTagLibraryDetail:
         tag_items = await self._build_tag_items_detail(library)
+        system = [item.name for item in tag_items if item.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value]
         manual = [item.name for item in tag_items if item.resource_type == TagResourceTypeEnum.MANUAL_TAG.value]
         return KnowledgeSpaceTagLibraryDetail(
             id=library.id,
@@ -325,7 +339,7 @@ class KnowledgeSpaceTagLibraryService:
             description=library.description,
             tag_count=len(tag_items),
             is_builtin=library.is_builtin,
-            tags=manual,
+            tags=[*system, *manual],
             tag_items=tag_items,
         )
 
@@ -378,7 +392,7 @@ class KnowledgeSpaceTagLibraryService:
             library_id=int(library.id),
             tenant_id=self.login_user.tenant_id,
             user_id=self.login_user.user_id,
-            manual_tags=normalized,
+            system_tags=normalized,
             ai_tags=library.ai_tags or [],
         )
         return await self.to_detail(library)
@@ -389,6 +403,7 @@ class KnowledgeSpaceTagLibraryService:
         name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
+        manual_tags: list[str] | None = None,
         ai_tags: list[str] | None = None,
     ) -> KnowledgeSpaceTagLibraryDetail:
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
@@ -404,29 +419,33 @@ class KnowledgeSpaceTagLibraryService:
         if description is not None:
             updates["description"] = description
 
-        current_manual, current_ai = await TagLibraryTagService.list_tag_names(library_id)
-        if not current_manual:
-            current_manual = list(library.tags or [])
+        current_system, current_manual, current_ai = await TagLibraryTagService.list_tag_names(library_id)
+        if not current_system and not current_manual:
+            current_system = list(library.tags or [])
         if not current_ai:
             current_ai = list(library.ai_tags or [])
 
-        next_manual = self.normalize_tags(tags) if tags is not None else current_manual
+        next_system = self.normalize_tags(tags) if tags is not None else current_system
+        next_manual = self.normalize_tags(manual_tags) if manual_tags is not None else current_manual
         next_ai = self.normalize_tags(ai_tags) if ai_tags is not None else current_ai
-        if len(next_manual) + len(next_ai) > MAX_LIBRARY_TAGS:
+        non_ai = TagLibraryTagService.non_ai_tag_names(next_system, next_manual)
+        if len(non_ai) + len(next_ai) > MAX_LIBRARY_TAGS:
             raise KnowledgeSpaceTagLibraryInvalidError(message=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
 
-        if tags is not None or ai_tags is not None:
+        if tags is not None or manual_tags is not None or ai_tags is not None:
             await self._ensure_global_tag_names_available(
                 tenant_id=library.tenant_id,
-                tag_names=[*next_manual, *next_ai],
+                tag_names=[*non_ai, *next_ai],
                 exclude_library_id=library_id,
             )
-            updates["tags"] = next_manual
-            updates["tag_count"] = len(next_manual) + len(next_ai)
+            updates["tags"] = non_ai
+            updates["ai_tags"] = next_ai
+            updates["tag_count"] = len(non_ai) + len(next_ai)
             await TagLibraryTagService.replace_tags(
                 library_id=library_id,
                 tenant_id=library.tenant_id,
                 user_id=self.login_user.user_id,
+                system_tags=next_system,
                 manual_tags=next_manual,
                 ai_tags=next_ai,
             )
@@ -480,6 +499,6 @@ class KnowledgeSpaceTagLibraryService:
                 raise KnowledgeSpaceTagLibraryNotExistError()
             if library.owner_knowledge_id is not None:
                 raise KnowledgeSpaceTagLibraryInvalidError(message="无效的标签库")
-            manual, ai = await TagLibraryTagService.list_tag_names(library_id)
-            if not manual and not ai and not (library.tags or library.ai_tags):
+            system, manual, ai = await TagLibraryTagService.list_tag_names(library_id)
+            if not system and not manual and not ai and not (library.tags or library.ai_tags):
                 raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须绑定非空标签库")

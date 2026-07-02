@@ -25,10 +25,64 @@ class TagLibraryTagService:
 
     @classmethod
     async def list_tags(cls, library_id: int) -> list[Tag]:
-        return await TagDao.get_tags_by_business(
+        tags = await TagDao.get_tags_by_business(
             TagBusinessTypeEnum.TAG_LIBRARY,
             cls._business_id(library_id),
         )
+        return await cls._repair_legacy_library_resource_types(tags)
+
+    @classmethod
+    async def _repair_legacy_library_resource_types(cls, tags: list[Tag]) -> list[Tag]:
+        """Upgrade pre-2.6 libraries that stored every candidate as manual_tag.
+
+        Old ``replace_tags`` wrote all non-AI library tags with ``manual_tag`` while the
+        product treated them as system tags in the UI. Once display mapping was fixed,
+        those rows looked like human/manual tags. Only auto-repair libraries that still
+        have *no* ``system_tag`` rows (mixed libraries already use the new model).
+        """
+        if not tags:
+            return tags
+        if any(tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value for tag in tags):
+            return tags
+
+        legacy_manual = [
+            tag for tag in tags if tag.resource_type == TagResourceTypeEnum.MANUAL_TAG.value and tag.id is not None
+        ]
+        if not legacy_manual:
+            return tags
+
+        async with get_async_db_session() as session:
+            for tag in legacy_manual:
+                tag.resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
+                session.add(tag)
+            await session.commit()
+
+        for tag in legacy_manual:
+            tag.resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
+        return tags
+
+    @classmethod
+    def _repair_legacy_library_resource_types_sync(cls, tags: list[Tag]) -> list[Tag]:
+        if not tags:
+            return tags
+        if any(tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value for tag in tags):
+            return tags
+
+        legacy_manual = [
+            tag for tag in tags if tag.resource_type == TagResourceTypeEnum.MANUAL_TAG.value and tag.id is not None
+        ]
+        if not legacy_manual:
+            return tags
+
+        with get_sync_db_session() as session:
+            for tag in legacy_manual:
+                tag.resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
+                session.add(tag)
+            session.commit()
+
+        for tag in legacy_manual:
+            tag.resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
+        return tags
 
     @staticmethod
     def _file_resource_types(library_resource_type: str) -> list[str]:
@@ -45,16 +99,31 @@ class TagLibraryTagService:
         cls,
         *,
         tags: list[Tag],
+        system_tags: list[str] | None = None,
         manual_tags: list[str] | None = None,
         ai_tags: list[str] | None = None,
     ) -> list[tuple[str, str]]:
         if tags:
             return [(tag.name or "", tag.resource_type) for tag in tags if tag.name]
         items: list[tuple[str, str]] = [
-            (name, TagResourceTypeEnum.MANUAL_TAG.value) for name in (manual_tags or []) if name
+            (name, TagResourceTypeEnum.SYSTEM_TAG.value) for name in (system_tags or []) if name
         ]
+        items.extend((name, TagResourceTypeEnum.MANUAL_TAG.value) for name in (manual_tags or []) if name)
         items.extend((name, TagResourceTypeEnum.AI_AUTO_TAG.value) for name in (ai_tags or []) if name)
         return items
+
+    @staticmethod
+    def _existing_tag_meta(
+        existing_meta: dict[tuple[str, str], tuple],
+        name: str,
+        resource_type: str,
+    ) -> tuple:
+        if (name, resource_type) in existing_meta:
+            return existing_meta[(name, resource_type)]
+        for alt_type in (TagResourceTypeEnum.SYSTEM_TAG.value, TagResourceTypeEnum.MANUAL_TAG.value):
+            if alt_type != resource_type and (name, alt_type) in existing_meta:
+                return existing_meta[(name, alt_type)]
+        return None, None
 
     @classmethod
     async def _resolve_file_tag_ids(
@@ -177,12 +246,18 @@ class TagLibraryTagService:
         *,
         library_id: int,
         tenant_id: int | None,
+        system_tags: list[str] | None = None,
         manual_tags: list[str] | None = None,
         ai_tags: list[str] | None = None,
     ) -> int:
         """Sum per-tag usage counts (matches tag dialog column semantics)."""
         tags = await cls.list_tags(library_id)
-        items = cls._library_usage_items(tags=tags, manual_tags=manual_tags, ai_tags=ai_tags)
+        items = cls._library_usage_items(
+            tags=tags,
+            system_tags=system_tags,
+            manual_tags=manual_tags,
+            ai_tags=ai_tags,
+        )
         if not items or tenant_id is None:
             return 0
         usage_map = await cls.count_usage_batch(items=items, tenant_id=tenant_id)
@@ -192,11 +267,13 @@ class TagLibraryTagService:
     async def list_tag_names(
         cls,
         library_id: int,
-    ) -> tuple[list[str], list[str]]:
-        tags = await TagDao.get_tags_by_business(
-            TagBusinessTypeEnum.TAG_LIBRARY,
-            cls._business_id(library_id),
-        )
+    ) -> tuple[list[str], list[str], list[str]]:
+        tags = await cls.list_tags(library_id)
+        system = [
+            (tag.name or "").strip()
+            for tag in tags
+            if tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value and (tag.name or "").strip()
+        ]
         manual = [
             (tag.name or "").strip()
             for tag in tags
@@ -207,10 +284,10 @@ class TagLibraryTagService:
             for tag in tags
             if tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG.value and (tag.name or "").strip()
         ]
-        return manual, ai
+        return system, manual, ai
 
     @classmethod
-    def list_tag_names_sync(cls, library_id: int) -> tuple[list[str], list[str]]:
+    def list_tag_names_sync(cls, library_id: int) -> tuple[list[str], list[str], list[str]]:
 
         statement = select(Tag).where(
             Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
@@ -218,6 +295,12 @@ class TagLibraryTagService:
         )
         with get_sync_db_session() as session:
             tags = session.exec(statement).all()
+        tags = cls._repair_legacy_library_resource_types_sync(list(tags))
+        system = [
+            (tag.name or "").strip()
+            for tag in tags
+            if tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value and (tag.name or "").strip()
+        ]
         manual = [
             (tag.name or "").strip()
             for tag in tags
@@ -228,12 +311,16 @@ class TagLibraryTagService:
             for tag in tags
             if tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG.value and (tag.name or "").strip()
         ]
-        return manual, ai
+        return system, manual, ai
+
+    @classmethod
+    def non_ai_tag_names(cls, system_tags: list[str], manual_tags: list[str]) -> list[str]:
+        return list(dict.fromkeys([*(system_tags or []), *(manual_tags or [])]))
 
     @classmethod
     async def count_tags(cls, library_id: int) -> int:
-        manual, ai = await cls.list_tag_names(library_id)
-        return len(manual) + len(ai)
+        system, manual, ai = await cls.list_tag_names(library_id)
+        return len(system) + len(manual) + len(ai)
 
     @classmethod
     async def find_names_used_in_other_libraries(
@@ -270,10 +357,12 @@ class TagLibraryTagService:
         library_id: int,
         tenant_id: int | None,
         user_id: int,
-        manual_tags: Iterable[str],
+        system_tags: Iterable[str] | None = None,
+        manual_tags: Iterable[str] | None = None,
         ai_tags: Iterable[str] | None = None,
-    ) -> tuple[list[str], list[str]]:
-        manual = cls._normalize_names(manual_tags)
+    ) -> tuple[list[str], list[str], list[str]]:
+        system = cls._normalize_names(system_tags or [])
+        manual = cls._normalize_names(manual_tags or [])
         ai = cls._normalize_names(ai_tags or [])
         async with get_async_db_session() as session:
             existing = (
@@ -292,9 +381,24 @@ class TagLibraryTagService:
                 )
             )
             now = datetime.now()
+            for name in system:
+                resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
+                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                session.add(
+                    Tag(
+                        name=name,
+                        tenant_id=tenant_id,
+                        user_id=prev_user_id or user_id,
+                        business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+                        business_id=cls._business_id(library_id),
+                        resource_type=resource_type,
+                        create_time=prev_create_time or now,
+                        update_time=now,
+                    )
+                )
             for name in manual:
                 resource_type = TagResourceTypeEnum.MANUAL_TAG.value
-                prev_create_time, prev_user_id = existing_meta.get((name, resource_type), (None, None))
+                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
                 session.add(
                     Tag(
                         name=name,
@@ -309,7 +413,7 @@ class TagLibraryTagService:
                 )
             for name in ai:
                 resource_type = TagResourceTypeEnum.AI_AUTO_TAG.value
-                prev_create_time, prev_user_id = existing_meta.get((name, resource_type), (None, None))
+                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
                 session.add(
                     Tag(
                         name=name,
@@ -323,7 +427,7 @@ class TagLibraryTagService:
                     )
                 )
             await session.commit()
-        return manual, ai
+        return system, manual, ai
 
     @classmethod
     async def delete_for_library(cls, library_id: int) -> None:

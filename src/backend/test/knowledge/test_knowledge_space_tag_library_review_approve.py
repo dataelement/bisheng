@@ -93,13 +93,14 @@ async def test_append_review_tag_adds_ai_tag_to_bound_library():
 
     with (
         patch.object(service, "validate_library_bound_to_knowledge", new=AsyncMock()),
+        patch.object(service, "_ensure_global_tag_names_available", new=AsyncMock()),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aget",
             new=AsyncMock(return_value=library),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.list_tag_names",
-            new=AsyncMock(return_value=(["合同"], [])),
+            new=AsyncMock(return_value=(["合同"], [], [])),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.replace_tags",
@@ -121,13 +122,62 @@ async def test_append_review_tag_adds_ai_tag_to_bound_library():
         library_id=10,
         tenant_id=1,
         user_id=1,
-        manual_tags=["合同"],
+        system_tags=["合同"],
+        manual_tags=[],
         ai_tags=["AI助手功能"],
     )
     update_library.assert_awaited_once_with(
         10,
         tags=["合同"],
         ai_tags=["AI助手功能"],
+        tag_count=2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_append_review_tag_adds_manual_tag_to_bound_library():
+    service = KnowledgeSpaceTagLibraryService(_login_user())
+    library = _library(tags=["合同"], ai_tags=[])
+
+    with (
+        patch.object(service, "validate_library_bound_to_knowledge", new=AsyncMock()),
+        patch.object(service, "_ensure_global_tag_names_available", new=AsyncMock()),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=library),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.list_tag_names",
+            new=AsyncMock(return_value=(["合同"], [], [])),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.replace_tags",
+            new=AsyncMock(),
+        ) as replace_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aupdate",
+            new=AsyncMock(),
+        ) as update_library,
+    ):
+        await service.append_review_tag(
+            library_id=10,
+            knowledge_id=100,
+            tag_name="人工新标签",
+            review_resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
+        )
+
+    replace_tags.assert_awaited_once_with(
+        library_id=10,
+        tenant_id=1,
+        user_id=1,
+        system_tags=["合同"],
+        manual_tags=["人工新标签"],
+        ai_tags=[],
+    )
+    update_library.assert_awaited_once_with(
+        10,
+        tags=["合同", "人工新标签"],
+        ai_tags=[],
         tag_count=2,
     )
 

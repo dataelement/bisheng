@@ -110,6 +110,7 @@ export async function updateKnowledgeSpaceTagLibraryApi(
     name?: string
     description?: string
     tags?: string[]
+    manual_tags?: string[]
     ai_tags?: string[]
   },
 ): Promise<KnowledgeSpaceTagLibraryDetail> {

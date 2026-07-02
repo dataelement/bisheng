@@ -2004,8 +2004,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not library:
                 continue
             if library.owner_knowledge_id is not None and library.owner_knowledge_id == result.id:
-                manual, _ai = await TagLibraryTagService.list_tag_names(library_id)
-                custom_tags.extend(manual or list(library.tags or []))
+                system, manual, _ai = await TagLibraryTagService.list_tag_names(library_id)
+                custom_tags.extend(TagLibraryTagService.non_ai_tag_names(system, manual) or list(library.tags or []))
             else:
                 public_ids.append(library_id)
 
