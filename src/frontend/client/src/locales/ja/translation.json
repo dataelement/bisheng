@@ -1591,6 +1591,7 @@
     "collapse": "折りたたむ",
     "select_auto_tag_library": "タグライブラリを選択してください",
     "knowledge_space": "ナレッジスペース",
+    "knowledge_square": "ナレッジ広場",
     "load_doc_failed": "ドキュメントの読み込みに失敗しました",
     "load_file_failed": "ファイルの読み込みに失敗しました",
     "load_file_list_failed": "ファイル一覧の読み込みに失敗しました",
