@@ -5,6 +5,7 @@ import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
+import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { TopBar } from "./TopBar";
 
 interface RichKnowledgePreviewProps {
@@ -98,7 +99,7 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
         }
         setLoading(true);
         setError("");
-        fetch(fileUrl)
+        fetch(resolveKnowledgePreviewUrl(fileUrl))
             .then((response) => {
                 if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 return response.text();
@@ -152,7 +153,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
         }
         setLoading(true);
         setError("");
-        fetch(fileUrl)
+        fetch(resolveKnowledgePreviewUrl(fileUrl))
             .then((response) => {
                 if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 return response.text();
@@ -217,8 +218,11 @@ export function RichKnowledgePreview({
     const localize = useLocalize();
     const isMedia = isMediaPreview(preview);
     const isVideo = isVideoPreview(preview);
-    const mediaTextUrl = preview.preview_url && !isMediaUrl(preview.preview_url) ? preview.preview_url : "";
-    const webLinkMarkdownUrl = preview.preview_url || preview.original_url || "";
+    const mediaTextUrl = preview.preview_url && !isMediaUrl(preview.preview_url)
+        ? resolveKnowledgePreviewUrl(preview.preview_url)
+        : "";
+    const webLinkMarkdownUrl = resolveKnowledgePreviewUrl(preview.preview_url || preview.original_url || "");
+    const mediaPlaybackUrl = resolveKnowledgePreviewUrl(preview.original_url || "");
 
     const title = useMemo(() => {
         if (preview.file_source === "web_link") {
@@ -245,11 +249,11 @@ export function RichKnowledgePreview({
                             {isVideo ? (
                                 <video
                                     className="max-h-[420px] w-full rounded-[6px] bg-black"
-                                    src={preview.original_url}
+                                    src={mediaPlaybackUrl}
                                     controls
                                 />
                             ) : (
-                                <audio className="w-full" src={preview.original_url} controls />
+                                <audio className="w-full" src={mediaPlaybackUrl} controls />
                             )}
                         </section>
                         {mediaTextUrl ? <MediaTranscriptTabs fileUrl={mediaTextUrl} /> : null}

@@ -16,6 +16,7 @@ import { PermissionDialog } from "~/components/permission";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
 import FilePreview from "./index";
 import { RichKnowledgePreview } from "./RichKnowledgePreview";
+import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { useLocalize } from "~/hooks";
 
 /**
@@ -35,13 +36,6 @@ function extractExtFromUrl(url: string, fallback: string): string {
         // Parsing failed, use fallback
     }
     return fallback;
-}
-
-function resolvePreviewUrl(url: string): string {
-    if (!url) return "";
-    return /^https?:\/\//.test(url)
-        ? url
-        : `${window.location.origin}${__APP_ENV__.BASE_URL}${url}`;
 }
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
@@ -87,9 +81,9 @@ export default function FilePreviewPage() {
             .then((data) => {
                 const resolvedPreview = {
                     ...data,
-                    original_url: resolvePreviewUrl(data.original_url),
-                    preview_url: resolvePreviewUrl(data.preview_url),
-                    html_preview_url: resolvePreviewUrl(data.html_preview_url),
+                    original_url: resolveKnowledgePreviewUrl(data.original_url),
+                    preview_url: resolveKnowledgePreviewUrl(data.preview_url),
+                    html_preview_url: resolveKnowledgePreviewUrl(data.html_preview_url),
                 };
                 setPreviewData(resolvedPreview);
 
@@ -118,7 +112,7 @@ export default function FilePreviewPage() {
                     return;
                 }
 
-                setFileUrl(resolvePreviewUrl(chosenUrl));
+                setFileUrl(resolveKnowledgePreviewUrl(chosenUrl));
                 setFileType(ext);
             })
             .catch((err) => console.error("Failed to load preview URL:", err))
