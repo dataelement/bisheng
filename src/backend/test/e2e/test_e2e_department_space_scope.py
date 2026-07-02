@@ -73,6 +73,42 @@ def _assert_200(resp: httpx.Response):
     return body.get("data")
 
 
+class _FakeResp:
+    def __init__(self, status_code: int, body: dict):
+        self.status_code = status_code
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def _get_department_tree(client: httpx.Client, token: str):
+    """F038/T012: the eager ``GET /departments/tree`` was removed — rebuild the
+    same nested, scope-filtered tree from the lazy ``GET /departments/children``."""
+    headers = _auth(token)
+
+    def _layer(parent_id):
+        params = {} if parent_id is None else {"parent_id": parent_id}
+        return client.get(f"{API_BASE}/departments/children", headers=headers, params=params)
+
+    root = _layer(None)
+    if root.status_code != 200:
+        return root
+    body = root.json()
+    if body.get("status_code") != 200:
+        return _FakeResp(200, body)
+
+    def _build(nodes):
+        out = []
+        for n in nodes:
+            node = dict(n)
+            node["children"] = _build(_layer(node["id"]).json().get("data") or []) if node.get("has_children") else []
+            out.append(node)
+        return out
+
+    return _FakeResp(200, {"status_code": 200, "status_message": "SUCCESS", "data": _build(body.get("data") or [])})
+
+
 def _assert_denied(resp: httpx.Response):
     assert resp.status_code == 200, f"HTTP {resp.status_code}: {resp.text[:300]}"
     body = resp.json()
@@ -176,7 +212,7 @@ def _preclean_prefixed(client: httpx.Client, token: str) -> None:
         if (sp.get("name") or "").startswith(PREFIX) and sp.get("id") is not None:
             client.delete(f"{API_BASE}/knowledge/space/{sp['id']}", headers=_auth(token))
 
-    tree = _assert_200(client.get(f"{API_BASE}/departments/tree", headers=_auth(token)))
+    tree = _assert_200(_get_department_tree(client, token))
     stale: list[dict] = []
 
     def _collect(nodes):
@@ -224,7 +260,7 @@ def env(client, admin_token):
 
     run = uuid.uuid4().hex[:6]
     _preclean_prefixed(client, admin_token)
-    tree = _assert_200(client.get(f"{API_BASE}/departments/tree", headers=_auth(admin_token)))
+    tree = _assert_200(_get_department_tree(client, admin_token))
     root_id = int(tree[0]["id"])
 
     parent = _create_dept(client, admin_token, f"{PREFIX}{run}-parent", root_id)

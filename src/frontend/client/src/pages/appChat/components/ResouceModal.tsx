@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "~/api/apps";
 import { Dialog, DialogContent } from "~/components";
 import FileViewPanne from "~/components/PreviewFile";
+import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { downloadFile } from "~/utils";
@@ -47,7 +48,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     }, [])
 
     return <div className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto" style={{ display: fullScreen ? 'none' : 'block' }}>
-        <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
+        <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}></p>
     </div>
 }
 

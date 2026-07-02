@@ -1,7 +1,7 @@
 import Cookies from 'js-cookie';
 import { getBysConfigApi } from '~/api/apps';
 import { Filled, Outlined } from 'bisheng-icons';
-import { LayoutDashboard, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components/ui/Button';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import store from '~/store';
 
@@ -140,16 +141,9 @@ function Sidebar({
     || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
     || Boolean(plugins?.includes('admin'));
 
-  // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
-  const portalAdminUrl =
-    bsConfig?.shougang?.portal_admin_url
-    ?? window.__SHOUGANG_PORTAL_ADMIN_URL__;
-  const showShougangPortalTab =
-    user?.role === 'admin' && !isMobile && Boolean(portalAdminUrl);
-
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo<Array<{
-    section: 'home' | 'apps' | 'channel' | 'knowledge' | 'portal-admin';
+    section: 'home' | 'apps' | 'channel' | 'knowledge';
     to: string;
     icon: React.ReactNode;
     label: string;
@@ -199,23 +193,14 @@ function Sidebar({
         isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps') || menuUnavailablePlugin === 'apps',
         closeDrawerOnNavigate: true,
       },
-      {
-        section: 'portal-admin' as const,
-        to: '/shougang-portal-admin',
-        icon: <LayoutDashboard />,
-        label: localize('com_nav_portal_admin'),
-        isActive: pathname.startsWith('/shougang-portal-admin'),
-        closeDrawerOnNavigate: true,
-      },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
       if (l.section === 'apps') return showAppsTab;
       if (l.section === 'channel') return showSubscriptionTab;
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-      if (l.section === 'portal-admin') return showShougangPortalTab;
       return true;
     });
-  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
+  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -335,6 +320,7 @@ export default function MainLayout() {
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
   /** 订阅 / 应用中心 / 应用对话：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
   const innerScrollShell =
+    /^\/(c|linsight)(\/|$)/.test(pathname) ||
     isChannelRoute ||
     isAppChatRoute ||
     (isAppsArea && !isAppsExploreRoute);
@@ -403,6 +389,17 @@ export default function MainLayout() {
     }
     setNoticeDismissed(true);
   };
+
+  // Themed startup spinner while the user query is in flight — identical to the
+  // platform app's LoadingIcon (same size/centering) so the platform→client
+  // hand-off shows no size/position jump, instead of a blank flash.
+  if (isUserLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white">
+        <LoadingIcon className="w-48 text-primary" />
+      </div>
+    );
+  }
 
   // Don't render any page content until the user is authenticated.
   // This prevents the flash of empty-state pages for unauthenticated visitors.

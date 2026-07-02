@@ -376,6 +376,41 @@ def _primary_department_id_map_for_user_ids(user_ids: list[int]) -> dict[int, in
     return out
 
 
+def _parse_dept_path_ids(path: str | None) -> list[int]:
+    """Ancestor→self id chain from a materialized path ``/1/21/106/`` → ``[1, 21, 106]``."""
+    ids: list[int] = []
+    for part in str(path or "").split("/"):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    return ids
+
+
+async def _department_path_label_map(dept_ids: list[int]) -> dict[int, str]:
+    """{department.id -> ``总公司/研发部/平台组``} for the given departments.
+
+    F038: lets ``/user/list`` return each user's primary-department full path so
+    the picker doesn't fire one path-tree call per distinct department. Ancestor
+    names not among the requested ids are loaded in a single extra batched query.
+    """
+    ids = [int(x) for x in dict.fromkeys(dept_ids) if x is not None]
+    if not ids:
+        return {}
+    from bisheng.database.models.department import DepartmentDao
+
+    depts = await DepartmentDao.aget_by_ids(ids) or []
+    id_to_name = {d.id: d.name for d in depts}
+    ancestor_ids = {i for d in depts for i in _parse_dept_path_ids(getattr(d, "path", None)) if i not in id_to_name}
+    if ancestor_ids:
+        for ancestor in await DepartmentDao.aget_by_ids(list(ancestor_ids)) or []:
+            id_to_name[ancestor.id] = ancestor.name
+    labels: dict[int, str] = {}
+    for d in depts:
+        path_ids = _parse_dept_path_ids(getattr(d, "path", None))
+        labels[d.id] = "/".join(id_to_name.get(i) or f"#{i}" for i in path_ids) if path_ids else d.name
+    return labels
+
+
 @router.get("/user/list", status_code=201)
 async def list_user(
     *,
@@ -385,6 +420,7 @@ async def list_user(
     group_id: Annotated[list[int], Query()] = None,
     role_id: Annotated[list[int], Query()] = None,
     simple: bool = False,
+    with_department_path: bool = False,
     login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     groups = group_id
@@ -463,6 +499,12 @@ async def list_user(
 
     uid_list = [int(one.user_id) for one in users if getattr(one, "user_id", None) is not None]
     primary_dept_by_user = _primary_department_id_map_for_user_ids(uid_list)
+    # F038: resolve each primary department's full path once (batched) so the
+    # picker needn't fire a path-tree call per distinct department. Gated so the
+    # general user list pays nothing unless the caller opts in.
+    dept_path_by_id: dict[int, str] = {}
+    if with_department_path:
+        dept_path_by_id = await _department_path_label_map([d for d in primary_dept_by_user.values() if d is not None])
 
     # Parallelize avatar presigned-URL generation to avoid N serial MinIO round-trips
     import asyncio as _asyncio
@@ -476,7 +518,10 @@ async def list_user(
     group_dict = {}
     for one, avatar_url in zip(users, avatar_urls):
         one_data = one.model_dump()
-        one_data["department_id"] = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
+        primary_dept_id = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
+        one_data["department_id"] = primary_dept_id
+        if with_department_path:
+            one_data["department_path"] = dept_path_by_id.get(primary_dept_id) if primary_dept_id is not None else None
         one_data["avatar"] = avatar_url
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)

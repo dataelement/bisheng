@@ -5,7 +5,7 @@ Part of F002-department-tree.
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    or_,
     text,
     update,
 )
@@ -30,14 +31,14 @@ logger = logging.getLogger(__name__)
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 
-def _normalize_id_scalar_rows(rows) -> List[int]:
+def _normalize_id_scalar_rows(rows) -> list[int]:
     """Normalize SQLAlchemy/SQLModel scalar select rows to plain int ids.
 
     Depending on driver/version, ``select(Department.id)`` rows may be bare ints,
     ``Row((id,))``, or tuples — callers comparing to ``int(department_id)`` must
     not receive tuple elements inside sets (``5 in {(5,)}`` is False).
     """
-    out: List[int] = []
+    out: list[int] = []
     for row in rows or []:
         if isinstance(row, (list, tuple)):
             out.append(int(row[0]))
@@ -47,73 +48,86 @@ def _normalize_id_scalar_rows(rows) -> List[int]:
 
 
 class Department(SQLModelSerializable, table=True):
-    __tablename__ = 'department'
+    __tablename__ = "department"
 
-    id: Optional[int] = Field(
+    id: int | None = Field(
         default=None,
         sa_column=Column(Integer, primary_key=True, autoincrement=True),
     )
     dept_id: str = Field(
         sa_column=Column(
-            String(64), nullable=False, unique=True,
-            comment='Business key, e.g. BS@a3f7e',
+            String(64),
+            nullable=False,
+            unique=True,
+            comment="Business key, e.g. BS@a3f7e",
         ),
     )
     name: str = Field(
-        sa_column=Column(String(128), nullable=False, comment='Department name'),
+        sa_column=Column(String(128), nullable=False, comment="Department name"),
     )
-    parent_id: Optional[int] = Field(
+    parent_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=True, index=True,
-            comment='Parent department ID, NULL=root',
+            Integer,
+            nullable=True,
+            index=True,
+            comment="Parent department ID, NULL=root",
         ),
     )
-    tenant_id: Optional[int] = Field(
+    tenant_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=False,
-            server_default=text('1'), index=True,
-            comment='Tenant ID',
+            Integer,
+            nullable=False,
+            server_default=text("1"),
+            index=True,
+            comment="Tenant ID",
         ),
     )
     path: str = Field(
-        default='',
+        default="",
         sa_column=Column(
-            String(512), nullable=False,
-            server_default=text("''"), index=True,
-            comment='Materialized path /1/2/3/',
+            String(512),
+            nullable=False,
+            server_default=text("''"),
+            index=True,
+            comment="Materialized path /1/2/3/",
         ),
     )
     sort_order: int = Field(
         default=0,
         sa_column=Column(
-            Integer, nullable=False,
-            server_default=text('0'),
-            comment='Sort order among siblings',
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Sort order among siblings",
         ),
     )
     source: str = Field(
-        default='local',
+        default="local",
         sa_column=Column(
-            String(32), nullable=False,
+            String(32),
+            nullable=False,
             server_default=text("'local'"),
-            comment='Source: local/feishu/wecom/dingtalk',
+            comment="Source: local/feishu/wecom/dingtalk",
         ),
     )
-    external_id: Optional[str] = Field(
+    external_id: str | None = Field(
         default=None,
         sa_column=Column(
-            String(128), nullable=True,
-            comment='External department ID for sync',
+            String(128),
+            nullable=True,
+            comment="External department ID for sync",
         ),
     )
     status: str = Field(
-        default='active',
+        default="active",
         sa_column=Column(
-            String(16), nullable=False,
-            server_default=text("'active'"), index=True,
-            comment='Status: active/archived',
+            String(16),
+            nullable=False,
+            server_default=text("'active'"),
+            index=True,
+            comment="Status: active/archived",
         ),
     )
     # v2.5.1 F011: tenant mount point flag + linked tenant FK.
@@ -123,15 +137,19 @@ class Department(SQLModelSerializable, table=True):
     is_tenant_root: int = Field(
         default=0,
         sa_column=Column(
-            Integer, nullable=False, server_default=text('0'),
-            comment='1=Tenant mount point (Child Tenant root dept); v2.5.1 F011',
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="1=Tenant mount point (Child Tenant root dept); v2.5.1 F011",
         ),
     )
-    mounted_tenant_id: Optional[int] = Field(
+    mounted_tenant_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=True, index=True,
-            comment='FK→tenant.id when is_tenant_root=1 (v2.5.1 F011)',
+            Integer,
+            nullable=True,
+            index=True,
+            comment="FK→tenant.id when is_tenant_root=1 (v2.5.1 F011)",
         ),
     )
     # v2.5.1 F014: distinguishes "authoritatively removed by the SSO/HR source
@@ -142,9 +160,10 @@ class Department(SQLModelSerializable, table=True):
     is_deleted: int = Field(
         default=0,
         sa_column=Column(
-            SmallInteger, nullable=False,
-            server_default=text('0'),
-            comment='F014: 1=removed by SSO authoritative source',
+            SmallInteger,
+            nullable=False,
+            server_default=text("0"),
+            comment="F014: 1=removed by SSO authoritative source",
         ),
     )
     # v2.5.1 F014/F015 INV-T12: per-external_id high-water mark so that
@@ -153,157 +172,150 @@ class Department(SQLModelSerializable, table=True):
     last_sync_ts: int = Field(
         default=0,
         sa_column=Column(
-            BigInteger, nullable=False,
-            server_default=text('0'), index=True,
-            comment='F014/F015 INV-T12: latest Gateway/Celery sync ts',
+            BigInteger,
+            nullable=False,
+            server_default=text("0"),
+            index=True,
+            comment="F014/F015 INV-T12: latest Gateway/Celery sync ts",
         ),
     )
-    default_role_ids: Optional[list] = Field(
+    default_role_ids: list | None = Field(
         default=None,
         sa_column=Column(
-            JsonType, nullable=True,
-            comment='Default role IDs for department members',
+            JsonType,
+            nullable=True,
+            comment="Default role IDs for department members",
         ),
     )
     concurrent_session_limit: int = Field(
         default=0,
         sa_column=Column(
-            Integer, nullable=False,
-            server_default=text('0'),
-            comment='Dept-wide max concurrent daily-mode chat users; 0=unlimited (F030)',
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Dept-wide max concurrent daily-mode chat users; 0=unlimited (F030)",
         ),
     )
-    create_user: Optional[int] = Field(
+    create_user: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=True, comment='Creator user ID'),
+        sa_column=Column(Integer, nullable=True, comment="Creator user ID"),
     )
-    create_time: Optional[datetime] = Field(
+    create_time: datetime | None = Field(
         default=None,
         sa_column=Column(
-            DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP'),
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
         ),
     )
-    update_time: Optional[datetime] = Field(
+    update_time: datetime | None = Field(
         default=None,
         sa_column=Column(
-            DateTime, nullable=False,
+            DateTime,
+            nullable=False,
             server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 
-    __table_args__ = (
-        UniqueConstraint('source', 'external_id', name='uk_source_external_id'),
-    )
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uk_source_external_id"),)
 
 
 class UserDepartment(SQLModelSerializable, table=True):
-    __tablename__ = 'user_department'
+    __tablename__ = "user_department"
 
-    id: Optional[int] = Field(
+    id: int | None = Field(
         default=None,
         sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
     )
     user_id: int = Field(
         sa_column=Column(
             Integer,
-            ForeignKey('user.user_id', ondelete='CASCADE'),
+            ForeignKey("user.user_id", ondelete="CASCADE"),
             nullable=False,
             index=True,
-            comment='User ID',
+            comment="User ID",
         ),
     )
     department_id: int = Field(
         sa_column=Column(
             Integer,
-            ForeignKey('department.id', ondelete='CASCADE'),
+            ForeignKey("department.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
-            comment='Department ID',
+            comment="Department ID",
         ),
     )
     is_primary: int = Field(
         default=1,
         sa_column=Column(
-            SmallInteger, nullable=False,
-            server_default=text('1'),
-            comment='1=primary department, 0=secondary',
+            SmallInteger,
+            nullable=False,
+            server_default=text("1"),
+            comment="1=primary department, 0=secondary",
         ),
     )
     source: str = Field(
-        default='local',
+        default="local",
         sa_column=Column(
-            String(32), nullable=False,
+            String(32),
+            nullable=False,
             server_default=text("'local'"),
-            comment='Source: local/feishu/wecom/dingtalk',
+            comment="Source: local/feishu/wecom/dingtalk",
         ),
     )
-    create_time: Optional[datetime] = Field(
+    create_time: datetime | None = Field(
         default=None,
         sa_column=Column(
-            DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP'),
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
         ),
     )
 
-    __table_args__ = (
-        UniqueConstraint('user_id', 'department_id', name='uk_user_dept'),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "department_id", name="uk_user_dept"),)
 
 
 # ---------------------------------------------------------------------------
 # DAO: DepartmentDao
 # ---------------------------------------------------------------------------
 
+
 class DepartmentDao:
-
     @classmethod
-    def get_by_id(cls, dept_id: int) -> Optional[Department]:
+    def get_by_id(cls, dept_id: int) -> Department | None:
         with get_sync_db_session() as session:
-            return session.exec(
-                select(Department).where(Department.id == dept_id)
-            ).first()
+            return session.exec(select(Department).where(Department.id == dept_id)).first()
 
     @classmethod
-    async def aget_by_id(cls, dept_id: int) -> Optional[Department]:
+    async def aget_by_id(cls, dept_id: int) -> Department | None:
         async with get_async_db_session() as session:
-            result = await session.exec(
-                select(Department).where(Department.id == dept_id)
-            )
+            result = await session.exec(select(Department).where(Department.id == dept_id))
             return result.first()
 
     @classmethod
-    def get_by_dept_id(cls, dept_id: str) -> Optional[Department]:
+    def get_by_dept_id(cls, dept_id: str) -> Department | None:
         with get_sync_db_session() as session:
-            return session.exec(
-                select(Department).where(Department.dept_id == dept_id)
-            ).first()
+            return session.exec(select(Department).where(Department.dept_id == dept_id)).first()
 
     @classmethod
-    async def aget_by_ids(cls, dept_ids: List[int]) -> List[Department]:
+    async def aget_by_ids(cls, dept_ids: list[int]) -> list[Department]:
         if not dept_ids:
             return []
         async with get_async_db_session() as session:
-            result = await session.exec(
-                select(Department).where(Department.id.in_(dept_ids))
-            )
+            result = await session.exec(select(Department).where(Department.id.in_(dept_ids)))
             return result.all()
 
     @classmethod
-    def get_by_ids(cls, dept_ids: List[int]) -> List[Department]:
+    def get_by_ids(cls, dept_ids: list[int]) -> list[Department]:
         if not dept_ids:
             return []
         with get_sync_db_session() as session:
-            return session.exec(
-                select(Department).where(Department.id.in_(dept_ids))
-            ).all()
+            return session.exec(select(Department).where(Department.id.in_(dept_ids))).all()
 
     @classmethod
-    async def aget_by_dept_id(cls, dept_id: str) -> Optional[Department]:
+    async def aget_by_dept_id(cls, dept_id: str) -> Department | None:
         async with get_async_db_session() as session:
-            result = await session.exec(
-                select(Department).where(Department.dept_id == dept_id)
-            )
+            result = await session.exec(select(Department).where(Department.dept_id == dept_id))
             return result.first()
 
     @classmethod
@@ -344,100 +356,166 @@ class DepartmentDao:
             return dept
 
     @classmethod
-    def get_children(cls, parent_id: int) -> List[Department]:
+    def get_children(cls, parent_id: int) -> list[Department]:
         with get_sync_db_session() as session:
             return session.exec(
                 select(Department).where(
                     Department.parent_id == parent_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
             ).all()
 
     @classmethod
-    async def aget_children(cls, parent_id: int) -> List[Department]:
+    async def aget_children(cls, parent_id: int | None, include_archived: bool = False) -> list[Department]:
+        """Direct children of ``parent_id``, ordered by sort_order then id.
+
+        F038: ``parent_id=None`` returns the root layer (``parent_id IS NULL``) so
+        the lazy tree can fetch the tenant root(s) the same way it fetches any
+        layer. ``include_archived`` lets the management nav tree show archived
+        nodes (active+archived); pickers keep the default (active only).
+        """
+        async with get_async_db_session() as session:
+            parent_clause = Department.parent_id.is_(None) if parent_id is None else Department.parent_id == parent_id
+            stmt = select(Department).where(
+                parent_clause,
+                cls._status_clause(include_archived),
+            )
+            result = await session.exec(stmt.order_by(Department.sort_order, Department.id))
+            return result.all()
+
+    @staticmethod
+    def _status_clause(include_archived: bool):
+        """Status visibility clause: active(+archived). F038 helper."""
+        if include_archived:
+            return Department.status.in_(["active", "archived"])
+        return Department.status == "active"
+
+    @classmethod
+    async def aget_children_existence(cls, parent_ids: list[int], include_archived: bool = False) -> set[int]:
+        """Subset of ``parent_ids`` that have at least one visible child.
+
+        F038: batch ``has_children`` for a single rendered layer in ONE query
+        (``SELECT DISTINCT parent_id ... WHERE parent_id IN (...)``), avoiding an
+        N+1 EXISTS per node. ``parent_ids`` is one layer's worth of ids, so the
+        ``.in_()`` stays small (no DM large-bind-param trap, F038 design §5).
+        """
+        if not parent_ids:
+            return set()
+        async with get_async_db_session() as session:
+            stmt = (
+                select(Department.parent_id)
+                .where(
+                    Department.parent_id.in_(parent_ids),
+                    cls._status_clause(include_archived),
+                )
+                .distinct()
+            )
+            result = await session.exec(stmt)
+            return {int(r) for r in _normalize_id_scalar_rows(result.all())}
+
+    @classmethod
+    async def aget_by_name_like(
+        cls,
+        keyword: str,
+        path_prefixes: list[str] | None = None,
+        limit: int = 50,
+        include_archived: bool = False,
+    ) -> list[Department]:
+        """Department name substring search, scoped by materialized-path prefixes.
+
+        F038: ``path_prefixes`` is the caller's (Service-computed) visible scope —
+        ``None`` means unscoped (system admin); an EMPTY list means an empty scope
+        → no rows (fail-closed, so a caller's empty scope never degrades into an
+        unscoped tenant-wide search); a non-empty list restricts to
+        ``OR(path LIKE prefix%)``. The Service guards empty/whitespace keywords
+        (no full-table scan); ``limit`` caps the result (caller fetches ``limit+1``
+        to detect truncation).
+        """
+        if path_prefixes is not None and not path_prefixes:
+            return []
+        async with get_async_db_session() as session:
+            stmt = select(Department).where(
+                Department.name.like(f"%{keyword}%"),
+                cls._status_clause(include_archived),
+            )
+            if path_prefixes:
+                stmt = stmt.where(or_(*[Department.path.like(f"{p}%") for p in path_prefixes]))
+            stmt = stmt.order_by(Department.sort_order, Department.id).limit(limit)
+            result = await session.exec(stmt)
+            return result.all()
+
+    @classmethod
+    def get_subtree(cls, path_prefix: str) -> list[Department]:
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(Department).where(
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
+                )
+            ).all()
+
+    @classmethod
+    async def aget_subtree(cls, path_prefix: str) -> list[Department]:
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department).where(
-                    Department.parent_id == parent_id,
-                    Department.status == 'active',
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
                 )
             )
             return result.all()
 
     @classmethod
-    def get_subtree(cls, path_prefix: str) -> List[Department]:
-        with get_sync_db_session() as session:
-            return session.exec(
-                select(Department).where(
-                    Department.path.like(f'{path_prefix}%'),
-                    Department.status == 'active',
-                )
-            ).all()
-
-    @classmethod
-    async def aget_subtree(cls, path_prefix: str) -> List[Department]:
-        async with get_async_db_session() as session:
-            result = await session.exec(
-                select(Department).where(
-                    Department.path.like(f'{path_prefix}%'),
-                    Department.status == 'active',
-                )
-            )
-            return result.all()
-
-    @classmethod
-    def get_subtree_ids(cls, path_prefix: str) -> List[int]:
+    def get_subtree_ids(cls, path_prefix: str) -> list[int]:
         with get_sync_db_session() as session:
             raw = session.exec(
                 select(Department.id).where(
-                    Department.path.like(f'{path_prefix}%'),
-                    Department.status == 'active',
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
                 )
             ).all()
             return _normalize_id_scalar_rows(raw)
 
     @classmethod
-    async def aget_subtree_ids(cls, path_prefix: str) -> List[int]:
+    async def aget_subtree_ids(cls, path_prefix: str) -> list[int]:
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department.id).where(
-                    Department.path.like(f'{path_prefix}%'),
-                    Department.status == 'active',
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
                 )
             )
             return _normalize_id_scalar_rows(result.all())
 
     @classmethod
-    def get_all_active(cls) -> List[Department]:
+    def get_all_active(cls) -> list[Department]:
         with get_sync_db_session() as session:
-            return session.exec(
-                select(Department).where(Department.status == 'active')
-            ).all()
+            return session.exec(select(Department).where(Department.status == "active")).all()
 
     @classmethod
-    async def aget_all_active(cls) -> List[Department]:
+    async def aget_all_active(cls) -> list[Department]:
         async with get_async_db_session() as session:
-            result = await session.exec(
-                select(Department).where(Department.status == 'active')
-            )
+            result = await session.exec(select(Department).where(Department.status == "active"))
             return result.all()
 
     @classmethod
-    async def aget_active_by_tenant(cls, tenant_id: int) -> List[Department]:
+    async def aget_active_by_tenant(cls, tenant_id: int) -> list[Department]:
         """Get all active departments for a specific tenant."""
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department).where(
                     Department.tenant_id == tenant_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
             )
             return result.all()
 
     @classmethod
     async def aget_by_external_id(
-        cls, external_id: str, tenant_id: int,
-    ) -> Optional[Department]:
+        cls,
+        external_id: str,
+        tenant_id: int,
+    ) -> Department | None:
         """Get department by external_id within a tenant (for org sync)."""
         async with get_async_db_session() as session:
             result = await session.exec(
@@ -453,7 +531,7 @@ class DepartmentDao:
         with get_sync_db_session() as session:
             session.execute(
                 update(Department)
-                .where(Department.path.like(f'{old_prefix}%'))
+                .where(Department.path.like(f"{old_prefix}%"))
                 .values(path=func.replace(Department.path, old_prefix, new_prefix))
             )
             session.commit()
@@ -463,13 +541,43 @@ class DepartmentDao:
         async with get_async_db_session() as session:
             await session.execute(
                 update(Department)
-                .where(Department.path.like(f'{old_prefix}%'))
+                .where(Department.path.like(f"{old_prefix}%"))
                 .values(path=func.replace(Department.path, old_prefix, new_prefix))
             )
             await session.commit()
 
     @classmethod
-    def get_root_by_tenant(cls, tenant_id: int) -> Optional[Department]:
+    async def areparent_root_under(
+        cls,
+        dept_id: int,
+        old_path: str,
+        new_path: str,
+        new_parent_id: int,
+    ) -> int:
+        """Collapse a mis-rooted department subtree under ``new_parent_id``,
+        atomically.
+
+        Rewrites every row whose ``path`` starts with ``old_path`` (the
+        subtree, including the department itself) to the ``new_path``
+        prefix AND sets the department's own ``parent_id`` in one
+        transaction so path and parent never diverge. Mount state
+        (``is_tenant_root`` / ``mounted_tenant_id``) is untouched.
+
+        Used only by the single-root backfill script. Returns the number
+        of subtree rows whose path changed.
+        """
+        async with get_async_db_session() as session:
+            res = await session.execute(
+                update(Department)
+                .where(Department.path.like(f"{old_path}%"))
+                .values(path=func.replace(Department.path, old_path, new_path))
+            )
+            await session.execute(update(Department).where(Department.id == dept_id).values(parent_id=new_parent_id))
+            await session.commit()
+            return res.rowcount or 0
+
+    @classmethod
+    def get_root_by_tenant(cls, tenant_id: int) -> Department | None:
         """Get the root department for a specific tenant.
 
         Uses bypass_tenant_filter() at call site since this queries
@@ -480,31 +588,59 @@ class DepartmentDao:
                 select(Department).where(
                     Department.parent_id.is_(None),
                     Department.tenant_id == tenant_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
             ).first()
 
     @classmethod
-    async def aget_root_by_tenant(cls, tenant_id: int) -> Optional[Department]:
+    async def aget_root_by_tenant(cls, tenant_id: int) -> Department | None:
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department).where(
                     Department.parent_id.is_(None),
                     Department.tenant_id == tenant_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
             )
             return result.first()
 
     @classmethod
+    async def aget_tenant_root_via_pointer(
+        cls,
+        tenant_id: int,
+    ) -> Department | None:
+        """Resolve a tenant's root department via the authoritative
+        ``tenant.root_dept_id`` pointer instead of ``parent_id IS NULL``.
+
+        SSO sync must keep the platform at exactly one root, but while
+        legacy mis-rooted rows still exist (pre-backfill) a
+        ``parent_id IS NULL`` query is ambiguous — it returns an arbitrary
+        sibling root. The pointer set at init is unambiguous. Returns
+        ``None`` when the tenant has no ``root_dept_id`` yet (legacy
+        v2.5.0 env), letting callers fall back to the no-root behaviour.
+        """
+        from bisheng.database.models.tenant import Tenant
+
+        async with get_async_db_session() as session:
+            row = (await session.exec(select(Tenant.root_dept_id).where(Tenant.id == tenant_id))).first()
+            root_dept_id = row[0] if isinstance(row, tuple) else row
+            if root_dept_id is None:
+                return None
+            result = await session.exec(select(Department).where(Department.id == root_dept_id))
+            return result.first()
+
+    @classmethod
     def check_name_duplicate(
-        cls, parent_id: int, name: str, exclude_id: Optional[int] = None,
+        cls,
+        parent_id: int,
+        name: str,
+        exclude_id: int | None = None,
     ) -> bool:
         with get_sync_db_session() as session:
             stmt = select(Department).where(
                 Department.parent_id == parent_id,
                 Department.name == name,
-                Department.status == 'active',
+                Department.status == "active",
             )
             if exclude_id is not None:
                 stmt = stmt.where(Department.id != exclude_id)
@@ -512,13 +648,16 @@ class DepartmentDao:
 
     @classmethod
     async def acheck_name_duplicate(
-        cls, parent_id: int, name: str, exclude_id: Optional[int] = None,
+        cls,
+        parent_id: int,
+        name: str,
+        exclude_id: int | None = None,
     ) -> bool:
         async with get_async_db_session() as session:
             stmt = select(Department).where(
                 Department.parent_id == parent_id,
                 Department.name == name,
-                Department.status == 'active',
+                Department.status == "active",
             )
             if exclude_id is not None:
                 stmt = stmt.where(Department.id != exclude_id)
@@ -530,7 +669,7 @@ class DepartmentDao:
     # -----------------------------------------------------------------------
 
     @classmethod
-    async def aget_mount_point(cls, dept_id: int) -> Optional[Department]:
+    async def aget_mount_point(cls, dept_id: int) -> Department | None:
         """Return the department only if it is flagged as a tenant mount point.
 
         Used by F011 mount conflict checks and F012 JWT leaf derivation.
@@ -546,8 +685,9 @@ class DepartmentDao:
 
     @classmethod
     async def aget_ancestors_with_mount(
-        cls, dept_id: int,
-    ) -> Optional[Department]:
+        cls,
+        dept_id: int,
+    ) -> Department | None:
         """Return the nearest ancestor (or self) that is a tenant mount point.
 
         Walks the materialized ``path`` column. Used by:
@@ -562,10 +702,10 @@ class DepartmentDao:
         if dept is None:
             return None
         # path is like "/1/2/3/"; split and keep non-empty numeric ids.
-        candidate_ids: List[int] = []
-        malformed_parts: List[str] = []
+        candidate_ids: list[int] = []
+        malformed_parts: list[str] = []
         if dept.path:
-            for part in dept.path.split('/'):
+            for part in dept.path.split("/"):
                 if not part:
                     continue
                 if part.isdigit():
@@ -579,8 +719,10 @@ class DepartmentDao:
             # it via a WARNING so ops can investigate instead of silently
             # returning "no mount ancestor".
             logger.warning(
-                'Malformed department path on dept_id=%s: %r (non-numeric: %s)',
-                dept_id, dept.path, malformed_parts,
+                "Malformed department path on dept_id=%s: %r (non-numeric: %s)",
+                dept_id,
+                dept.path,
+                malformed_parts,
             )
         # Include self: "self is a mount point" also counts.
         if dept_id not in candidate_ids:
@@ -601,7 +743,9 @@ class DepartmentDao:
 
     @classmethod
     async def aassert_reparent_legal(
-        cls, dept_id: int, new_parent_id: Optional[int],
+        cls,
+        dept_id: int,
+        new_parent_id: int | None,
     ) -> None:
         """INV-T1 (2-layer tenant lock) gate for every reparent path.
 
@@ -635,8 +779,9 @@ class DepartmentDao:
 
     @classmethod
     async def aget_descendant_mount(
-        cls, dept_id: int,
-    ) -> Optional['Department']:
+        cls,
+        dept_id: int,
+    ) -> Optional["Department"]:
         """Return one descendant (or self) of ``dept_id`` that carries
         ``is_tenant_root=1``, or None.
 
@@ -651,23 +796,25 @@ class DepartmentDao:
             return None
         async with get_async_db_session() as session:
             result = await session.exec(
-                select(Department).where(
-                    Department.path.like(f'{dept.path}%'),
+                select(Department)
+                .where(
+                    Department.path.like(f"{dept.path}%"),
                     Department.is_tenant_root == 1,
-                ).limit(1)
+                )
+                .limit(1)
             )
             return result.first()
 
     @classmethod
     async def aset_mount(
-        cls, dept_id: int, tenant_id: int,
+        cls,
+        dept_id: int,
+        tenant_id: int,
     ) -> None:
         """Mark ``dept_id`` as a tenant mount point pointing to ``tenant_id``."""
         async with get_async_db_session() as session:
             await session.execute(
-                update(Department)
-                .where(Department.id == dept_id)
-                .values(is_tenant_root=1, mounted_tenant_id=tenant_id)
+                update(Department).where(Department.id == dept_id).values(is_tenant_root=1, mounted_tenant_id=tenant_id)
             )
             await session.commit()
 
@@ -676,14 +823,12 @@ class DepartmentDao:
         """Clear mount flag + linked tenant on ``dept_id`` (unmount path)."""
         async with get_async_db_session() as session:
             await session.execute(
-                update(Department)
-                .where(Department.id == dept_id)
-                .values(is_tenant_root=0, mounted_tenant_id=None)
+                update(Department).where(Department.id == dept_id).values(is_tenant_root=0, mounted_tenant_id=None)
             )
             await session.commit()
 
     @classmethod
-    async def aget_user_admin_departments(cls, user_id: int) -> List[Department]:
+    async def aget_user_admin_departments(cls, user_id: int) -> list[Department]:
         """Get departments where user is admin via OpenFGA.
 
         Uses FGAClient.list_objects() which respects admin inheritance from parent.
@@ -703,14 +848,17 @@ class DepartmentDao:
             return []
         try:
             raw = await fga.list_objects(
-                user=f'user:{user_id}', relation='admin', type='department',
+                user=f"user:{user_id}",
+                relation="admin",
+                type="department",
             )
         except Exception:
             logger.warning(
-                'FGA list_objects failed for user %d department admin', user_id,
+                "FGA list_objects failed for user %d department admin",
+                user_id,
             )
             return []
-        dept_ids = [int(obj.split(':', 1)[1]) for obj in raw if ':' in obj]
+        dept_ids = [int(obj.split(":", 1)[1]) for obj in raw if ":" in obj]
         if not dept_ids:
             return []
         with bypass_tenant_filter():
@@ -722,8 +870,10 @@ class DepartmentDao:
 
     @classmethod
     async def aget_by_source_external_id(
-        cls, source: str, external_id: str,
-    ) -> Optional[Department]:
+        cls,
+        source: str,
+        external_id: str,
+    ) -> Department | None:
         """Get department by (source, external_id) — includes ``is_deleted=1``
         rows so that :class:`OrgSyncTsGuard` can observe the prior remove and
         honor INV-T12 (same ts with upsert vs remove → remove wins)."""
@@ -738,23 +888,21 @@ class DepartmentDao:
 
     @classmethod
     async def aget_active_synced_departments_by_source(
-        cls, source: str,
-    ) -> List[Department]:
+        cls,
+        source: str,
+    ) -> list[Department]:
         """Active departments with external_id for F014 full_snapshot absent reconcile."""
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department).where(
                     Department.source == source,
-                    Department.status == 'active',
+                    Department.status == "active",
                     Department.is_tenant_root == 0,
                     Department.external_id.isnot(None),  # type: ignore[union-attr]
                 )
             )
             rows = list(result.all())
-        return [
-            d for d in rows
-            if d.external_id and str(d.external_id).strip()
-        ]
+        return [d for d in rows if d.external_id and str(d.external_id).strip()]
 
     @classmethod
     async def aupsert_by_external_id(
@@ -763,7 +911,7 @@ class DepartmentDao:
         source: str,
         external_id: str,
         name: str,
-        parent_id: Optional[int],
+        parent_id: int | None,
         path: str,
         sort_order: int,
         last_sync_ts: int,
@@ -780,18 +928,18 @@ class DepartmentDao:
         """
 
         def final_path(parent_path: str, dept_id: int) -> str:
-            base = (parent_path or '').strip()
-            if base and not base.endswith('/'):
-                base = f'{base}/'
-            if not base.startswith('/'):
-                base = f'/{base}' if base else '/'
-            return f'{base}{dept_id}/'.replace('//', '/')
+            base = (parent_path or "").strip()
+            if base and not base.endswith("/"):
+                base = f"{base}/"
+            if not base.startswith("/"):
+                base = f"/{base}" if base else "/"
+            return f"{base}{dept_id}/".replace("//", "/")
 
         existing = await cls.aget_by_source_external_id(source, external_id)
         async with get_async_db_session() as session:
             if existing is None:
                 dept = Department(
-                    dept_id=f'{source.upper()}@{external_id}',
+                    dept_id=f"{source.upper()}@{external_id}",
                     name=name,
                     parent_id=parent_id,
                     tenant_id=tenant_id,
@@ -799,7 +947,7 @@ class DepartmentDao:
                     sort_order=sort_order,
                     source=source,
                     external_id=external_id,
-                    status='active',
+                    status="active",
                     is_deleted=0,
                     last_sync_ts=last_sync_ts,
                 )
@@ -819,7 +967,7 @@ class DepartmentDao:
                     parent_id=parent_id,
                     path=final_path(path, int(existing.id)),
                     sort_order=sort_order,
-                    status='active',
+                    status="active",
                     is_deleted=0,
                     last_sync_ts=last_sync_ts,
                 )
@@ -830,8 +978,11 @@ class DepartmentDao:
 
     @classmethod
     async def aarchive_by_external_id(
-        cls, source: str, external_id: str, last_sync_ts: int,
-    ) -> Optional[Department]:
+        cls,
+        source: str,
+        external_id: str,
+        last_sync_ts: int,
+    ) -> Department | None:
         """Soft-delete a department by (source, external_id) for F014 remove
         flow. Sets ``status='archived'``, ``is_deleted=1`` and bumps
         ``last_sync_ts`` atomically. Returns the pre-update row (so callers
@@ -846,7 +997,7 @@ class DepartmentDao:
                 update(Department)
                 .where(Department.id == existing.id)
                 .values(
-                    status='archived',
+                    status="archived",
                     is_deleted=1,
                     last_sync_ts=last_sync_ts,
                 )
@@ -861,45 +1012,47 @@ class DepartmentDao:
         tenant_id: int,
         path_prefix: str,
         exclude_id: int,
-    ) -> List[Department]:
+    ) -> list[Department]:
         """Active departments strictly under ``path_prefix`` (materialised path).
 
         Used when an SSO-archived parent must pull down local child departments
         (PRD §5 cascade).
         """
-        p = (path_prefix or '').strip()
+        p = (path_prefix or "").strip()
         if not p:
             return []
-        if not p.endswith('/'):
-            p = f'{p}/'
+        if not p.endswith("/"):
+            p = f"{p}/"
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department).where(
                     Department.tenant_id == tenant_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                     Department.id != exclude_id,
-                    Department.path.like(f'{p}%'),
+                    Department.path.like(f"{p}%"),
                 )
             )
             return list(result.all())
 
     @classmethod
     async def aarchive_by_id_sso_cascade(
-        cls, dept_id: int, last_sync_ts: int,
-    ) -> Optional[Department]:
+        cls,
+        dept_id: int,
+        last_sync_ts: int,
+    ) -> Department | None:
         """Archive a row by id for subtree cascade (no per-row ts guard)."""
         existing = await cls.aget_by_id(dept_id)
-        if existing is None or existing.status != 'active':
+        if existing is None or existing.status != "active":
             return None
         async with get_async_db_session() as session:
             await session.execute(
                 update(Department)
                 .where(
                     Department.id == dept_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
                 .values(
-                    status='archived',
+                    status="archived",
                     is_deleted=1,
                     last_sync_ts=last_sync_ts,
                 )
@@ -909,9 +1062,12 @@ class DepartmentDao:
 
     @classmethod
     async def aget_active_by_source_path_name(
-        cls, source: str, path: str, name: str,
-        exclude_id: Optional[int] = None,
-    ) -> List[Department]:
+        cls,
+        source: str,
+        path: str,
+        name: str,
+        exclude_id: int | None = None,
+    ) -> list[Department]:
         """F015 relink helper: active depts matching (source, path, name).
 
         Used by :class:`DepartmentRelinkService` to discover candidates
@@ -924,7 +1080,7 @@ class DepartmentDao:
                 Department.source == source,
                 Department.path == path,
                 Department.name == name,
-                Department.status == 'active',
+                Department.status == "active",
             )
             if exclude_id is not None:
                 stmt = stmt.where(Department.id != exclude_id)
@@ -933,7 +1089,9 @@ class DepartmentDao:
 
     @classmethod
     async def aupdate_external_id(
-        cls, dept_id: int, new_external_id: str,
+        cls,
+        dept_id: int,
+        new_external_id: str,
     ) -> bool:
         """F015 relink helper: rewrite a dept's external_id in place.
 
@@ -941,11 +1099,7 @@ class DepartmentDao:
         responsible for writing the audit_log entry around the rewrite.
         """
         async with get_async_db_session() as session:
-            stmt = (
-                update(Department)
-                .where(Department.id == dept_id)
-                .values(external_id=new_external_id)
-            )
+            stmt = update(Department).where(Department.id == dept_id).values(external_id=new_external_id)
             result = await session.execute(stmt)
             await session.commit()
             return result.rowcount > 0
@@ -955,12 +1109,15 @@ class DepartmentDao:
 # DAO: UserDepartmentDao
 # ---------------------------------------------------------------------------
 
-class UserDepartmentDao:
 
+class UserDepartmentDao:
     @classmethod
     def add_member(
-        cls, user_id: int, department_id: int,
-        is_primary: int = 1, source: str = 'local',
+        cls,
+        user_id: int,
+        department_id: int,
+        is_primary: int = 1,
+        source: str = "local",
     ) -> UserDepartment:
         with get_sync_db_session() as session:
             ud = UserDepartment(
@@ -976,8 +1133,11 @@ class UserDepartmentDao:
 
     @classmethod
     async def aadd_member(
-        cls, user_id: int, department_id: int,
-        is_primary: int = 1, source: str = 'local',
+        cls,
+        user_id: int,
+        department_id: int,
+        is_primary: int = 1,
+        source: str = "local",
     ) -> UserDepartment:
         async with get_async_db_session() as session:
             ud = UserDepartment(
@@ -992,14 +1152,14 @@ class UserDepartmentDao:
             return ud
 
     @classmethod
-    def batch_add_members(cls, entries: List[dict]) -> None:
+    def batch_add_members(cls, entries: list[dict]) -> None:
         with get_sync_db_session() as session:
             for entry in entries:
                 session.add(UserDepartment(**entry))
             session.commit()
 
     @classmethod
-    async def abatch_add_members(cls, entries: List[dict]) -> None:
+    async def abatch_add_members(cls, entries: list[dict]) -> None:
         async with get_async_db_session() as session:
             for entry in entries:
                 session.add(UserDepartment(**entry))
@@ -1034,9 +1194,12 @@ class UserDepartmentDao:
 
     @classmethod
     def get_members(
-        cls, department_id: int, page: int = 1, limit: int = 20,
-        keyword: str = '',
-    ) -> Tuple[List, int]:
+        cls,
+        department_id: int,
+        page: int = 1,
+        limit: int = 20,
+        keyword: str = "",
+    ) -> tuple[list, int]:
         """Return (rows, total) for department members with pagination.
 
         Each row is a UserDepartment joined with user info.
@@ -1059,22 +1222,21 @@ class UserDepartmentDao:
                 )
             )
             if keyword:
-                base = base.where(User.user_name.like(f'%{keyword}%'))
+                base = base.where(User.user_name.like(f"%{keyword}%"))
 
-            total = session.exec(
-                select(func.count()).select_from(base.subquery())
-            ).one()
+            total = session.exec(select(func.count()).select_from(base.subquery())).one()
 
-            rows = session.exec(
-                base.offset((page - 1) * limit).limit(limit)
-            ).all()
+            rows = session.exec(base.offset((page - 1) * limit).limit(limit)).all()
             return rows, total
 
     @classmethod
     async def aget_members(
-        cls, department_id: int, page: int = 1, limit: int = 20,
-        keyword: str = '',
-    ) -> Tuple[List, int]:
+        cls,
+        department_id: int,
+        page: int = 1,
+        limit: int = 20,
+        keyword: str = "",
+    ) -> tuple[list, int]:
         from bisheng.user.domain.models.user import User
 
         async with get_async_db_session() as session:
@@ -1093,16 +1255,12 @@ class UserDepartmentDao:
                 )
             )
             if keyword:
-                base = base.where(User.user_name.like(f'%{keyword}%'))
+                base = base.where(User.user_name.like(f"%{keyword}%"))
 
-            total_result = await session.exec(
-                select(func.count()).select_from(base.subquery())
-            )
+            total_result = await session.exec(select(func.count()).select_from(base.subquery()))
             total = total_result.one()
 
-            result = await session.exec(
-                base.offset((page - 1) * limit).limit(limit)
-            )
+            result = await session.exec(base.offset((page - 1) * limit).limit(limit))
             rows = result.all()
             return rows, total
 
@@ -1126,7 +1284,7 @@ class UserDepartmentDao:
             return result.one()
 
     @classmethod
-    async def aget_user_ids_for_department(cls, department_id: int) -> List[int]:
+    async def aget_user_ids_for_department(cls, department_id: int) -> list[int]:
         """All user_ids with a membership row on this department (any primary flag)."""
         async with get_async_db_session() as session:
             result = await session.exec(
@@ -1138,7 +1296,7 @@ class UserDepartmentDao:
             return [int(r[0]) for r in rows]
 
     @classmethod
-    def get_user_departments(cls, user_id: int) -> List[UserDepartment]:
+    def get_user_departments(cls, user_id: int) -> list[UserDepartment]:
         with get_sync_db_session() as session:
             return session.exec(
                 select(UserDepartment).where(
@@ -1147,7 +1305,7 @@ class UserDepartmentDao:
             ).all()
 
     @classmethod
-    async def aget_user_departments(cls, user_id: int) -> List[UserDepartment]:
+    async def aget_user_departments(cls, user_id: int) -> list[UserDepartment]:
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(UserDepartment).where(
@@ -1157,7 +1315,7 @@ class UserDepartmentDao:
             return result.all()
 
     @classmethod
-    def get_user_primary_department(cls, user_id: int) -> Optional[UserDepartment]:
+    def get_user_primary_department(cls, user_id: int) -> UserDepartment | None:
         with get_sync_db_session() as session:
             return session.exec(
                 select(UserDepartment).where(
@@ -1168,8 +1326,9 @@ class UserDepartmentDao:
 
     @classmethod
     async def aget_user_primary_department(
-        cls, user_id: int,
-    ) -> Optional[UserDepartment]:
+        cls,
+        user_id: int,
+    ) -> UserDepartment | None:
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(UserDepartment).where(
@@ -1180,7 +1339,7 @@ class UserDepartmentDao:
             return result.first()
 
     @classmethod
-    async def aget_by_user_ids(cls, user_ids: List[int]) -> List[UserDepartment]:
+    async def aget_by_user_ids(cls, user_ids: list[int]) -> list[UserDepartment]:
         """Batch load UserDepartment records for multiple users."""
         if not user_ids:
             return []
@@ -1193,7 +1352,7 @@ class UserDepartmentDao:
             return result.all()
 
     @classmethod
-    def get_by_user_ids(cls, user_ids: List[int]) -> List[UserDepartment]:
+    def get_by_user_ids(cls, user_ids: list[int]) -> list[UserDepartment]:
         """Batch load UserDepartment records for multiple users (sync)."""
         if not user_ids:
             return []
@@ -1213,8 +1372,10 @@ class UserDepartmentDao:
 
     @classmethod
     async def aget_membership(
-        cls, user_id: int, department_id: int,
-    ) -> Optional[UserDepartment]:
+        cls,
+        user_id: int,
+        department_id: int,
+    ) -> UserDepartment | None:
         """Return the exact (user_id, department_id) membership row or None."""
         async with get_async_db_session() as session:
             result = await session.exec(
@@ -1227,8 +1388,10 @@ class UserDepartmentDao:
 
     @classmethod
     async def aget_memberships_in_depts(
-        cls, user_id: int, department_ids: List[int],
-    ) -> List[UserDepartment]:
+        cls,
+        user_id: int,
+        department_ids: list[int],
+    ) -> list[UserDepartment]:
         """Batch lookup — returns every existing (user_id, dept_id) row whose
         dept_id is in the given list. Lets callers resolve the N+1 pattern
         around secondary-department assignment in a single query."""
@@ -1245,8 +1408,10 @@ class UserDepartmentDao:
 
     @classmethod
     async def aget_user_ids_by_department(
-        cls, department_id: int, is_primary: Optional[bool] = None,
-    ) -> List[int]:
+        cls,
+        department_id: int,
+        is_primary: bool | None = None,
+    ) -> list[int]:
         """F015: list user ids assigned to a department.
 
         ``is_primary=True`` returns only primary-department members,
@@ -1268,7 +1433,10 @@ class UserDepartmentDao:
 
     @classmethod
     async def aset_primary_flag(
-        cls, user_id: int, department_id: int, is_primary: int,
+        cls,
+        user_id: int,
+        department_id: int,
+        is_primary: int,
     ) -> None:
         """Flip the ``is_primary`` flag on an existing membership row."""
         async with get_async_db_session() as session:
@@ -1285,16 +1453,21 @@ class UserDepartmentDao:
     @classmethod
     def check_member_exists(cls, user_id: int, department_id: int) -> bool:
         with get_sync_db_session() as session:
-            return session.exec(
-                select(UserDepartment).where(
-                    UserDepartment.user_id == user_id,
-                    UserDepartment.department_id == department_id,
-                )
-            ).first() is not None
+            return (
+                session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == department_id,
+                    )
+                ).first()
+                is not None
+            )
 
     @classmethod
     async def acheck_member_exists(
-        cls, user_id: int, department_id: int,
+        cls,
+        user_id: int,
+        department_id: int,
     ) -> bool:
         async with get_async_db_session() as session:
             result = await session.exec(
@@ -1319,8 +1492,8 @@ class UserDepartmentDao:
         tenant_id: int,
         page: int = 1,
         page_size: int = 20,
-        keyword: Optional[str] = None,
-    ) -> Tuple[List[dict], int]:
+        keyword: str | None = None,
+    ) -> tuple[list[dict], int]:
         """Get users whose primary department is mounted under the tenant.
 
         Resolution rules (in order):
@@ -1341,18 +1514,12 @@ class UserDepartmentDao:
 
         async with get_async_db_session() as session:
             # Step 1: resolve tenant.root_dept_id (if set) → path prefix
-            root_path: Optional[str] = None
-            tenant_row = (
-                await session.exec(
-                    select(Tenant.root_dept_id).where(Tenant.id == tenant_id)
-                )
-            ).first()
+            root_path: str | None = None
+            tenant_row = (await session.exec(select(Tenant.root_dept_id).where(Tenant.id == tenant_id))).first()
             # session.exec with a column-tuple select returns the value
             # directly on SQLModel >=0.0.14, but on some versions returns a
             # 1-tuple Row. Normalise.
-            root_dept_id = (
-                tenant_row[0] if isinstance(tenant_row, tuple) else tenant_row
-            )
+            root_dept_id = tenant_row[0] if isinstance(tenant_row, tuple) else tenant_row
             if root_dept_id is not None:
                 path_row = (
                     await session.exec(
@@ -1361,13 +1528,11 @@ class UserDepartmentDao:
                         )
                     )
                 ).first()
-                root_path = (
-                    path_row[0] if isinstance(path_row, tuple) else path_row
-                )
+                root_path = path_row[0] if isinstance(path_row, tuple) else path_row
 
             # Step 2: build the subtree filter
             if root_path:
-                subtree_filter = Department.path.like(f'{root_path}%')
+                subtree_filter = Department.path.like(f"{root_path}%")
             else:
                 # Fallback: legacy flat model
                 subtree_filter = Department.tenant_id == tenant_id
@@ -1390,7 +1555,7 @@ class UserDepartmentDao:
                 )
             )
             if keyword:
-                like_pattern = f'%{keyword}%'
+                like_pattern = f"%{keyword}%"
                 count_stmt = count_stmt.where(
                     User.user_name.like(like_pattern),
                 )
@@ -1424,7 +1589,7 @@ class UserDepartmentDao:
                     User.user_name,
                     User.external_id,
                     User.avatar,
-                    UserTenant.last_access_time.label('join_time'),
+                    UserTenant.last_access_time.label("join_time"),
                 )
                 .join(uid_subq, uid_subq.c.user_id == User.user_id)
                 .outerjoin(
@@ -1435,7 +1600,7 @@ class UserDepartmentDao:
                 )
             )
             if keyword:
-                like_pattern = f'%{keyword}%'
+                like_pattern = f"%{keyword}%"
                 stmt = stmt.where(User.user_name.like(like_pattern))
             stmt = (
                 stmt.order_by(
@@ -1449,11 +1614,11 @@ class UserDepartmentDao:
 
             return [
                 {
-                    'user_id': row.user_id,
-                    'user_name': row.user_name,
-                    'external_id': row.external_id,
-                    'avatar': row.avatar,
-                    'join_time': row.join_time,
+                    "user_id": row.user_id,
+                    "user_name": row.user_name,
+                    "external_id": row.external_id,
+                    "avatar": row.avatar,
+                    "join_time": row.join_time,
                 }
                 for row in rows
             ], total
@@ -1467,7 +1632,9 @@ class UserDepartmentDao:
     # -----------------------------------------------------------------------
     @classmethod
     async def _aresolve_subtree_root_paths(
-        cls, session, tenant_ids: List[int],
+        cls,
+        session,
+        tenant_ids: list[int],
     ) -> dict:
         """Resolve ``tenant_id -> Department.path`` for the given tenants.
 
@@ -1476,6 +1643,7 @@ class UserDepartmentDao:
         ``Department.tenant_id == tenant_id`` semantic.
         """
         from bisheng.database.models.tenant import Tenant
+
         if not tenant_ids:
             return {}
         rows = (
@@ -1488,10 +1656,7 @@ class UserDepartmentDao:
         root_dept_to_tenant: dict = {}
         for row in rows:
             tid = row[0] if isinstance(row, (list, tuple)) else row.id
-            rdid = (
-                row[1] if isinstance(row, (list, tuple))
-                else row.root_dept_id
-            )
+            rdid = row[1] if isinstance(row, (list, tuple)) else row.root_dept_id
             if rdid is not None:
                 root_dept_to_tenant.setdefault(rdid, []).append(tid)
         if not root_dept_to_tenant:
@@ -1524,11 +1689,12 @@ class UserDepartmentDao:
 
         async with get_async_db_session() as session:
             paths = await cls._aresolve_subtree_root_paths(
-                session, [tenant_id],
+                session,
+                [tenant_id],
             )
             root_path = paths.get(tenant_id)
             if root_path:
-                subtree_filter = Department.path.like(f'{root_path}%')
+                subtree_filter = Department.path.like(f"{root_path}%")
             else:
                 subtree_filter = Department.tenant_id == tenant_id
             stmt = (
@@ -1554,7 +1720,8 @@ class UserDepartmentDao:
 
     @classmethod
     async def acount_users_by_tenant_subtree_batch(
-        cls, tenant_ids: List[int],
+        cls,
+        tenant_ids: list[int],
     ) -> dict:
         """Batch counterpart of ``acount_users_by_tenant_subtree``.
 
@@ -1575,7 +1742,7 @@ class UserDepartmentDao:
             for tid in tenant_ids:
                 root_path = paths.get(tid)
                 if root_path:
-                    subtree_filter = Department.path.like(f'{root_path}%')
+                    subtree_filter = Department.path.like(f"{root_path}%")
                 else:
                     subtree_filter = Department.tenant_id == tid
                 stmt = (

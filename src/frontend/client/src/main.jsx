@@ -64,6 +64,10 @@ if (__VCONSOLE_ENABLED__) {
   });
 }
 
+// Disable the browser context menu globally (right-click on desktop,
+// long-press callout on mobile WebView). Text selection is left intact.
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
 const container = document.getElementById('root');
 const root = createRoot(container);
 

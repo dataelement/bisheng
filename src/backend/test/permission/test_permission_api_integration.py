@@ -13,15 +13,15 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from bisheng.core.openfga.exceptions import FGAWriteError
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.openfga.exceptions import FGAWriteError
 from bisheng.permission.api.router import router as permission_router
 from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
 
 
 class _AdminUser:
     user_id = 1
-    user_name = 'admin'
+    user_name = "admin"
     tenant_id = 1
 
     def is_admin(self):
@@ -30,7 +30,7 @@ class _AdminUser:
 
 class _ViewerUser:
     user_id = 7
-    user_name = 'viewer'
+    user_name = "viewer"
     tenant_id = 1
 
     def is_admin(self):
@@ -39,7 +39,7 @@ class _ViewerUser:
 
 def _make_app(user_factory):
     app = FastAPI()
-    app.include_router(permission_router, prefix='/api/v1')
+    app.include_router(permission_router, prefix="/api/v1")
 
     async def get_user():
         return user_factory()
@@ -49,51 +49,57 @@ def _make_app(user_factory):
 
 
 class TestPermissionApiIntegration:
-
     def test_create_relation_model_rejects_duplicate_name(self):
         app = _make_app(_AdminUser)
-        state = [{
-            'id': 'custom_existing',
-            'name': '新关系测试',
-            'relation': 'viewer',
-            'grant_tier': 'usage',
-            'permissions': ['view_app'],
-            'permissions_explicit': True,
-            'is_system': False,
-        }]
+        state = [
+            {
+                "id": "custom_existing",
+                "name": "新关系测试",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": ["view_app"],
+                "permissions_explicit": True,
+                "is_system": False,
+            }
+        ]
 
         async def fake_get_relation_models():
             return deepcopy(state)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            side_effect=fake_get_relation_models,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
-            new_callable=AsyncMock,
-        ) as mock_save_relation_models:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                side_effect=fake_get_relation_models,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_relation_models",
+                new_callable=AsyncMock,
+            ) as mock_save_relation_models,
+        ):
             with TestClient(app) as client:
                 create_resp = client.post(
-                    '/api/v1/permissions/relation-models',
-                    json={'name': ' 新关系测试 ', 'relation': 'viewer', 'permissions': ['view_app']},
+                    "/api/v1/permissions/relation-models",
+                    json={"name": " 新关系测试 ", "relation": "viewer", "permissions": ["view_app"]},
                 )
                 body = create_resp.json()
 
-        assert body['status_code'] == 19006
+        assert body["status_code"] == 19006
         mock_save_relation_models.assert_not_awaited()
 
     def test_relation_model_update_round_trip_preserves_explicit_empty_permissions(self):
         app = _make_app(_AdminUser)
-        state = [{
-            'id': 'custom_empty',
-            'name': '空模型',
-            'relation': 'viewer',
-            'grant_tier': 'usage',
-            'permissions': ['view_app'],
-            'permissions_explicit': False,
-            'is_system': False,
-        }]
+        state = [
+            {
+                "id": "custom_empty",
+                "name": "空模型",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": ["view_app"],
+                "permissions_explicit": False,
+                "is_system": False,
+            }
+        ]
 
         async def fake_get_relation_models():
             return deepcopy(state)
@@ -102,594 +108,573 @@ class TestPermissionApiIntegration:
             state.clear()
             state.extend(deepcopy(models))
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            side_effect=fake_get_relation_models,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
-            new_callable=AsyncMock,
-            side_effect=fake_save_relation_models,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                side_effect=fake_get_relation_models,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_relation_models",
+                new_callable=AsyncMock,
+                side_effect=fake_save_relation_models,
+            ),
         ):
             with TestClient(app) as client:
                 update_resp = client.put(
-                    '/api/v1/permissions/relation-models/custom_empty',
-                    json={'name': '仍然为空', 'permissions': []},
+                    "/api/v1/permissions/relation-models/custom_empty",
+                    json={"name": "仍然为空", "permissions": []},
                 )
-                assert update_resp.json()['status_code'] == 200
+                assert update_resp.json()["status_code"] == 200
 
-                list_resp = client.get('/api/v1/permissions/relation-models')
+                list_resp = client.get("/api/v1/permissions/relation-models")
                 body = list_resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'] == [{
-            'id': 'custom_empty',
-            'name': '仍然为空',
-            'relation': 'viewer',
-            'grant_tier': 'usage',
-            'permissions': [],
-            'permissions_explicit': True,
-            'is_system': False,
-        }]
+        assert body["status_code"] == 200
+        assert body["data"] == [
+            {
+                "id": "custom_empty",
+                "name": "仍然为空",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": [],
+                "permissions_explicit": True,
+                "is_system": False,
+            }
+        ]
 
     def test_authorize_api_blocks_privilege_escalation_before_tuple_write(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'owner',
-                    'name': '所有者',
-                    'relation': 'owner',
-                    'grant_tier': 'owner',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ), patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value=set(),
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "owner",
+                        "name": "所有者",
+                        "relation": "owner",
+                        "grant_tier": "owner",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'owner',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "owner",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 19000
+        assert body["status_code"] == 19000
         mock_authorize.assert_not_awaited()
 
     def test_authorize_api_allows_app_usage_grant_by_permission_id_without_caller_level(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_app_viewer', 'view_app', 'use_app'},
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize, patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_app_viewer", "view_app", "use_app"},
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                            'model_id': 'viewer',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                                "model_id": "viewer",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
+        assert body["status_code"] == 200
         mock_get_permission_level.assert_not_awaited()
         mock_authorize.assert_awaited_once()
 
     def test_authorize_api_blocks_custom_model_with_permissions_outside_caller_set(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'custom_owner_manager',
-                    'name': '所有者管理',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': ['manage_app_owner'],
-                    'permissions_explicit': True,
-                    'is_system': False,
-                },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_app_viewer'},
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "custom_owner_manager",
+                        "name": "所有者管理",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": ["manage_app_owner"],
+                        "permissions_explicit": True,
+                        "is_system": False,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_app_viewer"},
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                            'model_id': 'custom_owner_manager',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                                "model_id": "custom_owner_manager",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 19000
+        assert body["status_code"] == 19000
         mock_authorize.assert_not_awaited()
 
     def test_authorize_api_blocks_self_owner_revoke_when_it_is_the_last_owner(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='owner',
-        ), patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={
-                'manage_app_owner',
-                'manage_app_manager',
-                'manage_app_viewer',
-                'view_app',
-                'use_app',
-                'edit_app',
-                'delete_app',
-                'publish_app',
-                'unpublish_app',
-                'share_app',
-            },
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=7,
-                    subject_name='viewer',
-                    relation='owner',
-                ),
-            ],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="owner",
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_app_owner",
+                    "manage_app_manager",
+                    "manage_app_viewer",
+                    "view_app",
+                    "use_app",
+                    "edit_app",
+                    "delete_app",
+                    "publish_app",
+                    "unpublish_app",
+                    "share_app",
+                },
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=7,
+                        subject_name="viewer",
+                        relation="owner",
+                    ),
+                ],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
                     json={
-                        'grants': [],
-                        'revokes': [{
-                            'subject_type': 'user',
-                            'subject_id': 7,
-                            'relation': 'owner',
-                        }],
+                        "grants": [],
+                        "revokes": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 7,
+                                "relation": "owner",
+                            }
+                        ],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 19000
+        assert body["status_code"] == 19000
         mock_authorize.assert_not_awaited()
 
     def test_authorize_api_allows_self_owner_revoke_when_another_owner_remains(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='owner',
-        ), patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={
-                'manage_app_owner',
-                'manage_app_manager',
-                'manage_app_viewer',
-                'view_app',
-                'use_app',
-                'edit_app',
-                'delete_app',
-                'publish_app',
-                'unpublish_app',
-                'share_app',
-            },
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=7,
-                    subject_name='viewer',
-                    relation='owner',
-                ),
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=9,
-                    subject_name='co-owner',
-                    relation='owner',
-                ),
-            ],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize, patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="owner",
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_app_owner",
+                    "manage_app_manager",
+                    "manage_app_viewer",
+                    "view_app",
+                    "use_app",
+                    "edit_app",
+                    "delete_app",
+                    "publish_app",
+                    "unpublish_app",
+                    "share_app",
+                },
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=7,
+                        subject_name="viewer",
+                        relation="owner",
+                    ),
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=9,
+                        subject_name="co-owner",
+                        relation="owner",
+                    ),
+                ],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
                     json={
-                        'grants': [],
-                        'revokes': [{
-                            'subject_type': 'user',
-                            'subject_id': 7,
-                            'relation': 'owner',
-                        }],
+                        "grants": [],
+                        "revokes": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 7,
+                                "relation": "owner",
+                            }
+                        ],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
+        assert body["status_code"] == 200
         mock_authorize.assert_awaited_once()
 
     def test_permissions_list_requires_can_edit_on_resource(self):
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
             new_callable=AsyncMock,
             return_value=set(),
         ) as mock_get_effective_permissions:
             with TestClient(app) as client:
-                resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
+                resp = client.get("/api/v1/permissions/resources/workflow/wf-1/permissions")
                 body = resp.json()
 
-        assert body['status_code'] == 19000
+        assert body["status_code"] == 19000
         mock_get_effective_permissions.assert_awaited_once()
 
     def test_permissions_list_includes_creator_owner_when_tuple_is_missing(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[{
-                'id': 'owner',
-                'name': '所有者',
-                'relation': 'owner',
-                'grant_tier': 'owner',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
-            }],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator',
-            new_callable=AsyncMock,
-            return_value=7,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "owner",
+                        "name": "所有者",
+                        "relation": "owner",
+                        "grant_tier": "owner",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    }
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=7,
+            ),
         ):
             with TestClient(app) as client:
-                resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
+                resp = client.get("/api/v1/permissions/resources/workflow/wf-1/permissions")
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'] == [{
-            'subject_type': 'user',
-            'subject_id': 7,
-            'subject_name': None,
-            'subject_group_names': None,
-            'subject_member_names': None,
-            'relation': 'owner',
-            'include_children': None,
-            'model_id': 'owner',
-            'model_name': '所有者',
-        }]
+        assert body["status_code"] == 200
+        assert body["data"] == [
+            {
+                "subject_type": "user",
+                "subject_id": 7,
+                "subject_name": None,
+                "subject_group_names": None,
+                "subject_member_names": None,
+                "relation": "owner",
+                "include_children": None,
+                "model_id": "owner",
+                "model_name": "所有者",
+            }
+        ]
 
     def test_knowledge_space_grant_subject_users_endpoint_returns_tenant_scoped_candidates(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
-            new_callable=AsyncMock,
-            return_value=3,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users',
-            new_callable=AsyncMock,
-            return_value=[{
-                'user_id': 8,
-                'user_name': 'Alice',
-                'primary_department_path': '总部/研发部',
-            }],
-        ) as mock_list_users:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id",
+                new_callable=AsyncMock,
+                return_value=3,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "user_id": 8,
+                        "user_name": "Alice",
+                        "primary_department_path": "总部/研发部",
+                    }
+                ],
+            ) as mock_list_users,
+        ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/resources/knowledge_space/1/grant-subjects/users',
-                    params={'keyword': 'Ali'},
+                    "/api/v1/permissions/resources/knowledge_space/1/grant-subjects/users",
+                    params={"keyword": "Ali"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'][0]['user_name'] == 'Alice'
-        mock_list_users.assert_awaited_once_with(tenant_id=3, keyword='Ali', page=1, page_size=1000)
+        assert body["status_code"] == 200
+        assert body["data"][0]["user_name"] == "Alice"
+        mock_list_users.assert_awaited_once_with(tenant_id=3, keyword="Ali", page=1, page_size=1000)
 
-    def test_knowledge_space_grant_subject_departments_endpoint_returns_tenant_tree(self):
-        app = _make_app(_ViewerUser)
+    async def test_list_grant_users_resolves_paths_without_whole_department_table(self):
+        """F038 perf regression: the primary-department full-path label must be resolved
+        via bounded ``aget_by_ids`` (this page's primary depts + their ancestors), NEVER
+        via ``aget_active_by_tenant`` — on the 50k-department load-test tenant that whole-
+        table load was ~2.8s / ~94% of the endpoint latency for at most page_size labels.
+        """
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.permission.api.endpoints import resource_permission as rp
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
-            new_callable=AsyncMock,
-            return_value=3,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_departments',
-            new_callable=AsyncMock,
-            return_value=[{
-                'id': 10,
-                'dept_id': 'BS@10',
-                'name': '研发部',
-                'parent_id': None,
-                'path': '/10/',
-                'sort_order': 0,
-                'source': 'local',
-                'status': 'active',
-                'member_count': 0,
-                'children': [],
-            }],
-        ) as mock_list_departments:
-            with TestClient(app) as client:
-                resp = client.get(
-                    '/api/v1/permissions/resources/knowledge_space/1/grant-subjects/departments',
-                )
-                body = resp.json()
+        users = [SimpleNamespace(user_id=8, user_name="Alice", external_id="a", delete=0)]
 
-        assert body['status_code'] == 200
-        assert body['data'][0]['name'] == '研发部'
-        mock_list_departments.assert_awaited_once_with(tenant_id=3)
-
-    def test_grant_subject_departments_helper_returns_member_counts(self):
-        from bisheng.permission.api.endpoints import resource_permission
-
-        departments = [
-            SimpleNamespace(
-                id=10,
-                dept_id='BS@10',
-                name='默认组织',
-                parent_id=None,
-                path='/10/',
-                sort_order=0,
-                source='local',
-                status='active',
-            ),
-            SimpleNamespace(
-                id=11,
-                dept_id='BS@11',
-                name='研发部',
-                parent_id=10,
-                path='/10/11/',
-                sort_order=0,
-                source='local',
-                status='active',
-            ),
-        ]
-
-        class FakeResult:
-            def __init__(self, rows):
-                self._rows = rows
-
-            def first(self):
-                return self._rows[0] if self._rows else None
-
+        class _Result:
             def all(self):
-                return self._rows
+                return users
 
-        class FakeSession:
-            calls = 0
-
-            async def exec(self, _statement):
-                FakeSession.calls += 1
-                if FakeSession.calls == 1:
-                    return FakeResult([SimpleNamespace(id=3, status='active', root_dept_id=10)])
-                if FakeSession.calls == 2:
-                    return FakeResult([departments[0]])
-                if FakeSession.calls == 3:
-                    return FakeResult(departments)
-                return FakeResult([(10, 3), (11, 1)])
-
-        class FakeSessionContext:
+        class _Session:
             async def __aenter__(self):
-                return FakeSession()
+                return self
 
-            async def __aexit__(self, exc_type, exc, tb):
+            async def __aexit__(self, *exc):
                 return False
 
-        async def run_case():
-            FakeSession.calls = 0
-            with patch(
-                'bisheng.core.database.get_async_db_session',
-                return_value=FakeSessionContext(),
-            ):
-                return await resource_permission._list_knowledge_space_grant_departments(tenant_id=3)
+            async def exec(self, _stmt):
+                return _Result()
 
-        import anyio
+        primary_rows = [SimpleNamespace(user_id=8, department_id=106, is_primary=1)]
+        pool = {
+            1: SimpleNamespace(id=1, name="总部", path="/1/"),
+            21: SimpleNamespace(id=21, name="研发部", path="/1/21/"),
+            106: SimpleNamespace(id=106, name="平台组", path="/1/21/106/"),
+        }
 
-        tree = anyio.run(run_case, backend='asyncio')
+        async def _fake_aget_by_ids(ids):
+            return [pool[i] for i in ids if i in pool]
 
-        assert tree[0]['member_count'] == 3
-        assert tree[0]['children'][0]['member_count'] == 1
+        async def _forbidden_whole_table(*_a, **_k):
+            raise AssertionError("aget_active_by_tenant must not be called (whole-table load)")
 
-    def test_workflow_grant_subject_departments_endpoint_uses_permission_access_not_department_admin(self):
-        app = _make_app(_ViewerUser)
+        with (
+            patch("bisheng.core.database.get_async_db_session", lambda: _Session()),
+            patch.object(UserDepartmentDao, "aget_by_user_ids", AsyncMock(return_value=primary_rows)),
+            patch.object(DepartmentDao, "aget_by_ids", AsyncMock(side_effect=_fake_aget_by_ids)),
+            patch.object(DepartmentDao, "aget_active_by_tenant", AsyncMock(side_effect=_forbidden_whole_table)),
+        ):
+            result = await rp._list_knowledge_space_grant_users(tenant_id=1, keyword="Ali", page=1, page_size=50)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
-            new_callable=AsyncMock,
-            return_value=True,
-        ) as mock_has_access, patch(
-            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
-            new_callable=AsyncMock,
-            return_value=3,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_departments',
-            new_callable=AsyncMock,
-            return_value=[{
-                'id': 10,
-                'dept_id': 'BS@10',
-                'name': '研发部',
-                'parent_id': None,
-                'path': '/10/',
-                'sort_order': 0,
-                'source': 'local',
-                'status': 'active',
-                'member_count': 0,
-                'children': [],
-            }],
-        ) as mock_list_departments:
-            with TestClient(app) as client:
-                resp = client.get(
-                    '/api/v1/permissions/resources/workflow/wf-1/grant-subjects/departments',
-                )
-                body = resp.json()
-
-        assert body['status_code'] == 200
-        assert body['data'][0]['name'] == '研发部'
-        mock_has_access.assert_awaited_once()
-        mock_list_departments.assert_awaited_once_with(tenant_id=3)
+        assert result == [
+            {
+                "user_id": 8,
+                "user_name": "Alice",
+                "external_id": "a",
+                "primary_department_path": "总部/研发部/平台组",
+            }
+        ]
 
     def test_knowledge_space_grant_subject_user_groups_endpoint_returns_tenant_scoped_groups(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
-            new_callable=AsyncMock,
-            return_value=3,
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_user_groups',
-            new_callable=AsyncMock,
-            return_value=[{
-                'id': 5,
-                'group_name': '产品组',
-            }],
-        ) as mock_list_groups:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id",
+                new_callable=AsyncMock,
+                return_value=3,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_user_groups",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": 5,
+                        "group_name": "产品组",
+                    }
+                ],
+            ) as mock_list_groups,
+        ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/resources/knowledge_space/1/grant-subjects/user-groups',
-                    params={'keyword': '产品'},
+                    "/api/v1/permissions/resources/knowledge_space/1/grant-subjects/user-groups",
+                    params={"keyword": "产品"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'][0]['group_name'] == '产品组'
+        assert body["status_code"] == 200
+        assert body["data"][0]["group_name"] == "产品组"
         mock_list_groups.assert_awaited_once()
-        assert mock_list_groups.await_args.kwargs['tenant_id'] == 3
-        assert mock_list_groups.await_args.kwargs['keyword'] == '产品'
-        assert mock_list_groups.await_args.kwargs['login_user'].user_id == 7
+        assert mock_list_groups.await_args.kwargs["tenant_id"] == 3
+        assert mock_list_groups.await_args.kwargs["keyword"] == "产品"
+        assert mock_list_groups.await_args.kwargs["login_user"].user_id == 7
 
     @pytest.mark.asyncio
     async def test_grant_subject_user_groups_helper_filters_private_groups_for_plain_user(self):
@@ -710,7 +695,7 @@ class TestPermissionApiIntegration:
             async def exec(self, stmt):
                 nonlocal captured_stmt
                 captured_stmt = stmt
-                return _Rows([SimpleNamespace(id=5, group_name='产品组')])
+                return _Rows([SimpleNamespace(id=5, group_name="产品组")])
 
         @asynccontextmanager
         async def _session_cm():
@@ -718,24 +703,32 @@ class TestPermissionApiIntegration:
 
         viewer = SimpleNamespace(user_id=7, tenant_id=3, user_role=[2], is_global_super=False)
 
-        with patch(
-            'bisheng.core.database.get_async_db_session',
-            side_effect=_session_cm,
-        ), patch(
-            'bisheng.database.models.user_group.UserGroupDao.aget_user_visible_group_ids',
-            new_callable=AsyncMock, return_value=[9],
-        ), patch(
-            'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
-            new_callable=AsyncMock, return_value=False,
+        with (
+            patch(
+                "bisheng.core.database.get_async_db_session",
+                side_effect=_session_cm,
+            ),
+            patch(
+                "bisheng.database.models.user_group.UserGroupDao.aget_user_visible_group_ids",
+                new_callable=AsyncMock,
+                return_value=[9],
+            ),
+            patch(
+                "bisheng.user_group.domain.services.user_group_service._can_view_all_groups",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             data = await m._list_knowledge_space_grant_user_groups(
-                tenant_id=3, keyword='产品', login_user=viewer,
+                tenant_id=3,
+                keyword="产品",
+                login_user=viewer,
             )
 
-        assert data == [{'id': 5, 'group_name': '产品组'}]
+        assert data == [{"id": 5, "group_name": "产品组"}]
         stmt_text = str(captured_stmt).lower()
-        assert 'group.visibility' in stmt_text
-        assert 'group.create_user' in stmt_text
+        assert "group.visibility" in stmt_text
+        assert "group.create_user" in stmt_text
 
     @pytest.mark.asyncio
     async def test_grant_subject_user_groups_helper_allows_all_for_tenant_admin(self):
@@ -756,7 +749,7 @@ class TestPermissionApiIntegration:
             async def exec(self, stmt):
                 nonlocal captured_stmt
                 captured_stmt = stmt
-                return _Rows([SimpleNamespace(id=8, group_name='私密组')])
+                return _Rows([SimpleNamespace(id=8, group_name="私密组")])
 
         @asynccontextmanager
         async def _session_cm():
@@ -764,858 +757,989 @@ class TestPermissionApiIntegration:
 
         viewer = SimpleNamespace(user_id=7, tenant_id=3, user_role=[2], is_global_super=False)
 
-        with patch(
-            'bisheng.core.database.get_async_db_session',
-            side_effect=_session_cm,
-        ), patch(
-            'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
-            new_callable=AsyncMock, return_value=True,
+        with (
+            patch(
+                "bisheng.core.database.get_async_db_session",
+                side_effect=_session_cm,
+            ),
+            patch(
+                "bisheng.user_group.domain.services.user_group_service._can_view_all_groups",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
             data = await m._list_knowledge_space_grant_user_groups(
-                tenant_id=3, keyword='', login_user=viewer,
+                tenant_id=3,
+                keyword="",
+                login_user=viewer,
             )
 
-        assert data == [{'id': 8, 'group_name': '私密组'}]
-        assert 'group.visibility' not in str(captured_stmt).lower()
+        assert data == [{"id": 8, "group_name": "私密组"}]
+        assert "group.visibility" not in str(captured_stmt).lower()
 
     def test_permissions_list_reads_workflow_permissions_after_fine_grained_allow(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_app_viewer'},
-        ) as mock_get_effective_permissions, patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=7,
-                    subject_name='viewer',
-                    relation='owner',
-                ),
-            ],
-        ) as mock_get_permissions, patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
+        with (
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_app_viewer"},
+            ) as mock_get_effective_permissions,
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=7,
+                        subject_name="viewer",
+                        relation="owner",
+                    ),
+                ],
+            ) as mock_get_permissions,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
         ):
             with TestClient(app) as client:
-                resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
+                resp = client.get("/api/v1/permissions/resources/workflow/wf-1/permissions")
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'][0]['subject_id'] == 7
-        assert body['data'][0]['relation'] == 'owner'
+        assert body["status_code"] == 200
+        assert body["data"][0]["subject_id"] == 7
+        assert body["data"][0]["relation"] == "owner"
         mock_get_effective_permissions.assert_awaited_once()
         mock_get_permissions.assert_awaited_once_with(
-            object_type='workflow',
-            object_id='wf-1',
+            object_type="workflow",
+            object_id="wf-1",
         )
 
     def test_permissions_list_hides_legacy_subscription_viewer_tuple(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_space_relation'},
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=8,
-                    subject_name='subscriber',
-                    relation='viewer',
-                ),
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=9,
-                    subject_name='manager',
-                    relation='manager',
-                ),
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
+        with (
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_space_relation"},
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=8,
+                        subject_name="subscriber",
+                        relation="viewer",
+                    ),
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=9,
+                        subject_name="manager",
+                        relation="manager",
+                    ),
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
         ):
             with TestClient(app) as client:
-                resp = client.get('/api/v1/permissions/resources/knowledge_space/1/permissions')
+                resp = client.get("/api/v1/permissions/resources/knowledge_space/1/permissions")
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['subject_id'] for item in body['data']] == [9]
+        assert body["status_code"] == 200
+        assert [item["subject_id"] for item in body["data"]] == [9]
 
     def test_permissions_list_keeps_bound_viewer_grant(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_space_relation'},
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[
-                ResourcePermissionItem(
-                    subject_type='user',
-                    subject_id=8,
-                    subject_name='explicit-viewer',
-                    relation='viewer',
-                ),
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[{
-                'id': 'viewer',
-                'name': '可查看',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
-            }],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[{
-                'key': 'knowledge_space:1:user:8:viewer:-',
-                'resource_type': 'knowledge_space',
-                'resource_id': '1',
-                'subject_type': 'user',
-                'subject_id': 8,
-                'relation': 'viewer',
-                'include_children': None,
-                'model_id': 'viewer',
-            }],
+        with (
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_space_relation"},
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=8,
+                        subject_name="explicit-viewer",
+                        relation="viewer",
+                    ),
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    }
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "key": "knowledge_space:1:user:8:viewer:-",
+                        "resource_type": "knowledge_space",
+                        "resource_id": "1",
+                        "subject_type": "user",
+                        "subject_id": 8,
+                        "relation": "viewer",
+                        "include_children": None,
+                        "model_id": "viewer",
+                    }
+                ],
+            ),
         ):
             with TestClient(app) as client:
-                resp = client.get('/api/v1/permissions/resources/knowledge_space/1/permissions')
+                resp = client.get("/api/v1/permissions/resources/knowledge_space/1/permissions")
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'][0]['subject_id'] == 8
-        assert body['data'][0]['model_id'] == 'viewer'
+        assert body["status_code"] == 200
+        assert body["data"][0]["subject_id"] == 8
+        assert body["data"][0]["model_id"] == "viewer"
 
     def test_department_space_permissions_do_not_add_implicit_department_viewer_row(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_space_relation'},
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'manager',
-                    'name': '可管理',
-                    'relation': 'manager',
-                    'grant_tier': 'manager',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id',
-            new_callable=AsyncMock,
-            return_value=SimpleNamespace(department_id=10),
-        ), patch(
-            'bisheng.database.models.department.DepartmentDao.aget_by_id',
-            new_callable=AsyncMock,
-            return_value=SimpleNamespace(id=10, name='财务部'),
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_manage',
+        with (
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_space_relation"},
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "manager",
+                        "name": "可管理",
+                        "relation": "manager",
+                        "grant_tier": "manager",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(department_id=10),
+            ),
+            patch(
+                "bisheng.database.models.department.DepartmentDao.aget_by_id",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(id=10, name="财务部"),
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_manage",
+            ),
         ):
             with TestClient(app) as client:
-                resp = client.get('/api/v1/permissions/resources/knowledge_space/101/permissions')
+                resp = client.get("/api/v1/permissions/resources/knowledge_space/101/permissions")
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        rows = {
-            (item['subject_type'], item['subject_id']): item
-            for item in body['data']
-        }
-        assert set(rows) == {('user', 7)}
-        assert rows[('user', 7)]['relation'] == 'manager'
-        assert rows[('user', 7)]['model_id'] == 'manager'
-        assert rows[('user', 7)]['subject_name'] == 'viewer'
+        assert body["status_code"] == 200
+        rows = {(item["subject_type"], item["subject_id"]): item for item in body["data"]}
+        assert set(rows) == {("user", 7)}
+        assert rows[("user", 7)]["relation"] == "manager"
+        assert rows[("user", 7)]["model_id"] == "manager"
+        assert rows[("user", 7)]["subject_name"] == "viewer"
 
     def test_permission_check_uses_permission_id_for_all_resource_types(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
-            new_callable=AsyncMock,
-            return_value=True,
-        ) as mock_has_permission, patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.check',
-            new_callable=AsyncMock,
-        ) as mock_relation_check:
+        with (
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_has_permission,
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.check",
+                new_callable=AsyncMock,
+            ) as mock_relation_check,
+        ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/check',
+                    "/api/v1/permissions/check",
                     json={
-                        'object_type': 'workflow',
-                        'object_id': 'wf-1',
-                        'relation': 'can_edit',
-                        'permission_id': 'publish_app',
+                        "object_type": "workflow",
+                        "object_id": "wf-1",
+                        "relation": "can_edit",
+                        "permission_id": "publish_app",
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'] == {'allowed': True}
+        assert body["status_code"] == 200
+        assert body["data"] == {"allowed": True}
         mock_has_permission.assert_awaited_once()
-        assert mock_has_permission.await_args.kwargs['object_type'] == 'workflow'
-        assert mock_has_permission.await_args.kwargs['object_id'] == 'wf-1'
-        assert mock_has_permission.await_args.kwargs['permission_ids'] == ['publish_app']
+        assert mock_has_permission.await_args.kwargs["object_type"] == "workflow"
+        assert mock_has_permission.await_args.kwargs["object_id"] == "wf-1"
+        assert mock_has_permission.await_args.kwargs["permission_ids"] == ["publish_app"]
         mock_relation_check.assert_not_awaited()
 
     def test_authorize_api_requires_matching_management_permission_id(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_manage',
-        ), patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'view_app', 'edit_app'},
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_manage",
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"view_app", "edit_app"},
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                            'model_id': 'viewer',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                                "model_id": "viewer",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 19000
+        assert body["status_code"] == 19000
         mock_authorize.assert_not_awaited()
 
     def test_authorize_knowledge_space_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_space_relation",
+                    "view_space",
+                    "download_folder",
+                    "download_file",
+                    "view_folder",
+                    "view_file",
                 },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={
-                'manage_space_relation',
-                'view_space',
-                'download_folder',
-                'download_file',
-                'view_folder',
-                'view_file',
-            },
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize, patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
-            new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/knowledge_space/1/authorize',
+                    "/api/v1/permissions/resources/knowledge_space/1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                            'model_id': 'viewer',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                                "model_id": "viewer",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
+        assert body["status_code"] == 200
         mock_authorize.assert_awaited_once()
         mock_get_permission_level.assert_not_awaited()
 
     def test_authorize_folder_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_folder_relation",
+                    "view_space",
+                    "view_folder",
+                    "download_folder",
+                    "view_file",
+                    "download_file",
                 },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_folder_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
-        ) as mock_get_effective_permissions, patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize, patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
-            new_callable=AsyncMock,
+            ) as mock_get_effective_permissions,
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/folder/1/authorize',
+                    "/api/v1/permissions/resources/folder/1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                            'model_id': 'viewer',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                                "model_id": "viewer",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
+        assert body["status_code"] == 200
         mock_authorize.assert_awaited_once()
         mock_get_permission_level.assert_not_awaited()
-        assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True
+        assert mock_get_effective_permissions.await_args.kwargs["nearest_binding_wins"] is True
 
     def test_authorize_knowledge_file_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_file_relation",
+                    "view_space",
+                    "view_folder",
+                    "download_folder",
+                    "view_file",
+                    "download_file",
                 },
-            ],
-        ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_file_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
-        ) as mock_get_effective_permissions, patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-        ) as mock_authorize, patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
-            new_callable=AsyncMock,
+            ) as mock_get_effective_permissions,
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/knowledge_file/1/authorize',
+                    "/api/v1/permissions/resources/knowledge_file/1/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                            'model_id': 'viewer',
-                        }],
-                        'revokes': [],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                                "model_id": "viewer",
+                            }
+                        ],
+                        "revokes": [],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
+        assert body["status_code"] == 200
         mock_authorize.assert_awaited_once()
         mock_get_permission_level.assert_not_awaited()
-        assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True
+        assert mock_get_effective_permissions.await_args.kwargs["nearest_binding_wins"] is True
 
     def test_authorize_api_returns_tuple_write_error_when_fga_write_fails(self):
         app = _make_app(_AdminUser)
 
-        with patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-            new_callable=AsyncMock,
-            side_effect=FGAWriteError('boom'),
-        ) as mock_authorize, patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
-            new_callable=AsyncMock,
-        ) as mock_save_bindings:
+        with (
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+                side_effect=FGAWriteError("boom"),
+            ) as mock_authorize,
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ) as mock_save_bindings,
+        ):
             with TestClient(app) as client:
                 resp = client.post(
-                    '/api/v1/permissions/resources/knowledge_library/12/authorize',
+                    "/api/v1/permissions/resources/knowledge_library/12/authorize",
                     json={
-                        'grants': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'owner',
-                            'model_id': 'owner',
-                        }],
-                        'revokes': [{
-                            'subject_type': 'user',
-                            'subject_id': 2,
-                            'relation': 'viewer',
-                        }],
+                        "grants": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "owner",
+                                "model_id": "owner",
+                            }
+                        ],
+                        "revokes": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 2,
+                                "relation": "viewer",
+                            }
+                        ],
                     },
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 19004
+        assert body["status_code"] == 19004
         mock_authorize.assert_awaited_once()
-        assert mock_authorize.await_args.kwargs['enforce_fga_success'] is True
+        assert mock_authorize.await_args.kwargs["enforce_fga_success"] is True
         mock_save_bindings.assert_not_awaited()
 
     def test_grantable_relation_models_returns_empty_for_read_only_caller(self):
         app = _make_app(_ViewerUser)
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=[
-                {
-                    'id': 'owner',
-                    'name': '所有者',
-                    'relation': 'owner',
-                    'grant_tier': 'owner',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-                {
-                    'id': 'viewer',
-                    'name': '可查看',
-                    'relation': 'viewer',
-                    'grant_tier': 'usage',
-                    'permissions': [],
-                    'permissions_explicit': False,
-                    'is_system': True,
-                },
-            ],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ), patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value=set(),
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "owner",
+                        "name": "所有者",
+                        "relation": "owner",
+                        "grant_tier": "owner",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                    {
+                        "id": "viewer",
+                        "name": "可查看",
+                        "relation": "viewer",
+                        "grant_tier": "usage",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    },
+                ],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'workflow', 'object_id': 'wf-1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "workflow", "object_id": "wf-1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert body['data'] == []
+        assert body["status_code"] == 200
+        assert body["data"] == []
 
     def test_grantable_application_models_filter_by_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
         models = [
             {
-                'id': 'owner',
-                'name': '所有者',
-                'relation': 'owner',
-                'grant_tier': 'owner',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "owner",
+                "name": "所有者",
+                "relation": "owner",
+                "grant_tier": "owner",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'manager',
-                'name': '可管理',
-                'relation': 'manager',
-                'grant_tier': 'manager',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "manager",
+                "name": "可管理",
+                "relation": "manager",
+                "grant_tier": "manager",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'viewer',
-                'name': '可查看',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "viewer",
+                "name": "可查看",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
         ]
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=models,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_app_viewer'},
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=models,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_app_viewer"},
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'workflow', 'object_id': 'wf-1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "workflow", "object_id": "wf-1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['viewer']
+        assert body["status_code"] == 200
+        assert [item["id"] for item in body["data"]] == ["viewer"]
         mock_get_permission_level.assert_not_awaited()
 
     def test_grantable_application_owner_model_uses_owner_management_permission(self):
         app = _make_app(_ViewerUser)
         models = [
             {
-                'id': 'owner',
-                'name': '所有者',
-                'relation': 'owner',
-                'grant_tier': 'owner',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "owner",
+                "name": "所有者",
+                "relation": "owner",
+                "grant_tier": "owner",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'manager',
-                'name': '可管理',
-                'relation': 'manager',
-                'grant_tier': 'manager',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "manager",
+                "name": "可管理",
+                "relation": "manager",
+                "grant_tier": "manager",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'viewer',
-                'name': '可查看',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "viewer",
+                "name": "可查看",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
         ]
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=models,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_app_owner'},
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=models,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_app_owner"},
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'workflow', 'object_id': 'wf-1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "workflow", "object_id": "wf-1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['owner']
+        assert body["status_code"] == 200
+        assert [item["id"] for item in body["data"]] == ["owner"]
         mock_get_permission_level.assert_not_awaited()
 
     def test_grantable_application_custom_models_require_embedded_manage_permissions(self):
         app = _make_app(_ViewerUser)
         models = [
             {
-                'id': 'custom_manage_usage',
-                'name': '使用者管理',
-                'relation': 'viewer',
-                'grant_tier': 'owner',
-                'permissions': ['manage_app_viewer'],
-                'permissions_explicit': True,
-                'is_system': False,
+                "id": "custom_manage_usage",
+                "name": "使用者管理",
+                "relation": "viewer",
+                "grant_tier": "owner",
+                "permissions": ["manage_app_viewer"],
+                "permissions_explicit": True,
+                "is_system": False,
             },
             {
-                'id': 'custom_manage_owner',
-                'name': '所有者管理',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': ['manage_app_owner'],
-                'permissions_explicit': True,
-                'is_system': False,
+                "id": "custom_manage_owner",
+                "name": "所有者管理",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": ["manage_app_owner"],
+                "permissions_explicit": True,
+                "is_system": False,
             },
         ]
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=models,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_app_viewer'},
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=models,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={"manage_app_viewer"},
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'workflow', 'object_id': 'wf-1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "workflow", "object_id": "wf-1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['custom_manage_usage']
+        assert body["status_code"] == 200
+        assert [item["id"] for item in body["data"]] == ["custom_manage_usage"]
         mock_get_permission_level.assert_not_awaited()
 
     def test_grantable_knowledge_space_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
         models = [
             {
-                'id': 'owner',
-                'name': '所有者',
-                'relation': 'owner',
-                'grant_tier': 'owner',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "owner",
+                "name": "所有者",
+                "relation": "owner",
+                "grant_tier": "owner",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'viewer',
-                'name': '可查看',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "viewer",
+                "name": "可查看",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
         ]
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=models,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={
-                'manage_space_relation',
-                'view_space',
-                'download_folder',
-                'download_file',
-                'view_folder',
-                'view_file',
-            },
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=models,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_space_relation",
+                    "view_space",
+                    "download_folder",
+                    "download_file",
+                    "view_folder",
+                    "view_file",
+                },
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'knowledge_space', 'object_id': '1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "knowledge_space", "object_id": "1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['viewer']
+        assert body["status_code"] == 200
+        assert [item["id"] for item in body["data"]] == ["viewer"]
         mock_get_permission_level.assert_not_awaited()
 
     def test_grantable_folder_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
         models = [
             {
-                'id': 'owner',
-                'name': '所有者',
-                'relation': 'owner',
-                'grant_tier': 'owner',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "owner",
+                "name": "所有者",
+                "relation": "owner",
+                "grant_tier": "owner",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'viewer',
-                'name': '可查看',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "viewer",
+                "name": "可查看",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
         ]
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=models,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_folder_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
-        ) as mock_get_effective_permissions:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=models,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_folder_relation",
+                    "view_space",
+                    "view_folder",
+                    "download_folder",
+                    "view_file",
+                    "download_file",
+                },
+            ) as mock_get_effective_permissions,
+        ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'folder', 'object_id': '1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "folder", "object_id": "1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['viewer']
+        assert body["status_code"] == 200
+        assert [item["id"] for item in body["data"]] == ["viewer"]
         mock_get_permission_level.assert_not_awaited()
-        assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True
+        assert mock_get_effective_permissions.await_args.kwargs["nearest_binding_wins"] is True
 
     def test_grantable_knowledge_file_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
         models = [
             {
-                'id': 'owner',
-                'name': '所有者',
-                'relation': 'owner',
-                'grant_tier': 'owner',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "owner",
+                "name": "所有者",
+                "relation": "owner",
+                "grant_tier": "owner",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
             {
-                'id': 'viewer',
-                'name': '可查看',
-                'relation': 'viewer',
-                'grant_tier': 'usage',
-                'permissions': [],
-                'permissions_explicit': False,
-                'is_system': True,
+                "id": "viewer",
+                "name": "可查看",
+                "relation": "viewer",
+                "grant_tier": "usage",
+                "permissions": [],
+                "permissions_explicit": False,
+                "is_system": True,
             },
         ]
 
-        with patch(
-            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
-            new_callable=AsyncMock,
-            return_value=models,
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock,
-            return_value='can_read',
-        ) as mock_get_permission_level, patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
-            new_callable=AsyncMock,
-            return_value={'manage_file_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
-        ) as mock_get_effective_permissions:
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=models,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ) as mock_get_permission_level,
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_file_relation",
+                    "view_space",
+                    "view_folder",
+                    "download_folder",
+                    "view_file",
+                    "download_file",
+                },
+            ) as mock_get_effective_permissions,
+        ):
             with TestClient(app) as client:
                 resp = client.get(
-                    '/api/v1/permissions/relation-models/grantable',
-                    params={'object_type': 'knowledge_file', 'object_id': '1'},
+                    "/api/v1/permissions/relation-models/grantable",
+                    params={"object_type": "knowledge_file", "object_id": "1"},
                 )
                 body = resp.json()
 
-        assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['viewer']
+        assert body["status_code"] == 200
+        assert [item["id"] for item in body["data"]] == ["viewer"]
         mock_get_permission_level.assert_not_awaited()
-        assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True
+        assert mock_get_effective_permissions.await_args.kwargs["nearest_binding_wins"] is True

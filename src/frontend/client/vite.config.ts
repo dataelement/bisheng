@@ -110,7 +110,10 @@ export default defineConfig(({ command, mode }) => {
     base: app_env.BASE_URL || '/',
     define: {
       __APP_ENV__: JSON.stringify(app_env),
-      __VCONSOLE_ENABLED__: 'true',
+      // vconsole ships ONLY when explicitly requested (npm run build:vconsole,
+      // which sets VITE_ENABLE_VCONSOLE=true). A plain `npm run build` never
+      // bundles the debug console — do not hardcode this back to 'true'.
+      __VCONSOLE_ENABLED__: JSON.stringify(env.VITE_ENABLE_VCONSOLE === 'true'),
     },
     server: {
       host: '0.0.0.0',
@@ -244,6 +247,15 @@ export default defineConfig(({ command, mode }) => {
       sourcemap: process.env.NODE_ENV === 'development',
       outDir: './build',
       minify: 'terser',
+      // Strip all console.* / debugger from production bundles so no debug data
+      // (API payloads, tokens, filenames) leaks to the browser console. The
+      // vconsole debug build keeps them so its panel stays useful.
+      terserOptions: {
+        compress: {
+          drop_console: env.VITE_ENABLE_VCONSOLE !== 'true',
+          drop_debugger: true,
+        },
+      },
       rollupOptions: {
         preserveEntrySignatures: 'strict',
         output: {

@@ -27,6 +27,8 @@ export function PinnedTaskPanel({ versionId }: { versionId: string }) {
 
     const status = linsight?.status;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
+    // manual stop: the panel should stop spinning and flag a problem instead
+    const terminated = status === SopStatus.Stoped;
 
     // The card aligns flush with the input box width (no horizontal inset) and
     // keeps a gap below it. Spacing lives here (not in the reusable TaskPanel)
@@ -36,7 +38,7 @@ export function PinnedTaskPanel({ versionId }: { versionId: string }) {
             {/* Key by versionId so the panel remounts (and its collapsed default
                 re-applies) on every conversation switch, instead of carrying the
                 previous turn's open/closed state over. */}
-            <TaskPanel key={versionId} tasks={tasks} completed={completed} />
+            <TaskPanel key={versionId} tasks={tasks} completed={completed} terminated={terminated} />
         </div>
     );
 }

@@ -20,7 +20,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",
@@ -57,6 +57,7 @@
     "copy-to-clipboard": "^3.3.3",
     "cross-env": "^7.0.3",
     "date-fns": "^3.3.1",
+    "dompurify": "^3.4.11",
     "downloadjs": "^1.4.7",
     "echarts": "^6.0.0",
     "export-from-json": "^1.7.2",

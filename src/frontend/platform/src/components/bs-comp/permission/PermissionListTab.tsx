@@ -11,7 +11,6 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
-  getResourceGrantDepartmentsApi,
   getResourcePermissions,
   type RelationModel,
 } from "@/controllers/API/permission"
@@ -20,7 +19,6 @@ import { cn } from "@/utils"
 import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { buildDepartmentPathLabelMap } from "./departmentPathUtils"
 import { RelationModelOption } from "./RelationSelect"
 import { PermissionEntry, RelationLevel, ResourceType, RevokeItem } from "./types"
 
@@ -113,21 +111,10 @@ export function PermissionListTab({
   const [error, setError] = useState(false)
   const [grantableModels, setGrantableModels] = useState<RelationModel[]>(prefetchedGrantableModels || [])
   const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels)
-  const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map())
   const [userSelectedTab, setUserSelectedTab] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isListScrolling, setIsListScrolling] = useState(false)
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    captureAndAlertRequestErrorHoc(
-      getResourceGrantDepartmentsApi(resourceType, resourceId),
-    ).then((res) => {
-      if (res && Array.isArray(res)) {
-        setDeptPathById(buildDepartmentPathLabelMap(res))
-      }
-    })
-  }, [refreshKey, resourceId, resourceType])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -229,12 +216,9 @@ export function PermissionListTab({
     return opts.length ? opts : DEFAULT_MODELS
   }, [entries, grantableModelOptions])
 
+  // F038: the backend already resolves a department's full ancestor path into
+  // subject_name (父/子/孙), so no per-grant path-tree lookup is needed here.
   function getEntryDisplayName(entry: PermissionEntry) {
-    if (entry.subject_type === 'department') {
-      return deptPathById.get(entry.subject_id)
-        ?? entry.subject_name
-        ?? `${entry.subject_type}:${entry.subject_id}`
-    }
     return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`
   }
 

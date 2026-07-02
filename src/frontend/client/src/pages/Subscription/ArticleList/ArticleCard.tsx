@@ -1,4 +1,5 @@
 import { useLocalize } from "~/hooks";
+import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { Article } from "~/api/channels";
@@ -227,7 +228,7 @@ export function ArticleCard({
                                 )}
                             >
                                 {highlightTitle
-                                    ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
+                                    ? <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(highlightTitle, { ALLOWED_TAGS: ['em'] }) }} />
                                     : article.title}
                             </h3>
                             {sensitiveViolated && (
