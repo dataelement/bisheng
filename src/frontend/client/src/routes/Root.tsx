@@ -10,6 +10,7 @@ import {
 } from '~/Providers';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { MobileNav, Nav } from '~/components/Nav';
 import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
@@ -40,9 +41,12 @@ export default function Root() {
   }, [isSmallScreen]);
 
   if (isUserLoading) {
+    // Themed startup spinner — identical to the platform app's LoadingIcon
+    // (same BrandTickSpinner, size and centering) so the platform→client
+    // hand-off shows no size/position jump.
     return (
-      <div className="flex h-full w-full items-center justify-center bg-white text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">
-        Loading…
+      <div className="flex h-full w-full items-center justify-center bg-white">
+        <LoadingIcon className="w-48 text-primary" />
       </div>
     );
   }

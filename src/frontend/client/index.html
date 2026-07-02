@@ -23,7 +23,8 @@
     document.write('<script src="' + brandBaseUrl + '/assets/bisheng/config.js?v=<%= Date.now() %>"><\/script>');
     document.write('<script src="' + brandBaseUrl + '/assets/bisheng/brand-runtime.js?v=<%= Date.now() %>"><\/script>');
   </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, interactive-widget=resizes-content, maximum-scale=1, user-scalable=no" />
   <meta name="referrer" content="never">
   <style>
     /* iOS WKWebView / WeCom embedded WebView bottom-strip fix.
@@ -58,6 +59,7 @@
          only ever showed the native WebView background before this.) */
       background-color: #ffffff;
     }
+
     body {
       margin: 0;
       padding: 0;
@@ -98,81 +100,11 @@
       });
     })();
   </script>
-  <script>
-    const theme = localStorage.getItem('color-theme');
-    const loadingContainerStyle = document.createElement('style');
-    let backgroundColor;
-
-    if (theme === 'dark') {
-      backgroundColor = '#0d0d0d';
-    } else if (theme === 'light') {
-      backgroundColor = '#ffffff';
-    } else if (theme === 'system') {
-      const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      backgroundColor = prefersDarkScheme ? '#0d0d0d' : '#ffffff';
-    } else {
-      backgroundColor = '#ffffff';
-    }
-
-    loadingContainerStyle.innerHTML = `
-        #loading-container {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          background-color: ${backgroundColor};
-        }
-
-        #loading-container img {
-          width: 80px;
-          height: 80px;
-          object-fit: contain;
-        }
-
-        #loading-container img:not([src]) {
-          display: none;
-        }
-      `;
-    document.head.appendChild(loadingContainerStyle);
-  </script>
   <script defer type="module" src="/src/brandEntry.jsx"></script>
 </head>
 
 <body>
-  <div id="root">
-    <div id="loading-container">
-      <img id="loading-icon" alt="" />
-    </div>
-  </div>
-  <script>
-    (function () {
-      var config = window.BRAND_CONFIG || {};
-      var loadingIcon =
-        config.URLLoadingIcon ||
-        config.loadingIcon ||
-        (config.loading && config.loading.icon && config.loading.icon.url) ||
-        "";
-      var iconElement = document.getElementById("loading-icon");
-
-      if (!loadingIcon || !iconElement) return;
-
-      var absoluteUrlPattern = /^(https?:|data:|blob:|\/\/)/i;
-      var resolvedIcon = loadingIcon;
-
-      if (!absoluteUrlPattern.test(loadingIcon)) {
-        var baseUrl = (brandBaseUrl || "").replace(/\/$/, "");
-        // brand-runtime.js may have already prefixed the icon with baseUrl.
-        // Re-prefixing here produces /workspace/workspace/... (404). Stay
-        // idempotent: only prepend baseUrl when it is not already present.
-        var alreadyPrefixed = baseUrl && (loadingIcon === baseUrl || loadingIcon.indexOf(baseUrl + "/") === 0);
-        if (!alreadyPrefixed) {
-          resolvedIcon = baseUrl + (loadingIcon.charAt(0) === "/" ? loadingIcon : "/" + loadingIcon);
-        }
-      }
-
-      iconElement.setAttribute("src", resolvedIcon);
-    })();
-  </script>
+  <div id="root"></div>
 </body>
 
 </html>

@@ -12,6 +12,7 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components/ui/Button';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import store from '~/store';
 
@@ -388,6 +389,17 @@ export default function MainLayout() {
     }
     setNoticeDismissed(true);
   };
+
+  // Themed startup spinner while the user query is in flight — identical to the
+  // platform app's LoadingIcon (same size/centering) so the platform→client
+  // hand-off shows no size/position jump, instead of a blank flash.
+  if (isUserLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white">
+        <LoadingIcon className="w-48 text-primary" />
+      </div>
+    );
+  }
 
   // Don't render any page content until the user is authenticated.
   // This prevents the flash of empty-state pages for unauthenticated visitors.
