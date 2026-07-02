@@ -11,7 +11,7 @@ from bisheng.common.errcode.tag import (
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
-from bisheng.database.models.tag import TagResourceTypeEnum
+from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.workstation.domain.repositories.tags_repository import TagRepositoryImpl
 
 
@@ -231,11 +231,19 @@ class ReviewTagsRepositoryImpl:
             return {"tag_name": tag_name, "resource_type": resource_type, "resource_count": 0}
         return None
 
+    @staticmethod
+    def _library_tag_name_subquery(tenant_id: int):
+        return select(Tag.name).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.tenant_id == tenant_id,
+        )
+
     async def get_review_tag_group_list_by_page(self, page: int, page_size: int, tenant_id: int):
         where_clause = (
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
+            ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
         )
 
         # 分页数据
@@ -256,6 +264,7 @@ class ReviewTagsRepositoryImpl:
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
+            ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
         )
         subq = select(1).select_from(ReviewTag).where(*where_clause).group_by(ReviewTag.name, ReviewTag.resource_type)
         stmt = select(func.count()).select_from(subq.subquery())

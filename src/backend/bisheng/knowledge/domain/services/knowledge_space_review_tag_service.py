@@ -269,18 +269,24 @@ class KnowledgeSpaceReviewTagService:
             ).all()
             tag_by_name = {tag.name: tag for tag in existing_tags}
             for tag_name in tag_names:
-                if tag_name not in tag_by_name:
-                    tag = ReviewTag(
-                        name=tag_name,
-                        business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                        business_id=str(space_id),
-                        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                    )
-                    session.add(tag)
-                    session.flush()
-                    tag_by_name[tag_name] = tag
+                if tag_name in tag_by_name:
+                    continue
+                if TagLibraryTagService.find_library_tag_by_name_sync(
+                    tenant_id=tenant_id,
+                    tag_name=tag_name,
+                ):
+                    continue
+                tag = ReviewTag(
+                    name=tag_name,
+                    business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+                    business_id=str(space_id),
+                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                )
+                session.add(tag)
+                session.flush()
+                tag_by_name[tag_name] = tag
 
             tag_ids = [tag_by_name[name].id for name in tag_names if tag_by_name.get(name)]
             existing_links = session.exec(

@@ -998,7 +998,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for space in spaces:
             # 『我的收藏』是每个用户私有的系统知识库，只对归属者本人可见，
             # 绝不出现在他人（包括拥有全局可见权限的管理员）的知识空间列表中。
-            if getattr(space, 'is_favorite', False) and space.user_id != self.login_user.user_id:
+            if getattr(space, "is_favorite", False) and space.user_id != self.login_user.user_id:
                 continue
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
@@ -2470,9 +2470,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # 清理本次刚建的孤儿空间并上抛，交由 _ensure_favorite_space 回查复用赢家。
             try:
                 await KnowledgeDao.async_delete_knowledge(int(space.id), only_clear=False)
-            except Exception as cleanup_exc:  # noqa: BLE001
-                logger.warning("cleanup orphan favorite space {} failed: {}",
-                               getattr(space, 'id', None), cleanup_exc)
+            except Exception as cleanup_exc:
+                logger.warning("cleanup orphan favorite space {} failed: {}", getattr(space, "id", None), cleanup_exc)
             raise
         return space
 
@@ -8284,6 +8283,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return merged
 
+    async def _find_tenant_library_tag_by_name(self, tag_name: str) -> Tag | None:
+        return await TagLibraryTagService.find_library_tag_by_name(
+            tenant_id=int(self.login_user.tenant_id),
+            tag_name=tag_name,
+        )
+
     async def _find_bound_library_tag_by_name(self, space_id: int, tag_name: str) -> Tag | None:
         normalized = (tag_name or "").strip()
         if not normalized:
@@ -8317,7 +8322,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if review_tag.name == tag_name:
                 return review_tag
 
-        library_tag = await self._find_bound_library_tag_by_name(space_id, tag_name)
+        library_tag = await self._find_tenant_library_tag_by_name(tag_name)
         if library_tag:
             await self._require_review_tag_feature_enabled()
             return library_tag
@@ -8357,6 +8362,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in review_id_set]
         return normalized_tags, normalized_review
 
+    async def _promote_review_tags_existing_in_libraries(
+        self, tag_ids: list[int], review_tag_ids: list[int]
+    ) -> tuple[list[int], list[int]]:
+        """Drop review queue entries when the tag name already exists in any tag library."""
+        if not review_tag_ids:
+            return tag_ids, review_tag_ids
+
+        tenant_id = int(self.login_user.tenant_id)
+        async with get_async_db_session() as session:
+            review_rows = (await session.exec(select(ReviewTag).where(ReviewTag.id.in_(review_tag_ids)))).all()
+
+        promoted_tag_ids = list(dict.fromkeys(tag_ids or []))
+        remaining_review_ids: list[int] = []
+        fetched_ids: set[int] = set()
+        for review_tag in review_rows:
+            fetched_ids.add(int(review_tag.id))
+            library_tag = await TagLibraryTagService.find_library_tag_by_name(
+                tenant_id=tenant_id,
+                tag_name=review_tag.name or "",
+            )
+            if library_tag and library_tag.id is not None:
+                library_tag_id = int(library_tag.id)
+                if library_tag_id not in promoted_tag_ids:
+                    promoted_tag_ids.append(library_tag_id)
+                continue
+            remaining_review_ids.append(int(review_tag.id))
+
+        for review_tag_id in review_tag_ids:
+            if int(review_tag_id) not in fetched_ids:
+                remaining_review_ids.append(int(review_tag_id))
+
+        return promoted_tag_ids, list(dict.fromkeys(remaining_review_ids))
+
     async def delete_space_tag(self, space_id: int, tag_id: int):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
         return await TagDao.delete_business_tag(
@@ -8374,6 +8412,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_type = ResourceTypeEnum.SPACE_FILE
         normalized_tag_ids, normalized_review_tag_ids = await self._partition_file_tag_ids_for_update(
             tag_ids, review_tag_ids
+        )
+        normalized_tag_ids, normalized_review_tag_ids = await self._promote_review_tags_existing_in_libraries(
+            normalized_tag_ids, normalized_review_tag_ids
         )
         tenant_id = int(self.login_user.tenant_id)
         await TagDao.aupdate_resource_tags(normalized_tag_ids, resource_id, resource_type, self.login_user.user_id)
@@ -8393,21 +8434,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ):
         """1：支持对文件批量添加标签: Batch add tags to files."""
         await self._require_read_permission(space_id)
-        if not file_ids or not tag_ids or not review_tag_ids:
+        if not file_ids or (not tag_ids and not review_tag_ids):
             return
 
         files = await self._get_space_files_or_raise(space_id, file_ids)
 
         resource_type = ResourceTypeEnum.SPACE_FILE
         tenant_id = int(self.login_user.tenant_id)
+        normalized_tag_ids, normalized_review_tag_ids = await self._partition_file_tag_ids_for_update(
+            tag_ids, review_tag_ids
+        )
+        normalized_tag_ids, normalized_review_tag_ids = await self._promote_review_tags_existing_in_libraries(
+            normalized_tag_ids, normalized_review_tag_ids
+        )
+        if normalized_review_tag_ids:
+            await self._require_review_tag_feature_enabled()
+
         for file_record in files:
             await self._require_permission_id("knowledge_file", file_record.id, "rename_file", space_id=space_id)
-            if tag_ids and len(tag_ids) > 0:
-                await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
-            if review_tag_ids and len(review_tag_ids) > 0:
-                await self._require_review_tag_feature_enabled()
+            if normalized_tag_ids:
+                await TagDao.add_tags(normalized_tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
+            if normalized_review_tag_ids:
                 await ReviewTagDao.add_tags(
-                    review_tag_ids,
+                    normalized_review_tag_ids,
                     str(file_record.id),
                     resource_type,
                     self.login_user.user_id,

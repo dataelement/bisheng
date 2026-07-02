@@ -68,6 +68,16 @@ function formatTagSource(resourceType: string, t: (key: string, defaultValue: st
     return t("build.tagSourceManual", "人工标签");
 }
 
+function formatTagCreator(
+    item: KnowledgeSpaceTagLibraryTagItem,
+    t: (key: string, defaultValue: string) => string,
+) {
+    if (item.resource_type === "ai_auto_tag") {
+        return t("build.tagCreatorAi", "AI生成");
+    }
+    return item.creator_name || "-";
+}
+
 function formatDateTime(value?: string | null) {
     if (!value) return "-";
     const date = new Date(value);
@@ -404,7 +414,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                                                 {formatDateTime(item.create_time)}
                                             </td>
                                             <td className="truncate px-3 py-3 text-muted-foreground">
-                                                {item.creator_name || "-"}
+                                                {formatTagCreator(item, t)}
                                             </td>
                                             <td className="px-3 py-3">
                                                 <Button

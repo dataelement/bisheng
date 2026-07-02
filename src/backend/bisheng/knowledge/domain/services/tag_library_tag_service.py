@@ -323,6 +323,57 @@ class TagLibraryTagService:
         return len(system) + len(manual) + len(ai)
 
     @classmethod
+    async def find_library_tag_by_name(cls, *, tenant_id: int | None, tag_name: str) -> Tag | None:
+        normalized = (tag_name or "").strip()
+        if not normalized or tenant_id is None:
+            return None
+        async with get_async_db_session() as session:
+            row = (
+                await session.exec(
+                    select(Tag)
+                    .where(
+                        Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                        Tag.tenant_id == tenant_id,
+                        Tag.name == normalized,
+                    )
+                    .limit(1)
+                )
+            ).first()
+        return row
+
+    @classmethod
+    def find_library_tag_by_name_sync(cls, *, tenant_id: int | None, tag_name: str) -> Tag | None:
+        normalized = (tag_name or "").strip()
+        if not normalized or tenant_id is None:
+            return None
+        statement = (
+            select(Tag)
+            .where(
+                Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                Tag.tenant_id == tenant_id,
+                Tag.name == normalized,
+            )
+            .limit(1)
+        )
+        with get_sync_db_session() as session:
+            return session.exec(statement).first()
+
+    @classmethod
+    async def list_tenant_library_tag_name_keys(cls, tenant_id: int | None) -> set[str]:
+        if tenant_id is None:
+            return set()
+        async with get_async_db_session() as session:
+            rows = (
+                await session.exec(
+                    select(Tag.name).where(
+                        Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                        Tag.tenant_id == tenant_id,
+                    )
+                )
+            ).all()
+        return {str(name).strip().lower() for name in rows if name and str(name).strip()}
+
+    @classmethod
     async def find_names_used_in_other_libraries(
         cls,
         *,

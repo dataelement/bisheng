@@ -1044,6 +1044,7 @@
     "tagSource": "标签来源",
     "tagSourceSystem": "系统标签",
     "tagSourceAi": "AI标签",
+    "tagCreatorAi": "AI生成",
     "tagSourceManual": "人工标签",
     "tagUsedCount": "使用知识数",
     "createTime": "创建时间",

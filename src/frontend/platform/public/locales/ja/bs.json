@@ -1038,6 +1038,7 @@
     "tagSource": "タグソース",
     "tagSourceSystem": "システムタグ",
     "tagSourceAi": "AIタグ",
+    "tagCreatorAi": "AI生成",
     "tagSourceManual": "手動タグ",
     "tagUsedCount": "使用ナレッジ数",
     "createTime": "作成日時",

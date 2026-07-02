@@ -1055,6 +1055,7 @@
     "tagSource": "Tag source",
     "tagSourceSystem": "System tag",
     "tagSourceAi": "AI tag",
+    "tagCreatorAi": "AI Generated",
     "tagSourceManual": "Manual tag",
     "tagUsedCount": "Usage count",
     "createTime": "Created at",

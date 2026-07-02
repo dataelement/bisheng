@@ -161,7 +161,7 @@ async def test_add_space_tag_returns_bound_library_tag(service):
         ),
         patch.object(
             service,
-            "_find_bound_library_tag_by_name",
+            "_find_tenant_library_tag_by_name",
             new_callable=AsyncMock,
             return_value=library_tag,
         ),
@@ -204,7 +204,7 @@ async def test_add_space_tag_rejects_library_tag_when_review_feature_disabled(se
         ),
         patch.object(
             service,
-            "_find_bound_library_tag_by_name",
+            "_find_tenant_library_tag_by_name",
             new_callable=AsyncMock,
             return_value=library_tag,
         ),
@@ -235,7 +235,7 @@ async def test_add_space_tag_rejects_when_review_feature_disabled(service):
         ),
         patch.object(
             service,
-            "_find_bound_library_tag_by_name",
+            "_find_tenant_library_tag_by_name",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -266,7 +266,7 @@ async def test_add_space_tag_creates_review_tag_with_tenant_id(service):
         ),
         patch.object(
             service,
-            "_find_bound_library_tag_by_name",
+            "_find_tenant_library_tag_by_name",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -345,6 +345,12 @@ async def test_update_file_tags_partitions_review_tag_ids(service):
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
             new_callable=AsyncMock,
         ),
+        patch.object(
+            service,
+            "_promote_review_tags_existing_in_libraries",
+            new_callable=AsyncMock,
+            side_effect=lambda tag_ids, review_tag_ids: (tag_ids, review_tag_ids),
+        ),
     ):
         session = AsyncMock()
         session.exec = AsyncMock(return_value=SimpleNamespace(all=lambda: [20]))
@@ -370,6 +376,12 @@ async def test_update_file_tags_rejects_review_tags_when_feature_disabled(servic
             new_callable=AsyncMock,
             return_value=([1], [2]),
         ),
+        patch.object(
+            service,
+            "_promote_review_tags_existing_in_libraries",
+            new_callable=AsyncMock,
+            return_value=([1], [2]),
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags",
             new_callable=AsyncMock,
@@ -389,3 +401,190 @@ async def test_update_file_tags_rejects_review_tags_when_feature_disabled(servic
             await service.update_file_tags(137, 10, [1], [2])
 
     mock_update_tags.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_add_space_tag_skips_review_when_tag_exists_in_any_library(service):
+    library_tag = SimpleNamespace(
+        id=100,
+        name="全局标签",
+        business_type="tag_library",
+        resource_type="system_tag",
+    )
+
+    with (
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.get_tags_by_business",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            service,
+            "_find_tenant_library_tag_by_name",
+            new_callable=AsyncMock,
+            return_value=library_tag,
+        ),
+        patch.object(
+            KnowledgeSpaceService,
+            "_require_review_tag_feature_enabled",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.ainsert_review_tag",
+            new_callable=AsyncMock,
+        ) as mock_insert,
+    ):
+        result = await service.add_space_tag(137, "全局标签")
+
+    assert result is library_tag
+    mock_insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_file_tags_promotes_review_tag_when_name_exists_in_library(service):
+    file_record = SimpleNamespace(id=10, knowledge_id=137)
+    review_tag = SimpleNamespace(id=20, name="库内标签")
+    library_tag = SimpleNamespace(id=100, name="库内标签")
+
+    with (
+        patch.object(service, "_get_file_for_action", new_callable=AsyncMock, return_value=file_record),
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_partition_file_tag_ids_for_update",
+            new_callable=AsyncMock,
+            return_value=([1], [20]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+        ) as mock_session_ctx,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.find_library_tag_by_name",
+            new_callable=AsyncMock,
+            return_value=library_tag,
+        ),
+        patch.object(
+            KnowledgeSpaceService,
+            "_require_review_tag_feature_enabled",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags",
+            new_callable=AsyncMock,
+        ) as mock_update_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.aupdate_resource_tags",
+            new_callable=AsyncMock,
+        ) as mock_update_review_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+    ):
+        session = AsyncMock()
+        session.exec = AsyncMock(return_value=SimpleNamespace(all=lambda: [review_tag]))
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await service.update_file_tags(137, 10, [1], [20])
+
+    mock_update_tags.assert_awaited_once_with([1, 100], "10", ResourceTypeEnum.SPACE_FILE, 1)
+    mock_update_review_tags.assert_awaited_once_with([], "10", ResourceTypeEnum.SPACE_FILE, 1, tenant_id=1)
+
+
+@pytest.mark.asyncio
+async def test_batch_add_file_tags_promotes_review_tag_when_name_exists_in_library(service):
+    file_record = SimpleNamespace(id=10, knowledge_id=137)
+    review_tag = SimpleNamespace(id=20, name="库内标签")
+    library_tag = SimpleNamespace(id=100, name="库内标签")
+
+    with (
+        patch.object(service, "_require_read_permission", new_callable=AsyncMock),
+        patch.object(service, "_get_space_files_or_raise", new_callable=AsyncMock, return_value=[file_record]),
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_partition_file_tag_ids_for_update",
+            new_callable=AsyncMock,
+            return_value=([1], [20]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+        ) as mock_session_ctx,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.find_library_tag_by_name",
+            new_callable=AsyncMock,
+            return_value=library_tag,
+        ),
+        patch.object(
+            KnowledgeSpaceService,
+            "_require_review_tag_feature_enabled",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.add_tags",
+            new_callable=AsyncMock,
+        ) as mock_add_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.add_tags",
+            new_callable=AsyncMock,
+        ) as mock_add_review_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+    ):
+        session = AsyncMock()
+        session.exec = AsyncMock(return_value=SimpleNamespace(all=lambda: [review_tag]))
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await service.batch_add_file_tags(137, [10], [1], [20])
+
+    mock_add_tags.assert_awaited_once_with([1, 100], "10", ResourceTypeEnum.SPACE_FILE, 1)
+    mock_add_review_tags.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_batch_add_file_tags_allows_tag_ids_only(service):
+    file_record = SimpleNamespace(id=10, knowledge_id=137)
+
+    with (
+        patch.object(service, "_require_read_permission", new_callable=AsyncMock),
+        patch.object(service, "_get_space_files_or_raise", new_callable=AsyncMock, return_value=[file_record]),
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_partition_file_tag_ids_for_update",
+            new_callable=AsyncMock,
+            return_value=([1], []),
+        ),
+        patch.object(
+            service,
+            "_promote_review_tags_existing_in_libraries",
+            new_callable=AsyncMock,
+            return_value=([1], []),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.add_tags",
+            new_callable=AsyncMock,
+        ) as mock_add_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.add_tags",
+            new_callable=AsyncMock,
+        ) as mock_add_review_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await service.batch_add_file_tags(137, [10], [1], [])
+
+    mock_add_tags.assert_awaited_once_with([1], "10", ResourceTypeEnum.SPACE_FILE, 1)
+    mock_add_review_tags.assert_not_awaited()
