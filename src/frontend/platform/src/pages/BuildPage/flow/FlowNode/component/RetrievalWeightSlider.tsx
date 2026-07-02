@@ -130,7 +130,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">{t('enableToVerifyUserAccessToKnowledgeBase')}</p>
+                                    {/* F041: detailed tip — ON=runtime user view_file, OFF=config author range (shared) */}
+                                    <p className="max-w-xs">{t('userAuthVerificationTips')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>

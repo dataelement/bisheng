@@ -28,9 +28,14 @@ export interface ArtifactFile {
     previewAsImage?: boolean;
 }
 
-export type PreviewKind = 'markdown' | 'text' | 'image' | 'unsupported';
+export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'unsupported';
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
+// Rich file types rendered inline by the shared FilePreview viewer (pdfjs /
+// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse)
+// and `ppt`/`pptx` (need a backend pptx→pdf conversion) — those stay 'unsupported'
+// so they keep the "download to view" fallback.
+const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv'];
 
 export function getFileExtension(fileName: string): string {
     const lastDot = fileName?.lastIndexOf('.') ?? -1;
@@ -43,6 +48,7 @@ export function getPreviewKind(fileName: string): PreviewKind {
     if (ext === 'md') return 'markdown';
     if (ext === 'txt') return 'text';
     if (IMAGE_EXTS.includes(ext)) return 'image';
+    if (DOCUMENT_EXTS.includes(ext)) return 'document';
     return 'unsupported';
 }
 

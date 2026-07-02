@@ -213,6 +213,10 @@ class AgentNode(BaseNode):
         # Determine whether it is a knowledge base or a temporary file list
         self._knowledge_type = self.node_params["knowledge_id"]["type"]
         self._knowledge_ids = [one["key"] for one in self.node_params["knowledge_id"]["value"]]
+        # F041: 用户知识库权限校验 toggle (default OFF, preserves current behavior).
+        # ON  → filter knowledge-space retrieval by the runtime user's view_file;
+        # OFF → by the config author's (flow creator) view_file.
+        self._knowledge_auth = self.node_params.get("user_auth", False)
 
         # Supported or notnl2sql
         self._sql_agent_params = self.node_params.get("sql_agent", None)
@@ -334,6 +338,24 @@ class AgentNode(BaseNode):
     def _init_knowledge_tools(self, knowledge_retriever: dict):
         if not self._knowledge_ids:
             return []
+        if self._knowledge_type == "space":
+            # F041: one tool covering all selected knowledge spaces, retrieving
+            # through the F029 view_file filter (identity = runtime user when the
+            # permission toggle is ON, config author when OFF).
+            from bisheng.knowledge.domain.services.space_flow_retrieval import build_space_knowledge_tool
+
+            identity_user_id = self.user_id if self._knowledge_auth else self.flow_user_id
+            space_tool = build_space_knowledge_tool(
+                name="knowledge_space_retriever",
+                description="在知识空间中检索与查询相关的文档内容。",
+                llm=self._llm,
+                space_ids=self._knowledge_ids,
+                identity_user_id=identity_user_id,
+                tenant_id=self.tenant_id,
+                max_content=knowledge_retriever.get("max_content", 15000),
+                access_scope="per_user" if self._knowledge_auth else "shared",
+            )
+            return [space_tool]
         tools = []
         for index, knowledge_id in enumerate(self._knowledge_ids):
             if self._knowledge_type == "knowledge":

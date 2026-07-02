@@ -33,6 +33,28 @@ from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 logger = logging.getLogger(__name__)
 
 
+def _parse_path_ids(path: str | None) -> list[int]:
+    """Ancestor→self id chain parsed from a materialized path ``/1/21/106/`` →
+    ``[1, 21, 106]`` (paths end with the node's own id). F038."""
+    ids: list[int] = []
+    for part in str(path or "").split("/"):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    return ids
+
+
+def _department_path_label(path: str | None, id_to_name: dict[int, str], own_name: str | None) -> str | None:
+    """Full display path for a department (``总公司/研发部/平台组``) from its
+    materialized ``path`` and an id→name map. Falls back to the node's own name
+    when the path can't be parsed. F038: lets the permission list show the path
+    without a per-grant path-tree round trip."""
+    ids = _parse_path_ids(path)
+    if not ids:
+        return own_name
+    return "/".join(id_to_name.get(i) or f"#{i}" for i in ids)
+
+
 class PermissionService:
     """Stateless service for ReBAC permission operations."""
 
@@ -814,10 +836,34 @@ class PermissionService:
             return_exceptions=True,
         )
 
+        # F038: a department's display name is its FULL ancestor path so the
+        # permission list (which can hold one row per descendant of an
+        # include-children grant) renders labels without issuing one path-tree
+        # call per granted department. Ancestors not in the granted set are
+        # loaded in a single extra batched query.
+        dept_label_map: dict[int, str | None] = {}
+        dept_result = results[1]
+        if not isinstance(dept_result, Exception) and dept_result:
+            id_to_name = {d.id: d.name for d in dept_result}
+            ancestor_ids = {
+                i for d in dept_result for i in _parse_path_ids(getattr(d, "path", None)) if i not in id_to_name
+            }
+            if ancestor_ids:
+                from bisheng.database.models.department import DepartmentDao
+
+                try:
+                    for ancestor in await DepartmentDao.aget_by_ids(list(ancestor_ids)) or []:
+                        id_to_name[ancestor.id] = ancestor.name
+                except Exception as exc:
+                    logger.warning("Failed to resolve department ancestor names: %s", exc)
+            dept_label_map = {
+                d.id: _department_path_label(getattr(d, "path", None), id_to_name, d.name) for d in dept_result
+            }
+
         name_map: dict[tuple, str | None] = {}
         extractors = [
             (results[0], "user", lambda u: (u.user_id, u.user_name)),
-            (results[1], "department", lambda d: (d.id, d.name)),
+            (results[1], "department", lambda d: (d.id, dept_label_map.get(d.id, d.name))),
             (results[2], "user_group", lambda g: (g.id, g.group_name)),
         ]
         for result, subject_type, extractor in extractors:

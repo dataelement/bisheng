@@ -12,7 +12,16 @@ import { ACCENT, FAINT, INK, MUTED } from './execTokens';
 import type { ExecTask } from './TaskStepRow';
 import { isTaskDone, isTaskRunning } from './stepUtils';
 
-export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: boolean }) {
+export function TaskPanel({
+    tasks,
+    completed,
+    terminated = false,
+}: {
+    tasks: ExecTask[];
+    completed: boolean;
+    /** user manually stopped the run — flag a problem instead of spinning */
+    terminated?: boolean;
+}) {
     const localize = useLocalize();
     // Default collapsed: the panel opens collapsed on every conversation switch
     // (the parent keys this by versionId so it remounts per turn), keeping the
@@ -27,7 +36,9 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
     // Collapsed header surfaces the currently-running task name inline (Figma
     // 12221-40080): `≣ 任务  <running task>  N/M  ⌃`. While expanded the list
     // below already shows every task, so the header omits the inline name.
-    const runningTask = tasks.find((t) => isTaskRunning(t.status));
+    // A terminated run is no longer "running", so it shows neither the spinner
+    // nor the shimmering task name.
+    const runningTask = terminated ? undefined : tasks.find((t) => isTaskRunning(t.status));
     const runningName = runningTask?.name || runningTask?.task_data?.name || '';
     const showRunningInline = !open && !allDone && !!runningName;
 
@@ -40,10 +51,13 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 className="flex w-full items-center gap-2 px-4 py-3 text-left"
             >
                 {/* Header glyph:
+                    - terminated → static task glyph (manual stop → no spinner)
                     - all done → DoubleCheck (both expanded & collapsed)
                     - in progress + expanded → the task (list) glyph
                     - in progress + collapsed → Accent spinner (live activity cue) */}
-                {allDone ? (
+                {terminated ? (
+                    <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
+                ) : allDone ? (
                     <Outlined.DoubleCheck size={16} className="shrink-0" style={{ color: INK }} />
                 ) : open ? (
                     <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
@@ -51,7 +65,11 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                     <Outlined.Loading size={16} className="shrink-0 animate-spin" style={{ color: ACCENT }} />
                 )}
                 <span className="shrink-0 text-[16px] font-medium" style={{ color: INK }}>
-                    {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
+                    {terminated
+                        ? localize('com_linsight_task_terminated')
+                        : allDone
+                            ? localize('com_linsight_task_panel_done')
+                            : localize('com_linsight_task_panel')}
                 </span>
                 {showRunningInline && (
                     <span className="min-w-0 flex-1 truncate bg-[linear-gradient(90deg,#cccccc_0%,#6b6b6b_50%,#cccccc_100%)] bg-[length:200%_100%] bg-clip-text text-[14px] text-transparent animate-text-shimmer">

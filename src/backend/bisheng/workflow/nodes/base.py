@@ -2,12 +2,12 @@ import base64
 import copy
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 
 from bisheng.core.cache.utils import file_download
-from bisheng.user.domain.models.user import UserDao, User
+from bisheng.user.domain.models.user import User, UserDao
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
@@ -18,28 +18,40 @@ from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 
 class BaseNode(ABC):
-
-    def __init__(self, node_data: BaseNodeData, workflow_id: str, user_id: int,
-                 graph_state: GraphState, target_edges: List[EdgeBase], max_steps: int,
-                 callback: BaseCallback, **kwargs: Any):
+    def __init__(
+        self,
+        node_data: BaseNodeData,
+        workflow_id: str,
+        user_id: int,
+        graph_state: GraphState,
+        target_edges: list[EdgeBase],
+        max_steps: int,
+        callback: BaseCallback,
+        **kwargs: Any,
+    ):
         self.id = node_data.id
         self.type = node_data.type
         self.name = node_data.name
         self.description = node_data.description
         self.target_edges = target_edges
 
-        # Execute Unique Identification of User
+        # Execute Unique Identification of User (runtime user who triggered the run)
         self.user_id = user_id
 
         # Global State Management
         self.workflow_id = workflow_id
-        self.workflow_name = kwargs.get('workflow_name')
+        self.workflow_name = kwargs.get("workflow_name")
         self.graph_state = graph_state
         # Owner tenant of the Flow — set by GraphEngine from FlowDao at
         # task entry; downstream nodes pass this to LLMService.get_*_llm
         # so the F022 system-config row resolves against the Flow's tenant
         # rather than the (often unset) Celery worker ContextVar (INV-T18).
-        self.tenant_id: Optional[int] = kwargs.get('tenant_id')
+        self.tenant_id: int | None = kwargs.get("tenant_id")
+        # Flow creator (config author), set by GraphEngine from FlowDao at task
+        # entry. F041: knowledge-space retrieval filters by the config author's
+        # view_file when the permission toggle is OFF (falls back to user_id when
+        # unset, e.g. legacy call sites that don't thread it).
+        self.flow_user_id: int | None = kwargs.get("flow_user_id") or user_id
 
         # Data of all nodes
         self.node_data = node_data
@@ -59,19 +71,19 @@ class BaseNode(ABC):
 
         # Storing Temporary Data milvus Collection Name And es Collection Name workflow_id As partition key
         # samecollectionMedium vector data must be the sameembedding_modelGenerated, so the collection name needs to containembedding_model_id
-        self.tmp_collection_name = 'tmp_workflow_data_new'
+        self.tmp_collection_name = "tmp_workflow_data_new"
 
         self.stop_flag = False
 
         self.exec_unique_id = None
 
-        self.user_info: Optional[User] = None
+        self.user_info: User | None = None
 
         # Parse Simple Parameters
         self.init_data()
 
     def init_data(self):
-        """ Unified parameter processing, nodes with special needs can be processed when initializing themselves """
+        """Unified parameter processing, nodes with special needs can be processed when initializing themselves"""
         if not self.node_data.group_params:
             return
 
@@ -85,7 +97,7 @@ class BaseNode(ABC):
         self.user_info = UserDao.get_user(int(self.user_id))
 
     @abstractmethod
-    def _run(self, unique_id: str) -> Dict[str, Any]:
+    def _run(self, unique_id: str) -> dict[str, Any]:
         """
         Run node The returned results are stored in the global variable management and can be used by other nodes
         :return:
@@ -111,17 +123,17 @@ class BaseNode(ABC):
         return []
 
     def get_other_node_variable(self, variable_key: str) -> Any:
-        """ Get the variable values of other nodes from the global variable """
+        """Get the variable values of other nodes from the global variable"""
         value = self.graph_state.get_variable_by_str(variable_key)
         self.other_node_variable[variable_key] = value
         return value
 
     def get_input_schema(self) -> Any:
-        """ Returns the form description the user needs to enter """
+        """Returns the form description the user needs to enter"""
         return None
 
     def is_condition_node(self) -> bool:
-        """ Whether it is a mutually exclusive node """
+        """Whether it is a mutually exclusive node"""
         return self.node_data.type == NodeType.CONDITION.value
 
     def get_milvus_collection_name(self, embedding_model_id: str) -> str:
@@ -164,18 +176,18 @@ class BaseNode(ABC):
 
     @staticmethod
     def get_file_base64_data(file_path: str) -> str:
-        if file_path.startswith(('http', "https")):
+        if file_path.startswith(("http", "https")):
             file_path, _ = file_download(file_path)
 
         with open(file_path, "rb") as f:
             file_data = f.read()
-            base64_data = base64.b64encode(file_data).decode('utf-8')
+            base64_data = base64.b64encode(file_data).decode("utf-8")
         return base64_data
 
-    def contact_file_into_prompt(self, human_message: HumanMessage, variable_list: List[str]) -> HumanMessage:
+    def contact_file_into_prompt(self, human_message: HumanMessage, variable_list: list[str]) -> HumanMessage:
         if not variable_list:
             if isinstance(human_message.content, list):
-                human_message.content = human_message.content[0].get('text')
+                human_message.content = human_message.content[0].get("text")
             return human_message
         for image_variable in variable_list:
             image_value = self.get_other_node_variable(image_variable)
@@ -183,12 +195,14 @@ class BaseNode(ABC):
                 continue
             for file_path in image_value:
                 base64_image = self.get_file_base64_data(file_path)
-                human_message.content.append({
-                    "type": "image",
-                    "source_type": "base64",
-                    "mime_type": "image/jpeg",
-                    "data": base64_image,
-                })
+                human_message.content.append(
+                    {
+                        "type": "image",
+                        "source_type": "base64",
+                        "mime_type": "image/jpeg",
+                        "data": base64_image,
+                    }
+                )
         return human_message
 
     def run(self, state: dict) -> Any:
@@ -197,14 +211,13 @@ class BaseNode(ABC):
         :return:
         """
         if self.stop_flag:
-            raise IgnoreException('stop by user')
+            raise IgnoreException("stop by user")
         if self.current_step >= self.max_steps:
-            raise IgnoreException(f'{self.name} -- has run more than the maximum number of times.')
+            raise IgnoreException(f"{self.name} -- has run more than the maximum number of times.")
 
         exec_id = uuid.uuid4().hex
         self.exec_unique_id = exec_id
-        self.callback_manager.on_node_start(
-            data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
+        self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
         reason = None
         log_data = None
@@ -222,9 +235,16 @@ class BaseNode(ABC):
         finally:
             # The end log of the output node is created byfakeNode Output, Because it is necessary to wait for the user to complete the input before the log can be displayed correctly
             if reason or self.type != NodeType.OUTPUT.value:
-                self.callback_manager.on_node_end(data=NodeEndData(
-                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data,
-                    input_data=self.other_node_variable))
+                self.callback_manager.on_node_end(
+                    data=NodeEndData(
+                        unique_id=exec_id,
+                        node_id=self.id,
+                        name=self.name,
+                        reason=reason,
+                        log_data=log_data,
+                        input_data=self.other_node_variable,
+                    )
+                )
         return state
 
     async def arun(self, state: dict) -> Any:

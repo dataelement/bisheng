@@ -292,7 +292,9 @@ function CitationPreviewCard({
   const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
   const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
   const titleContainerClassName = 'bg-white p-3';
-  const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-blue-600`;
+  // Web link titles hover to a fixed blue (matches the web hover arrow #1B61E6),
+  // not the blue⇄green brand theme — they're generic external links, not a brand action.
+  const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#1B61E6]`;
   const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]';
   const formatSourceMeta = (value?: string) => {
     if (!value) {

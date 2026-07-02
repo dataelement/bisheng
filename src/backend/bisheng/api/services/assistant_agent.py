@@ -277,17 +277,43 @@ class AssistantAgent(AssistantUtils):
                 callbacks=callbacks,
             )
 
+        # F041: split knowledge spaces (type=3) from document / QA KBs by row.type.
+        link_knowledge_ids = [link.knowledge_id for link in flow_links if link.knowledge_id]
         kb_ids: list[int] = []
-        for link in flow_links:
-            knowledge_id = link.knowledge_id
-            if knowledge_id:
-                kb_ids.append(knowledge_id)
-                knowledge_tool = await ToolExecutor.init_knowledge_tool(
-                    self.invoke_user_id, knowledge_id, llm=self.llm, callbacks=callbacks, **self.knowledge_retriever
+        space_ids: list[int] = []
+        if link_knowledge_ids:
+            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+            type_by_id = {row.id: row.type for row in KnowledgeDao.get_list_by_ids(link_knowledge_ids)}
+            for knowledge_id in link_knowledge_ids:
+                if type_by_id.get(knowledge_id) == KnowledgeTypeEnum.SPACE.value:
+                    space_ids.append(knowledge_id)
+                else:
+                    kb_ids.append(knowledge_id)
+                    knowledge_tool = await ToolExecutor.init_knowledge_tool(
+                        self.invoke_user_id, knowledge_id, llm=self.llm, callbacks=callbacks, **self.knowledge_retriever
+                    )
+                    tools.append(knowledge_tool)
+        if space_ids:
+            # One tool over all selected spaces; identity by the 用户知识库权限校验 toggle
+            # (runtime user ON / assistant creator OFF).
+            from bisheng.knowledge.domain.services.space_flow_retrieval import build_space_knowledge_tool
+
+            identity_user_id = self.invoke_user_id if self.assistant.knowledge_auth else self.assistant.user_id
+            tools.append(
+                build_space_knowledge_tool(
+                    name="knowledge_space_retriever",
+                    description="在知识空间中检索与查询相关的文档内容。",
+                    llm=self.llm,
+                    space_ids=space_ids,
+                    identity_user_id=identity_user_id,
+                    tenant_id=self.assistant.tenant_id,
+                    max_content=self.knowledge_retriever.get("max_content", 15000),
+                    access_scope="per_user" if self.assistant.knowledge_auth else "shared",
                 )
-                tools.append(knowledge_tool)
+            )
         self.tools = [self.wrap_citation_tool(tool) for tool in tools]
-        kb_name_by_id = self._resolve_kb_name_by_id(kb_ids)
+        kb_name_by_id = self._resolve_kb_name_by_id(kb_ids + space_ids)
         for tool in self.tools:
             if isinstance(tool, AssistantCitationToolWrapper) and tool._has_knowledge_rag_tool():
                 tool.kb_name_by_id = kb_name_by_id

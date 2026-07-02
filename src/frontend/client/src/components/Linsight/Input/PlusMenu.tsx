@@ -107,7 +107,10 @@ export function PlusMenu({
                         >
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <Outlined.Newspaper size={16} className="text-slate-600" />
+                                    <Outlined.Newspaper
+                                        size={16}
+                                        className={cn(selectedSkills.length > 0 ? 'text-blue-600' : 'text-slate-600')}
+                                    />
                                     {selectedSkills.length > 0 && (
                                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                                     )}
@@ -118,7 +121,8 @@ export function PlusMenu({
                             </div>
                             {/* ChevronRight is rendered by DropdownMenuSubTrigger itself */}
                         </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-2 shadow-2xl">
+                        {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`). */}
+                        <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                             <SkillSelector selected={selectedSkills} onChange={onSkillsChange} />
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>

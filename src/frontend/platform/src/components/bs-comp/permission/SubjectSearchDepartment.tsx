@@ -1,14 +1,28 @@
+import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { getResourceGrantDepartmentsApi } from "@/controllers/API/permission"
-import { getDepartmentTreeApi } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import {
+  getDepartmentChildrenApi,
+  getDepartmentPathTreeApi,
+  searchDepartmentsApi,
+} from "@/controllers/API/department"
+import {
+  getResourceGrantDepartmentChildrenApi,
+  getResourceGrantDepartmentPathTreeApi,
+  searchResourceGrantDepartmentsApi,
+} from "@/controllers/API/permission"
 import type { DepartmentTreeNode } from "@/types/api/department"
-import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { ResourceType, SelectedSubject } from "./types"
 
-const INDENT_PX = 20
+/**
+ * F038: department subject picker for authorization (knowledge space / channel)
+ * and the org tree. Lazy browse/search/locate; multi-select with implicit
+ * selection determined by materialized `path` (decision 9) and "include children"
+ * applied as all-or-nothing — the grant truth is the explicit picks + the global
+ * include-children flag, the backend expands subtrees (decision 10). No
+ * client-side subtree materialization.
+ */
 
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[]
@@ -24,40 +38,6 @@ interface SubjectSearchDepartmentProps {
   disabledLabel?: string
 }
 
-function collectExplicitDepartmentSelections(
-  nodes: DepartmentTreeNode[],
-  selectedDepartmentsById: Map<number, SelectedSubject>,
-  inherited = false,
-): SelectedSubject[] {
-  const out: SelectedSubject[] = []
-  const visited = new Set<number>()
-
-  const walk = (items: DepartmentTreeNode[], prefix: string[], ancestorSelected: boolean) => {
-    for (const node of items) {
-      const explicitSelection = selectedDepartmentsById.get(node.id)
-      const isSelected = ancestorSelected || Boolean(explicitSelection)
-      const pathSegments = [...prefix, node.name]
-      if (isSelected && !visited.has(node.id)) {
-        visited.add(node.id)
-        out.push({
-          type: 'department',
-          id: node.id,
-          name: pathSegments.join('/'),
-          include_children: false,
-        })
-      }
-
-      const nextAncestorSelected = ancestorSelected || Boolean(explicitSelection?.include_children)
-      if (node.children?.length) {
-        walk(node.children, pathSegments, nextAncestorSelected)
-      }
-    }
-  }
-
-  walk(nodes, [], inherited)
-  return out
-}
-
 export function SubjectSearchDepartment({
   value,
   onChange,
@@ -71,277 +51,122 @@ export function SubjectSearchDepartment({
   disabledIds = [],
   disabledLabel,
 }: SubjectSearchDepartmentProps) {
-  const { t } = useTranslation('permission')
-  const [tree, setTree] = useState<DepartmentTreeNode[]>([])
-  const [loading, setLoading] = useState(false)
-  const [keyword, setKeyword] = useState('')
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const { t } = useTranslation("permission")
   const disabledIdSet = new Set(disabledIds)
 
-  useEffect(() => {
-    const request = resourceType && resourceId
-      ? getResourceGrantDepartmentsApi(resourceType, resourceId)
-      : allowOrganizationTree
-        ? getDepartmentTreeApi()
-        : null
-
-    if (!request) {
-      setTree([])
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    captureAndAlertRequestErrorHoc(request).then((res) => {
-      if (res) setTree(res)
-      setLoading(false)
-    })
-  }, [allowOrganizationTree, resourceId, resourceType])
-
-  const selectedIds = new Set(value.map((s) => s.id))
-  const selectedDepartmentsById = useMemo(
-    () =>
-      new Map(
-        value
-          .filter((subject) => subject.type === 'department')
-          .map((subject) => [subject.id, subject] as const),
-      ),
-    [value],
+  const hasResource = !!(resourceType && resourceId)
+  // Data source: the authorization grant tree (resource scope) when granting a
+  // resource, otherwise the plain org tree (allowOrganizationTree). Inline
+  // fetchers are fine — the hook keeps them in a ref; cacheKey is the stable
+  // namespace.
+  const tree = useLazyDepartmentTree(
+    hasResource
+      ? {
+          autoLoad: true,
+          cacheKey: `grant-dept:${resourceType}:${resourceId}`,
+          fetchChildren: (p) => getResourceGrantDepartmentChildrenApi(resourceType!, resourceId!, p),
+          fetchSearch: (kw) => searchResourceGrantDepartmentsApi(resourceType!, resourceId!, kw),
+          fetchPathTree: (id) => getResourceGrantDepartmentPathTreeApi(resourceType!, resourceId!, id),
+        }
+      : {
+          autoLoad: allowOrganizationTree,
+          cacheKey: "dept:false",
+          fetchChildren: (p) => getDepartmentChildrenApi(p, false),
+          fetchSearch: (kw) => searchDepartmentsApi(kw, false),
+          fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
+        }
   )
 
-  useEffect(() => {
-    onSelectionSummaryChange?.(
-      collectExplicitDepartmentSelections(tree, selectedDepartmentsById),
-    )
-  }, [onSelectionSummaryChange, selectedDepartmentsById, tree])
+  // Remember each selected dept's path at pick time so implicit selection can be
+  // computed by path even after a search swaps the rendered nodes.
+  const selectedPathRef = useRef<Map<number, string>>(new Map())
 
-  const toggle = (node: DepartmentTreeNode, pathLabel: string) => {
+  const departmentSubjects = value.filter((s) => s.type === "department")
+  const selectedIdSet = new Set(departmentSubjects.map((s) => s.id))
+  const selectedPaths = departmentSubjects
+    .map((s) => tree.getNode(s.id)?.path ?? selectedPathRef.current.get(s.id))
+    .filter((p): p is string => !!p)
+
+  // A node is implicitly selected when "include children" is on and one of the
+  // explicitly-selected departments is its ancestor (path prefix). Decision 9.
+  const isImplicit = (node: DepartmentTreeNode): boolean =>
+    includeChildren &&
+    !selectedIdSet.has(node.id) &&
+    !!node.path &&
+    selectedPaths.some((sp) => node.path !== sp && node.path.startsWith(sp))
+
+  // Summary = the explicit department picks (decision 10: the subtree coverage is
+  // conveyed by the include-children flag, not enumerated).
+  useEffect(() => {
+    onSelectionSummaryChange?.(departmentSubjects)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, onSelectionSummaryChange])
+
+  const handleToggle = (node: DepartmentTreeNode) => {
     if (disabledIdSet.has(node.id)) return
-    if (selectedIds.has(node.id)) {
+    if (selectedIdSet.has(node.id)) {
       onChange(value.filter((s) => s.id !== node.id))
-    } else {
-      onChange([...value, {
-        type: 'department',
-        id: node.id,
-        name: pathLabel,
-        include_children: includeChildren,
-      }])
+      return
     }
+    // Implicitly-selected children can't be picked/unpicked individually; the
+    // user toggles coverage via the parent's include-children (decision 10).
+    if (isImplicit(node)) return
+    selectedPathRef.current.set(node.id, node.path)
+    onChange([
+      ...value,
+      { type: "department", id: node.id, name: node.name, include_children: includeChildren },
+    ])
   }
 
-  const materializeInheritedSelection = useCallback(() => {
-    const explicitDepartments = collectExplicitDepartmentSelections(
-      tree,
-      selectedDepartmentsById,
+  const renderRowPrefix = (node: DepartmentTreeNode) => {
+    const explicit = selectedIdSet.has(node.id)
+    const disabled = disabledIdSet.has(node.id)
+    const implicit = !explicit && !disabled && isImplicit(node)
+    return (
+      <Checkbox
+        className="mr-1.5 shrink-0"
+        checked={explicit || implicit || disabled}
+        disabled={disabled || implicit}
+        onClick={(e) => e.stopPropagation()}
+        onCheckedChange={() => handleToggle(node)}
+      />
     )
-    const nonDepartmentSubjects = value.filter((subject) => subject.type !== 'department')
-    onIncludeChildrenChange(false)
-    onChange([...nonDepartmentSubjects, ...explicitDepartments])
-  }, [onChange, onIncludeChildrenChange, selectedDepartmentsById, tree, value])
-
-  const toggleExpand = (id: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
   }
 
-  const matchesKeyword = useCallback((node: DepartmentTreeNode): boolean => {
-    if (!keyword) return true
-    const lower = keyword.toLowerCase()
-    if (node.name.toLowerCase().includes(lower)) return true
-    return (node.children || []).some(matchesKeyword)
-  }, [keyword])
-
-  useEffect(() => {
-    if (!keyword) return
-    const ids = new Set<number>()
-    const collect = (nodes: DepartmentTreeNode[]) => {
-      for (const n of nodes) {
-        if (matchesKeyword(n)) {
-          ids.add(n.id)
-          if (n.children) collect(n.children)
-        }
-      }
-    }
-    collect(tree)
-    setExpanded(ids)
-  }, [tree, keyword, matchesKeyword])
+  const renderRowSuffix = (node: DepartmentTreeNode) =>
+    disabledIdSet.has(node.id) && disabledLabel ? (
+      <span
+        className="ml-auto max-w-[8rem] shrink-0 truncate text-xs text-muted-foreground"
+        title={disabledLabel}
+      >
+        {disabledLabel}
+      </span>
+    ) : null
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
-        <input
-          type="text"
-          placeholder={t('search.department')}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+      {/* Must be ``flex flex-col`` so LazyDepartmentTree's ``flex-1`` resolves to a
+          bounded height and its inner list actually scrolls (a plain block here
+          lets the tree size to content, so it overflows + can't scroll). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[6px] border border-[#EBECF0]">
+        <LazyDepartmentTree
+          controller={tree}
+          onSelect={handleToggle}
+          renderRowPrefix={renderRowPrefix}
+          renderRowSuffix={renderRowSuffix}
+          isRowDisabled={(n) => disabledIdSet.has(n.id)}
+          searchPlaceholder={t("search.department")}
+          emptyHint={t("empty.departments")}
+          wheelScrollFix
+          className="p-1"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
-        {loading && (
-          <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
-        )}
-        {!loading && tree.length === 0 && (
-          <div className="py-4 text-center text-sm text-muted-foreground">
-            {t('empty.departments')}
-          </div>
-        )}
-        {!loading &&
-          tree.map((node) => (
-            <TreeNode
-              key={node.id}
-              node={node}
-              depth={0}
-              pathSegments={[node.name]}
-              expanded={expanded}
-              selectedIds={selectedIds}
-              selectedDepartmentsById={selectedDepartmentsById}
-              ancestorIncluded={false}
-              disabledIds={disabledIdSet}
-              disabledLabel={disabledLabel}
-              matchesKeyword={matchesKeyword}
-              onMaterializeInheritedSelection={materializeInheritedSelection}
-              onToggle={toggle}
-              onExpand={toggleExpand}
-            />
-          ))}
-      </div>
       {showIncludeChildrenToggle && (
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <Checkbox
-            checked={includeChildren}
-            onCheckedChange={(v) => onIncludeChildrenChange(v === true)}
-          />
-          {t('includeChildren')}
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox checked={includeChildren} onCheckedChange={(v) => onIncludeChildrenChange(v === true)} />
+          {t("includeChildren")}
         </label>
       )}
     </div>
-  )
-}
-
-function TreeNode({
-  node,
-  depth,
-  pathSegments,
-  expanded,
-  selectedIds,
-  selectedDepartmentsById,
-  ancestorIncluded,
-  disabledIds,
-  disabledLabel,
-  matchesKeyword,
-  onMaterializeInheritedSelection,
-  onToggle,
-  onExpand,
-}: {
-  node: DepartmentTreeNode
-  depth: number
-  pathSegments: string[]
-  expanded: Set<number>
-  selectedIds: Set<number>
-  selectedDepartmentsById: Map<number, SelectedSubject>
-  ancestorIncluded: boolean
-  disabledIds: Set<number>
-  disabledLabel?: string
-  matchesKeyword: (n: DepartmentTreeNode) => boolean
-  onMaterializeInheritedSelection: () => void
-  onToggle: (n: DepartmentTreeNode, pathLabel: string) => void
-  onExpand: (id: number) => void
-}) {
-  if (!matchesKeyword(node)) return null
-
-  const hasChildren = node.children && node.children.length > 0
-  const isExpanded = expanded.has(node.id)
-  const explicitSelection = selectedDepartmentsById.get(node.id)
-  const isExplicitlySelected = selectedIds.has(node.id)
-  const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected
-  const isDisabled = disabledIds.has(node.id)
-  const isChecked = isExplicitlySelected || isImplicitlySelected || isDisabled
-  const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children)
-  const pathLabel = pathSegments.join('/')
-
-  return (
-    <>
-      <div
-        className={`flex items-stretch gap-0 pr-2 ${
-          isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-accent"
-        }`}
-        onClick={() => {
-          if (isDisabled) return
-          if (isImplicitlySelected) {
-            onMaterializeInheritedSelection()
-            return
-          }
-          onToggle(node, pathLabel)
-        }}
-      >
-        <div
-          className="shrink-0"
-          style={{ width: depth * INDENT_PX }}
-          aria-hidden
-        />
-        <div className="flex min-w-0 flex-1 items-center gap-1 py-1.5 pl-1">
-          {hasChildren ? (
-            <button
-              type="button"
-              className="shrink-0 rounded p-0.5 hover:bg-muted"
-              onClick={(e) => { e.stopPropagation(); onExpand(node.id) }}
-            >
-              {isExpanded
-                ? <ChevronDown className="h-3.5 w-3.5" />
-                : <ChevronRight className="h-3.5 w-3.5" />}
-            </button>
-          ) : (
-            <span className="inline-flex w-5 shrink-0 justify-center" />
-          )}
-          <Checkbox
-            checked={isChecked}
-            disabled={isDisabled}
-            onClick={(e) => e.stopPropagation()}
-            onCheckedChange={() => {
-              if (isDisabled) return
-              if (isImplicitlySelected) {
-                onMaterializeInheritedSelection()
-                return
-              }
-              onToggle(node, pathLabel)
-            }}
-          />
-          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate text-sm" title={pathLabel}>
-            {node.name}
-          </span>
-          {/* F027 AC-14: per-department member-count badge removed from the
-              tree-node response; this guard is now always false-y and the
-              badge is gone. */}
-          {isDisabled && disabledLabel && (
-            <span className="ml-auto max-w-[8rem] shrink-0 truncate text-xs text-muted-foreground" title={disabledLabel}>{disabledLabel}</span>
-          )}
-        </div>
-      </div>
-      {hasChildren && isExpanded && node.children!.map((child) => (
-        <TreeNode
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          pathSegments={[...pathSegments, child.name]}
-          expanded={expanded}
-          selectedIds={selectedIds}
-          selectedDepartmentsById={selectedDepartmentsById}
-          ancestorIncluded={nextAncestorIncluded}
-          disabledIds={disabledIds}
-          disabledLabel={disabledLabel}
-          matchesKeyword={matchesKeyword}
-          onMaterializeInheritedSelection={onMaterializeInheritedSelection}
-          onToggle={onToggle}
-          onExpand={onExpand}
-        />
-      ))}
-    </>
   )
 }

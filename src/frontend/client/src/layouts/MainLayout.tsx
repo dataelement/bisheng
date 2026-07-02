@@ -83,7 +83,12 @@ function Sidebar({
   /** 移动端应用中心抽屉：置于遮罩层内时用全宽撑满面板，避免与 flex 并排挤压主区域 */
   overlay?: boolean;
 }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  // On the menu-unavailable placeholder the URL carries the originating menu as
+  // `?plugin=xxx`; use it to keep that section's rail icon highlighted.
+  const menuUnavailablePlugin = pathname.startsWith('/menu-unavailable')
+    ? new URLSearchParams(search).get('plugin') || ''
+    : '';
   const { data: bsConfig } = useGetBsConfig();
   const { user, logout } = useAuthContext();
   const localize = useLocalize();
@@ -159,7 +164,7 @@ function Sidebar({
         icon: <Outlined.Home />,
         activeIcon: <Filled.Home />,
         label: localize('com_nav_home'),
-        isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+        isActive: /^\/(c|linsight)(\/|$)/.test(pathname) || menuUnavailablePlugin === 'home',
         closeDrawerOnNavigate: true,
       },
 
@@ -173,7 +178,7 @@ function Sidebar({
         icon: <Outlined.Book />,
         activeIcon: <Filled.Book />,
         label: localize('com_knowledge.knowledge_space'),
-        isActive: pathname.startsWith('/knowledge'),
+        isActive: pathname.startsWith('/knowledge') || menuUnavailablePlugin === 'knowledge_space',
         closeDrawerOnNavigate: true,
       },
       {
@@ -182,7 +187,7 @@ function Sidebar({
         icon: <Outlined.Rss />,
         activeIcon: <Filled.Rss />,
         label: localize('com_ui_channel'),
-        isActive: pathname.startsWith('/channel'),
+        isActive: pathname.startsWith('/channel') || menuUnavailablePlugin === 'subscription',
         closeDrawerOnNavigate: true,
       },
       {
@@ -191,7 +196,7 @@ function Sidebar({
         icon: <Outlined.Application />,
         activeIcon: <Filled.Application />,
         label: localize('com_nav_app_center'),
-        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps') || menuUnavailablePlugin === 'apps',
         closeDrawerOnNavigate: true,
       },
       {
@@ -210,7 +215,7 @@ function Sidebar({
       if (l.section === 'portal-admin') return showShougangPortalTab;
       return true;
     });
-  }, [canOpenWorkbenchEntry, pathname, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
+  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -223,13 +228,16 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-2 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        // Rail: let the content column shrink to its 44px width instead of stretching the track.
+        // Expanded drawer keeps the stretched full-width layout.
+        showExpandedHubSidebar ? undefined : 'items-center',
         // Mobile chat 路由的 sidebar 显隐由 MainLayout 顶层条件渲染管理(systemMenuRevealing),
         // 这里不再硬加 hidden,否则 systemMenu 露出时 sidebar 也被隐掉。
       )}
     >
       <div className={cn('flex flex-col', showExpandedHubSidebar ? 'gap-4 items-stretch' : 'gap-10 items-center')}>
-        <div className={cn('relative shrink-0', showExpandedHubSidebar ? 'flex items-center justify-between p-2' : 'size-10 flex items-center justify-center')}>
+        <div className={cn('relative shrink-0', showExpandedHubSidebar ? 'flex items-center justify-between p-2' : 'size-11 flex items-center justify-center')}>
           {showExpandedHubSidebar ? (
             <>
               {bsConfig?.sidebarIcon?.image ? (
@@ -332,11 +340,12 @@ export default function MainLayout() {
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
+  const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
-  // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话)都隐藏 MainLayout 左栏,
-  // 点页面内菜单按钮触发系统主菜单整页右滑露出。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute);
+  // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
+  // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -471,7 +480,7 @@ export default function MainLayout() {
       <main
         className={cn(
           'relative min-w-0 flex-1',
-          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] p-2',
+          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] py-2 pr-2',
           shouldHideSidebarOnMobileAppsArea && 'transition-transform duration-300 ease-out',
           systemMenuRevealing && 'translate-x-16',
         )}
@@ -489,13 +498,34 @@ export default function MainLayout() {
           // useEffect fires on every navigation and re-checks pending status.
           <div
             className={cn(
-              'bg-white shadow-[0px_0px_20px_0px_#07225808]',
+              'flex flex-col bg-white shadow-[0px_0px_20px_0px_#07225808]',
               !isMobile && 'rounded-xl',
+              // Match the main panel: when the left system menu is revealed, round
+              // the exposed left edge and clip content to it (parity with KeepAlive branch).
+              systemMenuRevealing && 'rounded-l-[24px]',
               isMobile
                 ? 'h-auto min-h-[100dvh] overflow-visible'
                 : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+              systemMenuRevealing && 'overflow-hidden',
             )}
           >
+            {/* 移动端顶栏:无权限占位页本身没有汉堡入口,这里补一个,与会话/知识页一致,
+                避免收起侧栏后用户无法唤出系统菜单。 */}
+            {shouldHideSidebarOnMobileAppsArea ? (
+              <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
+                  <button
+                    type="button"
+                    aria-label={localize('com_nav_open_sidebar')}
+                    onClick={() => setSystemMenuOpen(true)}
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                  >
+                    <Outlined.SidebarMenu className="size-5" />
+                  </button>
+                  <div className="min-w-0 flex-1" aria-hidden />
+                </div>
+              </div>
+            ) : null}
             {outlet}
           </div>
         ) : (

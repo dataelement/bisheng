@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Dict, Any, Literal
+from typing import Any, Literal
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -19,16 +19,16 @@ from bisheng.workflow.nodes.base import BaseNode
 
 
 class ConditionOne(BaseModel):
-    id: str = Field(..., description='Unique id for condition')
-    knowledge_id: int = Field(..., description='metadata filed belong for knowledge`s id')
-    metadata_field: str = Field(..., description='knowledge metadata field')
-    comparison_operation: str = Field(..., description='Compare type')
-    right_value_type: str = Field(..., description='Right value type')
-    right_value: str = Field(..., description='Right value')
+    id: str = Field(..., description="Unique id for condition")
+    knowledge_id: int = Field(..., description="metadata filed belong for knowledge`s id")
+    metadata_field: str = Field(..., description="knowledge metadata field")
+    comparison_operation: str = Field(..., description="Compare type")
+    right_value_type: str = Field(..., description="Right value type")
+    right_value: str = Field(..., description="Right value")
 
     def convert_right_value(self, field_type: str, right_value: Any, is_preset: bool) -> Any:
         # no need to convert right value for is_empty and is_not_empty
-        if self.comparison_operation in ['is_empty', 'is_not_empty'] or is_preset:
+        if self.comparison_operation in ["is_empty", "is_not_empty"] or is_preset:
             return right_value
 
         # only for user metadata field, need to convert right value type
@@ -51,7 +51,7 @@ class ConditionOne(BaseModel):
         return right_value
 
     def convert_preset_filed(self) -> (str, str):
-        """ convert preset field to mysql field in knowledge file table"""
+        """convert preset field to mysql field in knowledge file table"""
         if self.metadata_field == "document_id":
             return "id"
         elif self.metadata_field == "document_name":
@@ -67,12 +67,12 @@ class ConditionOne(BaseModel):
         else:
             raise ValueError(f"Unsupported preset metadata field: {self.metadata_field}")
 
-    def get_knowledge_file_filter(self, field_info: Dict, parent_node: BaseNode, is_preset: bool) -> (str, List[Dict]):
-        """ get knowledge file filter field info for mysql """
+    def get_knowledge_file_filter(self, field_info: dict, parent_node: BaseNode, is_preset: bool) -> (str, list[dict]):
+        """get knowledge file filter field info for mysql"""
         right_value = self.right_value
-        if self.right_value_type == 'ref' and self.right_value:
+        if self.right_value_type == "ref" and self.right_value:
             right_value = parent_node.get_other_node_variable(self.right_value)
-        field_type = field_info.get('field_type')
+        field_type = field_info.get("field_type")
         right_value = self.convert_right_value(field_type, right_value, is_preset)
         if is_preset:
             field_key = self.convert_preset_filed()
@@ -81,66 +81,65 @@ class ConditionOne(BaseModel):
             # MySQL raw SQL path expression
             field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}.field_value'))"
             # Python-side accessor for DaMeng (used by _filter_python in KnowledgeFileDao)
-            py_field = ('user_metadata', self.metadata_field)
+            py_field = ("user_metadata", self.metadata_field)
 
-        key_info: Dict = {'py_field': py_field}
+        key_info: dict = {"py_field": py_field}
         if self.comparison_operation == ComparisonType.EQUAL:
-            key_info['comparison'] = '='
-            key_info['value'] = right_value
+            key_info["comparison"] = "="
+            key_info["value"] = right_value
         elif self.comparison_operation == ComparisonType.NOT_EQUAL:
-            key_info['comparison'] = '!='
-            key_info['value'] = right_value
+            key_info["comparison"] = "!="
+            key_info["value"] = right_value
         elif self.comparison_operation == ComparisonType.CONTAINS:
-            key_info['comparison'] = 'like'
-            key_info['value'] = f"%{right_value}%"
+            key_info["comparison"] = "like"
+            key_info["value"] = f"%{right_value}%"
         elif self.comparison_operation == ComparisonType.NOT_CONTAINS:
-            key_info['comparison'] = 'not like'
-            key_info['value'] = f"%{right_value}%"
+            key_info["comparison"] = "not like"
+            key_info["value"] = f"%{right_value}%"
         elif self.comparison_operation == ComparisonType.STARTS_WITH:
-            key_info['comparison'] = 'like'
-            key_info['value'] = f"{right_value}%"
+            key_info["comparison"] = "like"
+            key_info["value"] = f"{right_value}%"
         elif self.comparison_operation == ComparisonType.ENDS_WITH:
-            key_info['comparison'] = 'like'
-            key_info['value'] = f"%{right_value}"
+            key_info["comparison"] = "like"
+            key_info["value"] = f"%{right_value}"
         elif self.comparison_operation == ComparisonType.IS_EMPTY:
-            key_info['comparison'] = '='
-            key_info['value'] = 'null'
+            key_info["comparison"] = "="
+            key_info["value"] = "null"
         elif self.comparison_operation == ComparisonType.IS_NOT_EMPTY:
-            key_info['comparison'] = '!='
-            key_info['value'] = 'null'
+            key_info["comparison"] = "!="
+            key_info["value"] = "null"
         elif self.comparison_operation == ComparisonType.GREATER_THAN:
-            key_info['comparison'] = '>'
-            key_info['value'] = right_value
+            key_info["comparison"] = ">"
+            key_info["value"] = right_value
         elif self.comparison_operation == ComparisonType.GREATER_THAN_OR_EQUAL:
-            key_info['comparison'] = '>='
-            key_info['value'] = right_value
+            key_info["comparison"] = ">="
+            key_info["value"] = right_value
         elif self.comparison_operation == ComparisonType.LESS_THAN:
-            key_info['comparison'] = '<'
-            key_info['value'] = right_value
+            key_info["comparison"] = "<"
+            key_info["value"] = right_value
         elif self.comparison_operation == ComparisonType.LESS_THAN_OR_EQUAL:
-            key_info['comparison'] = '<='
-            key_info['value'] = right_value
+            key_info["comparison"] = "<="
+            key_info["value"] = right_value
         else:
             raise ValueError(f"Unsupported comparison operation: {self.comparison_operation}")
-        if not is_preset and self.comparison_operation in [ComparisonType.GREATER_THAN,
-                                                           ComparisonType.GREATER_THAN_OR_EQUAL,
-                                                           ComparisonType.LESS_THAN,
-                                                           ComparisonType.LESS_THAN_OR_EQUAL]:
-            key_info['extra_filter'] = [{
-                'comparison': '!=',
-                'value': 'null'
-            }]
+        if not is_preset and self.comparison_operation in [
+            ComparisonType.GREATER_THAN,
+            ComparisonType.GREATER_THAN_OR_EQUAL,
+            ComparisonType.LESS_THAN,
+            ComparisonType.LESS_THAN_OR_EQUAL,
+        ]:
+            key_info["extra_filter"] = [{"comparison": "!=", "value": "null"}]
         return {field_key: key_info}
 
 
 class ConditionCases(BaseModel):
-    id: str = Field(default=None, description='Unique id for condition case')
-    conditions: List[ConditionOne] = Field(default_factory=list, description='List of conditions')
-    operator: Literal['and', 'or'] = Field(default='and', description='Logical operator to combine conditions')
-    enabled: bool = Field(default=False, description='Whether the condition case is enabled')
+    id: str = Field(default=None, description="Unique id for condition case")
+    conditions: list[ConditionOne] = Field(default_factory=list, description="List of conditions")
+    operator: Literal["and", "or"] = Field(default="and", description="Logical operator to combine conditions")
+    enabled: bool = Field(default=False, description="Whether the condition case is enabled")
 
-    def get_knowledge_filter(self, knowledge: Knowledge, parent_node: BaseNode) -> (str, Dict):
-        """ if return is None, filter file is empty, don't need to retrieve from this knowledge """
+    def get_knowledge_filter(self, knowledge: Knowledge, parent_node: BaseNode) -> (str, dict):
+        """if return is None, filter file is empty, don't need to retrieve from this knowledge"""
         if not self.enabled or not self.conditions:
             return "", {}
 
@@ -150,8 +149,9 @@ class ConditionCases(BaseModel):
 
         # Built-in metadata fields
         preset_field_info = {
-            one.field_name: one.model_dump() for one in KNOWLEDGE_RAG_METADATA_SCHEMA if
-            one.field_name != "user_metadata"
+            one.field_name: one.model_dump()
+            for one in KNOWLEDGE_RAG_METADATA_SCHEMA
+            if one.field_name != "user_metadata"
         }
         all_filter_field = []
         for condition in self.conditions:
@@ -171,7 +171,7 @@ class ConditionCases(BaseModel):
         file_ids = KnowledgeFileDao.filter_file_by_metadata_fields(knowledge.id, self.operator, all_filter_field)
         if not file_ids:
             # no file match the filter condition
-            logger.debug(f'knowledge {knowledge.id} no file match the filter condition')
+            logger.debug(f"knowledge {knowledge.id} no file match the filter condition")
             return None, None
         milvus_filter = f"document_id in {file_ids}"
         es_filter = {"filter": [{"terms": {"metadata.document_id": file_ids}}]}
@@ -179,31 +179,28 @@ class ConditionCases(BaseModel):
 
 
 class RagUtils(BaseNode):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._knowledge_type = self.node_params.get('knowledge', {}).get('type', "knowledge")
-        self._knowledge_value = [
-            one['key'] for one in self.node_params.get('knowledge', {}).get('value', [])
-        ]
+        self._knowledge_type = self.node_params.get("knowledge", {}).get("type", "knowledge")
+        self._knowledge_value = [one["key"] for one in self.node_params.get("knowledge", {}).get("value", [])]
 
-        self._advance_kwargs = self.node_params.get('advanced_retrieval_switch', {})
-        self._metadata_filter = ConditionCases(**self.node_params.get('metadata_filter', {}))
+        self._advance_kwargs = self.node_params.get("advanced_retrieval_switch", {})
+        self._metadata_filter = ConditionCases(**self.node_params.get("metadata_filter", {}))
         if self._advance_kwargs:
-            self._advance_kwargs = self.node_params.get('advanced_retrieval_switch', {})
-            self._knowledge_auth = self._advance_kwargs['user_auth']
-            self._max_chunk_size = int(self._advance_kwargs['max_chunk_size'])
-            self._keyword_weight = float(self._advance_kwargs['keyword_weight'])
-            self._vector_weight = float(self._advance_kwargs['vector_weight'])
-            self._rerank_flag = self._advance_kwargs['rerank_flag']
-            self._rerank_model_id = self._advance_kwargs['rerank_model']
+            self._advance_kwargs = self.node_params.get("advanced_retrieval_switch", {})
+            self._knowledge_auth = self._advance_kwargs["user_auth"]
+            self._max_chunk_size = int(self._advance_kwargs["max_chunk_size"])
+            self._keyword_weight = float(self._advance_kwargs["keyword_weight"])
+            self._vector_weight = float(self._advance_kwargs["vector_weight"])
+            self._rerank_flag = self._advance_kwargs["rerank_flag"]
+            self._rerank_model_id = self._advance_kwargs["rerank_model"]
         else:
-            self._knowledge_auth = self.node_params.get('user_auth', False)
-            self._max_chunk_size = int(self.node_params.get('max_chunk_size', 15000))
+            self._knowledge_auth = self.node_params.get("user_auth", False)
+            self._max_chunk_size = int(self.node_params.get("max_chunk_size", 15000))
             self._keyword_weight = 0.5
             self._vector_weight = 0.5
             self._rerank_flag = False
-            self._rerank_model_id = ''
+            self._rerank_model_id = ""
 
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
@@ -212,18 +209,21 @@ class RagUtils(BaseNode):
         self._rerank_model = None
         self._knowledge_retriever_tool = None
 
-    def _run(self, unique_id: str) -> Dict[str, Any]:
+    def _run(self, unique_id: str) -> dict[str, Any]:
         raise NotImplementedError()
 
     @staticmethod
     def format_timestamp(timestamp: int) -> str:
         try:
-            return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%dT%H:%M:%S')
+            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%dT%H:%M:%S")
         except Exception as e:
             logger.error(f"Error formatting timestamp {timestamp}: {e}")
             return str(timestamp)
 
-    def retrieve_question(self, question: str) -> List[Document]:
+    def retrieve_question(self, question: str) -> list[Document]:
+        # F041: knowledge spaces go through the F029 view_file-filtered path.
+        if self._knowledge_type == "space":
+            return self._retrieve_space_question(question)
         # 1: retrieve documents from multi retrievers
         knowledge_retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=self._multi_milvus_retriever,
@@ -232,13 +232,13 @@ class RagUtils(BaseNode):
             rrf_weights=[self._vector_weight, self._keyword_weight],
             rrf_remove_zero_score=True,
             rerank=self._rerank_model,
-            sort_by_source_and_index=True
+            sort_by_source_and_index=True,
         )
         finally_docs = knowledge_retriever_tool.invoke(input={"query": question})
         all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
         file_map = {}
         if finally_docs:
-            if self._knowledge_type == 'knowledge':
+            if self._knowledge_type == "knowledge":
                 file_info = KnowledgeFileDao.get_file_by_ids(list(all_file_id))
                 file_map = {one.id: one for one in file_info}
             for one in finally_docs:
@@ -246,18 +246,18 @@ class RagUtils(BaseNode):
                     one.metadata["upload_time"] = self.format_timestamp(one.metadata["upload_time"])
                 if "update_time" in one.metadata:
                     one.metadata["update_time"] = self.format_timestamp(one.metadata["update_time"])
-                file_id = one.metadata.get('document_id') or one.metadata.get('file_id')
+                file_id = one.metadata.get("document_id") or one.metadata.get("file_id")
                 if file_id and file_map.get(file_id):
-                    for user_key, user_value in one.metadata.get('user_metadata', {}).items():
+                    for user_key, user_value in one.metadata.get("user_metadata", {}).items():
                         field_info = file_map[file_id].user_metadata.get(user_key)
-                        if field_info and field_info.get('field_type') == MetadataFieldType.TIME.value:
+                        if field_info and field_info.get("field_type") == MetadataFieldType.TIME.value:
                             one.metadata["user_metadata"][user_key] = self.format_timestamp(user_value)
         return finally_docs
 
-    def init_user_question(self) -> List[str]:
+    def init_user_question(self) -> list[str]:
         # Convert all user questions to strings by default
         ret = []
-        for one in self.node_params['user_question']:
+        for one in self.node_params["user_question"]:
             ret.append(f"{self.get_other_node_variable(one)}")
         return ret
 
@@ -266,19 +266,80 @@ class RagUtils(BaseNode):
             return
         if self._rerank_model:
             return
-        self._rerank_model = LLMService.get_bisheng_rerank_sync(model_id=self._rerank_model_id,
-                                                                app_id=self.workflow_id,
-                                                                app_name=self.workflow_name,
-                                                                app_type=ApplicationTypeEnum.WORKFLOW,
-                                                                user_id=self.user_id)
+        self._rerank_model = LLMService.get_bisheng_rerank_sync(
+            model_id=self._rerank_model_id,
+            app_id=self.workflow_id,
+            app_name=self.workflow_name,
+            app_type=ApplicationTypeEnum.WORKFLOW,
+            user_id=self.user_id,
+        )
 
     def init_multi_retriever(self):
         if self._knowledge_type == "knowledge":
             self.init_knowledge_retriever()
+        elif self._knowledge_type == "space":
+            # F041: knowledge spaces build their own retriever per-space inside
+            # aretrieve_space_documents (with the F029 view_file filter), so there
+            # is nothing to pre-build here.
+            pass
         else:
             self.init_file_retriever()
 
-    def _fetch_non_primary_file_ids(self, knowledge_ids: List[int]) -> List[int]:
+    def _space_metadata_filter(self, space: Knowledge):
+        """Per-space metadata filter (AC-08, built-in fields) → (milvus_expr, es_clauses).
+
+        Conditions are keyed by knowledge_id, so each space resolves only its own
+        conditions. Returns ``(None, None)`` when no filter is configured.
+        """
+        milvus_str, es_filter = self._metadata_filter.get_knowledge_filter(knowledge=space, parent_node=self)
+        es_clauses = es_filter.get("filter") if es_filter else None
+        return (milvus_str or None), es_clauses
+
+    async def _aretrieve_space_docs(self, question: str) -> list[Document]:
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+            KnowledgeDocumentVersionRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.space_flow_retrieval import (
+            abuild_scoped_login_user,
+            aretrieve_space_documents,
+        )
+
+        # Identity: toggle ON → runtime user; OFF → config author (flow creator).
+        identity_user_id = self.user_id if self._knowledge_auth else self.flow_user_id
+        identity_user = await abuild_scoped_login_user(identity_user_id, self.tenant_id)
+        async with get_async_db_session() as session:
+            version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
+            return await aretrieve_space_documents(
+                space_ids=self._knowledge_value,
+                query=question,
+                identity_user=identity_user,
+                max_content=self._max_chunk_size,
+                metadata_filter_fn=self._space_metadata_filter,
+                rrf_weights=[self._vector_weight, self._keyword_weight],
+                rerank=self._rerank_model,
+                version_repo=version_repo,
+                access_scope="per_user" if self._knowledge_auth else "shared",
+            )
+
+    def _retrieve_space_question(self, question: str) -> list[Document]:
+        """F041: knowledge-space retrieval for workflow nodes (sync entry).
+
+        Runs the async F029-filtered retrieval on the single persistent background
+        loop (``run_async_safe``) — never ``asyncio.run`` — so the OpenFGA /
+        aiomysql singletons are not torn down (design gotcha 5.2).
+        """
+        from bisheng.utils.async_utils import run_async_safe
+
+        finally_docs = run_async_safe(self._aretrieve_space_docs(question), timeout=120)
+        for one in finally_docs:
+            if "upload_time" in one.metadata:
+                one.metadata["upload_time"] = self.format_timestamp(one.metadata["upload_time"])
+            if "update_time" in one.metadata:
+                one.metadata["update_time"] = self.format_timestamp(one.metadata["update_time"])
+        return finally_docs
+
+    def _fetch_non_primary_file_ids(self, knowledge_ids: list[int]) -> list[int]:
         """Best-effort sync fetch of non-primary file ids for the given knowledges.
 
         Workflow runs in sync Celery worker context, so asyncio.run() is safe.
@@ -287,6 +348,7 @@ class RagUtils(BaseNode):
         if not knowledge_ids:
             return []
         import asyncio
+
         from bisheng.core.database import get_async_db_session
         from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
             KnowledgeDocumentVersionRepositoryImpl,
@@ -300,16 +362,14 @@ class RagUtils(BaseNode):
         try:
             return asyncio.run(_fetch())
         except RuntimeError:
-            logger.warning(
-                "version filter skipped: already in async context", exc_info=True
-            )
+            logger.warning("version filter skipped: already in async context", exc_info=True)
             return []
         except Exception:
             logger.warning("version filter fetch failed", exc_info=True)
             return []
 
     def init_knowledge_retriever(self):
-        """ retriever from knowledge base """
+        """retriever from knowledge base"""
         if not self._knowledge_vector_list:
             self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore_sync(
                 invoke_user_id=self.user_id,
@@ -333,9 +393,9 @@ class RagUtils(BaseNode):
         excluded_file_ids = self._fetch_non_primary_file_ids(knowledge_ids)
 
         for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
-            knowledge = knowledge_info.get('knowledge')
-            milvus_vector = knowledge_info.get('milvus')
-            es_vector = knowledge_info.get('es')
+            knowledge = knowledge_info.get("knowledge")
+            milvus_vector = knowledge_info.get("milvus")
+            es_vector = knowledge_info.get("es")
             milvus_filter_str, es_filter = self._metadata_filter.get_knowledge_filter(
                 knowledge=knowledge, parent_node=self
             )
@@ -356,7 +416,7 @@ class RagUtils(BaseNode):
             if milvus_vector:
                 all_milvus.append(milvus_vector)
                 milvus_extra = {"expr": combined_milvus_expr} if combined_milvus_expr else {}
-                logger.debug(f'retrieve milvus filter: {milvus_extra}')
+                logger.debug(f"retrieve milvus filter: {milvus_extra}")
                 all_milvus_filter.append(milvus_extra | self._retriever_kwargs)
             if es_vector:
                 all_es.append(es_vector)
@@ -368,41 +428,37 @@ class RagUtils(BaseNode):
                 elif "filter" in combined_es_filter:
                     # No exclusions, no base filter list — remove empty entry.
                     del combined_es_filter["filter"]
-                logger.debug(f'retrieve es filter: {combined_es_filter}')
+                logger.debug(f"retrieve es filter: {combined_es_filter}")
                 all_es_filter.append(combined_es_filter | self._retriever_kwargs)
 
         if all_milvus:
             self._multi_milvus_retriever = MultiRetriever(
-                vectors=all_milvus,
-                search_kwargs=all_milvus_filter,
-                finally_k=self._retriever_kwargs["k"]
+                vectors=all_milvus, search_kwargs=all_milvus_filter, finally_k=self._retriever_kwargs["k"]
             )
         if all_es:
             self._multi_es_retriever = MultiRetriever(
-                vectors=all_es,
-                search_kwargs=all_es_filter,
-                finally_k=self._retriever_kwargs["k"]
+                vectors=all_es, search_kwargs=all_es_filter, finally_k=self._retriever_kwargs["k"]
             )
 
     def init_file_retriever(self):
-        """ retriever from file user upload """
+        """retriever from file user upload"""
         file_ids = []
         for one in self._knowledge_value:
             file_metadata = self.get_other_node_variable(one)
             if not file_metadata:
                 # No corresponding temporary file data found, User did not upload file
                 continue
-            file_ids.append(file_metadata[0]['document_id'])
+            file_ids.append(file_metadata[0]["document_id"])
         if not file_ids:
             self._multi_es_retriever = None
             self._multi_milvus_retriever = None
             return
         embeddings = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
         if not embeddings:
-            raise Exception('No knowledge base defaults configuredembeddingModels')
+            raise Exception("No knowledge base defaults configuredembeddingModels")
 
         # vectorstore use different collection_name for different embedding model
-        tmp_collection_name = self.get_milvus_collection_name(getattr(embeddings, 'model_id'))
+        tmp_collection_name = self.get_milvus_collection_name(embeddings.model_id)
         milvus_vector = KnowledgeRag.init_milvus_vectorstore(collection_name=tmp_collection_name, embeddings=embeddings)
         milvus_extra = {"expr": f"document_id in {file_ids}"}
         self._multi_milvus_retriever = milvus_vector.as_retriever(search_kwargs=self._retriever_kwargs | milvus_extra)

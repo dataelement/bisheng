@@ -281,6 +281,11 @@ class AssistantUpdateReq(BaseModel):
     knowledge_list: list[int] | None = Field(
         default=None, description="The knowledge base uponIDlist, forNonethen do not update"
     )
+    knowledge_auth: bool | None = Field(
+        default=None,
+        description="F041: 用户知识库权限校验 — ON filters knowledge-space retrieval by the runtime "
+        "user's view_file, OFF by the config author's; None = do not update",
+    )
 
     @field_validator("model_name", mode="before")
     @classmethod

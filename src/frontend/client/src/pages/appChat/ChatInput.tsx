@@ -81,7 +81,7 @@ export default function ChatInput({ readOnly, v }) {
                             className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                             disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                             onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
-                            <SendIcon size={24} />
+                            <SendIcon size={18} />
                         </button>
                     }
                 </div>

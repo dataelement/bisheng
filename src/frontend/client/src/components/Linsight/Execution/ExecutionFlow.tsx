@@ -221,7 +221,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         />
                     )}
                     {stopped && !linsight?.taskError && (
-                        <div className="my-2 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
+                        <div className="my-2 flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
                             <OctagonX size={16} className="shrink-0" />
                             {localize('com_linsight_task_terminated')}
                         </div>

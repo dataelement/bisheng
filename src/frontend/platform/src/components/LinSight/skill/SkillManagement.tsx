@@ -216,9 +216,9 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
             </div>
             {total > 0 && (
                 <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-muted-foreground">{t('skillManage.count', { count: total })}</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{t('skillManage.count', { count: total })}</span>
                     {total > PAGE_SIZE && (
-                        <AutoPagination page={page} pageSize={PAGE_SIZE} total={total} onChange={(p) => setPage(p)} />
+                        <AutoPagination className="w-auto justify-end" page={page} pageSize={PAGE_SIZE} total={total} onChange={(p) => setPage(p)} />
                     )}
                 </div>
             )}

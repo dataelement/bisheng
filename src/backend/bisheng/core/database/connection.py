@@ -88,15 +88,32 @@ class DatabaseConnectionManager:
         path. The result connects identically for the sync and async dialects,
         which is why both engines can share this single normalized URL. An
         explicit ``?schema=`` already present takes precedence over the path.
+
+        We also floor DaMeng's connection-establishment timeouts here
+        (``login_timeout`` / ``connection_timeout`` = 30s); see the inline
+        comment for why the driver's defaults are unsafe under async load. An
+        explicit value in the URL always wins, so a deployment can still tune
+        them via config.yaml / ConfigMap.
         """
         parsed = make_url(url)
         schema = parsed.query.get("schema") or parsed.database
         # set(database=None) is a no-op (None means "keep"); _replace forces it.
         new = parsed._replace(database=None)
+        query = {k: v for k, v in new.query.items() if k != "schema"}
         if schema:
-            query = {k: v for k, v in new.query.items() if k != "schema"}
             query["schema"] = schema
-            new = new.set(query=query)
+        # Connection-establishment timeout floor for DaMeng. dmAsync defaults to
+        # login_timeout=5s / connection_timeout=0, and it runs dmPython.connect()
+        # inline on the event-loop thread (the ONE dmPython call it does not
+        # offload via asyncio.to_thread). Under async load the DM login handshake
+        # can take longer than 5s and the driver aborts it, surfacing as
+        # "[CODE:-70028]Create SOCKET connection failure" — measured ~4% of
+        # connects in production, 0% after raising both timeouts to 30s. We use
+        # setdefault so an explicit value in the URL / ConfigMap still wins.
+        dm_connect_timeout = "30"
+        query.setdefault("login_timeout", dm_connect_timeout)
+        query.setdefault("connection_timeout", dm_connect_timeout)
+        new = new.set(query=query)
         return new.render_as_string(hide_password=False)
 
     @property

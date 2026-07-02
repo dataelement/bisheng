@@ -202,10 +202,14 @@ def collect_rag_citation_registry_items(documents: list[Document]) -> list[Citat
         return []
 
     grouped_documents: OrderedDict[str, list[Document]] = OrderedDict()
+    # F041: capture access_scope from the ORIGINAL doc metadata before cleaning
+    # ('shared' for toggle-OFF knowledge-space sources, else 'per_user').
+    access_scope_by_citation: dict[str, str] = {}
     for document in documents:
         citation_id, _ = _split_citation_key((document.metadata or {}).get("citation_key"))
         if not citation_id:
             continue
+        access_scope_by_citation.setdefault(citation_id, (document.metadata or {}).get("access_scope") or "per_user")
         grouped_documents.setdefault(citation_id, []).append(_clean_document_for_citation(document))
 
     registry_items: list[CitationRegistryItemSchema] = []
@@ -214,7 +218,11 @@ def collect_rag_citation_registry_items(documents: list[Document]) -> list[Citat
     )
     for citation_id, grouped_docs in grouped_documents.items():
         payload = CitationRegistryService._build_rag_payload_with_knowledge_names(grouped_docs, knowledge_names)
-        registry_items.extend(CitationRegistryService._flatten_rag_payload(citation_id, payload))
+        registry_items.extend(
+            CitationRegistryService._flatten_rag_payload(
+                citation_id, payload, access_scope=access_scope_by_citation.get(citation_id, "per_user")
+            )
+        )
     return registry_items
 
 

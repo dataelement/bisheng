@@ -49,6 +49,16 @@ class AssistantBase(SQLModelSerializable):
             comment="F017: Root resource shared to all children (mirrors FGA shared_with tuples)",
         ),
     )
+    knowledge_auth: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean,
+            nullable=False,
+            server_default=text("0"),
+            comment="F041: 用户知识库权限校验 — ON filters knowledge-space retrieval by the runtime "
+            "user's view_file, OFF by the config author's (default OFF preserves current behavior)",
+        ),
+    )
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
     )

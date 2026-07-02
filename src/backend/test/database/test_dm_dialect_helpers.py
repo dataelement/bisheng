@@ -517,3 +517,29 @@ class TestConnectionManagerUrlConversion:
         once = DatabaseConnectionManager._normalize_dm_url(url)
         twice = DatabaseConnectionManager._normalize_dm_url(once)
         assert once == twice
+
+    def test_dm_normalize_adds_default_connect_timeouts(self):
+        # dmAsync defaults login_timeout=5s / connection_timeout=0; under async
+        # load the DM login handshake can exceed 5s and the driver aborts it as
+        # "[CODE:-70028]Create SOCKET connection failure". Floor both to 30s so
+        # every DM deployment is safe without per-deployment URL tuning.
+        from sqlalchemy.engine.url import make_url
+
+        from bisheng.core.database.connection import DatabaseConnectionManager
+
+        url = "dm+dmPython://SYSDBA:pass@192.168.107.9:5236/BISHENG"
+        result = make_url(DatabaseConnectionManager._normalize_dm_url(url))
+        assert result.query.get("login_timeout") == "30"
+        assert result.query.get("connection_timeout") == "30"
+
+    def test_dm_normalize_explicit_timeout_wins(self):
+        # An explicit timeout in the URL / ConfigMap must take precedence over
+        # the injected default (only the missing one gets filled in).
+        from sqlalchemy.engine.url import make_url
+
+        from bisheng.core.database.connection import DatabaseConnectionManager
+
+        url = "dm+dmPython://SYSDBA:pass@192.168.107.9:5236/BISHENG?login_timeout=10"
+        result = make_url(DatabaseConnectionManager._normalize_dm_url(url))
+        assert result.query.get("login_timeout") == "10"
+        assert result.query.get("connection_timeout") == "30"

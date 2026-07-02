@@ -163,6 +163,7 @@
   "required": "Required",
   "isRequired": "Is Required",
   "documentKnowledgeBase": "Document Knowledge",
+  "knowledgeSpace": "Knowledge Space",
   "temporarySessionFiles": "Temporary Knowledge",
   "storeFilesSentInCurrentSession": "Store files sent in the current session",
   "displayNameTooltip": "Displayed on the user conversation page",
@@ -214,6 +215,7 @@
   "userInputContent": "User input content",
   "advancedSearchSettings": "Advanced search settings",
   "userAuthVerification": "User knowledge base access verification",
+  "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
   "enableToVerifyUserAccessToKnowledgeBase": "Enabling this will verify the user's access to the knowledge base.",
   "retrieverWeightSettings": "Retriever weight settings",
   "adjustWeightForVectorOrKeywordSearch": "Adjust the weight to prioritize either vector or keyword search.",
@@ -457,6 +459,10 @@
         "label": "Knowledge Base Range",
         "placeholder": "Select knowledge base"
       },
+      "user_auth": {
+        "label": "User knowledge permission check",
+        "help": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions."
+      },
       "sql_agent": {
         "label": "Database Configuration"
       },
@@ -494,7 +500,7 @@
       }
     },
     "rag": {
-      "name": "Document Retrieval",
+      "name": "Knowledge Base QA",
       "description": "Searches knowledge bases and generates final answers using an LLM. Supports parallel question processing.",
       "知识库检索设置": "Retrieval Settings",
       "AI回复生成设置": "AI Response Settings",
@@ -542,7 +548,7 @@
       }
     },
     "knowledge_retriever": {
-      "name": "Document Knowledge Base Retrieval",
+      "name": "Knowledge Base Retrieval",
       "description": "Retrieves content from the knowledge base based on user questions.",
       "知识库检索设置": "Retrieval Settings",
       "输出": "Output",

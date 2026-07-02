@@ -5,6 +5,7 @@ import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { WorkbenchEmptyIllustration } from '~/components/workbench/WorkbenchEmptyIllustration';
+import { Button } from '~/components/ui/Button';
 
 const MENU_LABEL_KEYS: Record<string, string> = {
   home: 'com_nav_home',
@@ -96,29 +97,28 @@ export default function MenuUnavailablePage() {
   };
 
   return (
-    <div className="flex h-full min-h-[320px] w-full flex-1 flex-col items-center justify-center bg-white px-6 py-12">
-      <div className="mb-4 opacity-80">
-        <WorkbenchEmptyIllustration />
-      </div>
-      <p className="max-w-xl text-center text-[14px] font-normal leading-relaxed text-[#999999]" role="status">
-        {localize('com_menu_unavailable_no_permission')}
-      </p>
-      {canApply && (
-        <div className="mt-6 flex flex-col items-center gap-3">
-          <div className="text-sm text-[#4e5969]">
+    <div className="flex min-h-[320px] w-full flex-1 flex-col items-center justify-center gap-4 bg-white px-8 text-center">
+      <WorkbenchEmptyIllustration />
+      <div className="flex flex-col items-center gap-1">
+        <p className="text-base font-medium leading-6 text-[#1D2129]" role="status">
+          {localize('com_menu_unavailable_no_permission')}
+        </p>
+        {canApply && (
+          <p className="text-sm leading-[22px] text-[#999999]">
             {localize('com_menu_unavailable_apply_hint', { menu: menuName || pluginId } as any)}
-          </div>
-          <button
-            type="button"
-            disabled={applied}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 btn-brand-primary"
-            onClick={() => setShowDialog(true)}
-          >
-            {applied
-              ? localize('com_menu_unavailable_apply_submitted')
-              : localize('com_menu_unavailable_apply_button')}
-          </button>
-        </div>
+          </p>
+        )}
+      </div>
+      {canApply && (
+        <Button
+          className="h-8 rounded-[6px] px-4"
+          disabled={applied}
+          onClick={() => setShowDialog(true)}
+        >
+          {applied
+            ? localize('com_menu_unavailable_apply_submitted')
+            : localize('com_menu_unavailable_apply_button')}
+        </Button>
       )}
 
       {/* Apply reason dialog */}

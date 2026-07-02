@@ -254,7 +254,7 @@ export function KnowledgeAiBottomDock({
                         knowledgeChatLayout
                         contentWidthClassName="max-w-none px-4"
                         emptyStateHint={folderQaHint}
-                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                        emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
                     />
@@ -476,7 +476,7 @@ export function KnowledgeAiBottomDock({
                                     knowledgeChatLayout
                                     contentWidthClassName="max-w-none px-4"
                                     emptyStateHint={folderQaHint}
-                                    emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                                    emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                     onPresetClick={() => { }}
                                     onRegenerate={regenerate}
                                 />

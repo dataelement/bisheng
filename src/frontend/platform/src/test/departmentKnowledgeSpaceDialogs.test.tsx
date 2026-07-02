@@ -6,7 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string) => fallback ?? key,
+    t: (key: string, fallback?: string | { defaultValue?: string }) => {
+      if (typeof fallback === "string") return fallback;
+      if (fallback && typeof fallback === "object" && "defaultValue" in fallback) return fallback.defaultValue || key;
+      return key;
+    },
   }),
 }));
 
@@ -43,11 +47,14 @@ vi.mock("@/components/bs-ui/input", async () => {
 });
 
 vi.mock("@/controllers/request", () => ({
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));
 
 vi.mock("@/controllers/API/department", () => ({
-  getDepartmentTreeApi: vi.fn(),
+  getDepartmentChildrenApi: vi.fn(() => Promise.resolve([])),
+  searchDepartmentsApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
+  getDepartmentPathTreeApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
 }));
 
 vi.mock("@/controllers/API/departmentKnowledgeSpace", () => ({
@@ -62,16 +69,28 @@ vi.mock("@/controllers/API", () => ({
 }));
 
 import { getKnowledgeConfigApi } from "@/controllers/API";
-import { getDepartmentTreeApi } from "@/controllers/API/department";
+import { getDepartmentChildrenApi } from "@/controllers/API/department";
 import {
   getDepartmentKnowledgeSpacesApi,
   setDepartmentKnowledgeSpacesVisibilityApi,
 } from "@/controllers/API/departmentKnowledgeSpace";
 
 const mockedGetKnowledgeConfigApi = vi.mocked(getKnowledgeConfigApi);
-const mockedGetDepartmentTreeApi = vi.mocked(getDepartmentTreeApi);
+const mockedChildren = vi.mocked(getDepartmentChildrenApi);
 const mockedGetDepartmentKnowledgeSpacesApi = vi.mocked(getDepartmentKnowledgeSpacesApi);
 const mockedSetVisibility = vi.mocked(setDepartmentKnowledgeSpacesVisibilityApi);
+
+// Build a lazy children-map mock: parent_id (null=root) -> child DepartmentTreeNodes.
+const lazyNode = (id: number, name: string, parent_id: number | null, has_children: boolean) => ({
+  id, dept_id: String(id), name, parent_id, path: `/${parent_id ? `${parent_id}/` : ""}${id}/`,
+  sort_order: id, source: "manual", status: "active",
+  is_tenant_root: false, mounted_tenant_id: null, has_children, matched: false, children: [],
+});
+function mockLazyChildren(map: Record<string, ReturnType<typeof lazyNode>[]>) {
+  mockedChildren.mockImplementation((parentId: number | null) =>
+    Promise.resolve((map[parentId == null ? "null" : String(parentId)] ?? []) as any),
+  );
+}
 
 describe("department knowledge space dialogs", () => {
   beforeEach(() => {
@@ -81,33 +100,11 @@ describe("department knowledge space dialogs", () => {
   });
 
   it("renders child departments with a deeper tree level", async () => {
-    mockedGetDepartmentTreeApi.mockResolvedValue([
-      {
-        id: 1,
-        dept_id: "root",
-        name: "一级部门",
-        parent_id: null,
-        path: "/1",
-        sort_order: 1,
-        source: "manual",
-        status: "active",
-        member_count: 0,
-        children: [
-          {
-            id: 2,
-            dept_id: "child",
-            name: "二级部门",
-            parent_id: 1,
-            path: "/1/2",
-            sort_order: 1,
-            source: "manual",
-            status: "active",
-            member_count: 0,
-            children: [],
-          },
-        ],
-      },
-    ]);
+    // Lazy: root layer = 一级部门 (has children); expanding loads 二级部门.
+    mockLazyChildren({
+      null: [lazyNode(1, "一级部门", null, true)],
+      "1": [lazyNode(2, "二级部门", 1, false)],
+    });
 
     render(
       <DepartmentKnowledgeSpaceManagerDialog
@@ -159,33 +156,12 @@ describe("department knowledge space dialogs", () => {
   });
 
   it("renders configured/hidden badges and stages a hide on uncheck + save", async () => {
-    mockedGetDepartmentTreeApi.mockResolvedValue([
-      {
-        id: 1,
-        dept_id: "d1",
-        name: "可见部门",
-        parent_id: null,
-        path: "/1",
-        sort_order: 1,
-        source: "manual",
-        status: "active",
-        children: [],
-      },
-      {
-        id: 2,
-        dept_id: "d2",
-        name: "隐藏部门",
-        parent_id: null,
-        path: "/2",
-        sort_order: 2,
-        source: "manual",
-        status: "active",
-        children: [],
-      },
-    ] as any);
+    mockLazyChildren({
+      null: [lazyNode(1, "可见部门", null, false), lazyNode(2, "隐藏部门", null, false)],
+    });
     mockedGetDepartmentKnowledgeSpacesApi.mockResolvedValue([
-      { id: 10, name: "可见部门的知识空间", department_id: 1, is_hidden: false },
-      { id: 11, name: "隐藏部门的知识空间", department_id: 2, is_hidden: true },
+      { id: 10, name: "可见部门的知识空间", department_id: 1, department_name: "可见部门", is_hidden: false },
+      { id: 11, name: "隐藏部门的知识空间", department_id: 2, department_name: "隐藏部门", is_hidden: true },
     ] as any);
     mockedSetVisibility.mockResolvedValue({ changed: 1 });
 
