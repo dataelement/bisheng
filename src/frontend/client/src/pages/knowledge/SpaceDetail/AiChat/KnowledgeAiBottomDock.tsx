@@ -70,6 +70,11 @@ export function KnowledgeAiBottomDock({
     // render different history-panel headers and animations.
     const [historyDirect, setHistoryDirect] = useState(false);
 
+    // Switching space/folder swaps the session list underneath — fold the history panel.
+    useEffect(() => {
+        setShowHistory(false);
+    }, [spaceId, folderId]);
+
     /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
      *  keyboard. Mirrors `ArticleAiDock`. See that file for the full rationale. */
     const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -157,9 +162,10 @@ export function KnowledgeAiBottomDock({
     // History opens the panel straight into the history list; the expand arrow opens
     // a fresh conversation — existing history stays in `sessions`, reachable via history.
     const handleOpenHistory = () => {
+        // Direct entry keeps the dock collapsed — the history panel pops up above
+        // the (still visible) box input instead of expanding the conversation card.
         setHistoryDirect(true);
         setShowHistory(true);
-        setOpen(true);
     };
 
     // Header history toggle — the "standard" entry from within the assistant.
@@ -179,6 +185,8 @@ export function KnowledgeAiBottomDock({
     const handleHistorySelect = (chatId: string) => {
         switchSession(chatId);
         setShowHistory(false);
+        // Direct entry: the dock is still collapsed — expand it to show the conversation.
+        setOpen(true);
     };
 
     // History-panel header actions (standard variant). Back returns to the conversation
@@ -190,12 +198,12 @@ export function KnowledgeAiBottomDock({
         await createSession();
     };
 
-    // History-panel header action: collapse folds the whole dock. Direct entry keeps
-    // the panel mounted (showHistory stays true) so the max-height collapse can
-    // animate; every reopen path resets showHistory first.
+    // History-panel header action: collapse. Standard entry lives inside the expanded
+    // dock, so fold the dock too; the direct panel floats over the collapsed dock —
+    // closing it (its wrapper animates shut, the panel stays mounted) is enough.
     const handleHistoryCollapse = () => {
-        if (!historyDirect) setShowHistory(false);
-        setOpen(false);
+        setShowHistory(false);
+        if (!historyDirect) setOpen(false);
     };
 
     // ─── Mobile + expanded: take over the full visual viewport ─────────────
@@ -367,7 +375,7 @@ export function KnowledgeAiBottomDock({
                         `messages` but the session history is still there, so the controls must
                         persist. Left = history (opens the history list), right = expand (opens a
                         fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks. */}
-                    {!open && (sessions.length > 0 || messages.length > 0) && (
+                    {!open && !(showHistory && historyDirect) && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
                             <div className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex items-center justify-end gap-2">
                                 <Tooltip>
@@ -404,37 +412,30 @@ export function KnowledgeAiBottomDock({
                         </TooltipProvider>
                     )}
 
-                    {/* Direct-entry history — grows/collapses with the same max-height
-                        transition as the normal panel. The wrapper stays mounted so the
-                        class flip animates; the panel stays mounted through the collapse
-                        so the closing transition can play out. Placed above the input
-                        block so the collapse shrinks upward, mirroring the normal panel. */}
+                    {/* Direct-entry history — its own rounded card floating above the
+                        (still visible) box input, growing/collapsing with the same
+                        max-height transition as the normal panel. Both wrapper and panel
+                        stay mounted so open and close transitions can play out. */}
                     <div
                         className={cn(
-                            "overflow-hidden transition-[max-height] duration-300 ease-out",
-                            open && showHistory && historyDirect
-                                ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]"
+                            "overflow-hidden rounded-[20px] bg-white transition-[max-height] duration-300 ease-out",
+                            !open && showHistory && historyDirect
+                                ? "mb-2 max-h-[clamp(440px,70vh,calc(100vh_-_160px))] border border-[#ECECEC] shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]"
                                 : "max-h-0",
                         )}
                     >
-                        {showHistory && historyDirect && (
-                            <ConversationHistory
-                                sessions={sessions}
-                                activeChatId={activeChatId}
-                                onSelect={handleHistorySelect}
-                                onDelete={deleteSession}
-                                onRename={renameSession}
-                                onCollapse={handleHistoryCollapse}
-                                variant="direct"
-                                fitContent
-                            />
-                        )}
+                        <ConversationHistory
+                            sessions={sessions}
+                            activeChatId={activeChatId}
+                            onSelect={handleHistorySelect}
+                            onDelete={deleteSession}
+                            onRename={renameSession}
+                            onCollapse={handleHistoryCollapse}
+                            variant="direct"
+                            fitContent
+                        />
                     </div>
 
-                    {/* Normal card content (header + messages + input). In direct-entry
-                        history mode it is hidden (not unmounted, so the input draft
-                        survives) and the fit-content history panel above sizes the card. */}
-                    <div className={cn(open && showHistory && historyDirect && "hidden")}>
                     {/* Header + messages grow upward above the input. Height scales with the
                         viewport (taller on large screens) — floored at 440px so small screens
                         don't regress, capped so it never overflows the file-display area. */}
@@ -547,7 +548,6 @@ export function KnowledgeAiBottomDock({
                         variant={open ? "line" : "box"}
                         onFocusChange={setKeyboardVisible}
                     />
-                    </div>
 
                     {/* Standard-entry history — overlays the expanded card. */}
                     {open && showHistory && !historyDirect && (
