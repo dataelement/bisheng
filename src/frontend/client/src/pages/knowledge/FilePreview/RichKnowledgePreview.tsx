@@ -6,7 +6,6 @@ import remarkGfm from "remark-gfm";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { TopBar } from "./TopBar";
-import { HtmlViewer } from "./viewers/HtmlViewer";
 
 interface RichKnowledgePreviewProps {
     fileName: string;
@@ -79,6 +78,60 @@ function MarkdownBlock({ content }: { content: string }) {
             </div>
         </div>
     );
+}
+
+function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
+    const localize = useLocalize();
+    const [content, setContent] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!fileUrl) {
+            setLoading(false);
+            setContent("");
+            setError("");
+            return () => {
+                cancelled = true;
+            };
+        }
+        setLoading(true);
+        setError("");
+        fetch(fileUrl)
+            .then((response) => {
+                if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
+                return response.text();
+            })
+            .then((text) => {
+                if (!cancelled) setContent(text);
+            })
+            .catch((err: Error) => {
+                if (!cancelled) setError(err.message || localize("com_knowledge.load_file_failed"));
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [fileUrl, localize]);
+
+    if (loading) {
+        return (
+            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-[#86909c]">
+                {localize("com_knowledge.loading")}
+            </div>
+        );
+    }
+    if (error) {
+        return (
+            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-[#86909c]">
+                {error}
+            </div>
+        );
+    }
+    return <MarkdownBlock content={content} />;
 }
 
 function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
@@ -164,8 +217,8 @@ export function RichKnowledgePreview({
     const localize = useLocalize();
     const isMedia = isMediaPreview(preview);
     const isVideo = isVideoPreview(preview);
-    const htmlUrl = preview.html_preview_url;
     const mediaTextUrl = preview.preview_url && !isMediaUrl(preview.preview_url) ? preview.preview_url : "";
+    const webLinkMarkdownUrl = preview.preview_url || preview.original_url || "";
 
     const title = useMemo(() => {
         if (preview.file_source === "web_link") {
@@ -217,8 +270,8 @@ export function RichKnowledgePreview({
                 />
             )}
             <div className="flex min-h-0 flex-1 overflow-hidden">
-                {htmlUrl ? (
-                    <HtmlViewer fileUrl={htmlUrl} zoomLevel={100} />
+                {webLinkMarkdownUrl ? (
+                    <MarkdownFromUrl fileUrl={webLinkMarkdownUrl} />
                 ) : (
                     <div className="flex h-full items-center justify-center text-sm text-[#86909c]">
                         {localize("com_knowledge.fetch_preview_link_failed")}
