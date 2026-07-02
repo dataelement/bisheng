@@ -65,6 +65,10 @@ export function KnowledgeAiBottomDock({
 
     const [open, setOpen] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    // Whether the history panel was opened straight from the collapsed dock's floating
+    // button ("direct") vs. from the assistant header ("standard") — the two entries
+    // render different history-panel headers and animations.
+    const [historyDirect, setHistoryDirect] = useState(false);
 
     /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
      *  keyboard. Mirrors `ArticleAiDock`. See that file for the full rationale. */
@@ -137,8 +141,12 @@ export function KnowledgeAiBottomDock({
 
     const handleSend = (text: string, files?: any[] | null, tag?: FolderChatTag) => {
         sendMessage(text, files, tag);
-        // First send slides the panel up — the input itself stays put.
-        if (!open) setOpen(true);
+        // First send slides the panel up — the input itself stays put. Clear any
+        // latched direct-history state so the conversation (not history) shows.
+        if (!open) {
+            setShowHistory(false);
+            setOpen(true);
+        }
     };
 
     const handleNewChat = async () => {
@@ -149,8 +157,15 @@ export function KnowledgeAiBottomDock({
     // History opens the panel straight into the history list; the expand arrow opens
     // a fresh conversation — existing history stays in `sessions`, reachable via history.
     const handleOpenHistory = () => {
+        setHistoryDirect(true);
         setShowHistory(true);
         setOpen(true);
+    };
+
+    // Header history toggle — the "standard" entry from within the assistant.
+    const handleToggleHistory = () => {
+        setHistoryDirect(false);
+        setShowHistory((v) => !v);
     };
 
     const handleExpandNew = async () => {
@@ -166,8 +181,8 @@ export function KnowledgeAiBottomDock({
         setShowHistory(false);
     };
 
-    // History-panel header actions. Back returns to the conversation view; new chat
-    // starts a fresh conversation and reveals it; collapse folds the whole dock.
+    // History-panel header actions (standard variant). Back returns to the conversation
+    // view; new chat starts a fresh conversation and reveals it.
     const handleHistoryBack = () => setShowHistory(false);
 
     const handleHistoryNewChat = async () => {
@@ -175,8 +190,11 @@ export function KnowledgeAiBottomDock({
         await createSession();
     };
 
+    // History-panel header action: collapse folds the whole dock. Direct entry keeps
+    // the panel mounted (showHistory stays true) so the max-height collapse can
+    // animate; every reopen path resets showHistory first.
     const handleHistoryCollapse = () => {
-        setShowHistory(false);
+        if (!historyDirect) setShowHistory(false);
         setOpen(false);
     };
 
@@ -194,7 +212,7 @@ export function KnowledgeAiBottomDock({
                     <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
                         <button
                             type="button"
-                            onClick={() => setShowHistory((v) => !v)}
+                            onClick={handleToggleHistory}
                             aria-label={localize("com_knowledge.history_chat")}
                             className={cn(
                                 "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
@@ -298,6 +316,7 @@ export function KnowledgeAiBottomDock({
                         onBack={handleHistoryBack}
                         onNewChat={handleHistoryNewChat}
                         onCollapse={handleHistoryCollapse}
+                        variant={historyDirect ? "direct" : "standard"}
                     />
                 )}
             </div>
@@ -385,6 +404,37 @@ export function KnowledgeAiBottomDock({
                         </TooltipProvider>
                     )}
 
+                    {/* Direct-entry history — grows/collapses with the same max-height
+                        transition as the normal panel. The wrapper stays mounted so the
+                        class flip animates; the panel stays mounted through the collapse
+                        so the closing transition can play out. Placed above the input
+                        block so the collapse shrinks upward, mirroring the normal panel. */}
+                    <div
+                        className={cn(
+                            "overflow-hidden transition-[max-height] duration-300 ease-out",
+                            open && showHistory && historyDirect
+                                ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]"
+                                : "max-h-0",
+                        )}
+                    >
+                        {showHistory && historyDirect && (
+                            <ConversationHistory
+                                sessions={sessions}
+                                activeChatId={activeChatId}
+                                onSelect={handleHistorySelect}
+                                onDelete={deleteSession}
+                                onRename={renameSession}
+                                onCollapse={handleHistoryCollapse}
+                                variant="direct"
+                                fitContent
+                            />
+                        )}
+                    </div>
+
+                    {/* Normal card content (header + messages + input). In direct-entry
+                        history mode it is hidden (not unmounted, so the input draft
+                        survives) and the fit-content history panel above sizes the card. */}
+                    <div className={cn(open && showHistory && historyDirect && "hidden")}>
                     {/* Header + messages grow upward above the input. Height scales with the
                         viewport (taller on large screens) — floored at 440px so small screens
                         don't regress, capped so it never overflows the file-display area. */}
@@ -408,7 +458,7 @@ export function KnowledgeAiBottomDock({
                                             <TooltipTrigger asChild>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setShowHistory((v) => !v)}
+                                                    onClick={handleToggleHistory}
                                                     aria-label={localize("com_knowledge.history_chat")}
                                                     className={cn(
                                                         "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
@@ -497,8 +547,10 @@ export function KnowledgeAiBottomDock({
                         variant={open ? "line" : "box"}
                         onFocusChange={setKeyboardVisible}
                     />
+                    </div>
 
-                    {open && showHistory && (
+                    {/* Standard-entry history — overlays the expanded card. */}
+                    {open && showHistory && !historyDirect && (
                         <ConversationHistory
                             sessions={sessions}
                             activeChatId={activeChatId}
@@ -508,6 +560,7 @@ export function KnowledgeAiBottomDock({
                             onBack={handleHistoryBack}
                             onNewChat={handleHistoryNewChat}
                             onCollapse={handleHistoryCollapse}
+                            variant="standard"
                         />
                     )}
                 </div>

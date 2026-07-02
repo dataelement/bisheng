@@ -1,5 +1,5 @@
 /**
- * ConversationHistory — slide-in sidebar listing past conversations.
+ * ConversationHistory — overlay panel listing past conversations.
  * Displays server-backed session records with inline rename + delete support.
  */
 import { useEffect, useRef, useState } from "react";
@@ -23,12 +23,27 @@ interface ConversationHistoryProps {
     onSelect: (chatId: string) => void;
     onDelete: (chatId: string) => void;
     onRename: (chatId: string, name: string) => Promise<boolean>;
-    /** Back to the conversation view (leaves the panel open). */
-    onBack: () => void;
-    /** Start a fresh conversation and reveal it. */
-    onNewChat: () => void;
+    /** Back to the conversation view (standard variant only). */
+    onBack?: () => void;
+    /** Start a fresh conversation and reveal it (standard variant only). */
+    onNewChat?: () => void;
     /** Collapse the whole dock. */
     onCollapse: () => void;
+    /**
+     * Entry-dependent look:
+     * - "standard" (default) — opened from the assistant header; slides in from the
+     *   right and keeps the back + new-chat header buttons.
+     * - "direct" — opened straight from the collapsed dock's floating history button;
+     *   fades in and shows only the title + collapse button.
+     */
+    variant?: "standard" | "direct";
+    /**
+     * Layout mode. Default (false) overlays the parent card (`absolute inset-0`).
+     * When true the panel sizes to its session list instead — min 160px, capped at
+     * the expanded-panel default height so it never grows taller than the normal
+     * conversation view. Used by the direct desktop entry.
+     */
+    fitContent?: boolean;
 }
 
 export function ConversationHistory({
@@ -40,6 +55,8 @@ export function ConversationHistory({
     onBack,
     onNewChat,
     onCollapse,
+    variant = "standard",
+    fitContent = false,
 }: ConversationHistoryProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -132,36 +149,61 @@ export function ConversationHistory({
     };
 
     return (
-        <div className="absolute inset-0 z-30 flex flex-col bg-white animate-in slide-in-from-right duration-200">
+        <div
+            className={cn(
+                "z-30 flex flex-col bg-white",
+                // Fit-content hugs the session list — floored at 160px, capped at the
+                // expanded-panel default height. Its entrance is animated by the parent's
+                // max-height wrapper, so no animate-in here. Overlay mode fills the card:
+                // standard entry slides in like a drawer; direct entry just fades in.
+                fitContent
+                    ? "relative min-h-[160px] max-h-[clamp(440px,70vh,calc(100vh_-_160px))]"
+                    : cn(
+                          "absolute inset-0 animate-in",
+                          variant === "direct"
+                              ? "fade-in duration-150"
+                              : "slide-in-from-right duration-200",
+                      ),
+            )}
+        >
             {/* Header — mirrors the AI assistant header exactly (px-4 py-3, no bottom
                 border, leading-[22px] title row, right icon group in py-1) so both panels
-                line up. Left: back to the conversation; right: new chat + collapse. */}
+                line up. Standard: back · divider · title + new chat · collapse on the
+                right. Direct: title + collapse only. */}
             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
-                {/* Back arrow · divider · title — 12px gap between all three. */}
-                <div className="flex shrink-0 items-center gap-3">
-                    <button
-                        type="button"
-                        onClick={onBack}
-                        aria-label={localize("com_ui_go_back")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.ArrowLeft className="size-4" />
-                    </button>
-                    <span className="h-3.5 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
-                    <h3 className="text-sm font-medium leading-[22px] text-[#212121]">
+                {variant === "standard" ? (
+                    // Back arrow · divider · title — 12px gap between all three.
+                    <div className="flex shrink-0 items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            aria-label={localize("com_ui_go_back")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.ArrowLeft className="size-4" />
+                        </button>
+                        <span className="h-3.5 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                        <h3 className="text-sm font-medium leading-[22px] text-[#212121]">
+                            {localize("com_knowledge.history_chat")}
+                        </h3>
+                    </div>
+                ) : (
+                    <h3 className="shrink-0 text-sm font-medium leading-[22px] text-[#212121]">
                         {localize("com_knowledge.history_chat")}
                     </h3>
-                </div>
+                )}
                 <div className="min-w-0 flex-1" aria-hidden />
                 <div className="flex shrink-0 items-center justify-end gap-3 py-1">
-                    <button
-                        type="button"
-                        onClick={onNewChat}
-                        aria-label={localize("com_knowledge.create_chat")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.MessagePlus className="size-4" />
-                    </button>
+                    {variant === "standard" && (
+                        <button
+                            type="button"
+                            onClick={onNewChat}
+                            aria-label={localize("com_knowledge.create_chat")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.MessagePlus className="size-4" />
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={onCollapse}
@@ -173,8 +215,9 @@ export function ConversationHistory({
                 </div>
             </div>
 
-            {/* Session list */}
-            <div className="flex-1 overflow-y-auto">
+            {/* Session list — min-h-0 lets it shrink and scroll when the panel hits
+                its max height in fit-content mode. */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
                 {sessions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-2">
                         <MessageSquareIcon className="size-10 text-[#c9cdd4]" />
