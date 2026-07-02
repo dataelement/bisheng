@@ -1645,6 +1645,7 @@
     "max_20_chars_spaced": "最大50文字まで",
     "max_40_chars": "最大40文字まで",
     "max_file_size_200m": "各ファイルの最大サイズは200MBです",
+    "upload_size_limits_hint": "文書/画像は各ファイル最大{{docMax}}MB、音声/動画は各ファイル最大{{mediaMax}}MB",
     "max_folder_depth_reached": "最大フォルダー階層制限（{{0}} レベル）に達しました",
     "max_upload_50": "1回のアップロードで最大50個のファイルが許可されます",
     "max_upload_50_short": "1回につき最大50個までアップロード可能",

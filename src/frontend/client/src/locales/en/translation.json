@@ -1721,6 +1721,7 @@
     "max_20_chars_spaced": "Maximum 50 characters",
     "max_40_chars": "Maximum 40 characters",
     "max_file_size_200m": "Maximum 200MB per file",
+    "upload_size_limits_hint": "Documents/images up to {{docMax}}MB each, audio/video up to {{mediaMax}}MB each",
     "max_folder_depth_reached": "Reached maximum folder depth limit of {{0}} levels",
     "max_upload_50": "Maximum 50 files allowed per upload",
     "max_upload_50_short": "Max 50 files per upload",

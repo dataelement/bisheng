@@ -35,6 +35,7 @@ from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, Knowledg
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
     ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
@@ -55,6 +56,7 @@ router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
+        validate_knowledge_upload_file_size(file_name, file.size)
 
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
 
@@ -65,6 +67,8 @@ async def upload_file(*, file: UploadFile = File(...)):
 
         return resp_200(UploadFileResponse(file_path=file_path))
 
+    except BaseErrorCode:
+        raise
     except Exception as e:
         logger.error(f'File upload failed: {e}')
         raise ServerError(msg=f'File upload failed: {e}')
@@ -84,6 +88,7 @@ async def upload_knowledge_file(*,
 
     try:
         file_name = file.filename
+        validate_knowledge_upload_file_size(file_name, file.size)
 
         # Save the uploaded file
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
@@ -110,6 +115,8 @@ async def upload_knowledge_file(*,
 
         return resp_200(ret)
 
+    except BaseErrorCode:
+        raise
     except Exception as e:
         raise ServerError(msg=f'File upload failed: {e}')
 

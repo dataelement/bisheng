@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
-import { useSetRecoilState } from "recoil";
+import { useSetRecoilState, useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import store from "~/store";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -46,9 +46,16 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
+import { resolveUploadSizeLimits } from "./knowledgeUtils";
 
 export default function Knowledge() {
     const localize = useLocalize();
+    const bishengConfig = useRecoilValue(bishengConfState);
+    const uploadSizeLimits = useMemo(
+        () => resolveUploadSizeLimits(bishengConfig),
+        [bishengConfig],
+    );
     const isH5 = usePrefersMobileLayout();
     // ≥1024 = desktop (sidebar expanded by default). 768–1023 = tablet: sidebar starts
     // collapsed but keeps its expand toggle (the mobile flow only kicks in below 768).
@@ -706,7 +713,10 @@ export default function Knowledge() {
                         <div className="text-center text-xs text-gray-400 leading-5">
                             <p>{localize("com_knowledge.supported_formats")}</p>
                             <p>{localize("com_knowledge.format_list")}</p>
-                            <p>{localize("com_knowledge.max_file_size_200m")}</p>
+                            <p>{localize("com_knowledge.upload_size_limits_hint", {
+                                docMax: uploadSizeLimits.defaultMaxMB,
+                                mediaMax: uploadSizeLimits.mediaMaxMB,
+                            })}</p>
                             <p>{localize("com_knowledge.max_upload_50_short")}</p>
                         </div>
                     </div>

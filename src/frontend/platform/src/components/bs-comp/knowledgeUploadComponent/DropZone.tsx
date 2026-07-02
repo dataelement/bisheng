@@ -56,9 +56,10 @@ export default function DropZone({ onDrop }) {
         }
     });
 
+    const mediaMaxSize = appConfig.uploadMediaMaxSize ?? 1;
     const formatText = appConfig.enableEtl4lm
-        ? t('supportedFormatsWithImages', { maxSize: appConfig.uploadFileMaxSize })
-        : t('supportedFormatsWithoutImages', { maxSize: appConfig.uploadFileMaxSize })
+        ? t('supportedFormatsWithImages', { maxSize: appConfig.uploadFileMaxSize, mediaMaxSize })
+        : t('supportedFormatsWithoutImages', { maxSize: appConfig.uploadFileMaxSize, mediaMaxSize })
 
     return (
         <div {...getRootProps()} className="group h-48 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">

@@ -14,7 +14,7 @@ const MEDIA_FILE_EXTENSIONS = new Set([
 function getKnowledgeUploadSizeLimitMB(file: File, appConfig: { uploadFileMaxSize?: number; uploadMediaMaxSize?: number }) {
     const ext = file.name.split('.').pop()?.toLowerCase();
     return ext && MEDIA_FILE_EXTENSIONS.has(ext)
-        ? (appConfig.uploadMediaMaxSize ?? 1024)
+        ? (appConfig.uploadMediaMaxSize ?? 1)
         : (appConfig.uploadFileMaxSize ?? 50);
 }
 

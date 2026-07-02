@@ -1648,6 +1648,7 @@
     "max_20_chars_spaced": "最多输入 50 个字符",
     "max_40_chars": "最多输入 40 个字符",
     "max_file_size_200m": "每个文件最大支持200mb",
+    "upload_size_limits_hint": "文档/图片每个文件最大支持{{docMax}}mb，音视频每个文件最大支持{{mediaMax}}mb",
     "max_folder_depth_reached": "已达文件夹层级上限 {{0}} 级",
     "max_upload_50": "单次最多允许上传 50 个文件",
     "max_upload_50_short": "单次最多上传50个",
