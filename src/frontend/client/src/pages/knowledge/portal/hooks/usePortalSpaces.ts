@@ -18,13 +18,14 @@ import type { SpaceGroup } from "../types";
 interface UsePortalSpacesParams {
     activeSpace: KnowledgeSpace | null;
     setActiveSpace: Dispatch<SetStateAction<KnowledgeSpace | null>>;
+    preferredSpaceId?: string;
 }
 
 function findDefaultPersonalSpace(spaces: KnowledgeSpace[]): KnowledgeSpace | null {
     return spaces.find((space) => space.isFavorite) ?? spaces[0] ?? null;
 }
 
-export function usePortalSpaces({ activeSpace, setActiveSpace }: UsePortalSpacesParams) {
+export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId }: UsePortalSpacesParams) {
     const personalSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.PERSONAL],
         queryFn: () => getSpacesByLevelApi(SpaceLevel.PERSONAL, { order_by: SpaceSortType.UPDATE_TIME }),
@@ -121,6 +122,27 @@ export function usePortalSpaces({ activeSpace, setActiveSpace }: UsePortalSpaces
         () => findDefaultPersonalSpace(personalSpacesQuery.data ?? []),
         [personalSpacesQuery.data],
     );
+    const preferredSpace = useMemo(
+        () => preferredSpaceId
+            ? selectableSpaces.find((space) => String(space.id) === String(preferredSpaceId)) ?? null
+            : null,
+        [preferredSpaceId, selectableSpaces],
+    );
+    const preferredSpacePending = Boolean(
+        preferredSpaceId
+        && !preferredSpace
+        && (
+            personalSpacesQuery.isLoading
+            || personalSpacesQuery.isFetching
+            || !silentGroupQueriesEnabled
+            || publicSpacesQuery.isLoading
+            || publicSpacesQuery.isFetching
+            || departmentSpacesQuery.isLoading
+            || departmentSpacesQuery.isFetching
+            || teamSpacesQuery.isLoading
+            || teamSpacesQuery.isFetching
+        ),
+    );
     const spaceIds = useMemo(
         () => selectableSpaces.map((space) => space.id),
         [selectableSpaces],
@@ -156,17 +178,32 @@ export function usePortalSpaces({ activeSpace, setActiveSpace }: UsePortalSpaces
     }, [spaceActionPermissions]);
 
     useEffect(() => {
+        if (preferredSpace) {
+            if (String(activeSpace?.id) !== String(preferredSpace.id)) {
+                setActiveSpace(preferredSpace);
+            }
+            return;
+        }
+        if (preferredSpacePending) return;
         if (activeSpace && selectableSpaces.some((space) => space.id === activeSpace.id)) return;
         if (personalSpacesQuery.isLoading) return;
         setActiveSpace(defaultPersonalSpace ?? selectableSpaces[0] ?? null);
-    }, [activeSpace, defaultPersonalSpace, personalSpacesQuery.isLoading, selectableSpaces, setActiveSpace]);
+    }, [
+        activeSpace,
+        defaultPersonalSpace,
+        personalSpacesQuery.isLoading,
+        preferredSpace,
+        preferredSpacePending,
+        selectableSpaces,
+        setActiveSpace,
+    ]);
 
     return {
         groups,
         createOptionsLoading,
         createPermissionByLevel,
         selectableSpaces,
-        spaceLoading: personalSpacesQuery.isLoading,
+        spaceLoading: personalSpacesQuery.isLoading || preferredSpacePending,
         activeGroup,
         getSpacePermissions,
     };

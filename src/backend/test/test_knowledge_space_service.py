@@ -1432,6 +1432,110 @@ async def test_shougang_portal_file_search_filters_document_type_before_paginati
 
 
 @pytest.mark.asyncio
+async def test_shougang_portal_file_search_filters_business_domain_code_before_pagination(service):
+    space = _make_space(space_id=12, user_id=7)
+    space.name = '设备知识库'
+    pm_file = _make_file(file_id=1580, knowledge_id=12, file_name='设备点检标准.pdf')
+    pm_file.file_encoding = 'SGGF-STD-PM-202604-01201'
+    pm_file.update_time = datetime(2026, 4, 15, 10, 30, 0)
+    qm_file = _make_file(file_id=1581, knowledge_id=12, file_name='质量分析报告.pdf')
+    qm_file.file_encoding = 'SGGF-RPT-QM-202604-01202'
+    qm_file.update_time = datetime(2026, 4, 16, 10, 30, 0)
+    malformed_file = _make_file(file_id=1582, knowledge_id=12, file_name='历史资料.pdf')
+    malformed_file.file_encoding = 'LEGACY-202604-01203'
+    malformed_file.update_time = datetime(2026, 4, 17, 10, 30, 0)
+    files = [malformed_file, qm_file, pm_file]
+
+    async def fake_enrich(input_files):
+        assert [int(file.id) for file in input_files] == [1580]
+        return [{**file.model_dump(), 'tags': []} for file in input_files]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=files,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        side_effect=fake_enrich,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                space_ids=[12],
+                business_domain_code='pm',
+                page=1,
+                page_size=10,
+                sort='updated_at',
+            )
+        )
+
+    assert result['total'] == 1
+    assert [item['id'] for item in result['data']] == [1580]
+    assert result['data'][0]['file_encoding'] == 'SGGF-STD-PM-202604-01201'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_tags_filters_by_business_domain_code(service):
+    public_space = _make_space(
+        space_id=12,
+        user_id=7,
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+    )
+    pm_file = _make_file(file_id=1580, knowledge_id=12, file_name='设备点检标准.pdf')
+    pm_file.file_encoding = 'SGGF-STD-PM-202604-01201'
+    qm_file = _make_file(file_id=1581, knowledge_id=12, file_name='质量分析报告.pdf')
+    qm_file.file_encoding = 'SGGF-RPT-QM-202604-01202'
+    malformed_file = _make_file(file_id=1582, knowledge_id=12, file_name='历史资料.pdf')
+    malformed_file.file_encoding = 'LEGACY-202604-01203'
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_visible_search_spaces',
+        new_callable=AsyncMock,
+        return_value=[public_space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids',
+        new_callable=AsyncMock,
+        return_value={
+            '12': [
+                SimpleNamespace(id=101, name='设备'),
+                SimpleNamespace(id=102, name='质量'),
+                SimpleNamespace(id=103, name='历史'),
+            ]
+        },
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=[pm_file, qm_file, malformed_file],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_resources_by_tags',
+        new_callable=AsyncMock,
+        return_value=[
+            SimpleNamespace(tag_id=101, resource_id='1580'),
+            SimpleNamespace(tag_id=102, resource_id='1581'),
+            SimpleNamespace(tag_id=103, resource_id='1582'),
+        ],
+    ):
+        result = await service.search_shougang_portal_tags(
+            [12],
+            None,
+            business_domain_code='pm',
+        )
+
+    assert result == ['设备']
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = '热轧知识库'

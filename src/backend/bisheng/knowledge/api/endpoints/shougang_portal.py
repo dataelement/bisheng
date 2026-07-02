@@ -175,7 +175,7 @@ async def search_shougang_portal_tags(
         req: ShougangPortalTagSearchReq,
         svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
-    tags = await svc.search_shougang_portal_tags(req.space_ids, req.space_level)
+    tags = await svc.search_shougang_portal_tags(req.space_ids, req.space_level, req.business_domain_code)
     return resp_200(ShougangPortalTagSearchResp(tags=tags).model_dump(mode='json'))
 
 

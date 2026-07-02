@@ -55,6 +55,7 @@ import {
     buildUploadTagOptions,
     extractUniqueLibraryTagNames,
     EMPTY_PORTAL_UPLOAD_METADATA,
+    type BusinessDomainOptionItem,
     type PortalUploadMetadataPayload,
     type PortalUploadTagOption,
 } from "../uploadMetadata";
@@ -69,6 +70,7 @@ interface UsePortalUploadDialogParams {
     currentPath: Array<{ id?: string; name: string }>;
     statusFilterNumbers: number[];
     fileCategoryOptions?: PortalFileCategoryOption[];
+    businessDomainOptions?: BusinessDomainOptionItem[];
     enableEtl4lm?: boolean;
     uploadSizeLimits?: UploadSizeLimits;
     /** @deprecated Use uploadSizeLimits */
@@ -85,6 +87,7 @@ export function usePortalUploadDialog({
     canUploadInPortal,
     statusFilterNumbers,
     fileCategoryOptions = DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
+    businessDomainOptions = [],
     enableEtl4lm = true,
     uploadSizeLimits,
     maxFileSizeMB = DEFAULT_MAX_FILE_SIZE_MB,
@@ -211,6 +214,13 @@ export function usePortalUploadDialog({
             setFileCategoryCode("");
         }
     }, [fileCategoryCode, fileCategoryOptions]);
+
+    useEffect(() => {
+        if (!businessDomainCode) return;
+        if (!businessDomainOptions.some((option) => option.code === businessDomainCode)) {
+            setBusinessDomainCode("");
+        }
+    }, [businessDomainCode, businessDomainOptions]);
 
     useEffect(() => {
         if (!uploadDialogOpen || !activeSpace) return;

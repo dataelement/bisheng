@@ -17,10 +17,11 @@ import TagGroup from "../../SpaceDetail/TagGroup";
 import { isKnowledgeItemPending } from "../../knowledgeUtils";
 import type { PortalFileCategoryOption } from "../types";
 import {
-    BUSINESS_DOMAIN_OPTIONS,
     DEFAULT_ENCODING_PREFIX,
+    type BusinessDomainOptionItem,
     type EncodingDraft,
     composeFileEncoding,
+    filterBusinessDomainOptionsByCodes,
     fileEncodingBusinessDomainLabel,
     fileEncodingCategoryLabel,
     normalizeEncodingCode,
@@ -202,6 +203,7 @@ interface PortalUploadedFilesDrawerProps {
     onRecordsChanged?: () => void | Promise<void>;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
     fileCategoryOptions: PortalFileCategoryOption[];
+    businessDomainOptions: BusinessDomainOptionItem[];
     encodingPrefix?: string;
 }
 
@@ -212,6 +214,7 @@ export function PortalUploadedFilesDrawer({
     onRecordsChanged,
     showToast,
     fileCategoryOptions,
+    businessDomainOptions,
     encodingPrefix = DEFAULT_ENCODING_PREFIX,
 }: PortalUploadedFilesDrawerProps) {
     const [records, setRecords] = useState<UploadedFileRecord[]>([]);
@@ -482,6 +485,10 @@ export function PortalUploadedFilesDrawer({
                             const selectedBusinessDomainCode = normalizeEncodingCode(draft.businessDomainCode ?? parsedEncoding.businessDomainCode);
                             const selectedFileCategoryText = selectedFileCategoryCode || EMPTY_FIELD_PLACEHOLDER;
                             const selectedBusinessDomainText = selectedBusinessDomainCode || EMPTY_FIELD_PLACEHOLDER;
+                            const recordBusinessDomainOptions = filterBusinessDomainOptionsByCodes(
+                                businessDomainOptions,
+                                record.businessDomainCodes,
+                            );
                             const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
                             const tagText = uploadRecordTagText(record);
                             const recordTags = uploadRecordTags(record);
@@ -542,12 +549,12 @@ export function PortalUploadedFilesDrawer({
                                             onChange={(event) => void handleEncodingPartChange(record, { businessDomainCode: event.currentTarget.value })}
                                         >
                                             <option value="">{EMPTY_FIELD_PLACEHOLDER}</option>
-                                            {selectedBusinessDomainCode && !BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode) ? (
+                                            {selectedBusinessDomainCode && !recordBusinessDomainOptions.some((option) => option.code === selectedBusinessDomainCode) ? (
                                                 <option value={selectedBusinessDomainCode}>
-                                                    {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode)}
+                                                    {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, recordBusinessDomainOptions)}
                                                 </option>
                                             ) : null}
-                                            {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                                            {recordBusinessDomainOptions.map((option) => (
                                                 <option key={option.code} value={option.code}>
                                                     {option.code} / {option.name}
                                                 </option>

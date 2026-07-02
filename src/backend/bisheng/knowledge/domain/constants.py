@@ -1,3 +1,4 @@
+import re
 from typing import Any, Optional
 
 
@@ -27,6 +28,6 @@ def normalize_business_domain_code(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
     code = value.strip().upper()
-    if code in BUSINESS_DOMAIN_CODES:
+    if re.fullmatch(r"[A-Z0-9_]{1,16}", code):
         return code
     return None

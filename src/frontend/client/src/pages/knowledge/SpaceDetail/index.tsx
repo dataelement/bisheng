@@ -54,6 +54,7 @@ import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import type { PortalFileCategoryOption } from "../portal/types";
+import type { BusinessDomainOptionItem } from "../portal/uploadMetadata";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 
@@ -94,6 +95,8 @@ interface KnowledgeSpaceContentProps {
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
     onPreviewFile?: (file: KnowledgeFile) => void;
+    canRetryFile?: (file: KnowledgeFile) => boolean;
+    retryActionLabel?: string;
     afterSearchActions?: ReactNode;
     hideNativeAddMenu?: boolean;
     hideNativeStatusFilter?: boolean;
@@ -101,6 +104,7 @@ interface KnowledgeSpaceContentProps {
     hideFilePermissionActions?: boolean;
     enableEncodingClassification?: boolean;
     fileCategoryOptions?: PortalFileCategoryOption[];
+    businessDomainOptions?: BusinessDomainOptionItem[];
     encodingPrefix?: string;
     markPendingDeletion: (ids: Array<string | number>) => void;
     clearPendingDeletion: (ids: Array<string | number>) => void;
@@ -141,6 +145,8 @@ export function KnowledgeSpaceContent({
     onCreateSpace,
     onGoKnowledgeSquare,
     onPreviewFile,
+    canRetryFile,
+    retryActionLabel,
     afterSearchActions,
     hideNativeAddMenu,
     hideNativeStatusFilter,
@@ -148,6 +154,7 @@ export function KnowledgeSpaceContent({
     hideFilePermissionActions = false,
     enableEncodingClassification = false,
     fileCategoryOptions = [],
+    businessDomainOptions = [],
     encodingPrefix,
     markPendingDeletion,
     clearPendingDeletion,
@@ -1124,6 +1131,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleSingleRetry = async (fileId: string) => {
+        const file = displayFiles.find(f => f.id === fileId);
+        if (file && canRetryFile && !canRetryFile(file)) return;
+
         try {
             await batchRetryApi(space.id, [Number(fileId)]);
             showToast({ message: localize("com_knowledge.retry_started"), status: "success" });
@@ -1340,6 +1350,8 @@ export function KnowledgeSpaceContent({
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                             onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                             canManageMembers={canManageMembers}
+                                            canRetryFile={canRetryFile}
+                                            retryActionLabel={retryActionLabel}
                                         />
                                     </div>
                                 ))}
@@ -1385,8 +1397,11 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
+                                    canRetryFile={canRetryFile}
+                                    retryActionLabel={retryActionLabel}
                                     enableEncodingClassification={enableEncodingClassification}
                                     fileCategoryOptions={fileCategoryOptions}
+                                    businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
                                     onFileEncodingUpdated={(fileId, newEncoding) => {
                                         setFiles((prev) => prev.map((file) => (

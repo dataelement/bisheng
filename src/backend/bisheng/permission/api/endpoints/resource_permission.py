@@ -813,6 +813,7 @@ async def _list_knowledge_space_grant_users(
     page: int,
     page_size: int,
 ) -> list[dict]:
+    from sqlalchemy import or_
     from sqlmodel import select
 
     from bisheng.core.context.tenant import bypass_tenant_filter
@@ -836,7 +837,11 @@ async def _list_knowledge_space_grant_users(
                 .order_by(User.user_id.desc())
             )
             if keyword:
-                stmt = stmt.where(User.user_name.like(f'%{keyword}%'))
+                keyword_pattern = f'%{keyword}%'
+                stmt = stmt.where(or_(
+                    User.user_name.like(keyword_pattern),
+                    User.external_id.like(keyword_pattern),
+                ))
             if page and page_size:
                 stmt = stmt.offset((page - 1) * page_size).limit(page_size)
             result = await session.exec(stmt)
@@ -850,19 +855,10 @@ async def _list_knowledge_space_grant_users(
         if getattr(user, 'user_id', None) is not None
     ]
     dept_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
-    primary_rows = [
-        row for row in dept_rows
-        if int(getattr(row, 'is_primary', 0) or 0) == 1
-    ]
     departments = await DepartmentDao.aget_active_by_tenant(tenant_id)
     dept_map = {
         int(dept.id): dept for dept in departments
         if getattr(dept, 'id', None) is not None
-    }
-    primary_by_user = {
-        int(row.user_id): dept_map.get(int(row.department_id))
-        for row in primary_rows
-        if getattr(row, 'user_id', None) is not None and getattr(row, 'department_id', None) is not None
     }
 
     def _department_display_path(dept) -> str | None:
@@ -882,6 +878,31 @@ async def _list_knowledge_space_grant_users(
             labels.append(current_name)
         return '/'.join(labels) if labels else current_name
 
+    dept_paths_by_user: dict[int, list[str]] = {}
+    primary_by_user = {}
+    for row in dept_rows:
+        user_id = int(getattr(row, 'user_id', 0) or 0)
+        dept_id = int(getattr(row, 'department_id', 0) or 0)
+        if not user_id or not dept_id:
+            continue
+        dept = dept_map.get(dept_id)
+        if int(getattr(row, 'is_primary', 0) or 0) == 1:
+            primary_by_user[user_id] = dept
+        path_label = _department_display_path(dept)
+        if path_label:
+            paths = dept_paths_by_user.setdefault(user_id, [])
+            if path_label not in paths:
+                paths.append(path_label)
+
+    for user_id, paths in list(dept_paths_by_user.items()):
+        dept_paths_by_user[user_id] = sorted(
+            paths,
+            key=lambda path: (
+                0 if path == _department_display_path(primary_by_user.get(user_id)) else 1,
+                path,
+            ),
+        )
+
     return [
         {
             'user_id': int(user.user_id),
@@ -890,6 +911,7 @@ async def _list_knowledge_space_grant_users(
             'primary_department_path': _department_display_path(
                 primary_by_user.get(int(user.user_id)),
             ),
+            'department_paths': dept_paths_by_user.get(int(user.user_id), []),
         }
         for user in active_users
     ]

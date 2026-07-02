@@ -74,6 +74,8 @@ class ResourcePermissionItem(BaseModel):
     subject_type: str
     subject_id: int
     subject_name: Optional[str] = None
+    subject_external_id: Optional[str] = None
+    subject_department_paths: Optional[List[str]] = None
     subject_group_names: Optional[List[str]] = None
     subject_member_names: Optional[List[str]] = None
     relation: str

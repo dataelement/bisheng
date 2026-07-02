@@ -549,11 +549,17 @@ class PermissionService:
         dept_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'department']
         group_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'user_group']
 
-        # Step 3: Batch resolve names and user-group captions for the user/group list UI
-        name_map, user_group_names_map, user_group_member_names_map = await asyncio.gather(
+        # Step 3: Batch resolve names and user/group captions for the permission list UI
+        (
+            name_map,
+            user_group_names_map,
+            user_group_member_names_map,
+            user_subject_metadata_map,
+        ) = await asyncio.gather(
             cls._resolve_subject_names(user_ids, dept_ids, group_ids),
             cls._resolve_user_group_names(user_ids),
             cls._resolve_user_group_member_names(group_ids),
+            cls._resolve_user_subject_metadata(user_ids),
         )
 
         # Step 4: Build items and merge department entries
@@ -580,10 +586,15 @@ class PermissionService:
                     dept_tracker[dept_key] = item
                     items.append(item)
             else:
+                user_metadata = user_subject_metadata_map.get(p['subject_id'], {})
                 items.append(ResourcePermissionItem(
                     subject_type=p['subject_type'],
                     subject_id=p['subject_id'],
                     subject_name=name,
+                    subject_external_id=user_metadata.get('external_id')
+                    if p['subject_type'] == 'user' else None,
+                    subject_department_paths=user_metadata.get('department_paths')
+                    if p['subject_type'] == 'user' else None,
                     subject_member_names=user_group_member_names_map.get(p['subject_id'])
                     if p['subject_type'] == 'user_group' else None,
                     subject_group_names=user_group_names_map.get(p['subject_id']) if p['subject_type'] == 'user' else None,
@@ -620,6 +631,105 @@ class PermissionService:
                 resolved[int(user_id)] = names
 
         return resolved
+
+    @classmethod
+    async def _resolve_user_subject_metadata(
+        cls,
+        user_ids: List[int],
+    ) -> dict[int, dict[str, object]]:
+        """Batch-resolve account and all department paths for user subjects."""
+        unique_user_ids = sorted({int(user_id) for user_id in user_ids if user_id})
+        if not unique_user_ids:
+            return {}
+
+        try:
+            from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+            from bisheng.user.domain.models.user import UserDao
+
+            users = await UserDao.aget_user_by_ids(unique_user_ids) or []
+            metadata: dict[int, dict[str, object]] = {
+                int(user.user_id): {
+                    'external_id': getattr(user, 'external_id', None),
+                    'department_paths': [],
+                }
+                for user in users or []
+                if getattr(user, 'user_id', None) is not None
+            }
+
+            dept_rows = await UserDepartmentDao.aget_by_user_ids(unique_user_ids) or []
+            user_dept_pairs: list[tuple[int, int, int, int]] = []
+            dept_ids: set[int] = set()
+            for index, row in enumerate(dept_rows):
+                user_id = int(getattr(row, 'user_id', 0) or 0)
+                dept_id = int(getattr(row, 'department_id', 0) or 0)
+                if not user_id or not dept_id:
+                    continue
+                primary_rank = 0 if int(getattr(row, 'is_primary', 0) or 0) == 1 else 1
+                user_dept_pairs.append((user_id, dept_id, primary_rank, index))
+                dept_ids.add(dept_id)
+
+            if not user_dept_pairs:
+                return metadata
+
+            departments = await DepartmentDao.aget_by_ids(sorted(dept_ids)) or []
+            dept_map = {
+                int(dept.id): dept
+                for dept in departments
+                if getattr(dept, 'id', None) is not None
+            }
+
+            ancestor_ids: set[int] = set()
+            for dept in departments:
+                for dept_id in cls._department_path_ids(getattr(dept, 'path', None)):
+                    if dept_id not in dept_map:
+                        ancestor_ids.add(dept_id)
+            if ancestor_ids:
+                ancestor_departments = await DepartmentDao.aget_by_ids(sorted(ancestor_ids)) or []
+                for dept in ancestor_departments:
+                    if getattr(dept, 'id', None) is not None:
+                        dept_map[int(dept.id)] = dept
+
+            for user_id, dept_id, _primary_rank, _index in sorted(
+                user_dept_pairs,
+                key=lambda item: (item[0], item[2], item[3], item[1]),
+            ):
+                path_label = cls._department_display_path(dept_map.get(dept_id), dept_map)
+                if not path_label:
+                    continue
+                item = metadata.setdefault(user_id, {
+                    'external_id': None,
+                    'department_paths': [],
+                })
+                paths = item.setdefault('department_paths', [])
+                if isinstance(paths, list) and path_label not in paths:
+                    paths.append(path_label)
+
+            return metadata
+        except Exception as e:
+            logger.warning('Failed to resolve user subject metadata: %s', e)
+            return {}
+
+    @staticmethod
+    def _department_path_ids(path: object) -> list[int]:
+        path_ids: list[int] = []
+        for part in str(path or '').split('/'):
+            part = part.strip()
+            if part.isdigit():
+                path_ids.append(int(part))
+        return path_ids
+
+    @staticmethod
+    def _department_display_path(dept, dept_map: dict[int, object]) -> Optional[str]:
+        if dept is None:
+            return None
+        labels = [
+            getattr(dept_map.get(dept_id), 'name', f'#{dept_id}')
+            for dept_id in PermissionService._department_path_ids(getattr(dept, 'path', None))
+        ]
+        current_name = getattr(dept, 'name', None)
+        if current_name and current_name not in labels:
+            labels.append(current_name)
+        return '/'.join(labels) if labels else current_name
 
     @classmethod
     async def _resolve_user_group_member_names(

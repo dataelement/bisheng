@@ -21,6 +21,11 @@ export const BUSINESS_DOMAIN_OPTIONS = [
     { code: "AD", name: "管理" },
 ];
 
+export type BusinessDomainOptionItem = {
+    code: string;
+    name: string;
+};
+
 export interface PortalUploadMetadataState {
     businessDomainCode: string;
     selectedTagValues: string[];
@@ -57,6 +62,43 @@ export const EMPTY_PORTAL_UPLOAD_METADATA: PortalUploadMetadataState = {
 
 export function normalizeEncodingCode(value?: string | null): string {
     return String(value ?? "").trim().toUpperCase();
+}
+
+export function normalizeBusinessDomainOptions(
+    options?: Array<{ code?: string | null; name?: string | null; label?: string | null }> | null,
+): BusinessDomainOptionItem[] {
+    const normalizedOptions: BusinessDomainOptionItem[] = [];
+    const seen = new Set<string>();
+    (options ?? []).forEach((option) => {
+        const code = normalizeEncodingCode(option?.code);
+        if (!code || seen.has(code)) return;
+        const name = String(option?.name ?? option?.label ?? code).trim() || code;
+        normalizedOptions.push({ code, name });
+        seen.add(code);
+    });
+    return normalizedOptions;
+}
+
+export function normalizeBusinessDomainCodes(codes?: Array<string | null | undefined> | null): string[] {
+    const normalizedCodes: string[] = [];
+    const seen = new Set<string>();
+    (codes ?? []).forEach((rawCode) => {
+        const code = normalizeEncodingCode(rawCode);
+        if (!code || seen.has(code)) return;
+        normalizedCodes.push(code);
+        seen.add(code);
+    });
+    return normalizedCodes;
+}
+
+export function filterBusinessDomainOptionsByCodes(
+    options: BusinessDomainOptionItem[],
+    boundCodes?: Array<string | null | undefined> | null,
+): BusinessDomainOptionItem[] {
+    const normalizedBoundCodes = normalizeBusinessDomainCodes(boundCodes);
+    if (!normalizedBoundCodes.length) return options;
+    const allowedCodes = new Set(normalizedBoundCodes);
+    return options.filter((option) => allowedCodes.has(option.code));
 }
 
 export function parseFileEncoding(
@@ -98,9 +140,14 @@ export function fileEncodingCategoryLabel(code: string, options: PortalFileCateg
     return option ? `${code} / ${option.label}` : `${code} / 未配置类型`;
 }
 
-export function fileEncodingBusinessDomainLabel(code: string): string {
+export function fileEncodingBusinessDomainLabel(
+    code: string,
+    options: BusinessDomainOptionItem[] = BUSINESS_DOMAIN_OPTIONS,
+): string {
     if (!code) return "未识别";
-    const option = BUSINESS_DOMAIN_OPTIONS.find((item) => item.code === code);
+    const normalizedCode = normalizeEncodingCode(code);
+    const option = options.find((item) => item.code === normalizedCode)
+        ?? BUSINESS_DOMAIN_OPTIONS.find((item) => item.code === normalizedCode);
     return option ? `${code} / ${option.name}` : `${code} / 未配置业务域`;
 }
 

@@ -137,6 +137,20 @@ def test_encoding_config_falls_back_per_invalid_field():
     assert messages[1]["content"] == "标题: x.pdf\n摘要: x"
 
 
+def test_encoding_config_restricts_business_domain_fallback_to_bound_codes():
+    kf = SimpleNamespace(
+        id=1, file_encoding=None, file_name="x.pdf",
+        abstract="x", knowledge_id=10, create_time=datetime(2026, 4, 15),
+    )
+    t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
+
+    config = t._resolve_encoding_config(SimpleNamespace(file_encoding=None), business_domain_codes=("QM",))
+
+    assert not t._is_type_business_code_allowed("RPT-PP", config)
+    assert t._is_type_business_code_allowed("RPT-QM", config)
+    assert t._resolve_allowed_fallback_code(config) == "STD-QM"
+
+
 def test_month_window():
     kf = SimpleNamespace(
         id=1, file_encoding=None, file_name="x", abstract="x",

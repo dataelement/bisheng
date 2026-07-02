@@ -45,8 +45,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { Badge } from "~/components/ui/Badge";
 import type { PortalFileCategoryOption } from "../portal/types";
 import {
-    BUSINESS_DOMAIN_OPTIONS,
     DEFAULT_ENCODING_PREFIX,
+    type BusinessDomainOptionItem,
     type EncodingDraft,
     composeFileEncoding,
     fileEncodingBusinessDomainLabel,
@@ -695,11 +695,14 @@ interface FileTableProps {
     canManageMembers?: boolean;
     enableEncodingClassification?: boolean;
     fileCategoryOptions?: PortalFileCategoryOption[];
+    businessDomainOptions?: BusinessDomainOptionItem[];
     encodingPrefix?: string;
     onFileEncodingUpdated?: (fileId: string, newEncoding: string) => void;
+    canRetryFile?: (file: KnowledgeFile) => boolean;
+    retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -707,7 +710,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { columnWidths, onResizeStart, totalWidth, isResizingInteraction } = useResizableColumns({
         includeBusinessDomain: showEncodingClassification,
     });
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
     const showStatusColumn = true;
@@ -890,6 +893,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canEditEncoding={canEditEncoding}
                                 onEditEncoding={handleOpenEditEncoding}
                                 fileCategoryOptions={fileCategoryOptions}
+                                businessDomainOptions={businessDomainOptions}
                                 encodingPrefix={encodingPrefix}
                                 encodingDraft={encodingDrafts[file.id]}
                                 savingEncoding={savingEncodingFileId === file.id}
@@ -900,6 +904,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canManageMembers={canManageMembers}
                                 canMove={Boolean(moveEntryIds?.has(file.id))}
                                 onMove={onMove ? () => onMove(file) : undefined}
+                                canRetryFile={canRetryFile}
+                                retryActionLabel={retryActionLabel}
                             />
                         ))}
                     </TableBody>
@@ -960,6 +966,7 @@ function FileRow({
     canEditEncoding = false,
     onEditEncoding,
     fileCategoryOptions,
+    businessDomainOptions,
     encodingPrefix,
     encodingDraft,
     savingEncoding = false,
@@ -970,6 +977,8 @@ function FileRow({
     canManageMembers = false,
     canMove = false,
     onMove,
+    canRetryFile,
+    retryActionLabel,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -1002,6 +1011,7 @@ function FileRow({
     canEditEncoding?: boolean;
     onEditEncoding?: (file: KnowledgeFile) => void;
     fileCategoryOptions: PortalFileCategoryOption[];
+    businessDomainOptions: BusinessDomainOptionItem[];
     encodingPrefix: string;
     encodingDraft?: EncodingDraft;
     savingEncoding?: boolean;
@@ -1009,6 +1019,8 @@ function FileRow({
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    canRetryFile?: (file: KnowledgeFile) => boolean;
+    retryActionLabel?: string;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -1035,13 +1047,13 @@ function FileRow({
         onCancelCreate,
     });
 
-    const hasRetryOption = Boolean(
-        (
-            file.status === FileStatus.FAILED ||
-            file.status === FileStatus.VIOLATION ||
-            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-        )
+    const defaultCanRetry = (
+        file.status === FileStatus.FAILED ||
+        file.status === FileStatus.VIOLATION ||
+        (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
     );
+    const hasRetryOption = canRetryFile ? canRetryFile(file) : defaultCanRetry;
+    const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = isAdmin && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
@@ -1057,7 +1069,7 @@ function FileRow({
         encodingDraft?.businessDomainCode ?? parsedEncoding.businessDomainCode,
     );
     const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
-    const hasCurrentBusinessDomainOption = BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode);
+    const hasCurrentBusinessDomainOption = businessDomainOptions.some((option) => option.code === selectedBusinessDomainCode);
     const classificationEncodingText = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(file.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
         : fileEncodingText;
@@ -1157,7 +1169,7 @@ function FileRow({
                                 }}
                             >
                                 <RefreshCw className="mr-2 size-4" />
-                                {localize("com_knowledge.retry")}
+                                {retryText}
                             </DropdownMenuItem>
                         )}
                         {onManagePermission && (
@@ -1412,18 +1424,18 @@ function FileRow({
                                 ) : null}
                                 {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
                                     <option value={selectedBusinessDomainCode}>
-                                        {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode)}
+                                        {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
                                     </option>
                                 ) : null}
-                                {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                                {businessDomainOptions.map((option) => (
                                     <option key={option.code} value={option.code}>
                                         {option.code} / {option.name}
                                     </option>
                                 ))}
                             </select>
                         ) : (
-                            <span className="truncate block" title={selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode) : EMPTY_FIELD_PLACEHOLDER}>
-                                {selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode) : EMPTY_FIELD_PLACEHOLDER}
+                            <span className="truncate block" title={selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : EMPTY_FIELD_PLACEHOLDER}>
+                                {selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : EMPTY_FIELD_PLACEHOLDER}
                             </span>
                         )}
                     </TableCell>

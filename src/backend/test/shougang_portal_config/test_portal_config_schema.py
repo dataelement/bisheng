@@ -1,6 +1,13 @@
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from bisheng.shougang_portal_config.api.endpoints.portal_config import router
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     ShougangPortalAdminConfig,
     redact_portal_admin_config,
+)
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
 )
 
 
@@ -9,7 +16,6 @@ def _minimal_portal_config() -> dict:
         'domains': [],
         'sections': [],
         'document_types': [],
-        'business_domain_options': [],
         'qa': {
             'welcome_message': '',
             'hot_questions': [],
@@ -85,3 +91,36 @@ def test_redact_portal_admin_config_hides_plaintext_secrets():
     assert 'client_secret' not in view_data['unified_auth']
     assert 'state_secret' not in view_data['unified_auth']
     assert 'login_sync_hmac_secret' not in view_data['unified_auth']
+
+
+def test_internal_config_endpoint_returns_full_config_without_auth(monkeypatch):
+    config = ShougangPortalAdminConfig(
+        portal=_minimal_portal_config(),
+        bisheng={
+            'base_url': 'http://bisheng.example.com',
+            'username': 'portal-admin',
+            'saved_password': 'plain-password',
+        },
+        unified_auth={
+            'client_secret': 'plain-client-secret',
+            'state_secret': 'plain-state-secret',
+            'login_sync_hmac_secret': 'plain-login-sync-secret',
+        },
+    )
+
+    async def fake_get_config():
+        return config
+
+    monkeypatch.setattr(ShougangPortalConfigService, 'get_config', staticmethod(fake_get_config))
+    app = FastAPI()
+    app.include_router(router)
+
+    response = TestClient(app).get('/shougang-portal/config/internal')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status_code'] == 200
+    assert body['data']['bisheng']['saved_password'] == 'plain-password'
+    assert body['data']['unified_auth']['client_secret'] == 'plain-client-secret'
+    assert body['data']['unified_auth']['state_secret'] == 'plain-state-secret'
+    assert body['data']['unified_auth']['login_sync_hmac_secret'] == 'plain-login-sync-secret'

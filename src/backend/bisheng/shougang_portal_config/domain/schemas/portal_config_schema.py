@@ -217,11 +217,6 @@ class PortalDocumentTypeConfig(BaseModel):
     label: str = ''
 
 
-class PortalBusinessDomainOption(BaseModel):
-    code: str = ''
-    name: str = ''
-
-
 class PortalRecommendationConfig(BaseModel):
     provider: str
     home_strategy: str
@@ -300,7 +295,6 @@ class PortalConfig(BaseModel):
     domains: list[PortalDomainConfig] = Field(default_factory=list)
     sections: list[PortalSectionConfig] = Field(default_factory=list)
     document_types: list[PortalDocumentTypeConfig] = Field(default_factory=list)
-    business_domain_options: list[PortalBusinessDomainOption] = Field(default_factory=list)
     qa: PortalQAConfig
     agent_config: PortalAgentConfig = Field(default_factory=PortalAgentConfig)
     search: PortalSearchConfig = Field(default_factory=PortalSearchConfig)

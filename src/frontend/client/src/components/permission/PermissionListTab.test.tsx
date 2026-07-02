@@ -109,6 +109,48 @@ describe("Client PermissionListTab", () => {
     });
   });
 
+  it("shows and searches user account and department details", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "张伟",
+        subject_external_id: "EMP001",
+        subject_department_paths: ["总部/炼铁部", "技术中心/AI组"],
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("张伟").length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText(/EMP001/)).toBeInTheDocument();
+    expect(screen.getByText(/总部\/炼铁部/)).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByPlaceholderText("com_permission.search_user_by_name_or_account"),
+      { target: { value: "EMP001" } },
+    );
+    expect(screen.getAllByText("张伟").length).toBeGreaterThan(0);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("com_permission.search_user_by_name_or_account"),
+      { target: { value: "技术中心" } },
+    );
+    expect(screen.getAllByText("张伟").length).toBeGreaterThan(0);
+  });
+
   it("shows owner actions when another owner remains", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {

@@ -50,6 +50,8 @@ interface FileCardProps {
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
     /** Mirrors member-management gating: creators + manage_space_relation holders. */
     canManageMembers?: boolean;
+    canRetryFile?: (file: KnowledgeFile) => boolean;
+    retryActionLabel?: string;
 }
 
 export function FileCard({
@@ -80,6 +82,8 @@ export function FileCard({
     onOpenVersionManagement,
     onOpenVersionHistory,
     canManageMembers = false,
+    canRetryFile,
+    retryActionLabel,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -169,7 +173,7 @@ export function FileCard({
                     </span>
                 );
             } else {
-            const item = config[file.status];
+            const item = file.status !== undefined ? config[file.status] : undefined;
             if (!item) return null;
             badge = (
                 <span
@@ -276,13 +280,13 @@ export function FileCard({
         onPreview?.(file.id);
     };
 
-    const hasRetryOption = Boolean(
-        onRetry && (
-            file.status === FileStatus.FAILED ||
-            file.status === FileStatus.VIOLATION ||
-            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-        )
+    const defaultCanRetry = (
+        file.status === FileStatus.FAILED ||
+        file.status === FileStatus.VIOLATION ||
+        (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
     );
+    const hasRetryOption = Boolean(onRetry && (canRetryFile ? canRetryFile(file) : defaultCanRetry));
+    const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = isAdmin && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
@@ -459,7 +463,7 @@ export function FileCard({
                                                 className="flex items-center"
                                             >
                                                 <RefreshCw className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.retry")}
+                                                {retryText}
                                             </DropdownMenuItem>
                                         )}
                                         {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
@@ -629,7 +633,7 @@ export function FileCard({
                                         className="flex items-center"
                                     >
                                         <RefreshCw className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.retry")}
+                                        {retryText}
                                     </DropdownMenuItem>
                                 )}
                                 {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (

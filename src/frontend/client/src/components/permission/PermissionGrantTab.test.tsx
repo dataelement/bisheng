@@ -367,7 +367,8 @@ describe("PermissionGrantTab", () => {
     );
 
     const userLabel = await screen.findByText("Alice");
-    const checkbox = userLabel.parentElement?.querySelector('[role="checkbox"]');
+    const row = screen.getByTestId("permission-user-row-8");
+    const checkbox = row.querySelector('[role="checkbox"]');
 
     await waitFor(() => {
       expect(checkbox).toHaveAttribute("data-state", "unchecked");
@@ -379,6 +380,43 @@ describe("PermissionGrantTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
 
     expect(mockedAuthorizeResource).not.toHaveBeenCalled();
+  });
+
+  it("shows user grant candidates with account and department details", async () => {
+    mockedGetResourceGrantUsers.mockResolvedValue([
+      {
+        user_id: 8,
+        user_name: "张伟",
+        external_id: "EMP001",
+        department_paths: ["总部/炼铁部", "技术中心/AI组"],
+      },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await screen.findByText("张伟");
+    expect(screen.getByText(/EMP001/)).toBeInTheDocument();
+    expect(screen.getByText(/总部\/炼铁部/)).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByPlaceholderText("com_permission.search_user_by_name_or_account"),
+      { target: { value: "EMP001" } },
+    );
+
+    await waitFor(() => {
+      expect(mockedGetResourceGrantUsers).toHaveBeenLastCalledWith(
+        "knowledge_space",
+        "space-1",
+        { keyword: "EMP001", page: 1, page_size: 50 },
+        { signal: expect.any(AbortSignal) },
+      );
+    });
   });
 
   it("hides user group grant targets even when historical user group grants exist", async () => {

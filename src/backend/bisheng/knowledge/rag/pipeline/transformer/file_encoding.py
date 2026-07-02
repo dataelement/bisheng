@@ -80,6 +80,7 @@ from bisheng.knowledge.domain.constants import (
     BUSINESS_DOMAIN_CODES,
     normalize_business_domain_code,
 )
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
 CLASSIFY_PROMPT = """# 角色
@@ -179,7 +180,7 @@ class FileEncodingRuntimeConfig:
     fallback_code: str
     seq_cap: int
     document_type_codes: frozenset[str]
-    business_domain_codes: frozenset[str]
+    business_domain_codes: tuple[str, ...]
 
 
 class FileEncodingTransformer(BaseDocumentTransformer):
@@ -211,7 +212,8 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     async def _do_work(self) -> None:
         shougang_conf = await bisheng_settings.aget_shougang_conf()
-        encoding_config = self._resolve_encoding_config(shougang_conf)
+        business_domain_codes = await self._resolve_space_business_domain_codes()
+        encoding_config = self._resolve_encoding_config(shougang_conf, business_domain_codes)
         company_code = self._resolve_company_code(shougang_conf)
         selected_document_type_code = self._resolve_selected_document_type_code(encoding_config)
         selected_business_domain_code = self._resolve_selected_business_domain_code(encoding_config)
@@ -247,7 +249,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             try:
                 seq = await self._compute_seq(encoding_config.seq_cap)
                 fallback_code = self._apply_selected_document_type_code(
-                    encoding_config.fallback_code,
+                    self._resolve_allowed_fallback_code(encoding_config),
                     selected_document_type_code,
                     encoding_config,
                 )
@@ -288,7 +290,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                     f"[shougang.encoding] file_id={self.knowledge_file.id} "
                     f"fallback: chat_title_llm_unset"
                 )
-                return encoding_config.fallback_code
+                return self._resolve_allowed_fallback_code(encoding_config)
 
             llm = await LLMService.get_bisheng_llm(
                 model_id=llm_conf.chat_title_llm.id,
@@ -301,21 +303,25 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             response = await llm.ainvoke(self._build_classify_messages(encoding_config))
             result = (response.content or "").strip()
 
-            if encoding_config.valid_pattern.match(result):
+            if self._is_type_business_code_allowed(result, encoding_config):
                 return result
             logger.warning(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
                 f"fallback: invalid_format raw={result!r}"
             )
-            return encoding_config.fallback_code
+            return self._resolve_allowed_fallback_code(encoding_config)
         except Exception as e:
             logger.warning(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
                 f"fallback: llm_error {e}"
             )
-            return encoding_config.fallback_code
+            return self._resolve_allowed_fallback_code(encoding_config)
 
-    def _resolve_encoding_config(self, shougang_conf: Any) -> FileEncodingRuntimeConfig:
+    def _resolve_encoding_config(
+        self,
+        shougang_conf: Any,
+        business_domain_codes: Sequence[str] | None = None,
+    ) -> FileEncodingRuntimeConfig:
         raw_config = getattr(shougang_conf, 'file_encoding', None) if shougang_conf is not None else None
         classify_prompt = self._resolve_nonempty_str(
             raw_config, 'classify_prompt', CLASSIFY_PROMPT,
@@ -332,8 +338,66 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             fallback_code=fallback_code,
             seq_cap=seq_cap,
             document_type_codes=document_type_codes,
-            business_domain_codes=BUSINESS_DOMAIN_CODES,
+            business_domain_codes=tuple(business_domain_codes or sorted(BUSINESS_DOMAIN_CODES)),
         )
+
+    async def _resolve_space_business_domain_codes(self) -> tuple[str, ...]:
+        knowledge_id = getattr(self.knowledge_file, 'knowledge_id', None)
+        if not knowledge_id:
+            return tuple(sorted(BUSINESS_DOMAIN_CODES))
+        try:
+            async with get_async_db_session() as session:
+                raw_codes = await session.scalar(
+                    select(Knowledge.business_domain_codes).where(Knowledge.id == knowledge_id)
+                )
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"failed to resolve space business domains, fallback to all: {e}"
+            )
+            return tuple(sorted(BUSINESS_DOMAIN_CODES))
+
+        codes: list[str] = []
+        seen: set[str] = set()
+        for raw_code in raw_codes or []:
+            code = normalize_business_domain_code(raw_code)
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            codes.append(code)
+        return tuple(codes or sorted(BUSINESS_DOMAIN_CODES))
+
+    def _is_type_business_code_allowed(
+        self,
+        type_business_code: str,
+        encoding_config: FileEncodingRuntimeConfig,
+    ) -> bool:
+        if not encoding_config.valid_pattern.match(type_business_code or ""):
+            return False
+        parts = [part.strip() for part in (type_business_code or "").split("-", 1)]
+        if len(parts) != 2:
+            return False
+        document_type_code = self._normalize_document_type_code(parts[0])
+        business_domain_code = normalize_business_domain_code(parts[1])
+        return (
+            bool(document_type_code)
+            and document_type_code in encoding_config.document_type_codes
+            and bool(business_domain_code)
+            and business_domain_code in encoding_config.business_domain_codes
+        )
+
+    def _resolve_allowed_fallback_code(self, encoding_config: FileEncodingRuntimeConfig) -> str:
+        parts = [part.strip() for part in (encoding_config.fallback_code or "").split("-", 1)]
+        document_type_code = self._normalize_document_type_code(parts[0]) if parts else None
+        if not document_type_code or document_type_code not in encoding_config.document_type_codes:
+            document_type_code = next(iter(sorted(encoding_config.document_type_codes)), "STD")
+        fallback_business_domain_code = normalize_business_domain_code(parts[1]) if len(parts) == 2 else None
+        if (
+            not fallback_business_domain_code
+            or fallback_business_domain_code not in encoding_config.business_domain_codes
+        ):
+            fallback_business_domain_code = encoding_config.business_domain_codes[0]
+        return f"{document_type_code}-{fallback_business_domain_code}"
 
     def _build_classify_messages(self, encoding_config: FileEncodingRuntimeConfig) -> list[dict[str, str]]:
         return [

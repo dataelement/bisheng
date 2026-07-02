@@ -56,7 +56,7 @@ async def test_sync_shougang_portal_space_business_domain_codes_rejects_invalid_
     with pytest.raises(SpaceBusinessDomainCodeInvalidError):
         await _service().sync_shougang_portal_space_business_domain_codes(
             ShougangPortalSpaceBusinessDomainCodesSyncReq(
-                bindings=[{"space_id": 11, "business_domain_codes": ["UNKNOWN"]}]
+                bindings=[{"space_id": 11, "business_domain_codes": ["UNKNOWN!"]}]
             )
         )
 
@@ -97,3 +97,16 @@ async def test_sync_shougang_portal_space_business_domain_codes_endpoint_returns
 
     assert response.status_code == 200
     assert response.data == {"updated": 1}
+
+
+def test_space_business_domain_allowed_check_rejects_unbound_code():
+    space = SimpleNamespace(business_domain_codes=["QM"])
+
+    with pytest.raises(SpaceBusinessDomainCodeInvalidError):
+        _service()._ensure_business_domain_allowed_for_space(space, "PP")
+
+
+def test_space_business_domain_allowed_check_allows_all_when_unbound():
+    space = SimpleNamespace(business_domain_codes=[])
+
+    _service()._ensure_business_domain_allowed_for_space(space, "PP")

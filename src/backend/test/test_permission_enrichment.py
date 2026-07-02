@@ -10,7 +10,7 @@ from test.fixtures.mock_openfga import InMemoryOpenFGAClient
 from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
 
 from bisheng.user.domain.models.user import UserDao
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
 
 
@@ -30,14 +30,23 @@ class TestEnrichPermissionTuples:
 
         tuples = [{'user': 'user:7', 'relation': 'owner', 'object': 'workflow:1'}]
 
-        with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve:
+        with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve, \
+             patch.object(PermissionService, '_resolve_user_subject_metadata', new_callable=AsyncMock) as mock_metadata:
             mock_resolve.return_value = {('user', 7): 'Alice'}
+            mock_metadata.return_value = {
+                7: {
+                    'external_id': 'EMP001',
+                    'department_paths': ['总部/研发部'],
+                },
+            }
             result = await PermissionService._enrich_permission_tuples(tuples)
 
         assert len(result) == 1
         assert result[0].subject_type == 'user'
         assert result[0].subject_id == 7
         assert result[0].subject_name == 'Alice'
+        assert result[0].subject_external_id == 'EMP001'
+        assert result[0].subject_department_paths == ['总部/研发部']
         assert result[0].relation == 'owner'
 
     @pytest.mark.asyncio
@@ -289,6 +298,43 @@ class TestResolveSubjectNames:
             result = await PermissionService._resolve_user_group_member_names([3])
 
         assert result == {3: ['Alice', 'Bob']}
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_subject_metadata(self):
+        """User permission rows expose account and all department paths."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        users = [
+            type('User', (), {'user_id': 7, 'external_id': 'EMP001'})(),
+        ]
+        dept_rows = [
+            type('UserDept', (), {'user_id': 7, 'department_id': 10, 'is_primary': 1})(),
+            type('UserDept', (), {'user_id': 7, 'department_id': 11, 'is_primary': 0})(),
+        ]
+        departments = [
+            type('Dept', (), {'id': 1, 'name': '总部', 'path': '/1/'})(),
+            type('Dept', (), {'id': 10, 'name': '研发部', 'path': '/1/10/'})(),
+            type('Dept', (), {'id': 11, 'name': '平台组', 'path': '/1/10/11/'})(),
+        ]
+
+        async def _aget_by_ids(ids):
+            return [dept for dept in departments if dept.id in set(ids)]
+
+        with patch.object(
+            UserDao, 'aget_user_by_ids', new_callable=AsyncMock, return_value=users,
+        ), patch.object(
+            UserDepartmentDao, 'aget_by_user_ids', new_callable=AsyncMock, return_value=dept_rows,
+        ), patch.object(
+            DepartmentDao, 'aget_by_ids', new_callable=AsyncMock, side_effect=_aget_by_ids,
+        ):
+            result = await PermissionService._resolve_user_subject_metadata([7])
+
+        assert result == {
+            7: {
+                'external_id': 'EMP001',
+                'department_paths': ['总部/研发部', '总部/研发部/平台组'],
+            },
+        }
 
 
 class TestGetResourcePermissionsIntegration:

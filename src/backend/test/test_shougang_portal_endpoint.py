@@ -165,6 +165,10 @@ class _FakeKnowledgeSpaceService:
             "page_size": req.page_size,
         }
 
+    async def search_shougang_portal_tags(self, space_ids, space_level, business_domain_code=None):
+        self.tag_search_request = (space_ids, space_level, business_domain_code)
+        return ["设备"]
+
     async def count_shougang_portal_domain_files(self, codes):
         self.requested_codes = codes
         return {"PP": 5, "QM": 2}
@@ -430,6 +434,7 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
             space_level="department",
             file_ext="pdf",
             document_type="RPT",
+            business_domain_code="pm",
             sort="relevance",
             page=1,
             page_size=10,
@@ -445,8 +450,33 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
     assert fake_service.search_request.space_level == "department"
     assert fake_service.search_request.space_ids == [12, 18]
     assert fake_service.search_request.document_type == "RPT"
+    assert fake_service.search_request.business_domain_code == "PM"
     assert response.data["total"] == 1
     assert response.data["data"][0]["space_id"] == 12
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_tag_search_accepts_business_domain_code(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        fake_service = _FakeKnowledgeSpaceService()
+        req = endpoint.ShougangPortalTagSearchReq(
+            space_ids=[12],
+            business_domain_code=" pm ",
+        )
+        response = await endpoint.search_shougang_portal_tags(req, svc=fake_service)
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert fake_service.tag_search_request == ([12], None, "PM")
+    assert response.data["tags"] == ["设备"]
 
 
 @pytest.mark.asyncio

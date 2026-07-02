@@ -3024,6 +3024,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         space_ids: list[int],
         space_level: KnowledgeSpaceLevelEnum | None,
+        business_domain_code: str | None = None,
     ) -> list[str]:
         spaces = await self._get_shougang_portal_visible_search_spaces(space_ids, space_level)
         if not spaces:
@@ -3033,7 +3034,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
             business_ids=[str(space.id) for space in spaces],
         )
         tag_names = {str(tag.name) for tags in tag_map.values() for tag in tags if tag.name}
+        normalized_business_domain_code = self._normalize_shougang_portal_business_domain_code(business_domain_code)
+        if normalized_business_domain_code:
+            return await self._filter_shougang_portal_tag_names_by_business_domain_code(
+                tag_map=tag_map,
+                spaces=spaces,
+                business_domain_code=normalized_business_domain_code,
+            )
         return sorted(tag_names)
+
+    async def _filter_shougang_portal_tag_names_by_business_domain_code(
+        self,
+        *,
+        tag_map: dict[str, list[Any]],
+        spaces: list[Knowledge],
+        business_domain_code: str,
+    ) -> list[str]:
+        all_tags = [
+            tag
+            for tags in tag_map.values()
+            for tag in tags
+            if getattr(tag, "id", None) is not None and getattr(tag, "name", None)
+        ]
+        if not all_tags:
+            return []
+
+        space_ids = [int(space.id) for space in spaces]
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            knowledge_ids=space_ids,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            order_by="update_time",
+            order_sort="desc",
+        )
+        files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
+        visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+        visible_file_ids = {str(int(file.id)) for file in visible_files if file.id is not None}
+        if not visible_file_ids:
+            return []
+
+        tag_ids = [int(tag.id) for tag in all_tags if tag.id is not None]
+        resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
+        visible_tag_ids = {
+            int(resource.tag_id)
+            for resource in resources
+            if str(resource.resource_id or "") in visible_file_ids and resource.tag_id is not None
+        }
+        return sorted({str(tag.name) for tag in all_tags if int(tag.id) in visible_tag_ids and tag.name})
 
     async def count_shougang_portal_domain_files(self, codes: list[str]) -> dict[str, int]:
         return await KnowledgeFileDao.async_count_files_by_domain_codes(codes)
@@ -3309,6 +3355,43 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 seen.add(code)
         return normalized_codes
 
+    @staticmethod
+    def _normalize_shougang_portal_business_domain_code(code: str | None) -> str:
+        return normalize_business_domain_code(code) or ""
+
+    @classmethod
+    def _space_allowed_business_domain_codes(cls, space: Knowledge | None) -> list[str]:
+        if not space:
+            return []
+        return [
+            code
+            for code in (
+                cls._normalize_shougang_portal_business_domain_code(raw_code)
+                for raw_code in (getattr(space, "business_domain_codes", None) or [])
+            )
+            if code
+        ]
+
+    @classmethod
+    def _ensure_business_domain_allowed_for_space(
+        cls,
+        space: Knowledge | None,
+        business_domain_code: str | None,
+    ) -> None:
+        code = cls._normalize_shougang_portal_business_domain_code(business_domain_code)
+        if not code:
+            return
+        allowed_codes = cls._space_allowed_business_domain_codes(space)
+        if allowed_codes and code not in allowed_codes:
+            raise SpaceBusinessDomainCodeInvalidError()
+
+    @classmethod
+    def _extract_business_domain_code_from_encoding(cls, encoding: str) -> str:
+        parts = [part.strip() for part in (encoding or "").split("-")]
+        if len(parts) < 4:
+            return ""
+        return cls._normalize_shougang_portal_business_domain_code(parts[2])
+
     async def sync_shougang_portal_space_business_domain_codes(
         self,
         req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
@@ -3484,6 +3567,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not files:
             return self._build_shougang_portal_paged_response([], req.page, req.page_size)
 
+        files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
+        if not files:
+            return self._build_shougang_portal_paged_response([], req.page, req.page_size)
+
         visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
         if not visible_files:
             return self._build_shougang_portal_paged_response([], req.page, req.page_size)
@@ -3548,6 +3635,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             tag_file_ids=tag_file_ids,
             file_ext=req.file_ext,
             document_type=req.document_type,
+            business_domain_code=req.business_domain_code,
             sort=req.sort,
         )
         if not visible_candidates:
@@ -3582,6 +3670,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces=spaces,
             file_ext=req.file_ext,
             document_type=req.document_type,
+            business_domain_code=req.business_domain_code,
         )
         return self._build_shougang_portal_search_response(items)
 
@@ -3593,6 +3682,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         file_ext: str | None,
         document_type: str | None,
+        business_domain_code: str | None,
         sort: str,
     ) -> tuple[list[PortalFileCandidate], dict[int, KnowledgeFile]]:
         if self._is_shougang_portal_updated_at_sort(sort):
@@ -3602,6 +3692,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tag_file_ids=tag_file_ids,
                 file_ext=file_ext,
                 document_type=document_type,
+                business_domain_code=business_domain_code,
                 sort=sort,
             )
 
@@ -3626,6 +3717,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             files = self._filter_shougang_portal_files_by_document_type(files, document_type)
             if not files:
                 continue
+            files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
+            if not files:
+                continue
             visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
             visible_batch_map = {int(file.id): file for file in visible_files}
             for candidate in batch_candidates:
@@ -3646,6 +3740,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         file_ext: str | None,
         document_type: str | None,
+        business_domain_code: str | None,
         sort: str,
     ) -> tuple[list[PortalFileCandidate], dict[int, KnowledgeFile]]:
         space_ids = [int(space.id) for space in spaces]
@@ -3663,6 +3758,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not files:
             return [], {}
         files = self._filter_shougang_portal_files_by_document_type(files, document_type)
+        if not files:
+            return [], {}
+        files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
         if not files:
             return [], {}
         file_map = {int(file.id): file for file in files}
@@ -4288,10 +4386,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         spaces: list[Knowledge],
         file_ext: str | None,
         document_type: str | None,
+        business_domain_code: str | None,
     ) -> list[ShougangPortalFileItemResp]:
         ordered_files = [file_map[candidate.file_id] for candidate in candidates if candidate.file_id in file_map]
         if not ordered_files:
             return []
+        ordered_files = self._filter_shougang_portal_files_by_business_domain_code(ordered_files, business_domain_code)
+        if not ordered_files:
+            return []
+        ordered_file_ids = {int(file.id) for file in ordered_files if file.id is not None}
         space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
         enriched_items = await self._handle_file_folder_extra_info(ordered_files)
         folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(enriched_items)
@@ -4304,7 +4407,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item["source_path"] = source_path_map.get(item_id, "")
             if self._is_shougang_portal_file_item(item, file_ext, document_type):
                 item_map[item_id] = self._map_shougang_portal_file_item(space_id, item)
-        return [item_map[candidate.file_id] for candidate in candidates if candidate.file_id in item_map]
+        return [
+            item_map[candidate.file_id]
+            for candidate in candidates
+            if candidate.file_id in ordered_file_ids and candidate.file_id in item_map
+        ]
 
     @staticmethod
     def _build_shougang_portal_search_response(items: list[ShougangPortalFileItemResp]) -> dict:
@@ -4723,6 +4830,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not normalized:
             return files
         return [file for file in files if cls._get_shougang_document_type_code(file) == normalized]
+
+    @classmethod
+    def _filter_shougang_portal_files_by_business_domain_code(
+        cls,
+        files: list[KnowledgeFile],
+        business_domain_code: str | None,
+    ) -> list[KnowledgeFile]:
+        normalized = cls._normalize_shougang_portal_business_domain_code(business_domain_code)
+        if not normalized:
+            return files
+        return [file for file in files if cls._get_shougang_business_domain_code(file) == normalized]
+
+    @classmethod
+    def _get_shougang_business_domain_code(cls, item: Any) -> str:
+        if isinstance(item, dict):
+            file_encoding = str(
+                item.get("file_encoding")
+                or item.get("fileEncoding")
+                or item.get("document_code")
+                or item.get("file_no")
+                or ""
+            )
+        else:
+            file_encoding = str(getattr(item, "file_encoding", "") or "")
+        parts = [part.strip() for part in file_encoding.split("-")]
+        if len(parts) < 4 or not parts[2]:
+            return ""
+        return cls._normalize_shougang_portal_business_domain_code(parts[2])
 
     @classmethod
     def _get_shougang_document_type_code(cls, item: Any) -> str:
@@ -6851,6 +6986,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_ids = sorted({int(file.knowledge_id) for file in files if file.knowledge_id})
         spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids) if space_ids else []
         space_name_map = {int(space.id): space.name for space in spaces if getattr(space, "id", None) is not None}
+        space_business_domain_codes_map = {
+            int(space.id): [
+                code
+                for code in (
+                    self._normalize_shougang_portal_business_domain_code(raw_code)
+                    for raw_code in (getattr(space, "business_domain_codes", None) or [])
+                )
+                if code
+            ]
+            for space in spaces
+            if getattr(space, "id", None) is not None
+        }
         space_level_map = {}
         for space in spaces:
             if getattr(space, "id", None) is None:
@@ -6888,6 +7035,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_id=int(file.knowledge_id),
                 knowledge_name=space_name_map.get(int(file.knowledge_id), ""),
                 space_level=space_level_map.get(int(file.knowledge_id)),
+                business_domain_codes=space_business_domain_codes_map.get(int(file.knowledge_id), []),
                 file_name=file.file_name,
                 file_level_path=file.file_level_path or "",
                 parent_id=self._parent_folder_id_from_level_path(file.file_level_path),
@@ -7523,6 +7671,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if normalized_file_category_code:
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code
         normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
+        if business_domain_code and not normalized_business_domain_code:
+            raise SpaceBusinessDomainCodeInvalidError()
+        self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
         if normalized_business_domain_code:
             split_rule_dict[self.business_domain_code_key] = normalized_business_domain_code
         process_files = []
@@ -7703,6 +7854,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cleaned = encoding.strip()
         if not cleaned:
             raise ValueError("encoding cannot be empty after strip")
+        db_knowledge = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+        self._ensure_business_domain_allowed_for_space(
+            db_knowledge,
+            self._extract_business_domain_code_from_encoding(cleaned),
+        )
         if await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
             raise SpaceFileEncodingDuplicateError()
 
@@ -8003,7 +8159,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_file_retry:
             return []
         file_category_code = self.normalize_file_category_code(req_data.get("file_category_code"))
-        business_domain_code = self.normalize_business_domain_code(req_data.get("business_domain_code"))
+        raw_business_domain_code = req_data.get("business_domain_code")
+        business_domain_code = self.normalize_business_domain_code(raw_business_domain_code)
+        if raw_business_domain_code and not business_domain_code:
+            raise SpaceBusinessDomainCodeInvalidError()
+        self._ensure_business_domain_allowed_for_space(space, business_domain_code)
         if file_category_code:
             for retry_file in db_file_retry:
                 retry_file["split_rule"] = self.with_file_category_code_in_split_rule(

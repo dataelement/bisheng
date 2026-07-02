@@ -9,8 +9,10 @@ import {
 import { TREE_PAGE_SIZE } from "../constants";
 import { isFolder } from "../utils";
 
-interface PortalDeepLinkTarget {
+export interface PortalDeepLinkTarget {
     spaceId: string;
+    folderId: string;
+    folderName: string;
     fileId: string;
     fileName: string;
     key: string;
@@ -32,6 +34,8 @@ interface UsePortalDeepLinkParams {
     setSearchResults: Dispatch<SetStateAction<KnowledgeFile[]>>;
     setSearchLoading: Dispatch<SetStateAction<boolean>>;
     setSelectedFile: Dispatch<SetStateAction<KnowledgeFile | null>>;
+    onNavigateFolder: (folderId?: string, folderName?: string) => void | Promise<void>;
+    onRestoreComplete?: (targetKey: string) => void;
 }
 
 const getQueryValue = (searchParams: URLSearchParams, keys: string[]) => {
@@ -42,16 +46,20 @@ const getQueryValue = (searchParams: URLSearchParams, keys: string[]) => {
     return "";
 };
 
-const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): PortalDeepLinkTarget | null => {
+export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): PortalDeepLinkTarget | null => {
     const spaceId = getQueryValue(searchParams, ["spaceId", "knowledgeId", "knowledge_id"]);
+    if (!spaceId) return null;
+    const folderId = getQueryValue(searchParams, ["folderId", "folder_id"]);
+    const folderName = getQueryValue(searchParams, ["folderName", "folder_name"]);
     const fileId = getQueryValue(searchParams, ["fileId", "documentId", "document_id"]);
-    if (!spaceId || !fileId) return null;
     const fileName = getQueryValue(searchParams, ["name", "fileName", "documentName", "document_name"]);
     return {
         spaceId,
+        folderId,
+        folderName,
         fileId,
         fileName,
-        key: `${spaceId}:${fileId}:${fileName}`,
+        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}`,
     };
 };
 
@@ -63,10 +71,10 @@ const resolveFileTypeFromName = (name: string): FileType => {
     return FileType.OTHER;
 };
 
-const createDeepLinkedFile = (target: PortalDeepLinkTarget): KnowledgeFile => {
+const createDeepLinkedFile = (target: PortalDeepLinkTarget, fileId: string): KnowledgeFile => {
     const name = target.fileName || `文件 ${target.fileId}`;
     return {
-        id: target.fileId,
+        id: fileId,
         name,
         type: resolveFileTypeFromName(name),
         tags: [],
@@ -93,16 +101,20 @@ export function usePortalDeepLink({
     setSearchResults,
     setSearchLoading,
     setSelectedFile,
+    onNavigateFolder,
+    onRestoreComplete,
 }: UsePortalDeepLinkParams) {
     const deepLinkTarget = useMemo(
         () => resolvePortalDeepLinkTarget(searchParams),
         [searchParams],
     );
     const deepLinkSpaceAppliedRef = useRef<string | null>(null);
+    const deepLinkFolderAppliedRef = useRef<string | null>(null);
     const deepLinkHandledRef = useRef<string | null>(null);
 
     useEffect(() => {
         deepLinkSpaceAppliedRef.current = null;
+        deepLinkFolderAppliedRef.current = null;
         deepLinkHandledRef.current = null;
     }, [deepLinkTarget?.key]);
 
@@ -117,14 +129,50 @@ export function usePortalDeepLink({
     }, [activeSpace?.id, deepLinkTarget, selectableSpaces, setActiveSpace]);
 
     useEffect(() => {
-        if (!deepLinkTarget || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
+        if (!deepLinkTarget?.folderId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
+        if (deepLinkFolderAppliedRef.current === deepLinkTarget.key) return;
+        let cancelled = false;
+        deepLinkFolderAppliedRef.current = deepLinkTarget.key;
+        setSelectedFile(null);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+        setSearchText("");
+        setSearchLoading(false);
+        setSearchMode(false);
+        setSearchResults([]);
+        void Promise.resolve(onNavigateFolder(deepLinkTarget.folderId, deepLinkTarget.folderName))
+            .finally(() => {
+                if (!cancelled && !deepLinkTarget.fileId) {
+                    onRestoreComplete?.(deepLinkTarget.key);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        activeSpace,
+        deepLinkTarget,
+        onNavigateFolder,
+        onRestoreComplete,
+        setSearchLoading,
+        setSearchMode,
+        setSearchResults,
+        setSearchText,
+        setSelectedFile,
+        setSelectedFileIds,
+        setSelectedFolderIds,
+    ]);
+
+    useEffect(() => {
+        if (!deepLinkTarget?.fileId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
+        if (deepLinkTarget.folderId && deepLinkFolderAppliedRef.current !== deepLinkTarget.key) return;
         if (deepLinkHandledRef.current === deepLinkTarget.key) return;
 
         let cancelled = false;
 
         const openDeepLinkedFile = (file: KnowledgeFile, searchResults?: KnowledgeFile[]) => {
             if (cancelled || String(activeSpaceIdRef.current) !== String(activeSpace.id)) return false;
-            setCurrentFolderId(undefined);
+            setCurrentFolderId(deepLinkTarget.folderId || undefined);
             setSelectedFileIds(new Set());
             setSelectedFolderIds(new Set());
             setSearchText(deepLinkTarget.fileName || file.name);
@@ -135,6 +183,7 @@ export function usePortalDeepLink({
             }
             setSelectedFile(file);
             deepLinkHandledRef.current = deepLinkTarget.key;
+            onRestoreComplete?.(deepLinkTarget.key);
             return true;
         };
 
@@ -150,11 +199,12 @@ export function usePortalDeepLink({
             };
         }
 
-        const fallbackFile = createDeepLinkedFile(deepLinkTarget);
+        const fallbackFile = createDeepLinkedFile(deepLinkTarget, deepLinkTarget.fileId);
         const keyword = deepLinkTarget.fileName || deepLinkTarget.fileId;
         setSearchLoading(true);
         searchSpaceChildrenApi({
             space_id: deepLinkTarget.spaceId,
+            parent_id: deepLinkTarget.folderId || undefined,
             keyword,
             page: 1,
             page_size: TREE_PAGE_SIZE,
@@ -190,6 +240,7 @@ export function usePortalDeepLink({
         setSelectedFile,
         setSelectedFileIds,
         setSelectedFolderIds,
+        onRestoreComplete,
         statusFilterNumbers,
     ]);
 }

@@ -308,6 +308,19 @@ class ShougangPortalShareLinkAccessResp(BaseModel):
 class ShougangPortalTagSearchReq(BaseModel):
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
+    business_domain_code: str | None = Field(
+        default=None, max_length=16, description="Business domain code from file_encoding segment 3"
+    )
+
+    @field_validator("business_domain_code", mode="before")
+    @classmethod
+    def normalize_business_domain_code_field(cls, value: Any):
+        if value in (None, ""):
+            return None
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError("business_domain_code is invalid")
+        return normalized
 
 
 class ShougangPortalTagSearchResp(BaseModel):
@@ -344,6 +357,9 @@ class ShougangPortalFileSearchReq(BaseModel):
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     file_ext: str | None = Field(default=None, description="File extension filter")
     document_type: str | None = Field(default=None, description="Document type code from file_encoding segment 2")
+    business_domain_code: str | None = Field(
+        default=None, max_length=16, description="Business domain code from file_encoding segment 3"
+    )
     sort: str = Field(
         default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc"
     )
@@ -352,6 +368,16 @@ class ShougangPortalFileSearchReq(BaseModel):
     )
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
+
+    @field_validator("business_domain_code", mode="before")
+    @classmethod
+    def normalize_business_domain_code_field(cls, value: Any):
+        if value in (None, ""):
+            return None
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError("business_domain_code is invalid")
+        return normalized
 
 
 class ShougangPortalFileTagResp(BaseModel):
@@ -574,6 +600,7 @@ class ShougangPortalUploadedFileResp(BaseModel):
     knowledge_id: int
     knowledge_name: str = ""
     space_level: KnowledgeSpaceLevelEnum | None = None
+    business_domain_codes: list[str] = Field(default_factory=list)
     file_name: str
     file_level_path: str = ""
     parent_id: int | None = None

@@ -22,9 +22,7 @@ async def get_shougang_portal_config(
 
 
 @router.get('/internal')
-async def get_shougang_portal_config_internal(
-    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
-):
+async def get_shougang_portal_config_internal():
     return resp_200(await ShougangPortalConfigService.get_config())
 
 

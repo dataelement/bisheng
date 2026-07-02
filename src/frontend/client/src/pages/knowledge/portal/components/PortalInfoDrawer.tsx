@@ -4,7 +4,7 @@ import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import { SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
 import type { PanelKey, PortalFileCategoryOption } from "../types";
 import {
-    BUSINESS_DOMAIN_OPTIONS,
+    type BusinessDomainOptionItem,
     type EncodingDraft,
     composeFileEncoding,
     fileEncodingBusinessDomainLabel,
@@ -99,6 +99,7 @@ interface PortalInfoDrawerProps {
     documentPath: string;
     canEditEncoding?: boolean;
     fileCategoryOptions: PortalFileCategoryOption[];
+    businessDomainOptions: BusinessDomainOptionItem[];
     encodingPrefix: string;
     onClose: () => void;
     onCopyShareLink: () => void;
@@ -112,6 +113,7 @@ export function PortalInfoDrawer({
     selectedFile,
     canEditEncoding = false,
     fileCategoryOptions,
+    businessDomainOptions,
     encodingPrefix,
     onClose,
     onCopyShareLink,
@@ -166,7 +168,7 @@ export function PortalInfoDrawer({
         encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
     );
     const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
-    const hasCurrentBusinessDomainOption = BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode);
+    const hasCurrentBusinessDomainOption = businessDomainOptions.some((option) => option.code === selectedBusinessDomainCode);
     const displayFileEncoding = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(selectedFile?.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
         : selectedFile?.fileEncoding;
@@ -246,10 +248,10 @@ export function PortalInfoDrawer({
                     <option value="">未识别</option>
                     {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
                         <option value={selectedBusinessDomainCode}>
-                            {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode)}
+                            {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
                         </option>
                     ) : null}
-                    {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                    {businessDomainOptions.map((option) => (
                         <option key={option.code} value={option.code}>
                             {option.code} / {option.name}
                         </option>
@@ -257,7 +259,7 @@ export function PortalInfoDrawer({
                 </select>
             ) : (
                 <span className={s.detailValue}>
-                    {selectedFile ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode) : "-"}
+                    {selectedFile ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : "-"}
                 </span>
             )}
         </div>

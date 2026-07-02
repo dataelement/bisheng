@@ -476,6 +476,8 @@ class TestPermissionApiIntegration:
             'subject_type': 'user',
             'subject_id': 7,
             'subject_name': None,
+            'subject_external_id': None,
+            'subject_department_paths': None,
             'subject_group_names': None,
             'subject_member_names': None,
             'relation': 'owner',
@@ -501,7 +503,9 @@ class TestPermissionApiIntegration:
             return_value=[{
                 'user_id': 8,
                 'user_name': 'Alice',
+                'external_id': 'EMP001',
                 'primary_department_path': '总部/研发部',
+                'department_paths': ['总部/研发部'],
             }],
         ) as mock_list_users:
             with TestClient(app) as client:
@@ -513,6 +517,8 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 200
         assert body['data'][0]['user_name'] == 'Alice'
+        assert body['data'][0]['external_id'] == 'EMP001'
+        assert body['data'][0]['department_paths'] == ['总部/研发部']
         mock_list_users.assert_awaited_once_with(tenant_id=3, keyword='Ali', page=1, page_size=1000)
 
     def test_knowledge_space_grant_subject_departments_endpoint_returns_tenant_tree(self):

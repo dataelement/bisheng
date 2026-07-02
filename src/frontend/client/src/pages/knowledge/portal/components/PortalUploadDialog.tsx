@@ -17,11 +17,10 @@ import type {
     PortalUploadStep,
 } from "../types";
 import {
-    BUSINESS_DOMAIN_OPTIONS,
+    type BusinessDomainOptionItem,
     type PortalUploadTagOption,
 } from "../uploadMetadata";
 
-type BusinessDomainOptionItem = { code: string; name: string };
 import { formatFileSize } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -143,7 +142,7 @@ export function PortalUploadDialog({
     fileCategoryCode,
     fileCategoryOptions,
     businessDomainCode,
-    businessDomainOptions = BUSINESS_DOMAIN_OPTIONS,
+    businessDomainOptions = [],
     uploadTagOptions,
     selectedUploadTagValues,
     uploadTagLoading,

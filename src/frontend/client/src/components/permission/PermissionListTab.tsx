@@ -347,11 +347,13 @@ export function PermissionListTab({
       const name = getEntryDisplayName(entry);
       const groupNames = entry.subject_group_names?.join(" ") ?? "";
       const memberNames = entry.subject_member_names?.join(" ") ?? "";
+      const account = entry.subject_external_id ?? "";
+      const departmentPaths = entry.subject_department_paths?.join(" ") ?? "";
       const includeChildrenText =
         entry.subject_type === "department" && entry.include_children
           ? localize("com_permission.include_children")
           : "";
-      return `${name} ${groupNames} ${memberNames} ${includeChildrenText}`
+      return `${name} ${account} ${departmentPaths} ${groupNames} ${memberNames} ${includeChildrenText}`
         .toLowerCase()
         .includes(normalizedSearchQuery);
     });
@@ -525,9 +527,7 @@ export function PermissionListTab({
 
   const getSearchPlaceholder = (type: ListSubjectType) => {
     const map: Record<ListSubjectType, string> = {
-      user:
-        localize("com_subscription.search_user_placeholder") ||
-        localize("com_permission.search_user"),
+      user: localize("com_permission.search_user_by_name_or_account"),
       department: localize("com_permission.search_department"),
     };
     return map[type];
@@ -535,7 +535,18 @@ export function PermissionListTab({
 
   const getEntryCaption = (entry: PermissionEntry) => {
     if (entry.subject_type === "user") {
-      return entry.subject_group_names?.join("、") ?? "";
+      const departmentPaths = entry.subject_department_paths?.filter(Boolean) ?? [];
+      return [
+        entry.subject_external_id
+          ? `${localize("com_permission.user_account")}: ${entry.subject_external_id}`
+          : "",
+        departmentPaths.length > 0
+          ? `${localize("com_permission.user_department")}: ${departmentPaths.join("、")}`
+          : "",
+        entry.subject_group_names?.length
+          ? `${localize("com_permission.subject_user_group")}: ${entry.subject_group_names.join("、")}`
+          : "",
+      ].filter(Boolean).join(" · ");
     }
 
     if (entry.subject_type === "department") {

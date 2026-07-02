@@ -18,6 +18,8 @@ export interface PermissionEntry {
   subject_type: SubjectType;
   subject_id: number;
   subject_name: string | null;
+  subject_external_id?: string | null;
+  subject_department_paths?: string[] | null;
   subject_group_names?: string[];
   subject_member_names?: string[];
   relation: RelationLevel;
@@ -51,6 +53,14 @@ export interface SelectedSubject {
   id: number;
   name: string;
   include_children?: boolean;
+}
+
+export interface PermissionUserRow {
+  user_id: number;
+  user_name: string;
+  external_id?: string | null;
+  primary_department_path?: string | null;
+  department_paths?: string[] | null;
 }
 
 interface PermissionRequestConfig {
@@ -257,7 +267,7 @@ export async function searchUsers(
   name: string,
   params?: { page?: number; pageSize?: number },
   config?: { signal?: AbortSignal }
-): Promise<{ data: { user_id: number; user_name: string }[]; total: number }> {
+): Promise<{ data: PermissionUserRow[]; total: number }> {
   const res = await request.get(`/api/v1/user/list`, {
     params: {
       name,
@@ -280,7 +290,7 @@ export async function getResourceGrantUsers(
   resourceId: string,
   params?: { keyword?: string; page?: number; page_size?: number },
   config?: { signal?: AbortSignal }
-): Promise<{ user_id: number; user_name: string }[]> {
+): Promise<PermissionUserRow[]> {
   const res = await request.get(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`,
     {
@@ -299,7 +309,7 @@ export async function getKnowledgeSpaceGrantUsers(
   resourceId: string,
   params?: { keyword?: string; page?: number; page_size?: number },
   config?: { signal?: AbortSignal }
-): Promise<{ user_id: number; user_name: string }[]> {
+): Promise<PermissionUserRow[]> {
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);
 }
 

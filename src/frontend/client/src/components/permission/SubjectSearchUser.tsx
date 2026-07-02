@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { getResourceGrantUsers, searchUsers } from "~/api/permission";
-import type { ResourceType, SelectedSubject } from "~/api/permission";
+import type { PermissionUserRow, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -14,9 +14,15 @@ interface SubjectSearchUserProps {
   grantUsersApi?: typeof getResourceGrantUsers;
 }
 
-type UserRow = { user_id: number; user_name: string };
-
 const PAGE_SIZE = 50;
+
+function getDepartmentPaths(user: PermissionUserRow) {
+  const paths = Array.isArray(user.department_paths)
+    ? user.department_paths.filter(Boolean)
+    : [];
+  if (paths.length > 0) return paths;
+  return user.primary_department_path ? [user.primary_department_path] : [];
+}
 
 export function SubjectSearchUser({
   value,
@@ -28,7 +34,7 @@ export function SubjectSearchUser({
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
-  const [results, setResults] = useState<UserRow[]>([]);
+  const [results, setResults] = useState<PermissionUserRow[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -52,7 +58,7 @@ export function SubjectSearchUser({
       name: string,
       pageNum: number,
       signal: AbortSignal,
-    ): Promise<UserRow[]> => {
+    ): Promise<PermissionUserRow[]> => {
       if (resourceType && resourceId) {
         const getGrantUsers = grantUsersApi ?? getResourceGrantUsers;
         const rows = await getGrantUsers(
@@ -182,7 +188,7 @@ export function SubjectSearchUser({
   const selectedIds = new Set(value.map((s) => s.id));
   const disabledIdSet = new Set(disabledIds);
 
-  const toggle = (user: UserRow) => {
+  const toggle = (user: PermissionUserRow) => {
     if (disabledIdSet.has(user.user_id)) return;
     if (selectedIds.has(user.user_id)) {
       onChange(value.filter((s) => s.id !== user.user_id));
@@ -200,7 +206,7 @@ export function SubjectSearchUser({
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
         <input
           type="text"
-          placeholder={localize("com_permission.search_user")}
+          placeholder={localize("com_permission.search_user_by_name_or_account")}
           value={keyword}
           onChange={handleInput}
           className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
@@ -223,9 +229,18 @@ export function SubjectSearchUser({
         {!loading &&
           results.map((user) => {
             const isDisabled = disabledIdSet.has(user.user_id);
+            const account = user.external_id?.trim();
+            const departments = getDepartmentPaths(user);
+            const caption = [
+              account ? `${localize("com_permission.user_account")}: ${account}` : "",
+              departments.length > 0
+                ? `${localize("com_permission.user_department")}: ${departments.join("、")}`
+                : "",
+            ].filter(Boolean).join(" · ");
             return (
               <div
                 key={user.user_id}
+                data-testid={`permission-user-row-${user.user_id}`}
                 className={`flex items-center gap-2 px-3 py-2 ${
                   isDisabled
                     ? "cursor-not-allowed opacity-60"
@@ -238,7 +253,14 @@ export function SubjectSearchUser({
                   disabled={isDisabled}
                 />
                 <UserIcon className="h-4 w-4 text-gray-400" />
-                <span className="min-w-0 flex-1 truncate text-sm">{user.user_name}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm text-[#212121]">{user.user_name}</div>
+                  {caption && (
+                    <div className="truncate text-xs leading-5 text-[#999999]" title={caption}>
+                      {caption}
+                    </div>
+                  )}
+                </div>
                 {isDisabled && (
                   <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                     {localize("com_permission.already_granted")}

@@ -1,5 +1,6 @@
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import type { PanelKey, PortalFileCategoryOption, PreviewState } from "../types";
+import type { BusinessDomainOptionItem } from "../uploadMetadata";
 import { DocumentPreview } from "./DocumentPreview";
 import { PortalAiDrawer } from "./PortalAiDialog";
 import { PortalInfoDrawer } from "./PortalInfoDrawer";
@@ -16,6 +17,7 @@ interface PortalPreviewWorkspaceProps {
     documentPath: string;
     encodingPrefix: string;
     fileCategoryOptions: PortalFileCategoryOption[];
+    businessDomainOptions: BusinessDomainOptionItem[];
     isPersonalSpace: boolean;
     preview: PreviewState;
     selectedFile: KnowledgeFile;
@@ -42,6 +44,7 @@ export function PortalPreviewWorkspace({
     documentPath,
     encodingPrefix,
     fileCategoryOptions,
+    businessDomainOptions,
     isPersonalSpace,
     preview,
     selectedFile,
@@ -87,6 +90,7 @@ export function PortalPreviewWorkspace({
                     documentPath={documentPath}
                     canEditEncoding={canEditEncoding}
                     fileCategoryOptions={fileCategoryOptions}
+                    businessDomainOptions={businessDomainOptions}
                     encodingPrefix={encodingPrefix}
                     onClose={() => onPanelChange(null)}
                     onCopyShareLink={onCopyShareLink}
