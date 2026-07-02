@@ -298,17 +298,11 @@ export default function MobileNav({
                 </button>
               </div>
             )}
-            {/* New-chat button stays active even while the list is open (handleNewChat
-                closes the list first), so a new conversation can always be started. */}
-            <button
-              type="button"
-              data-testid="mobile-header-new-chat-button"
-              aria-label={localize('com_ui_new_chat')}
-              className={mobileHeadIconBtnClassName}
-              onClick={handleNewChat}
-            >
-              <Outlined.Plus className="size-5" />
-            </button>
+            {/* No active conversation here (new-chat landing / chat list): the user is
+                already in a fresh chat, so the new-chat "+" would be a no-op — hide it.
+                A same-width spacer keeps the centered title from shifting right.
+                (The list dropdown still offers a "+ 新对话" entry as a fallback.) */}
+            <div className="size-5 shrink-0" aria-hidden />
           </>
         )}
       </div>
