@@ -328,14 +328,10 @@ export function PermissionListTab({
 
   const getEntryDisplayName = useCallback(
     (entry: PermissionEntry) => {
-      if (entry.subject_type === "department") {
-        return deptPathById.get(entry.subject_id)
-          ?? entry.subject_name
-          ?? `${entry.subject_type}:${entry.subject_id}`;
-      }
+      // For departments, show only the leaf name in the left column; full path goes to caption.
       return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
     },
-    [deptPathById],
+    [],
   );
 
   const visibleEntries = useMemo(() => {
@@ -550,9 +546,12 @@ export function PermissionListTab({
     }
 
     if (entry.subject_type === "department") {
-      return entry.include_children
+      const fullPath = deptPathById.get(entry.subject_id);
+      const pathLabel = fullPath && fullPath !== entry.subject_name ? fullPath : null;
+      const typeLabel = entry.include_children
         ? `${localize("com_permission.subject_department")} · ${localize("com_permission.include_children")}`
         : localize("com_permission.subject_department");
+      return pathLabel ? `${pathLabel} · ${typeLabel}` : typeLabel;
     }
 
     return entry.subject_member_names?.join("、") ?? localize("com_permission.subject_user_group");
