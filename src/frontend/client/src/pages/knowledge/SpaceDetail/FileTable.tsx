@@ -526,18 +526,17 @@ function FileTableHeader({
                         {localize("com_knowledge.type")}</SortableHeader>
                 )}
 
-                {/* 文件大小 */}
-                <SortableHeader
-                    sortKey={SortType.SIZE}
-                    currentSort={currentSort}
-                    onSort={handleSort}
-                    width={columnWidths.size}
-                    columnKey="size"
-                    onResizeStart={onResizeStart}
-                    isResizingInteraction={isResizingInteraction}
-                    headerAlignEnd
-                >
-                    {localize("com_knowledge.file_size")}</SortableHeader>
+                {/* 状态（移至文件大小原位置） */}
+                {showStatusColumn && (
+                    <TableHead
+                        className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                        style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+                    >
+                        <div className="flex items-center gap-1.5 border-l pl-3">
+                            {localize("com_knowledge.status")}</div>
+                        <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
+                    </TableHead>
+                )}
 
                 {shougangEnabled && enableEncodingClassification && (
                     <>
@@ -631,17 +630,18 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* 状态 */}
-                {showStatusColumn && (
-                    <TableHead
-                        className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
-                        style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-                    >
-                        <div className="flex items-center gap-1.5 border-l pl-3">
-                            {localize("com_knowledge.status")}</div>
-                        <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
-                    </TableHead>
-                )}
+                {/* 文件大小（移至状态原位置） */}
+                <SortableHeader
+                    sortKey={SortType.SIZE}
+                    currentSort={currentSort}
+                    onSort={handleSort}
+                    width={columnWidths.size}
+                    columnKey="size"
+                    onResizeStart={onResizeStart}
+                    isResizingInteraction={isResizingInteraction}
+                    headerAlignEnd
+                >
+                    {localize("com_knowledge.file_size")}</SortableHeader>
 
                 {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
                 <TableHead
@@ -1332,15 +1332,28 @@ function FileRow({
                 </TableCell>
             )}
 
-            {/* 大小 — 单元格右对齐，与表头一致 */}
-            <TableCell
-                className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
-                style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
-            >
-                <span className="block truncate">
-                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getFileSizeDisplay(file.size)}
-                </span>
-            </TableCell>
+            {/* 状态（移至文件大小原位置） */}
+            {showStatusColumn && (
+                <TableCell
+                    className={cn("relative overflow-visible py-3 align-middle", rowBg)}
+                    style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+                >
+                    {isFolder ? (
+                        file.folderStatsLoading ? (
+                            <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
+                        ) : file.folderStatsError ? (
+                            <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
+                        ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
+                            <span className="whitespace-nowrap text-sm">
+                                <span className="text-[#00b42a]">{file.successFileNum}</span>
+                                <span className="text-[#86909c]">/{file.fileNum}</span>
+                            </span>
+                        ) : null
+                    ) : (
+                        <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
+                    )}
+                </TableCell>
+            )}
 
             {enableEncodingClassification && (
                 <>
@@ -1513,28 +1526,15 @@ function FileRow({
                 <span className="block truncate whitespace-nowrap">{getUpdateTimeDisplay(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态 */}
-            {showStatusColumn && (
-                <TableCell
-                    className={cn("relative overflow-visible py-3 align-middle", rowBg)}
-                    style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-                >
-                    {isFolder ? (
-                        file.folderStatsLoading ? (
-                            <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
-                        ) : file.folderStatsError ? (
-                            <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
-                        ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
-                            <span className="whitespace-nowrap text-sm">
-                                <span className="text-[#00b42a]">{file.successFileNum}</span>
-                                <span className="text-[#86909c]">/{file.fileNum}</span>
-                            </span>
-                        ) : null
-                    ) : (
-                        <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
-                    )}
-                </TableCell>
-            )}
+            {/* 大小（移至状态原位置）— 单元格右对齐，与表头一致 */}
+            <TableCell
+                className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
+            >
+                <span className="block truncate">
+                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getFileSizeDisplay(file.size)}
+                </span>
+            </TableCell>
             {/* 行末锚点：固定在可视区最右侧，按钮距右侧 12px，不受横向滚动影响 */}
             <TableCell
                 className="sticky right-0 z-[34] overflow-visible border-none bg-transparent p-0"
