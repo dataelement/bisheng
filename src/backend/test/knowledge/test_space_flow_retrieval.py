@@ -172,3 +172,26 @@ async def test_space_filter_close_author_identity():
 
     assert len(result) == 1
     assert vis_cls.call_args.args[1] is author  # author drives the filter
+
+
+def test_build_space_knowledge_tool_defaults_rrf_weights_when_none():
+    """Regression: agent-node / assistant callers omit rrf_weights, so
+    build_space_knowledge_tool passes None. KnowledgeRetrieverTool.rrf_weights is
+    typed List[float] and pydantic v2 rejects an explicit None — the inner
+    SpaceKnowledgeRetrieverTool must be built with the default [0.5, 0.5] instead
+    of raising ValidationError. (KnowledgeRagTool is patched out to isolate the
+    fix from its unrelated real-llm requirement.)"""
+    with patch.object(space_flow_retrieval, "KnowledgeRagTool", MagicMock()) as rag_tool_cls:
+        space_flow_retrieval.build_space_knowledge_tool(
+            name="knowledge_space_retriever",
+            description="desc",
+            llm=MagicMock(),
+            space_ids=[5],
+            identity_user_id=7,
+            tenant_id=1,
+            # rrf_weights intentionally omitted → defaults to None inside the builder
+        )
+    inner = rag_tool_cls.call_args.kwargs["knowledge_retriever_tool"]
+    assert inner.rrf_weights == [0.5, 0.5]  # None was normalized, not rejected
+    assert inner.space_ids == [5]
+    assert inner.access_scope == "per_user"
