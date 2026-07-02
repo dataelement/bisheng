@@ -30,7 +30,6 @@ import ArticlePage from '~/pages/Subscription/Article/ArticlePage';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
-import ShougangPortalAdmin from '@/pages/ShougangPortalAdmin';
 import { useAuthContext } from '@/hooks';
 import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
@@ -222,7 +221,6 @@ export const router = createBrowserRouter([
           )},
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
           { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
-          { path: 'shougang-portal-admin', element: <ShougangPortalAdmin /> },
         ],
       },
       // Standalone chat — auth (login required, inside AuthLayout)

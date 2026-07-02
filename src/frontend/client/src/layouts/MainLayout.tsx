@@ -1,7 +1,7 @@
 import Cookies from 'js-cookie';
 import { getBysConfigApi } from '~/api/apps';
 import { Filled, Outlined } from 'bisheng-icons';
-import { LayoutDashboard, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
@@ -140,16 +140,9 @@ function Sidebar({
     || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
     || Boolean(plugins?.includes('admin'));
 
-  // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
-  const portalAdminUrl =
-    bsConfig?.shougang?.portal_admin_url
-    ?? window.__SHOUGANG_PORTAL_ADMIN_URL__;
-  const showShougangPortalTab =
-    user?.role === 'admin' && !isMobile && Boolean(portalAdminUrl);
-
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo<Array<{
-    section: 'home' | 'apps' | 'channel' | 'knowledge' | 'portal-admin';
+    section: 'home' | 'apps' | 'channel' | 'knowledge';
     to: string;
     icon: React.ReactNode;
     label: string;
@@ -199,23 +192,14 @@ function Sidebar({
         isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps') || menuUnavailablePlugin === 'apps',
         closeDrawerOnNavigate: true,
       },
-      {
-        section: 'portal-admin' as const,
-        to: '/shougang-portal-admin',
-        icon: <LayoutDashboard />,
-        label: localize('com_nav_portal_admin'),
-        isActive: pathname.startsWith('/shougang-portal-admin'),
-        closeDrawerOnNavigate: true,
-      },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
       if (l.section === 'apps') return showAppsTab;
       if (l.section === 'channel') return showSubscriptionTab;
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-      if (l.section === 'portal-admin') return showShougangPortalTab;
       return true;
     });
-  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
+  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
