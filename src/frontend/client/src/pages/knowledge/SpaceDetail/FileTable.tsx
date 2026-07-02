@@ -711,8 +711,35 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         includeBusinessDomain: showEncodingClassification,
     });
     const scrollRef = useRef<HTMLDivElement | null>(null);
+    const stickyScrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+
+    // Sync the sticky scrollbar with the actual table scroll container
+    useEffect(() => {
+        const table = scrollRef.current;
+        const sticky = stickyScrollRef.current;
+        if (!table || !sticky) return;
+        let syncing = false;
+        const onTableScroll = () => {
+            if (syncing) return;
+            syncing = true;
+            sticky.scrollLeft = table.scrollLeft;
+            syncing = false;
+        };
+        const onStickyScroll = () => {
+            if (syncing) return;
+            syncing = true;
+            table.scrollLeft = sticky.scrollLeft;
+            syncing = false;
+        };
+        table.addEventListener("scroll", onTableScroll, { passive: true });
+        sticky.addEventListener("scroll", onStickyScroll, { passive: true });
+        return () => {
+            table.removeEventListener("scroll", onTableScroll);
+            sticky.removeEventListener("scroll", onStickyScroll);
+        };
+    }, []);
     const showStatusColumn = true;
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -824,13 +851,13 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 
     return (
         <div className="relative max-w-full min-w-0 overflow-hidden px-2" data-testid="portal-file-table">
-            {/* 横向滚动限制在容器内，不撑开整页 */}
+            {/* 横向滚动限制在容器内，不撑开整页；隐藏原生滚动条，由下方 sticky 滚动条代替 */}
             <div
                 ref={(el) => {
                     scrollRef.current = el;
                     hScrollRevealRef(el);
                 }}
-                className="max-w-full overflow-x-auto overflow-y-visible pb-2 [scrollbar-color:#c9cdd4_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c9cdd4] [&::-webkit-scrollbar-track]:bg-transparent"
+                className="max-w-full overflow-x-auto overflow-y-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"
@@ -910,6 +937,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         ))}
                     </TableBody>
                 </table>
+            </div>
+
+            {/* 常驻横向滚动条，sticky 固定在底部，同步表格横向滚动位置 */}
+            <div
+                ref={stickyScrollRef}
+                className="sticky bottom-0 overflow-x-auto overflow-y-hidden z-20 [scrollbar-color:#c9cdd4_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c9cdd4] [&::-webkit-scrollbar-track]:bg-transparent"
+            >
+                <div style={{ width: totalWidth, height: 1 }} />
             </div>
 
             {/* 右侧溢出阴影 */}
