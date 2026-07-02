@@ -269,7 +269,7 @@ class KnowledgeSpaceTagLibraryDao:
                     library_id=int(existing.id),
                     tenant_id=tenant_id,
                     user_id=user_id or 0,
-                    manual_tags=normalized,
+                    system_tags=normalized,
                     ai_tags=existing.ai_tags or [],
                 )
                 return existing
@@ -295,7 +295,7 @@ class KnowledgeSpaceTagLibraryDao:
                 library_id=int(row.id),
                 tenant_id=tenant_id,
                 user_id=user_id or 0,
-                manual_tags=normalized,
+                system_tags=normalized,
                 ai_tags=[],
             )
             return row

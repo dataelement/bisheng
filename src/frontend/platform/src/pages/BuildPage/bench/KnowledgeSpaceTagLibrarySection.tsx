@@ -62,7 +62,7 @@ function formatTagSource(resourceType: string, t: (key: string, defaultValue: st
     if (resourceType === "ai_auto_tag") {
         return t("build.tagSourceAi", "AI标签");
     }
-    if (resourceType === "system_tag" || resourceType === "manual_tag") {
+    if (resourceType === "system_tag") {
         return t("build.tagSourceSystem", "系统标签");
     }
     return t("build.tagSourceManual", "人工标签");
@@ -77,11 +77,14 @@ function formatDateTime(value?: string | null) {
 }
 
 function splitTagItems(items: KnowledgeSpaceTagLibraryTagItem[]) {
+    const systemTags = items
+        .filter((item) => item.resource_type === "system_tag")
+        .map((item) => item.name);
     const manualTags = items
-        .filter((item) => item.resource_type === "manual_tag" || item.resource_type === "system_tag")
+        .filter((item) => item.resource_type === "manual_tag")
         .map((item) => item.name);
     const aiTags = items.filter((item) => item.resource_type === "ai_auto_tag").map((item) => item.name);
-    return { manualTags, aiTags };
+    return { systemTags, manualTags, aiTags };
 }
 
 interface KnowledgeSpaceTagLibrarySectionProps {
@@ -242,7 +245,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                 setTagItems(
                     (res.tags || []).map((name) => ({
                         name,
-                        resource_type: "manual_tag",
+                        resource_type: "system_tag",
                     })),
                 );
             }
@@ -262,17 +265,21 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
             toast({ variant: "error", description: t("build.tagLibraryLimit", "单个标签库最多 200 个标签") });
             return false;
         }
-        const { manualTags, aiTags } = splitTagItems(nextItems);
+        const { systemTags, manualTags, aiTags } = splitTagItems(nextItems);
         setSaving(true);
         const res = await captureAndAlertRequestErrorHoc(
-            updateKnowledgeSpaceTagLibraryApi(library.id, { tags: manualTags, ai_tags: aiTags }),
+            updateKnowledgeSpaceTagLibraryApi(library.id, {
+                tags: systemTags,
+                manual_tags: manualTags,
+                ai_tags: aiTags,
+            }),
         );
         setSaving(false);
         if (!res) return false;
         setTagItems(
             res.tag_items?.length
                 ? res.tag_items
-                : (res.tags || []).map((name) => ({ name, resource_type: "manual_tag" })),
+                : (res.tags || []).map((name) => ({ name, resource_type: "system_tag" })),
         );
         onUpdated();
         return true;
@@ -290,7 +297,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
         }
         const ok = await persistTagItems([
             ...tagItems,
-            { name: trimmed, resource_type: "manual_tag" },
+            { name: trimmed, resource_type: "system_tag" },
         ]);
         if (ok) {
             setNewTag("");

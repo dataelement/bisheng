@@ -98,8 +98,8 @@ describe("EditTagsModal recommended tags", () => {
             expect(screen.getByText("系统A")).toBeInTheDocument();
             expect(screen.getByText("com_knowledge.tag_type_ai")).toBeInTheDocument();
             expect(screen.getByText("AI-B")).toBeInTheDocument();
+            expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
             expect(screen.getByText("人工C")).toBeInTheDocument();
-            expect(screen.queryByText("com_knowledge.tag_type_manual")).not.toBeInTheDocument();
         });
 
         expect(getBoundTagLibraryTagsForKnowledgeApi).toHaveBeenCalledWith("100");
