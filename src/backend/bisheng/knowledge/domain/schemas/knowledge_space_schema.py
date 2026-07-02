@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
@@ -52,13 +52,11 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     id: int = Field(..., description="Knowledge Space ID")
-    business_domain_codes: List[str] = Field(
+    business_domain_codes: list[str] = Field(
         default_factory=list,
         description="Portal business-domain codes bound to this knowledge space",
     )
-    is_pinned: bool = Field(
-        default=False, description="Knowledge Space pinned by current user or not"
-    )
+    is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     user_name: str = Field(default="", description="Knowledge Space creator name")
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
@@ -323,16 +321,16 @@ class ShougangPortalDomainFileCountReq(BaseModel):
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):
-    counts: Dict[str, int] = Field(default_factory=dict)
+    counts: dict[str, int] = Field(default_factory=dict)
 
 
 class ShougangPortalSpaceBusinessDomainCodesItem(BaseModel):
     space_id: int = Field(..., gt=0)
-    business_domain_codes: List[str] = Field(default_factory=list, max_length=200)
+    business_domain_codes: list[str] = Field(default_factory=list, max_length=200)
 
 
 class ShougangPortalSpaceBusinessDomainCodesSyncReq(BaseModel):
-    bindings: List[ShougangPortalSpaceBusinessDomainCodesItem] = Field(default_factory=list, max_length=500)
+    bindings: list[ShougangPortalSpaceBusinessDomainCodesItem] = Field(default_factory=list, max_length=500)
 
 
 class ShougangPortalSpaceBusinessDomainCodesSyncResp(BaseModel):
@@ -502,9 +500,9 @@ class FileCreateReq(BaseModel):
     file_path: list[str] = Field(..., description="File Path")
     parent_id: int | None = Field(None, description="Parent Folder ID")
     file_category_code: str | None = Field(None, max_length=16, description="Selected business file category code")
-    business_domain_code: Optional[str] = Field(None, max_length=16, description="Selected business domain code")
-    manual_tag_ids: List[int] = Field(default_factory=list, description="Selected existing tag IDs")
-    manual_tag_names: List[str] = Field(default_factory=list, description="Selected tag names")
+    business_domain_code: str | None = Field(None, max_length=16, description="Selected business domain code")
+    manual_tag_ids: list[int] = Field(default_factory=list, description="Selected existing tag IDs")
+    manual_tag_names: list[str] = Field(default_factory=list, description="Selected tag names")
 
     @field_validator("business_domain_code", mode="before")
     @classmethod

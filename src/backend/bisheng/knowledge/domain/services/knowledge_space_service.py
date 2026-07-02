@@ -34,6 +34,7 @@ from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     FavoriteSpaceProtectedError,
+    SpaceBusinessDomainCodeInvalidError,
     SpaceCreateDepartmentDeniedError,
     SpaceCreatePublicDeniedError,
     SpaceFileDuplicateError,
@@ -49,7 +50,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError,
     SpaceInvalidLevelError,
     SpaceInvalidScopeOwnerError,
-    SpaceBusinessDomainCodeInvalidError,
     SpaceLimitError,
     SpaceNameDuplicateError,
     SpaceNameSensitiveWordError,
@@ -82,7 +82,6 @@ from bisheng.core.openfga.client import (
     finish_fga_read_stats,
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -90,6 +89,7 @@ from bisheng.database.models.review_tags import ReviewTag, ReviewTagDao
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao, TagResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -392,7 +392,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
-        self._created_space_scope_by_id: Dict[
+        self._created_space_scope_by_id: dict[
             int,
             tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
         ] = {}
@@ -751,7 +751,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         level: KnowledgeSpaceLevelEnum | str | None = None,
         owner_type: KnowledgeSpaceOwnerTypeEnum | str | None = None,
-        owner_id: Optional[int] = None,
+        owner_id: int | None = None,
     ) -> KnowledgeSpaceInfoResp:
         result = KnowledgeSpaceInfoResp(**space.model_dump())
         result.user_name = self.login_user.user_name
@@ -3122,10 +3122,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         permission_map = dict(zip(space_map.keys(), permission_results))
 
-        visible_space_ids: List[int] = []
-        has_content_permission_map: Dict[int, bool] = {}
-        error_map: Dict[int, ShougangPortalSpaceInfoError] = {}
-        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, 'is_admin', None)) else False
+        visible_space_ids: list[int] = []
+        has_content_permission_map: dict[int, bool] = {}
+        error_map: dict[int, ShougangPortalSpaceInfoError] = {}
+        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, "is_admin", None)) else False
         for space_id in unique_space_ids:
             space = space_map.get(space_id)
             if not space:
@@ -3297,8 +3297,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return items
 
     @classmethod
-    def _normalize_shougang_portal_business_domain_codes(cls, codes: List[str]) -> List[str]:
-        normalized_codes: List[str] = []
+    def _normalize_shougang_portal_business_domain_codes(cls, codes: list[str]) -> list[str]:
+        normalized_codes: list[str] = []
         seen: set[str] = set()
         for raw_code in codes or []:
             code = normalize_business_domain_code(raw_code)
@@ -3312,17 +3312,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def sync_shougang_portal_space_business_domain_codes(
         self,
         req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         if not req.bindings:
             return {"updated": 0}
 
-        bindings: Dict[int, List[str]] = {}
+        bindings: dict[int, list[str]] = {}
         for item in req.bindings:
             bindings[int(item.space_id)] = self._normalize_shougang_portal_business_domain_codes(
                 item.business_domain_codes
             )
 
-        spaces = await KnowledgeDao.async_get_spaces_by_ids(list(bindings.keys()), order_by='update_time')
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(list(bindings.keys()), order_by="update_time")
         existing_space_ids = {int(space.id) for space in spaces}
         if existing_space_ids != set(bindings.keys()):
             raise SpaceNotFoundError()
@@ -3330,7 +3330,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         updated = await KnowledgeDao.async_update_space_business_domain_codes(bindings)
         return {"updated": updated}
 
-    async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> Dict:
+    async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> dict:
         perf = PortalSearchPerfContext(started_at=time.monotonic())
         perf.keyword = (req.q or "").strip()
         perf.sort = req.sort
@@ -5040,8 +5040,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _list_accessible_spaces(
         self,
-        order_by: str = 'update_time',
-    ) -> List[KnowledgeRead]:
+        order_by: str = "update_time",
+    ) -> list[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members if str(member.business_id).isdigit()}
         created_ids, accessible_ids, public_space_ids = await asyncio.gather(
@@ -5074,7 +5074,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def get_grouped_spaces(
         self,
-        order_by: str = 'update_time',
+        order_by: str = "update_time",
     ) -> GroupedKnowledgeSpacesResp:
         spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
@@ -5092,26 +5092,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_spaces_by_level(
         self,
         space_level: KnowledgeSpaceLevelEnum | str,
-        order_by: str = 'update_time',
-    ) -> List[KnowledgeRead]:
+        order_by: str = "update_time",
+    ) -> list[KnowledgeRead]:
         target_level = self._normalize_space_level(space_level)
-        favorite_space_id: Optional[int] = None
+        favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
             favorite_space = await self._ensure_favorite_space()
             favorite_space_id = int(favorite_space.id)
 
         spaces = await self._list_accessible_spaces(order_by)
-        result = [
-            space
-            for space in spaces
-            if space.space_level == target_level
-        ]
+        result = [space for space in spaces if space.space_level == target_level]
 
         if favorite_space_id is not None:
             for space in result:
                 if int(space.id) == favorite_space_id:
                     space.is_favorite = True
-            result.sort(key=lambda space: (not bool(getattr(space, 'is_favorite', False))))
+            result.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
 
         return result
 
@@ -7456,9 +7452,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_path: list[str],
         parent_id: int | None = None,
         file_category_code: str | None = None,
-        business_domain_code: Optional[str] = None,
-        manual_tag_ids: Optional[List[int]] = None,
-        manual_tag_names: Optional[List[str]] = None,
+        business_domain_code: str | None = None,
+        manual_tag_ids: list[int] | None = None,
+        manual_tag_names: list[str] | None = None,
         file_source: FileSource = None,
         skip_approval: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
