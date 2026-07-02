@@ -41,7 +41,6 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
                 {'id': 'upload_file', 'label': '上传文件', 'relation': 'can_edit'},
                 {'id': 'publish_file', 'label': '发布文件', 'relation': 'can_edit'},
                 {'id': 'delete_space', 'label': '删除空间', 'relation': 'can_delete'},
-                {'id': 'share_space', 'label': '分享空间', 'relation': 'can_manage'},
                 {'id': 'manage_space_relation', 'label': '管理空间协作者', 'relation': 'can_manage'},
             ],
         },
