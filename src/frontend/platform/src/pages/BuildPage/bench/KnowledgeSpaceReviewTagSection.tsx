@@ -186,11 +186,9 @@ export default function KnowledgeSpaceReviewTagSection({
     }, []);
 
     useEffect(() => {
-        if (visible) {
-            setPage(1);
-            loadData(1);
-        }
-    }, [visible, loadData]);
+        setPage(1);
+        loadData(1);
+    }, [loadData]);
 
     const filteredRows = useMemo(() => {
         const trimmed = (keyword || "").trim().toLowerCase();
@@ -250,11 +248,9 @@ export default function KnowledgeSpaceReviewTagSection({
                     <div>
                         <p className="text-lg font-bold">
                             {t("build.autoTagGenerationTitle", "待审核标签")}
-                            {visible && (
-                                <span className="text-[#86909C] text-sm">
-                                    {`（${total}）`}
-                                </span>
-                            )}
+                            <span className="text-[#86909C] text-sm">
+                                {`（${total}）`}
+                            </span>
                         </p>
                         <p className="mt-1 text-sm text-[#86909C]">
                             {t(
@@ -266,8 +262,7 @@ export default function KnowledgeSpaceReviewTagSection({
                     <Switch checked={visible} onCheckedChange={onToggle} />
                 </div>
 
-                {visible && (
-                    <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                         <div className="max-h-[240px] overflow-y-auto rounded-md border bg-background">
                             <table className="w-full table-fixed border-collapse">
                                 <thead className="sticky top-0 z-10 bg-background">
@@ -379,8 +374,7 @@ export default function KnowledgeSpaceReviewTagSection({
                                 </Button>
                             </div>
                         )}
-                    </div>
-                )}
+                </div>
             </div>
 
             <ApproveReviewTagDialog
