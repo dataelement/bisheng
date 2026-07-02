@@ -2463,7 +2463,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             skip_user_limit=True,
         )
         space.is_favorite = True
-        await KnowledgeDao.async_update_space(space)
+        try:
+            await KnowledgeDao.async_update_space(space)
+        except Exception:
+            # 并发下他人已抢先建成收藏库（唯一索引 uq_knowledge_favorite_user 冲突）：
+            # 清理本次刚建的孤儿空间并上抛，交由 _ensure_favorite_space 回查复用赢家。
+            try:
+                await KnowledgeDao.async_delete_knowledge(int(space.id), only_clear=False)
+            except Exception as cleanup_exc:  # noqa: BLE001
+                logger.warning("cleanup orphan favorite space {} failed: {}",
+                               getattr(space, 'id', None), cleanup_exc)
+            raise
         return space
 
     async def _ensure_favorite_space(self) -> Knowledge:

@@ -216,6 +216,38 @@ async def test_list_marks_invalid_when_source_deleted():
 
 
 @pytest.mark.asyncio
+async def test_create_favorite_space_cleans_orphan_on_unique_conflict():
+    # #2 并发防重：更新 is_favorite 撞唯一索引(uq_knowledge_favorite_user)时，
+    # 清理本次刚建的孤儿空间并上抛，交由 _ensure_favorite_space 回查复用赢家。
+    svc = _make_service()
+    orphan = Knowledge(id=201, name="我的收藏", user_id=7, type=3, is_favorite=False)
+    with patch.object(KnowledgeSpaceService, "create_knowledge_space",
+                      new=AsyncMock(return_value=orphan)), \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+               new=AsyncMock(side_effect=Exception("duplicate favorite"))), \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_delete_knowledge",
+               new=AsyncMock()) as deleter:
+        with pytest.raises(Exception):
+            await svc._create_favorite_space()
+        deleter.assert_awaited_once_with(201, only_clear=False)
+
+
+@pytest.mark.asyncio
+async def test_ensure_favorite_space_recovers_winner_after_conflict():
+    # 并发下本次创建失败(撞唯一索引) → _ensure_favorite_space 回查到赢家并返回
+    svc = _make_service()
+    winner = Knowledge(id=117, name="我的收藏", user_id=7, type=3, is_favorite=True)
+    with patch.object(KnowledgeSpaceService, "_find_favorite_space",
+                      new=AsyncMock(side_effect=[None, winner])), \
+         patch.object(KnowledgeSpaceService, "_adopt_existing_favorite_space",
+                      new=AsyncMock(return_value=None)), \
+         patch.object(KnowledgeSpaceService, "_create_favorite_space",
+                      new=AsyncMock(side_effect=Exception("unique conflict"))):
+        space = await svc._ensure_favorite_space()
+        assert space.id == 117
+
+
+@pytest.mark.asyncio
 async def test_list_marks_valid_when_source_exists():
     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
     svc = _make_service()
