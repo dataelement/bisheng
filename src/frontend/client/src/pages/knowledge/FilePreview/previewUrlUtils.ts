@@ -1,12 +1,38 @@
 /**
- * Rewrite backend/MinIO absolute URLs to same-origin paths under BASE_URL,
- * matching Platform RichPreviewFile and Client PreviewFile components.
+ * Normalize MinIO share URLs for Client fetch/media under `/workspace`.
+ * nginx only proxies `^/(workspace/bisheng|bisheng|tmp-dir)/` — paths like
+ * `/workspace/workspace/bisheng/...` fall through to SPA index.html.
  */
 export function resolveKnowledgePreviewUrl(url: string): string {
     if (!url) return "";
+
+    let path = url;
     if (/^https?:\/\//.test(url)) {
-        return url.replace(/https?:\/\/[^/]+/, __APP_ENV__.BASE_URL);
+        try {
+            const parsed = new URL(url);
+            path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        } catch {
+            path = url.replace(/^https?:\/\/[^/]+/, "");
+        }
     }
-    const normalizedPath = url.startsWith("/") ? url : `/${url}`;
-    return `${window.location.origin}${__APP_ENV__.BASE_URL}${normalizedPath}`;
+
+    // Collapse accidental duplicate workspace prefixes from repeated normalization.
+    const base = __APP_ENV__.BASE_URL.replace(/\/$/, "") || "/workspace";
+    while (path.startsWith(`${base}${base}/`) || path.startsWith(`${base}${base}`)) {
+        path = path.slice(base.length);
+    }
+
+    if (path.startsWith(`${base}/bisheng/`) || path.startsWith(`${base}/tmp-dir/`)) {
+        return path;
+    }
+
+    if (path.startsWith("/bisheng/") || path.startsWith("/tmp-dir/")) {
+        return `${base}${path}`;
+    }
+
+    if (path.startsWith(base)) {
+        return path;
+    }
+
+    return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
