@@ -7673,6 +7673,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
+        file_record.updater_id = self.login_user.user_id
+        file_record.updater_name = self.login_user.user_name
         if file_record.file_source == FileSource.WEB_LINK.value:
             metadata = dict(file_record.user_metadata or {})
             metadata["web_title"] = self._web_link_display_title(new_name)
