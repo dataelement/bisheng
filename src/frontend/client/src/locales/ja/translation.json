@@ -1540,7 +1540,7 @@
     "file_name": "ファイル名",
     "file_register_failed": "ファイルのナレッジスペースへの登録に失敗しました",
     "upload_browser_hint": "このクライアントには時間制限がある可能性があります。ブラウザからアップロードしてみてください。",
-    "file_size": "ファイルサイズ",
+    "file_size": "サイズ",
     "file_upload_failed": "ファイル {{0}} のアップロードに失敗しました",
     "file_upload_failed_with_reason": "ファイル {{0}} のアップロードに失敗しました：{{1}}",
     "file_upload_quota_batch": "{{0}} 個のファイルのアップロードに失敗しました：{{1}}",

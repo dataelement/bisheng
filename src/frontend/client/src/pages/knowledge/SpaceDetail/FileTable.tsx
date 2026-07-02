@@ -52,12 +52,15 @@ const FILE_ROW_ACTION_BTN_CLASS =
 // ============================================================
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
-    name: { minWidth: 140, initialWidth: 280 },
-    fileType: { minWidth: 140, initialWidth: 140 },
-    size: { minWidth: 140, initialWidth: 140 },
-    tags: { minWidth: 140, initialWidth: 200 },
+    // Fluid column: no fixed width — absorbs all leftover horizontal space so the
+    // file name grows as the window widens. Its width value is used as a min only.
+    name: { minWidth: 200, initialWidth: 200 },
+    fileType: { minWidth: 88, initialWidth: 76 },
+    size: { minWidth: 88, initialWidth: 94 },
+    tags: { minWidth: 140, initialWidth: 140 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
-    updateTime: { minWidth: 140, initialWidth: 180 },
+    updateTime: { minWidth: 150, initialWidth: 156 },
+    actions: { minWidth: 96, initialWidth: 96 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
 
@@ -70,7 +73,7 @@ type ColumnKey = keyof typeof COLUMN_CONFIG;
 // permanent 4px horizontal scroll. Excluding `updateTime` (the last data
 // column in every mode) removes its handle and the 4px overflow.
 // fileType / size are pinned to a fixed 100px and not user-resizable.
-const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "updateTime", "fileType", "size"];
+const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "name", "updateTime", "fileType", "size", "actions"];
 // 左侧固定列
 const STICKY_COLUMNS: ColumnKey[] = ["checkbox", "name"];
 
@@ -304,6 +307,8 @@ const SortableHeader = ({
     sortIconBeforeText,
     /** false：左侧不分隔竖线（如紧贴复选框列的「文件名」表头） */
     leadingBorder = true,
+    /** true：列宽自适应（不设固定 width/maxWidth，只用 width 作为 minWidth）——文件名列 */
+    flexible = false,
 }: {
     children: React.ReactNode;
     sortKey: string;
@@ -317,6 +322,7 @@ const SortableHeader = ({
     headerAlignEnd?: boolean;
     sortIconBeforeText?: boolean;
     leadingBorder?: boolean;
+    flexible?: boolean;
 }) => {
     const isActive = currentSort?.key === sortKey;
     const direction = isActive ? currentSort.direction : "asc";
@@ -343,9 +349,9 @@ const SortableHeader = ({
                 isSticky && "sticky z-20"
             )}
             style={{
-                width,
-                minWidth: width,
-                maxWidth: width,
+                ...(flexible
+                    ? { minWidth: width }
+                    : { width, minWidth: width, maxWidth: width }),
                 ...(isSticky ? { left: stickyLeft } : {}),
             }}
             onClick={() => onSort(sortKey)}
@@ -432,7 +438,7 @@ function FileTableHeader({
                     </div>
                 </TableHead>
 
-                {/* 文件名 — 左侧固定 */}
+                {/* 文件名 — 左侧固定；自适应列（撑满剩余宽度） */}
                 <SortableHeader
                     sortKey={SortType.NAME}
                     currentSort={currentSort}
@@ -443,21 +449,21 @@ function FileTableHeader({
                     stickyLeft={columnWidths.checkbox}
                     showShadow={showLeftShadow}
                     leadingBorder={false}
+                    flexible
                 >
                     {localize("com_knowledge.file_name")}</SortableHeader>
 
-                {/* 文件类型 */}
-                <SortableHeader
-                    sortKey={SortType.TYPE}
-                    currentSort={currentSort}
-                    onSort={handleSort}
-                    width={columnWidths.fileType}
-                    columnKey="fileType"
-                    onResizeStart={onResizeStart}
+                {/* 标签 — 不排序 */}
+                <TableHead
+                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                    style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
-                    {localize("com_knowledge.type")}</SortableHeader>
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        {localize("com_knowledge.tag")}</div>
+                    <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
+                </TableHead>
 
-                {/* 文件大小 */}
+                {/* 大小 */}
                 <SortableHeader
                     sortKey={SortType.SIZE}
                     currentSort={currentSort}
@@ -470,15 +476,16 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
 
-                {/* 标签 — 不排序 */}
-                <TableHead
-                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
-                    style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
+                {/* 类型 */}
+                <SortableHeader
+                    sortKey={SortType.TYPE}
+                    currentSort={currentSort}
+                    onSort={handleSort}
+                    width={columnWidths.fileType}
+                    columnKey="fileType"
+                    onResizeStart={onResizeStart}
                 >
-                    <div className="flex items-center gap-1.5 border-l pl-3">
-                        {localize("com_knowledge.tag")}</div>
-                    <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
-                </TableHead>
+                    {localize("com_knowledge.type")}</SortableHeader>
 
                 {/* 文件编码 — 仅 shougang 模式显示 */}
                 {shougangEnabled && (
@@ -508,15 +515,13 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* Status column removed — non-success status pills now render inline
-                    next to the file name (see row cell). */}
-
-                {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致 + 承载右侧 sticky 阴影 */}
+                {/* 操作 — 右侧固定，始终显示 */}
                 <TableHead
-                    className="sticky right-0 z-[31] overflow-visible border-none bg-[rgb(251,251,251)] p-0"
-                    style={{ width: 0, minWidth: 0, maxWidth: 0 }}
+                    className="sticky right-0 z-[31] overflow-visible bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                    style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
                 >
                     <StickyColumnShadowRight show={showRightShadow} />
+                    <div className="flex items-center border-l pl-3">{localize("com_knowledge_operation")}</div>
                 </TableHead>
 
             </TableRow>
@@ -580,7 +585,7 @@ interface FileTableProps {
 }
 
 export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
-    const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
+    const { columnWidths, onResizeStart } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -591,6 +596,20 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
     const { showToast } = useToastContext();
+
+    // Fluid table: width is 100% so the name column (no fixed width) absorbs the
+    // slack and grows with the window. minWidth is the sum of the actually-rendered
+    // columns' widths, so a horizontal scrollbar only appears once the viewport is
+    // narrower than that floor.
+    const tableMinWidth =
+        columnWidths.checkbox
+        + columnWidths.name
+        + columnWidths.tags
+        + columnWidths.size
+        + columnWidths.fileType
+        + (shougangEnabled ? columnWidths.fileEncoding : 0)
+        + columnWidths.updateTime
+        + columnWidths.actions;
 
     const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
 
@@ -662,8 +681,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     className="w-full caption-bottom border-separate border-spacing-0 text-sm"
                     style={{
                         tableLayout: "fixed",
-                        width: totalWidth,
-                        minWidth: "100%",
+                        width: "100%",
+                        minWidth: tableMinWidth,
                     }}
                 >
                     <FileTableHeader
@@ -878,8 +897,6 @@ function FileRow({
     // Placeholder has only a temp id (no backend identity) — suppress all row actions.
     const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
     const namePreviewable = isKnowledgeItemPreviewable(file);
-    const [rowHovered, setRowHovered] = useState(false);
-    const showRowActions = (rowHovered || moreMenuOpen) && !isUploadingFolderPlaceholder;
     // Shared action-menu items, reused by the row "..." dropdown and the right-click menu.
     const moreMenuItems = (
         <>
@@ -977,7 +994,7 @@ function FileRow({
 
     const rowActions = (
         <div
-            className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
+            className="flex h-full items-center justify-center gap-1 px-2"
         >
             {canDownload && (
                 <button
@@ -1022,8 +1039,6 @@ function FileRow({
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent"
             )}
-            onMouseEnter={() => setRowHovered(true)}
-            onMouseLeave={() => setRowHovered(false)}
             onContextMenu={handleRowContextMenu}
         >
             {/* 复选框 — 左侧固定 */}
@@ -1045,13 +1060,11 @@ function FileRow({
                 </div>
             </TableCell>
 
-            {/* 文件名 — 左侧固定 */}
+            {/* 文件名 — 左侧固定；自适应列（撑满剩余宽度，不设固定/最大宽） */}
             <TableCell
                 className={cn("sticky z-10 overflow-visible py-3", rowBg)}
                 style={{
-                    width: columnWidths.name,
                     minWidth: columnWidths.name,
-                    maxWidth: columnWidths.name,
                     left: columnWidths.checkbox,
                 }}
             >
@@ -1135,26 +1148,6 @@ function FileRow({
                 <StickyColumnShadow show={showLeftShadow} />
             </TableCell>
 
-            {/* 类型 */}
-            <TableCell
-                className={cn("py-3 text-sm text-[#86909c]", rowBg)}
-                style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
-            >
-                <span className={cn("truncate block", isUploadingFolderPlaceholder && "opacity-50")}>
-                    {isFolder ? localize("com_knowledge.folder") : (file.name.split('.').pop()?.toLowerCase() || "--")}
-                </span>
-            </TableCell>
-
-            {/* 大小 — 单元格右对齐，与表头一致 */}
-            <TableCell
-                className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
-                style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
-            >
-                <span className={cn("block truncate", isUploadingFolderPlaceholder && "opacity-50")}>
-                    {isFolder ? "--" : (file.size ? formatBytes(file.size, 2, true) : "--")}
-                </span>
-            </TableCell>
-
             {/* 标签 — 行悬停时显示编辑（管理员、非文件夹） */}
             <TableCell
                 className={cn("py-3", rowBg)}
@@ -1183,6 +1176,26 @@ function FileRow({
                         />
                     )}
                 </div>
+            </TableCell>
+
+            {/* 大小 — 单元格右对齐，与表头一致 */}
+            <TableCell
+                className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
+            >
+                <span className={cn("block truncate", isUploadingFolderPlaceholder && "opacity-50")}>
+                    {isFolder ? "--" : (file.size ? formatBytes(file.size, 2, true) : "--")}
+                </span>
+            </TableCell>
+
+            {/* 类型 */}
+            <TableCell
+                className={cn("py-3 text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
+            >
+                <span className={cn("truncate block", isUploadingFolderPlaceholder && "opacity-50")}>
+                    {isFolder ? localize("com_knowledge.folder") : (file.name.split('.').pop()?.toLowerCase() || "--")}
+                </span>
             </TableCell>
 
             {/* 文件编码 — 仅 shougang 模式显示 */}
@@ -1235,13 +1248,13 @@ function FileRow({
             </TableCell>
 
             {/* Status column removed; non-success pills now render inline next to the file name. */}
-            {/* 行末锚点：固定在可视区最右侧，按钮距右侧 12px，不受横向滚动影响 */}
+            {/* 操作列：右侧固定，始终显示（不再依赖 hover） */}
             <TableCell
-                className="sticky right-0 z-[34] overflow-visible border-none bg-transparent p-0"
-                style={{ width: 0, minWidth: 0, maxWidth: 0 }}
+                className={cn("sticky right-0 z-10 overflow-visible p-0", rowBg)}
+                style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
             >
                 <StickyColumnShadowRight show={showRightShadow} />
-                {showRowActions && rowActions}
+                {rowActions}
                 {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
                 {showMoreMenu && (
                     <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
