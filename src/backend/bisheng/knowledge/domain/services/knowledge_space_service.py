@@ -3097,10 +3097,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
             business_ids=[str(space_id) for space_id in space_ids],
         )
-        all_tags = [tag for tags in tag_map.values() for tag in tags if tag.id is not None and tag.name]
-        hot_tags = list(dict.fromkeys(str(tag.name) for tag in all_tags))[: req.hot_tags_limit]
+        all_space_tags = [tag for tags in tag_map.values() for tag in tags if tag.id is not None and tag.name]
+        hot_tags = list(dict.fromkeys(str(tag.name) for tag in all_space_tags))[: req.hot_tags_limit]
         if not section_tags:
             return {"sections": empty_sections, "tags": hot_tags}
+
+        # Look up section tags directly by name so that file-level tags (not attached to spaces)
+        # are also found. Merge with space-level tags to avoid duplicate IDs.
+        file_level_tags = await TagDao.aget_tags_by_names(section_tags)
+        merged_tag_pool = {int(t.id): t for t in all_space_tags + file_level_tags if t.id is not None and t.name}
+        all_tags = list(merged_tag_pool.values())
 
         section_tag_ids_by_name: dict[str, list[int]] = {
             tag_name: [int(tag.id) for tag in all_tags if tag.name == tag_name and tag.id is not None]

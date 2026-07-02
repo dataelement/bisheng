@@ -215,6 +215,16 @@ class TagDao(Tag):
             return result.all()
 
     @classmethod
+    async def aget_tags_by_names(cls, names: list[str]) -> list[Tag]:
+        """Find tags by names asynchronously."""
+        if not names:
+            return []
+        statement = select(Tag).where(Tag.name.in_(names))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     async def get_tags_by_business(
         cls, business_type: TagBusinessTypeEnum, business_id: str, name: str = None
     ) -> list[Tag]:
