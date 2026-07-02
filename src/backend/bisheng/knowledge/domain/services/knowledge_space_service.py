@@ -996,6 +996,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         pinned_spaces = []
         normal_spaces = []
         for space in spaces:
+            # 『我的收藏』是每个用户私有的系统知识库，只对归属者本人可见，
+            # 绝不出现在他人（包括拥有全局可见权限的管理员）的知识空间列表中。
+            if getattr(space, 'is_favorite', False) and space.user_id != self.login_user.user_id:
+                continue
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
                 **space.model_dump(),

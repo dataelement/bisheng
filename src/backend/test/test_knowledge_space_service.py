@@ -4908,6 +4908,61 @@ class TestSpaceListings:
         assert result.personal_spaces == []
 
     @pytest.mark.asyncio
+    async def test_get_grouped_spaces_hides_other_users_favorite_space(self, service):
+        # #1: 『我的收藏』是每用户私有系统库；即使当前用户是拥有全局可见权限的管理员
+        # (list_accessible_ids 返回 None)，也不应在其个人库分组里看到其他用户的收藏库。
+        my_fav = _make_space(space_id=10, user_id=7, space_level=KnowledgeSpaceLevelEnum.PERSONAL)
+        my_fav.is_favorite = True
+        my_fav.name = '我的收藏'
+        other_fav = _make_space(space_id=20, user_id=99, space_level=KnowledgeSpaceLevelEnum.PERSONAL)
+        other_fav.is_favorite = True
+        other_fav.name = '我的收藏'
+        my_normal = _make_space(space_id=30, user_id=7, space_level=KnowledgeSpaceLevelEnum.PERSONAL)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_space_members',
+            new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_knowledge_ids_created_by',
+            new_callable=AsyncMock, return_value=[10, 30],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.list_accessible_ids',
+            new_callable=AsyncMock, return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level',
+            new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_knowledge_ids_by_type',
+            new_callable=AsyncMock, return_value=[10, 20, 30],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock, return_value=[my_fav, other_fav, my_normal],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock, return_value=None,
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock, return_value={'view_space'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock, return_value={},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_map_by_space_ids',
+            new_callable=AsyncMock, return_value={},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids',
+            new_callable=AsyncMock, return_value=[],
+        ):
+            result = await service.get_grouped_spaces()
+
+        personal_ids = {s.id for s in result.personal_spaces}
+        assert 10 in personal_ids  # 本人收藏库可见
+        assert 30 in personal_ids  # 本人普通个人库可见
+        assert 20 not in personal_ids  # 他人的收藏库被过滤，不对管理员泄漏
+
+    @pytest.mark.asyncio
     async def test_format_accessible_spaces_excludes_membership_without_required_permission_id(self, service):
         member_space = _make_space(space_id=2, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
         member = _make_member(
