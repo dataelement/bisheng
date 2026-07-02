@@ -1,6 +1,6 @@
 import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
@@ -129,6 +129,9 @@ export function FileCard({
     const isUploading = isKnowledgeItemUploading(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
+    const [contextMenuOpen, setContextMenuOpen] = useState(false);
+    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
     const failureMessage = (
         file.status === FileStatus.FAILED ||
         file.status === FileStatus.TIMEOUT ||
@@ -357,6 +360,84 @@ export function FileCard({
         !isUploadingFolderPlaceholder &&
         (isFolder || isKnowledgeItemPreviewable(file));
 
+    // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
+    const moreMenuItems = (
+        <>
+            {showMenuDownloadItem && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                    icon={<Outlined.Download />}
+                    label={localize("com_knowledge.download")}
+                />
+            )}
+            {onManagePermission && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                    icon={<Outlined.PeopleSafe />}
+                    label={localize("com_permission.manage_permission")}
+                />
+            )}
+            {isAdmin && !isFolder && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                    icon={<Outlined.Tag />}
+                    label={localize("com_knowledge.edit_tags")}
+                />
+            )}
+            {canRename && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); startRenaming(); }}
+                    icon={<Outlined.Edit />}
+                    label={localize("com_knowledge.rename")}
+                />
+            )}
+            {showMoveItem && (
+                <ActionMenuItem
+                    disabled={!canMove || isUploading}
+                    onClick={(e) => { e.stopPropagation(); onMove?.(); }}
+                    icon={<Outlined.MoveToFolder />}
+                    label={localize("com_knowledge.move")}
+                />
+            )}
+            {isAdmin && hasRetryOption && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                    icon={<Outlined.Refresh />}
+                    label={localize("com_knowledge.retry")}
+                />
+            )}
+            {showVersionManagement && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                    icon={<GitBranch />}
+                    label={localize("com_knowledge.version.menu_version_management")}
+                />
+            )}
+            {showVersionHistory && (
+                <ActionMenuItem
+                    onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                    icon={<History />}
+                    label={localize("com_knowledge.version.menu_version_history")}
+                />
+            )}
+            {canDelete && (
+                <ActionMenuItem
+                    danger
+                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    icon={<Outlined.Delete />}
+                    label={localize("com_knowledge.delete")}
+                />
+            )}
+        </>
+    );
+
+    const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+        if (!showMoreMenu) return;
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuOpen(true);
+    };
+
     // H5 mobile list row: flat row (no border / shadow / card background) with
     // icon + title + date + tags, and a circular checkbox on the far right.
     // Rendered independently from the desktop card so the desktop path is untouched.
@@ -494,7 +575,25 @@ export function FileCard({
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             onClick={handleCardClick}
+            onContextMenu={handleCardContextMenu}
         >
+            {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
+            {showMoreMenu && (
+                <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            type="button"
+                            aria-hidden="true"
+                            tabIndex={-1}
+                            className="fixed size-0 opacity-0"
+                            style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                        />
+                    </DropdownMenuTrigger>
+                    <ActionMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                        {moreMenuItems}
+                    </ActionMenuContent>
+                </DropdownMenu>
+            )}
             <CardContent className={cn(
                 "flex flex-col p-0",
                 !mobileListMode && "h-full",
@@ -599,74 +698,7 @@ export function FileCard({
                                         align="end"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        {showMenuDownloadItem && (
-                                            <ActionMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                                icon={<Outlined.Download />}
-                                                label={localize("com_knowledge.download")}
-                                            />
-                                        )}
-                                        {onManagePermission && (
-                                            <ActionMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                                icon={<Outlined.PeopleSafe />}
-                                                label={localize("com_permission.manage_permission")}
-                                            />
-                                        )}
-                                        {isAdmin && !isFolder && (
-                                            <ActionMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                                icon={<Outlined.Tag />}
-                                                label={localize("com_knowledge.edit_tags")}
-                                            />
-                                        )}
-                                        {canRename && (
-                                            <ActionMenuItem
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    startRenaming();
-                                                }}
-                                                icon={<Outlined.Edit />}
-                                                label={localize("com_knowledge.rename")}
-                                            />
-                                        )}
-                                        {showMoveItem && (
-                                            <ActionMenuItem
-                                                disabled={!canMove || isUploading}
-                                                onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                                                icon={<Outlined.MoveToFolder />}
-                                                label={localize("com_knowledge.move")}
-                                            />
-                                        )}
-                                        {isAdmin && hasRetryOption && (
-                                            <ActionMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                                icon={<Outlined.Refresh />}
-                                                label={localize("com_knowledge.retry")}
-                                            />
-                                        )}
-                                        {showVersionManagement && (
-                                            <ActionMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                                icon={<GitBranch />}
-                                                label={localize("com_knowledge.version.menu_version_management")}
-                                            />
-                                        )}
-                                        {showVersionHistory && (
-                                            <ActionMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                                icon={<History />}
-                                                label={localize("com_knowledge.version.menu_version_history")}
-                                            />
-                                        )}
-                                        {canDelete && (
-                                            <ActionMenuItem
-                                                danger
-                                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                icon={<Outlined.Delete />}
-                                                label={localize("com_knowledge.delete")}
-                                            />
-                                        )}
+                                        {moreMenuItems}
                                     </ActionMenuContent>
                                 </DropdownMenu>
                             )}

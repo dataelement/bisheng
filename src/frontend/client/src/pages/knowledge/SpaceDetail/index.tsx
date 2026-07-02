@@ -365,6 +365,8 @@ export function KnowledgeSpaceContent({
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
     const canUseAddActions = canCreateFolder && !isSearching;
+    // Blank-area right-click menu opens when the user can upload a file OR create a folder.
+    const canUseContextMenuActions = (canUploadFile || canCreateFolder) && !isSearching;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -644,13 +646,13 @@ export function KnowledgeSpaceContent({
     };
 
     useEffect(() => {
-        if (!canUseAddActions) {
+        if (!canUseContextMenuActions) {
             setContextMenuOpen(false);
         }
-    }, [canUseAddActions]);
+    }, [canUseContextMenuActions]);
 
     const handleContentContextMenu = (e: MouseEvent<HTMLDivElement>) => {
-        if (!canUseAddActions) return;
+        if (!canUseContextMenuActions) return;
         const target = e.target;
         if (target instanceof Element && target.closest("[data-knowledge-file-item]")) return;
 
@@ -1344,10 +1346,18 @@ export function KnowledgeSpaceContent({
                             />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                <FolderPlus className="mr-2 size-4" />
-                                {localize("com_knowledge.new_folder")}
-                            </DropdownMenuItem>
+                            {canUploadFile && (
+                                <DropdownMenuItem onClick={triggerUpload} className="cursor-pointer">
+                                    <Outlined.Upload className="mr-2 size-4" />
+                                    {localize("com_knowledge.upload_file")}
+                                </DropdownMenuItem>
+                            )}
+                            {canCreateFolder && (
+                                <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                    <FolderPlus className="mr-2 size-4" />
+                                    {localize("com_knowledge.new_folder")}
+                                </DropdownMenuItem>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                     {suppressList ? (
