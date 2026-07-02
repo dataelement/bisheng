@@ -72,6 +72,19 @@ function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?:
     return `${t("sensitiveViolationMessagePrefix", { ns: "knowledge" })}{${words.join(",")}}${t("sensitiveViolationMessageSuffix", { ns: "knowledge" })}`;
 }
 
+function formatMediaParseFailureMessage(obj: any, t: (key: string, options?: Record<string, any>) => string) {
+    if (obj?.status_code === 10956) {
+        return t("mediaNoRecognizableAudio", { ns: "knowledge" });
+    }
+
+    const exception = String(obj?.data?.exception ?? "").trim().toLowerCase();
+    if (exception === "media audio extraction failed" || exception === "asr returned empty text") {
+        return t("mediaNoRecognizableAudio", { ns: "knowledge" });
+    }
+
+    return "";
+}
+
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
     const { t } = useTranslation()
     const config = STATUS_CONFIG[status];
@@ -85,6 +98,8 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
                 if (status === 7 && obj?.reason === "sensitive_check") {
                     return formatSensitiveViolationMessage(Array.isArray(obj?.hits) ? obj.hits : [], t);
                 }
+                const mediaMessage = formatMediaParseFailureMessage(obj, t);
+                if (mediaMessage) return mediaMessage;
                 return t(`errors.${obj.status_code}`, obj.data)
             } catch (error) {
                 return trimmedRemark

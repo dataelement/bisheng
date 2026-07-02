@@ -218,6 +218,7 @@
   "webLinkRequestFailed": "Web link request failed",
   "mediaFileMissing": "Media file does not exist",
   "mediaAsrEmpty": "ASR returned empty text",
+  "mediaNoRecognizableAudio": "No recognizable audio was detected. Upload an audio or video file with clear speech.",
   "mediaAsrApiKeyMissing": "ASR API key is missing",
   "mediaFfmpegMissing": "ffmpeg is not installed on the server",
   "mediaAudioExtractionFailed": "Media audio extraction failed",

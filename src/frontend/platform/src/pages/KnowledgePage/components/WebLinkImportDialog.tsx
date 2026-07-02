@@ -23,6 +23,7 @@ const WEB_LINK_ERROR_KEY_MAP: Record<string, string> = {
     "web link host cannot be resolved": "webLinkHostUnresolved",
     "media file does not exist": "mediaFileMissing",
     "asr returned empty text": "mediaAsrEmpty",
+    "no recognizable audio detected": "mediaNoRecognizableAudio",
     "asr api key is missing": "mediaAsrApiKeyMissing",
     "ffmpeg is not installed": "mediaFfmpegMissing",
     "media audio extraction failed": "mediaAudioExtractionFailed",

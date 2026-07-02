@@ -470,6 +470,19 @@ function formatSensitiveViolationMessage(hits: any[]): string {
     return `您上传的文件包含违规内容：{${words.join(",")}}，请修改后重试`;
 }
 
+function formatMediaParseFailureMessage(parsed: any): string | undefined {
+    if (parsed?.status_code === 10956) {
+        return "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。";
+    }
+
+    const exception = String(parsed?.data?.exception ?? "").trim().toLowerCase();
+    if (exception === "media audio extraction failed" || exception === "asr returned empty text") {
+        return "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。";
+    }
+
+    return undefined;
+}
+
 export function extractKnowledgeFileError(raw: any): string | undefined {
     const directMessage = raw?.error_message;
     if (typeof directMessage === "string" && directMessage.trim()) {
@@ -486,6 +499,10 @@ export function extractKnowledgeFileError(raw: any): string | undefined {
         const parsed = JSON.parse(trimmedRemark);
         if (parsed?.reason === "sensitive_check") {
             return formatSensitiveViolationMessage(Array.isArray(parsed?.hits) ? parsed.hits : []);
+        }
+        const mediaMessage = formatMediaParseFailureMessage(parsed);
+        if (mediaMessage) {
+            return mediaMessage;
         }
 
         const statusMessage = parsed?.status_message;

@@ -1,3 +1,8 @@
+import subprocess
+
+import pytest
+
+from bisheng.common.errcode.knowledge import KnowledgeMediaNoRecognizableAudioError
 from bisheng.knowledge.domain.services.media_transcription_service import (
     KnowledgeMediaTranscriptionService,
     TranscriptSegment,
@@ -89,3 +94,39 @@ def test_normalize_segments_can_scale_second_timestamps_with_duration_hint() -> 
         (10_000, 20_000),
         (20_000, 30_000),
     ]
+
+
+def test_convert_to_wav_reports_missing_audio_stream(monkeypatch, tmp_path) -> None:
+    media_path = tmp_path / "video-only.mp4"
+    media_path.write_bytes(b"fake mp4")
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=args[0],
+            stderr=b"Output file #0 does not contain any stream",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(KnowledgeMediaNoRecognizableAudioError):
+        KnowledgeMediaTranscriptionService._convert_to_wav(str(media_path))
+
+
+def test_empty_asr_text_reports_missing_recognizable_audio(monkeypatch, tmp_path) -> None:
+    media_path = tmp_path / "silent.mp4"
+    wav_path = tmp_path / "silent.wav"
+    media_path.write_bytes(b"fake mp4")
+    wav_path.write_bytes(b"fake wav")
+
+    monkeypatch.setattr(KnowledgeMediaTranscriptionService, "_resolve_asr_model", lambda tenant_id: (None, None))
+    monkeypatch.setattr(KnowledgeMediaTranscriptionService, "_resolve_api_key", lambda server, model: "sk-test")
+    monkeypatch.setattr(KnowledgeMediaTranscriptionService, "_probe_media_duration_ms", lambda path: 1000)
+    monkeypatch.setattr(KnowledgeMediaTranscriptionService, "_convert_to_wav", lambda path: str(wav_path))
+    monkeypatch.setattr(KnowledgeMediaTranscriptionService, "_call_aliyun_asr", lambda *args, **kwargs: [])
+
+    with pytest.raises(KnowledgeMediaNoRecognizableAudioError):
+        KnowledgeMediaTranscriptionService.transcribe_media(
+            str(media_path),
+            source_file_name="silent.mp4",
+        )

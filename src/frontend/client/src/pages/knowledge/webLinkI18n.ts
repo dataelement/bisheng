@@ -17,6 +17,7 @@ const WEB_LINK_ERROR_KEY_MAP: Record<string, string> = {
 const MEDIA_ERROR_KEY_MAP: Record<string, string> = {
     "media file does not exist": "com_knowledge.media_file_missing",
     "asr returned empty text": "com_knowledge.media_asr_empty",
+    "no recognizable audio detected": "com_knowledge.media_no_recognizable_audio",
     "asr api key is missing": "com_knowledge.media_asr_api_key_missing",
     "ffmpeg is not installed": "com_knowledge.media_ffmpeg_missing",
     "media audio extraction failed": "com_knowledge.media_audio_extraction_failed",
