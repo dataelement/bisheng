@@ -1938,6 +1938,9 @@ export async function getSpaceChildrenApi(params: {
 export async function getSpaceFolderStatsApi(params: {
     space_id: string;
     folder_ids: Array<string | number>;
+    file_status?: number[];
+    keyword?: string;
+    tag_ids?: number[];
 }): Promise<KnowledgeFolderStats[]> {
     const folderIds = Array.from(new Set(
         params.folder_ids
@@ -1946,12 +1949,29 @@ export async function getSpaceFolderStatsApi(params: {
     ));
     if (!params.space_id || folderIds.length === 0) return [];
 
+    const payload: {
+        folder_ids: number[];
+        file_status?: number[];
+        keyword?: string;
+        tag_ids?: number[];
+    } = { folder_ids: folderIds };
+    if (params.file_status?.length) {
+        payload.file_status = params.file_status;
+    }
+    const keyword = params.keyword?.trim();
+    if (keyword) {
+        payload.keyword = keyword;
+    }
+    if (params.tag_ids?.length) {
+        payload.tag_ids = params.tag_ids;
+    }
+
     const res = await request.post(
         `/api/v1/knowledge/space/${params.space_id}/folder-stats`,
-        { folder_ids: folderIds },
+        payload,
     ) as ApiResponse<{ stats?: any[] }> & { stats?: any[] };
-    const payload: any = res?.data ?? res ?? {};
-    const stats = Array.isArray(payload?.stats) ? payload.stats : [];
+    const responsePayload: any = res?.data ?? res ?? {};
+    const stats = Array.isArray(responsePayload?.stats) ? responsePayload.stats : [];
     return stats.map((raw) => ({
         folderId: String(raw?.folder_id ?? raw?.folderId ?? ""),
         fileNum: Number(raw?.file_num ?? raw?.fileNum ?? 0),

@@ -1952,6 +1952,7 @@
     "permission_item_manage_space_relation": "成员管理",
     "permission_item_move_file": "移动文件",
     "permission_item_move_folder": "移动文件夹",
+    "permission_item_publish_file": "发布文件",
     "permission_item_rename_file": "重命名文件",
     "permission_item_rename_folder": "重命名文件夹",
     "permission_item_share_space": "分享空间",

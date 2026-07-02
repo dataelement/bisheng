@@ -8,6 +8,7 @@ import {
   createFolderApi,
   deleteFolderApi,
   getSquareSpacesApi,
+  getSpaceFolderStatsApi,
   listMyUploadedFilesApi,
   mapChild,
   moveUploadedFileFolderApi,
@@ -103,6 +104,55 @@ describe("createFolderApi", () => {
     });
 
     await expect(createFolderApi("101", { name: "New folder" })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("getSpaceFolderStatsApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("posts optional filters for folder statistics", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        stats: [
+          {
+            folder_id: 101,
+            file_num: 2,
+            success_file_num: 1,
+            visible_success_file_num: 1,
+            processing_file_num: 1,
+          },
+        ],
+      },
+    });
+
+    const result = await getSpaceFolderStatsApi({
+      space_id: "88",
+      folder_ids: ["101", "101"],
+      file_status: [2, 5],
+      keyword: " 制度 ",
+      tag_ids: [7],
+    });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/88/folder-stats",
+      {
+        folder_ids: [101],
+        file_status: [2, 5],
+        keyword: "制度",
+        tag_ids: [7],
+      },
+    );
+    expect(result).toEqual([
+      {
+        folderId: "101",
+        fileNum: 2,
+        successFileNum: 1,
+        visibleSuccessFileNum: 1,
+        processingFileNum: 1,
+      },
+    ]);
   });
 });
 

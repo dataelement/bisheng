@@ -502,7 +502,7 @@ describe("Relation model regressions", () => {
     expect(screen.queryByText("分享文件")).not.toBeInTheDocument();
   });
 
-  it("renders create folder and upload file under the space-level knowledge-space column", async () => {
+  it("renders create folder, upload file, and publish file under the space-level knowledge-space column", async () => {
     mockedGetRelationModelsApi.mockResolvedValue([
       {
         id: "owner",
@@ -523,6 +523,7 @@ describe("Relation model regressions", () => {
             { id: "view_space", label: "查看空间", relation: "can_read" },
             { id: "create_folder", label: "创建文件夹", relation: "can_edit" },
             { id: "upload_file", label: "上传文件", relation: "can_edit" },
+            { id: "publish_file", label: "发布文件", relation: "can_edit" },
           ],
         },
         {
@@ -551,11 +552,19 @@ describe("Relation model regressions", () => {
       "system.permissionTemplate.upload_file",
     );
     expectTextBefore(
+      "system.permissionTemplate.columnSpaceLevel",
+      "system.permissionTemplate.publish_file",
+    );
+    expectTextBefore(
       "system.permissionTemplate.create_folder",
       "system.permissionTemplate.columnFolderLevel",
     );
     expectTextBefore(
       "system.permissionTemplate.upload_file",
+      "system.permissionTemplate.columnFolderLevel",
+    );
+    expectTextBefore(
+      "system.permissionTemplate.publish_file",
       "system.permissionTemplate.columnFolderLevel",
     );
     expectTextBefore(

@@ -238,6 +238,7 @@ export default function PortalKnowledgeWorkbench() {
     const [treeRootLoadingMore, setTreeRootLoadingMore] = useState(false);
     const [searchMode, setSearchMode] = useState(false);
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
+    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>();
@@ -638,10 +639,21 @@ export default function PortalKnowledgeWorkbench() {
         });
 
         try {
-            const stats = await getSpaceFolderStatsApi({
+            const statsRequest: Parameters<typeof getSpaceFolderStatsApi>[0] = {
                 space_id: spaceId,
                 folder_ids: folderIds,
-            });
+            };
+            if (statusFilterNumbers.length) {
+                statsRequest.file_status = statusFilterNumbers;
+            }
+            const keyword = searchMode ? searchText.trim() : "";
+            if (keyword) {
+                statsRequest.keyword = keyword;
+            }
+            if (searchMode && searchTagIds.length) {
+                statsRequest.tag_ids = searchTagIds;
+            }
+            const stats = await getSpaceFolderStatsApi(statsRequest);
             if (activeSpaceIdRef.current !== spaceId) return;
             const statsById = new Map(stats.map((item) => [item.folderId, item]));
             folderIds.forEach((folderId) => {
@@ -674,7 +686,7 @@ export default function PortalKnowledgeWorkbench() {
                 }));
             });
         }
-    }, [patchFileById]);
+    }, [patchFileById, searchMode, searchTagIds, searchText, statusFilterNumbers]);
 
     const loadRootTree = useCallback(async (page = 1, append = false, spaceId = activeSpace?.id) => {
         if (!spaceId) {
@@ -1043,6 +1055,7 @@ export default function PortalKnowledgeWorkbench() {
         setSearchText("");
         setSearchMode(false);
         setSearchResults([]);
+        setSearchTagIds([]);
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         setTreeNodes([]);
@@ -1232,7 +1245,7 @@ export default function PortalKnowledgeWorkbench() {
             "knowledge_space",
             activeSpace.id,
             "can_edit",
-            "upload_file",
+            "publish_file",
             { signal: controller.signal },
         ).catch(() => ({ allowed: false })).then((result) => {
             if (cancelled) return;
@@ -1459,11 +1472,13 @@ export default function PortalKnowledgeWorkbench() {
         if (!spaceId) return;
         const keyword = params.keyword.trim();
         setSearchText(keyword);
+        setSearchTagIds(params.tagIds);
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         if (!keyword && params.tagIds.length === 0) {
             setSearchMode(false);
             setSearchResults([]);
+            setSearchTagIds([]);
             return;
         }
         setSearchMode(true);
@@ -1497,6 +1512,7 @@ export default function PortalKnowledgeWorkbench() {
     const handleNativeStatusFilter = useCallback((nextStatus: FileStatus[]) => {
         setStatusFilter(nextStatus);
         setSearchText("");
+        setSearchTagIds([]);
         setSearchMode(false);
         setSearchResults([]);
         setSelectedFile(null);
@@ -1509,6 +1525,7 @@ export default function PortalKnowledgeWorkbench() {
         setSortDirection(nextDirection);
         setSearchMode(false);
         setSearchResults([]);
+        setSearchTagIds([]);
     }, []);
 
     const handleToggleStatusFilter = useCallback((status: FileStatus, checked: boolean) => {
@@ -1519,6 +1536,7 @@ export default function PortalKnowledgeWorkbench() {
             return prev;
         });
         setSearchText("");
+        setSearchTagIds([]);
         setSearchMode(false);
         setSearchResults([]);
         setSelectedFileIds(new Set());
@@ -1701,6 +1719,7 @@ export default function PortalKnowledgeWorkbench() {
         setSearchMode(false);
         setSearchResults([]);
         setSearchText("");
+        setSearchTagIds([]);
         setSelectedFile(null);
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());

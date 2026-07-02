@@ -13,6 +13,7 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
     BatchDownloadReq,
@@ -40,7 +41,6 @@ from bisheng.knowledge.domain.services.department_knowledge_space_service import
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
-from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
@@ -423,7 +423,13 @@ async def get_space_folder_stats(
     req: KnowledgeSpaceFolderStatsReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.get_space_folder_stats(space_id, req.folder_ids)
+    result = await svc.get_space_folder_stats(
+        space_id,
+        req.folder_ids,
+        file_status=req.file_status,
+        keyword=req.keyword,
+        tag_ids=req.tag_ids,
+    )
     return resp_200(result)
 
 

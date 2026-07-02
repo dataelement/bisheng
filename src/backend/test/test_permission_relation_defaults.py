@@ -46,10 +46,14 @@ def test_knowledge_space_permission_defaults_accept_computed_relations():
     assert default_space_permission_ids_for_relation('can_read') >= {
         'view_space', 'view_folder', 'view_file', 'download_folder', 'download_file',
     }
+    assert 'publish_file' not in default_space_permission_ids_for_relation('can_read')
+    assert 'publish_file' in default_space_permission_ids_for_relation('can_edit')
     assert default_space_permission_ids_for_relation('can_manage') >= {
         'share_space', 'manage_space_relation', 'manage_folder_relation', 'share_file',
         'manage_file_relation',
     }
+
+
 def test_workflow_app_default_permissions_accept_computed_relations():
     assert default_workflow_app_permission_ids_for_relation('can_read') == {
         'view_app',

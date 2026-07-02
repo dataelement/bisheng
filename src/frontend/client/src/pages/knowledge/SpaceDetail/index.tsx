@@ -682,7 +682,7 @@ export function KnowledgeSpaceContent({
             "knowledge_space",
             space.id,
             "can_edit",
-            "upload_file",
+            "publish_file",
             { signal: controller.signal },
         ).catch(() => ({ allowed: false })).then((result) => {
             if (!cancelled) {

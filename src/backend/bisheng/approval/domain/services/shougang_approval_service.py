@@ -386,7 +386,7 @@ class ShougangApprovalService:
             await space_service._require_permission_id(
                 'knowledge_space',
                 int(source_file.knowledge_id),
-                'upload_file',
+                'publish_file',
             )
 
     async def _ensure_publish_target_space(self, target_space_id: int, *, source_level, space_service=None):

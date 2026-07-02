@@ -1944,6 +1944,7 @@
     "permission_item_manage_space_relation": "メンバー管理",
     "permission_item_move_file": "ファイルを移動",
     "permission_item_move_folder": "フォルダを移動",
+    "permission_item_publish_file": "ファイルを公開",
     "permission_item_rename_file": "ファイル名を変更",
     "permission_item_rename_folder": "フォルダ名を変更",
     "permission_item_share_space": "スペースを共有",

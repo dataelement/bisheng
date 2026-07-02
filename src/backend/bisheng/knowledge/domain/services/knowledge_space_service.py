@@ -6090,12 +6090,179 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return folder_counts
 
-    async def get_space_folder_stats(self, space_id: int, folder_ids: list[int]) -> dict:
+    @staticmethod
+    def _has_folder_stats_filters(
+        *,
+        file_status: list[int] | None = None,
+        keyword: str | None = None,
+        tag_ids: list[int] | None = None,
+    ) -> bool:
+        return bool(file_status or (keyword or "").strip() or tag_ids)
+
+    async def _resolve_folder_stats_tag_file_ids(self, tag_ids: list[int] | None) -> list[int] | None:
+        if not tag_ids:
+            return None
+        resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
+        file_ids: list[int] = []
+        for resource in resources or []:
+            try:
+                file_ids.append(int(resource.resource_id))
+            except (TypeError, ValueError):
+                continue
+        return list(dict.fromkeys(file_ids))
+
+    async def _resolve_folder_stats_keyword_file_ids(
+        self,
+        *,
+        space: Any,
+        keyword: str,
+        filter_file_ids: list[int] | None = None,
+    ) -> list[int]:
+        query: dict[str, Any] = {"match_phrase": {"text": keyword}}
+        if filter_file_ids:
+            query = {
+                "bool": {
+                    "must": [
+                        query,
+                        {"terms": {"metadata.document_id": filter_file_ids}},
+                    ],
+                },
+            }
+        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+        es_result = await es_vector.client.search(
+            index=space.index_name,
+            body={
+                "query": query,
+                "aggs": {
+                    "document_ids": {
+                        "terms": {
+                            "field": "metadata.document_id",
+                        },
+                    },
+                },
+                "size": 0,
+            },
+        )
+        extra_file_ids: list[int] = []
+        aggregations = es_result.get("aggregations")
+        if aggregations:
+            for item in aggregations.get("document_ids", {}).get("buckets", []):
+                try:
+                    extra_file_ids.append(int(item["key"]))
+                except (TypeError, ValueError):
+                    continue
+        if filter_file_ids:
+            filter_set = set(filter_file_ids)
+            extra_file_ids = [file_id for file_id in extra_file_ids if file_id in filter_set]
+        return list(dict.fromkeys(extra_file_ids))
+
+    async def _load_filtered_folder_stat_counts(
+        self,
+        *,
+        space: Any,
+        folders: list[KnowledgeFile],
+        file_status: list[int] | None = None,
+        keyword: str | None = None,
+        tag_ids: list[int] | None = None,
+    ) -> dict[int, dict[str, int]]:
+        folder_counts: dict[int, dict[str, int]] = {
+            int(folder.id): {
+                "file_num": 0,
+                "success_file_num": 0,
+                "visible_success_file_num": 0,
+                "processing_file_num": 0,
+            }
+            for folder in folders
+        }
+        if not folders:
+            return folder_counts
+
+        normalized_keyword = (keyword or "").strip()
+        filter_file_ids = await self._resolve_folder_stats_tag_file_ids(tag_ids)
+        if tag_ids and not filter_file_ids:
+            return folder_counts
+
+        extra_file_ids: list[int] | None = None
+        if normalized_keyword:
+            extra_file_ids = await self._resolve_folder_stats_keyword_file_ids(
+                space=space,
+                keyword=normalized_keyword,
+                filter_file_ids=filter_file_ids,
+            )
+
+        exclude_file_ids: list[int] | None = None
+        if self.version_repo is not None:
+            exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
+
+        filtered_files = await KnowledgeFileDao.aget_file_by_filters(
+            int(space.id),
+            file_name=normalized_keyword or None,
+            status=file_status,
+            file_ids=filter_file_ids,
+            extra_file_ids=extra_file_ids,
+            file_type=FileType.FILE.value,
+            exclude_file_ids=exclude_file_ids,
+        )
+
+        in_progress_statuses = {
+            KnowledgeFileStatus.PROCESSING.value,
+            KnowledgeFileStatus.WAITING.value,
+            KnowledgeFileStatus.REBUILDING.value,
+        }
+        permission_context = await self._build_child_permission_context(int(space.id))
+        success_files = [
+            file for file in filtered_files
+            if file.status == KnowledgeFileStatus.SUCCESS.value
+        ]
+        visible_success_files = (
+            await self._filter_visible_child_items(
+                success_files,
+                space_id=int(space.id),
+                context=permission_context,
+            )
+            if success_files
+            else []
+        )
+        visible_success_ids = {int(file.id) for file in visible_success_files}
+
+        for folder in folders:
+            folder_id = int(folder.id)
+            prefix = f"{folder.file_level_path or ''}/{folder.id}"
+            descendants = [
+                file for file in filtered_files
+                if file.file_level_path == prefix or str(file.file_level_path or "").startswith(f"{prefix}/")
+            ]
+            folder_counts[folder_id] = {
+                "file_num": len(descendants),
+                "success_file_num": sum(
+                    1 for file in descendants
+                    if file.status == KnowledgeFileStatus.SUCCESS.value
+                ),
+                "visible_success_file_num": sum(
+                    1 for file in descendants
+                    if int(file.id) in visible_success_ids
+                ),
+                "processing_file_num": sum(
+                    1 for file in descendants
+                    if file.status in in_progress_statuses
+                ),
+            }
+        return folder_counts
+
+    async def get_space_folder_stats(
+        self,
+        space_id: int,
+        folder_ids: list[int],
+        *,
+        file_status: list[int] | None = None,
+        keyword: str | None = None,
+        tag_ids: list[int] | None = None,
+    ) -> dict:
         unique_folder_ids = self._dedupe_ids([int(folder_id) for folder_id in folder_ids or []])
         if not unique_folder_ids:
             return {"stats": []}
 
-        await self._require_read_permission(space_id)
+        space = await self._require_read_permission(space_id)
         folders = await KnowledgeFileDao.aget_file_by_ids(unique_folder_ids)
         folder_by_id = {int(folder.id): folder for folder in folders}
         if set(folder_by_id) != set(unique_folder_ids):
@@ -6110,7 +6277,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
             *(self._require_resource_permission("can_read", "folder", int(folder.id)) for folder in ordered_folders)
         )
 
-        folder_counts = await self._load_folder_stat_counts(ordered_folders)
+        if self._has_folder_stats_filters(
+            file_status=file_status,
+            keyword=keyword,
+            tag_ids=tag_ids,
+        ):
+            folder_counts = await self._load_filtered_folder_stat_counts(
+                space=space,
+                folders=ordered_folders,
+                file_status=file_status,
+                keyword=keyword,
+                tag_ids=tag_ids,
+            )
+        else:
+            folder_counts = await self._load_folder_stat_counts(ordered_folders)
         return {
             "stats": [
                 {
@@ -6134,6 +6314,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         res: list[KnowledgeFile],
         *,
         include_folder_counts: bool = True,
+        folder_counts_override: dict[int, dict[str, int]] | None = None,
     ) -> list[dict]:
         folder_ids = []
         file_ids = []
@@ -6145,8 +6326,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         folder_counts = {}
         if include_folder_counts and folder_ids:
-            folders = [f for f in res if f.file_type == FileType.DIR]
-            folder_counts = await self._load_folder_stat_counts(folders)
+            if folder_counts_override is not None:
+                folder_counts = folder_counts_override
+            else:
+                folders = [f for f in res if f.file_type == FileType.DIR]
+                folder_counts = await self._load_folder_stat_counts(folders)
 
         # file need find all tags
         file_tags = {}
@@ -6587,7 +6771,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
-        data = await self._handle_file_folder_extra_info(page_items)
+        folder_counts_override = None
+        if self._has_folder_stats_filters(
+            file_status=file_status,
+            keyword=keyword,
+            tag_ids=tag_ids,
+        ):
+            folders = [item for item in page_items if item.file_type == FileType.DIR.value]
+            if folders:
+                folder_counts_override = await self._load_filtered_folder_stat_counts(
+                    space=space,
+                    folders=folders,
+                    file_status=file_status,
+                    keyword=keyword,
+                    tag_ids=tag_ids,
+                )
+
+        data = await self._handle_file_folder_extra_info(
+            page_items,
+            folder_counts_override=folder_counts_override,
+        )
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────

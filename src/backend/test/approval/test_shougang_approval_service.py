@@ -640,7 +640,7 @@ async def test_personal_private_space_create_skips_approval_for_regular_user(mon
 
 
 @pytest.mark.asyncio
-async def test_file_publish_source_requires_upload_file_permission():
+async def test_file_publish_source_requires_publish_file_permission():
     from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
@@ -662,7 +662,7 @@ async def test_file_publish_source_requires_upload_file_permission():
     space_service._require_permission_id.assert_awaited_once_with(
         "knowledge_space",
         10,
-        "upload_file",
+        "publish_file",
     )
 
 
@@ -701,7 +701,7 @@ async def test_file_publish_rules_allow_department_source_to_public_target(monke
         space_service=space_service,
     )
 
-    space_service._require_permission_id.assert_any_await("knowledge_space", 10, "upload_file")
+    space_service._require_permission_id.assert_any_await("knowledge_space", 10, "publish_file")
     space_service._require_permission_id.assert_any_await("knowledge_space", 20, "view_space")
 
 
@@ -1250,7 +1250,7 @@ async def test_file_publish_query_requires_publish_permissions(monkeypatch):
         space_service=space_service,
     )
 
-    space_service._require_permission_id.assert_any_await("knowledge_space", 10, "upload_file")
+    space_service._require_permission_id.assert_any_await("knowledge_space", 10, "publish_file")
     service._ensure_publish_target_space.assert_awaited_once_with(
         20,
         source_level=KnowledgeSpaceLevelEnum.TEAM,

@@ -24,6 +24,7 @@ describe("permission model scope info", () => {
       "edit_space",
       "create_folder",
       "upload_file",
+      "publish_file",
       "share_space",
       "manage_space_relation",
     ]);

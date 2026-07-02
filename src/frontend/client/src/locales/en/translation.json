@@ -2020,6 +2020,7 @@
     "permission_item_manage_space_relation": "Member management",
     "permission_item_move_file": "Move file",
     "permission_item_move_folder": "Move folder",
+    "permission_item_publish_file": "Publish file",
     "permission_item_rename_file": "Rename file",
     "permission_item_rename_folder": "Rename folder",
     "permission_item_share_space": "Share space",

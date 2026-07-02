@@ -31,6 +31,7 @@ import {
     getDepartmentSpacesApi,
     getFileDownloadApi,
     getFilePreviewApi,
+    getFileStatsApi,
     getGroupedSpacesApi,
     getJoinedSpacesApi,
     getBoundTagLibraryTagsForKnowledgeApi,
@@ -376,6 +377,7 @@ jest.mock("~/api/knowledge", () => ({
     createFolderApi: jest.fn(),
     listKnowledgeFolders: jest.fn(),
     getMineSpacesApi: jest.fn(),
+    getSpacesByLevelApi: jest.fn(),
     getJoinedSpacesApi: jest.fn(),
     getDepartmentSpacesApi: jest.fn(),
     getSpaceInfoApi: jest.fn(),
@@ -403,6 +405,7 @@ jest.mock("~/api/knowledge", () => ({
     checkSensitiveWordsApi: jest.fn(),
     getFileDownloadApi: jest.fn(),
     getFilePreviewApi: jest.fn(),
+    getFileStatsApi: jest.fn(),
     updateFileEncoding: jest.fn(),
     updateFileTagsApi: (...args: any[]) => mockUpdateFileTagsApi(...args),
     fileStatusToNumber: jest.fn((status) => {
@@ -559,6 +562,7 @@ describe("PortalKnowledgeWorkbench", () => {
             preview_url: "/preview.md",
             original_url: "/origin.md",
         } as any);
+        jest.mocked(getFileStatsApi).mockResolvedValue({ views: 0, downloads: 0 } as any);
         jest.mocked(updateFileEncoding).mockResolvedValue(makeFile("201", "后端开发.md", {
             fileEncoding: "RPT-PP-00000001",
         }) as any);
@@ -1333,6 +1337,56 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("applies selected status filters to portal folder stats", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const filteredFolder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            successFileNum: undefined,
+            fileNum: undefined,
+            processingFileNum: undefined,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => (
+            params.file_status?.[0] === 2
+                ? { data: [filteredFolder], total: 1 }
+                : { data: [], total: 0 }
+        ) as any);
+        jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([{
+            folderId: "101",
+            successFileNum: 1,
+            fileNum: 1,
+            visibleSuccessFileNum: 1,
+            processingFileNum: 0,
+        }] as any);
+
+        renderWorkbench();
+
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "personal-1",
+                page_size: 100,
+            }));
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "筛选" }));
+        fireEvent.click(screen.getByRole("button", { name: "成功" }));
+
+        await waitFor(() => {
+            expect(getSpaceFolderStatsApi).toHaveBeenCalledWith({
+                space_id: "personal-1",
+                folder_ids: ["101"],
+                file_status: [2],
+            });
+        });
+    });
+
     test("renders empty file list fields with double dash placeholders", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
@@ -1866,6 +1920,10 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         const fileRow = await screen.findByTestId("file-tree-row-301");
+        fireEvent.mouseEnter(fileRow);
+        await waitFor(() => {
+            expect(within(fileRow).getByRole("button", { name: "发布" })).toBeInTheDocument();
+        });
         fireEvent.click(within(fileRow).getByRole("button", { name: "发布" }));
 
         expect(await screen.findByText("发布文件")).toBeInTheDocument();
@@ -1914,6 +1972,10 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         const fileRow = await screen.findByTestId("file-tree-row-302");
+        fireEvent.mouseEnter(fileRow);
+        await waitFor(() => {
+            expect(within(fileRow).getByRole("button", { name: "发布" })).toBeInTheDocument();
+        });
         fireEvent.click(within(fileRow).getByRole("button", { name: "发布" }));
 
         expect(await screen.findByText("发布文件")).toBeInTheDocument();
@@ -1922,7 +1984,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
-    test("hides publish action without knowledge space upload permission", async () => {
+    test("hides publish action without knowledge space publish permission", async () => {
         const teamSpace = makeSpace("team-1", "团队空间01", {
             role: SpaceRole.MEMBER,
             spaceLevel: SpaceLevel.TEAM,
@@ -1933,7 +1995,7 @@ describe("PortalKnowledgeWorkbench", () => {
             spaceId: "team-1",
         });
         mockCheckPermission.mockImplementation((objectType, _objectId, _relation, permissionId) => {
-            if (objectType === "knowledge_space" && permissionId === "upload_file") {
+            if (objectType === "knowledge_space" && permissionId === "publish_file") {
                 return Promise.resolve({ allowed: false });
             }
             if (objectType === "knowledge_file" && permissionId === "upload_file") {
@@ -1961,14 +2023,15 @@ describe("PortalKnowledgeWorkbench", () => {
                 "knowledge_space",
                 "team-1",
                 "can_edit",
-                "upload_file",
+                "publish_file",
                 expect.any(Object),
             );
         });
+        fireEvent.mouseEnter(fileRow);
         expect(within(fileRow).queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
     });
 
-    test("disables publish action for non-success file when space upload permission exists", async () => {
+    test("disables publish action for non-success file when space publish permission exists", async () => {
         const teamSpace = makeSpace("team-1", "团队空间01", {
             role: SpaceRole.MEMBER,
             spaceLevel: SpaceLevel.TEAM,
@@ -1984,7 +2047,7 @@ describe("PortalKnowledgeWorkbench", () => {
             spaceId: "team-1",
         });
         mockCheckPermission.mockImplementation((objectType, _objectId, _relation, permissionId) => {
-            if (objectType === "knowledge_space" && permissionId === "upload_file") {
+            if (objectType === "knowledge_space" && permissionId === "publish_file") {
                 return Promise.resolve({ allowed: true });
             }
             return Promise.resolve({ allowed: true });
@@ -2010,14 +2073,15 @@ describe("PortalKnowledgeWorkbench", () => {
                 "knowledge_space",
                 "team-1",
                 "can_edit",
-                "upload_file",
+                "publish_file",
                 expect.any(Object),
             );
         });
+        fireEvent.mouseEnter(successRow);
+        fireEvent.mouseEnter(processingRow);
         expect(within(successRow).getByRole("button", { name: "发布" })).toBeEnabled();
-        expect(within(processingRow).getByRole("button", { name: "发布" })).toBeDisabled();
+        expect(within(processingRow).queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
 
-        fireEvent.click(within(processingRow).getByRole("button", { name: "发布" }));
         expect(screen.queryByText("发布文件")).not.toBeInTheDocument();
     });
 

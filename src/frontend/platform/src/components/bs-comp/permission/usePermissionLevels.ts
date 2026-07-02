@@ -50,6 +50,7 @@ const PERMISSION_RELATION: Record<string, string> = {
   manage_folder_relation: 'can_manage',
   view_file: 'can_read',
   upload_file: 'can_edit',
+  publish_file: 'can_edit',
   rename_file: 'can_edit',
   delete_file: 'can_delete',
   download_file: 'can_read',

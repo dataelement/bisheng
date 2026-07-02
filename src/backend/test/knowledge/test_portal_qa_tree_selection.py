@@ -8,12 +8,19 @@ from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFi
 from bisheng.knowledge.domain.services import knowledge_space_service as svc_mod
 
 
-def _file(file_id: int, space_id: int = 7101, *, folder: bool = False, path: str = ''):
+def _file(
+    file_id: int,
+    space_id: int = 7101,
+    *,
+    folder: bool = False,
+    path: str = '',
+    status: int = KnowledgeFileStatus.SUCCESS.value,
+):
     item = SimpleNamespace(
         id=file_id,
         knowledge_id=space_id,
         file_type=FileType.DIR.value if folder else FileType.FILE.value,
-        status=KnowledgeFileStatus.SUCCESS.value,
+        status=status,
         file_level_path=path,
         file_name=f"{'folder' if folder else 'file'}-{file_id}.md",
     )
@@ -192,6 +199,111 @@ async def test_get_space_folder_stats_returns_counts_in_request_order(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_get_space_folder_stats_applies_filters(monkeypatch):
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    service.login_user = SimpleNamespace(user_id=7, user_name='tester')
+
+    space = SimpleNamespace(id=7101, index_name='idx')
+    folder = _file(3001, folder=True, path='')
+
+    async def _get_files_by_ids(file_ids):
+        assert file_ids == [3001]
+        return [folder]
+
+    monkeypatch.setattr(service, '_require_read_permission', AsyncMock(return_value=space))
+    monkeypatch.setattr(service, '_require_resource_permission', AsyncMock())
+    monkeypatch.setattr(
+        service,
+        '_load_filtered_folder_stat_counts',
+        AsyncMock(return_value={
+            3001: {
+                'file_num': 2,
+                'success_file_num': 1,
+                'visible_success_file_num': 1,
+                'processing_file_num': 1,
+            },
+        }),
+    )
+    monkeypatch.setattr(service, '_load_folder_stat_counts', AsyncMock())
+    monkeypatch.setattr(svc_mod.KnowledgeFileDao, 'aget_file_by_ids', staticmethod(_get_files_by_ids))
+
+    result = await service.get_space_folder_stats(
+        7101,
+        [3001],
+        file_status=[KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.WAITING.value],
+        keyword='制度',
+        tag_ids=[11],
+    )
+
+    assert result == {
+        'stats': [
+            {
+                'folder_id': 3001,
+                'file_num': 2,
+                'success_file_num': 1,
+                'visible_success_file_num': 1,
+                'processing_file_num': 1,
+            },
+        ]
+    }
+    service._load_filtered_folder_stat_counts.assert_awaited_once_with(
+        space=space,
+        folders=[folder],
+        file_status=[KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.WAITING.value],
+        keyword='制度',
+        tag_ids=[11],
+    )
+    service._load_folder_stat_counts.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_load_filtered_folder_stat_counts_aggregates_descendant_files(monkeypatch):
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    service.version_repo = None
+    space = SimpleNamespace(id=7101, index_name='idx')
+    folder = _file(3001, folder=True, path='')
+    visible_success = _file(9001, path='/3001')
+    waiting = _file(9002, path='/3001/sub', status=KnowledgeFileStatus.WAITING.value)
+    outside = _file(9003, path='', status=KnowledgeFileStatus.SUCCESS.value)
+    captured = {}
+
+    async def _aget_file_by_filters(*args, **kwargs):
+        captured['args'] = args
+        captured['kwargs'] = kwargs
+        return [visible_success, waiting, outside]
+
+    monkeypatch.setattr(service, '_resolve_folder_stats_tag_file_ids', AsyncMock(return_value=[9001, 9002]))
+    monkeypatch.setattr(service, '_resolve_folder_stats_keyword_file_ids', AsyncMock(return_value=[9001]))
+    monkeypatch.setattr(service, '_build_child_permission_context', AsyncMock(return_value={}))
+    monkeypatch.setattr(service, '_filter_visible_child_items', AsyncMock(return_value=[visible_success]))
+    monkeypatch.setattr(svc_mod.KnowledgeFileDao, 'aget_file_by_filters', staticmethod(_aget_file_by_filters))
+
+    result = await service._load_filtered_folder_stat_counts(
+        space=space,
+        folders=[folder],
+        file_status=[KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.WAITING.value],
+        keyword='制度',
+        tag_ids=[11],
+    )
+
+    assert result[3001] == {
+        'file_num': 2,
+        'success_file_num': 1,
+        'visible_success_file_num': 1,
+        'processing_file_num': 1,
+    }
+    assert captured['args'][0] == 7101
+    assert captured['kwargs']['file_name'] == '制度'
+    assert captured['kwargs']['status'] == [
+        KnowledgeFileStatus.SUCCESS.value,
+        KnowledgeFileStatus.WAITING.value,
+    ]
+    assert captured['kwargs']['file_ids'] == [9001, 9002]
+    assert captured['kwargs']['extra_file_ids'] == [9001]
+    assert captured['kwargs']['file_type'] == FileType.FILE.value
+
+
+@pytest.mark.asyncio
 async def test_handle_file_folder_extra_info_can_skip_folder_counts():
     service = object.__new__(svc_mod.KnowledgeSpaceService)
     folder = _file(3001, folder=True, path='')
@@ -203,3 +315,26 @@ async def test_handle_file_folder_extra_info_can_skip_folder_counts():
     assert 'success_file_num' not in result[0]
     assert 'visible_success_file_num' not in result[0]
     assert 'processing_file_num' not in result[0]
+
+
+@pytest.mark.asyncio
+async def test_handle_file_folder_extra_info_uses_folder_count_override():
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    folder = _file(3001, folder=True, path='')
+
+    result = await service._handle_file_folder_extra_info(
+        [folder],
+        folder_counts_override={
+            3001: {
+                'file_num': 2,
+                'success_file_num': 1,
+                'visible_success_file_num': 1,
+                'processing_file_num': 1,
+            },
+        },
+    )
+
+    assert result[0]['file_num'] == 2
+    assert result[0]['success_file_num'] == 1
+    assert result[0]['visible_success_file_num'] == 1
+    assert result[0]['processing_file_num'] == 1

@@ -35,6 +35,7 @@ const KNOWLEDGE_PERMISSION_ITEMS: Record<
     { id: "edit_space", labelKey: "com_permission.permission_item_edit_space", relation: "can_edit" },
     { id: "create_folder", labelKey: "com_permission.permission_item_create_folder", relation: "can_edit" },
     { id: "upload_file", labelKey: "com_permission.permission_item_upload_file", relation: "can_edit" },
+    { id: "publish_file", labelKey: "com_permission.permission_item_publish_file", relation: "can_edit" },
     { id: "delete_space", labelKey: "com_permission.permission_item_delete_space", relation: "can_delete" },
     { id: "share_space", labelKey: "com_permission.permission_item_share_space", relation: "can_manage" },
     {

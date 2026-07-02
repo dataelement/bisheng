@@ -706,6 +706,18 @@ class KnowledgeSpaceFolderStatsReq(BaseModel):
         max_length=200,
         description="Folder IDs to load statistics for",
     )
+    file_status: list[int] | None = Field(
+        default=None,
+        description="Optional file status filter applied to folder statistics",
+    )
+    keyword: str | None = Field(
+        default=None,
+        description="Optional keyword filter applied to folder statistics",
+    )
+    tag_ids: list[int] | None = Field(
+        default=None,
+        description="Optional tag ID filter applied to folder statistics",
+    )
 
 
 class KnowledgeSpaceFolderStatsItemResp(BaseModel):
