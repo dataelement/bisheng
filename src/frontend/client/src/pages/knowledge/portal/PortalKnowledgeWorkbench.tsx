@@ -17,7 +17,6 @@ import {
     deleteSpaceApi,
     getFileDownloadApi,
     getFilePreviewApi,
-    recordPortalDownloadEventApi,
     getSpaceChildrenApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
@@ -1841,7 +1840,6 @@ export default function PortalKnowledgeWorkbench() {
                 return;
             }
             triggerUrlDownload(downloadUrl, selectedFile.name);
-            void recordPortalDownloadEventApi(activeSpace.id, selectedFile.id);
         } catch {
             showToast({ message: "下载地址获取失败", severity: NotificationSeverity.ERROR });
         }

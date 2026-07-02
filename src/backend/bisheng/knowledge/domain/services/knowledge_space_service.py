@@ -68,7 +68,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
-from bisheng.common.schemas.telemetry.event_data_schema import PortalDocumentReadEventData
+from bisheng.common.schemas.telemetry.event_data_schema import PortalDocumentDownloadEventData, PortalDocumentReadEventData
 from bisheng.common.telemetry.portal_event_service import (
     PORTAL_BFF_TELEMETRY_SOURCE_HEADER,
     PortalTelemetryEventService,
@@ -8186,6 +8186,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
         except (RuntimeError, ValueError, TypeError):
             logger.exception("Failed to log portal document read telemetry.")
 
+    async def _log_portal_document_download_success(self, file_record: KnowledgeFile) -> None:
+        try:
+            PortalTelemetryEventService.log_event_sync(
+                user_id=self.login_user.user_id,
+                event_type=BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD,
+                event_data=PortalDocumentDownloadEventData(
+                    source_app="bisheng_my_knowledge",
+                    scene="document_download",
+                    entry_point="my_knowledge_download",
+                    resource_type="document",
+                    space_id=file_record.knowledge_id,
+                    file_id=file_record.id,
+                    status="success",
+                ),
+            )
+        except (RuntimeError, ValueError, TypeError):
+            logger.exception("Failed to log portal document download telemetry.")
+
     async def _log_file_preview_success(self, file_record: KnowledgeFile) -> None:
         try:
             from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
@@ -8216,6 +8234,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+        if original_url or preview_url:
+            asyncio.create_task(self._log_portal_document_download_success(file_record))  # noqa: RUF006
 
         return {
             "original_url": original_url,

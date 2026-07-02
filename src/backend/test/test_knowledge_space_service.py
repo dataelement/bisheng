@@ -6742,10 +6742,49 @@ class TestTupleLifecycle:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
             return_value=('original', 'preview'),
-        ):
+        ), patch.object(
+            service,
+            '_log_portal_document_download_success',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task',
+        ) as mock_create_task:
             result = await service.get_file_download(99)
 
         assert result['original_url'] == 'original'
+        assert mock_create_task.call_count == 1
+        scheduled_task = mock_create_task.call_args.args[0]
+        assert inspect.iscoroutine(scheduled_task)
+        scheduled_task.close()
+
+    @pytest.mark.asyncio
+    async def test_get_file_download_skips_download_event_without_url(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=100, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service,
+            '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'download_file'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
+            return_value=('', ''),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task',
+        ) as mock_create_task:
+            result = await service.get_file_download(100)
+
+        assert result == {'original_url': '', 'preview_url': ''}
+        mock_create_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_list_space_children_filters_each_child_by_view_permission(self, service):
