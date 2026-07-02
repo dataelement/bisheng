@@ -1077,11 +1077,14 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         if (!selectedFile) return;
+        // #4 收藏原地预览：selectedFile 是来自其它源空间的合成文件（不属于当前 activeSpace，
+        // 自然不在其 displayedFiles 中），不应被此“列表中已不存在则关闭预览”的守卫清空。
+        if (selectedFile.spaceId && selectedFile.spaceId !== activeSpace?.id) return;
         const exists = displayedFiles.some((file) => file.id === selectedFile.id);
         if (!exists) {
             setSelectedFile(null);
         }
-    }, [displayedFiles, selectedFile]);
+    }, [displayedFiles, selectedFile, activeSpace?.id]);
 
     useEffect(() => {
         if (!permissionTarget) return;
@@ -1287,7 +1290,7 @@ export default function PortalKnowledgeWorkbench() {
             previewData: null,
         });
 
-        getFilePreviewApi(activeSpace.id, selectedFile.id)
+        getFilePreviewApi(selectedFile.spaceId || activeSpace.id, selectedFile.id)
             .then((res) => {
                 if (cancelled) return;
                 const resolvedPreview = {
@@ -1566,17 +1569,11 @@ export default function PortalKnowledgeWorkbench() {
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
     }, []);
 
-    // 从"我的收藏"只读面板打开有效源文件：切换到源知识库并以合成文件项触发现有预览流程。
+    // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
+    // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
+    // 由后端鉴权（无访问权限时预览接口自然报错），关闭预览后仍回到「我的收藏」列表。
     const handleOpenSourceFile = useCallback(
         (sourceSpaceId: string, sourceFileId: string, fileName?: string) => {
-            const srcSpace = selectableSpaces.find((space) => space.id === String(sourceSpaceId));
-            if (!srcSpace) {
-                showToast({
-                    message: "源文件不可访问，请确认您有访问源知识库的权限",
-                    severity: NotificationSeverity.WARNING,
-                });
-                return;
-            }
             const displayName = (fileName || "").trim() || "源文件";
             const syntheticFile: KnowledgeFile = {
                 id: String(sourceFileId),
@@ -1588,13 +1585,12 @@ export default function PortalKnowledgeWorkbench() {
                 createdAt: "",
                 updatedAt: "",
             };
-            setActiveSpace(srcSpace);
             setActivePanel(null);
             setAiDrawerOpen(false);
             setSummaryExpanded(false);
             setSelectedFile(syntheticFile);
         },
-        [selectableSpaces, showToast],
+        [],
     );
 
     const handleToggleFileSelection = useCallback((file: KnowledgeFile, checked: boolean) => {
@@ -1832,8 +1828,10 @@ export default function PortalKnowledgeWorkbench() {
 
     const handleDownloadSelected = useCallback(async () => {
         if (!activeSpace || !selectedFile || isFolder(selectedFile)) return;
+        // 收藏原地预览时 activeSpace 仍是收藏库，需按源文件所属空间下载
+        const downloadSpaceId = selectedFile.spaceId || activeSpace.id;
         try {
-            const res = await getFileDownloadApi(activeSpace.id, selectedFile.id);
+            const res = await getFileDownloadApi(downloadSpaceId, selectedFile.id);
             const downloadUrl = res.original_url || res.preview_url;
             if (!downloadUrl) {
                 showToast({ message: "未获取到下载地址", severity: NotificationSeverity.ERROR });
@@ -2204,9 +2202,9 @@ export default function PortalKnowledgeWorkbench() {
                     activePanel={activePanel}
                     activeSpace={activeSpace}
                     aiDrawerOpen={aiDrawerOpen}
-                    canEditEncoding={canEditSelectedFileEncoding}
-                    canEditTags={canEditSelectedFileEncoding}
-                    canManagePermission={canManageSelectedFilePermission}
+                    canEditEncoding={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
+                    canEditTags={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
+                    canManagePermission={canManageSelectedFilePermission && !isActiveSpaceFavorite}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}
                     preview={preview}
