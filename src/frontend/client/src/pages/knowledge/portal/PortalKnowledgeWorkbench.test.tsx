@@ -32,8 +32,7 @@ import {
     getFilePreviewApi,
     getGroupedSpacesApi,
     getJoinedSpacesApi,
-    getKnowledgeSpaceTagLibrariesApi,
-    getKnowledgeSpaceTagLibraryDetailApi,
+    getBoundTagLibraryTagsForKnowledgeApi,
     getSimilarCandidatesApi,
     getMineSpacesApi,
     getSpaceChildrenApi,
@@ -361,8 +360,7 @@ jest.mock("~/api/knowledge", () => ({
         APPROVAL: "approval",
     },
     getGroupedSpacesApi: jest.fn(),
-    getKnowledgeSpaceTagLibrariesApi: jest.fn(),
-    getKnowledgeSpaceTagLibraryDetailApi: jest.fn(),
+    getBoundTagLibraryTagsForKnowledgeApi: jest.fn(),
     getCreateSpaceOptionsApi: jest.fn(),
     createSpaceApi: jest.fn(),
     createFolderApi: jest.fn(),
@@ -518,8 +516,7 @@ describe("PortalKnowledgeWorkbench", () => {
             type: FileType.MD,
         }) as any);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
-        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({ data: [] } as any);
-        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({ tags: [] } as any);
+        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([] as any);
         jest.mocked(getFilePreviewApi).mockResolvedValue({
             preview_url: "/preview.md",
             original_url: "/origin.md",
@@ -3035,7 +3032,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(selectedFilesLabel.compareDocumentPosition(fileCategoryLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    test("loads existing and common tags in portal upload dialog", async () => {
+    test("loads existing and bound library tags in portal upload dialog", async () => {
         const personalSpace = makeSpace("personal-1", "设备部", {
             role: SpaceRole.ADMIN,
         });
@@ -3050,17 +3047,11 @@ describe("PortalKnowledgeWorkbench", () => {
             total: 0,
         } as any);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 1, name: "已有标签" }] as any);
-        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
-            data: [{ id: 9, name: "通用标签库", tag_count: 2, is_builtin: true }],
-            total: 1,
-        } as any);
-        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({
-            id: 9,
-            name: "通用标签库",
-            tag_count: 2,
-            is_builtin: true,
-            tags: ["制度", "已有标签"],
-        } as any);
+        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([
+            { name: "制度", resource_type: "manual_tag" },
+            { name: "已有标签", resource_type: "manual_tag" },
+            { name: "技术文档", resource_type: "ai_auto_tag" },
+        ] as any);
 
         renderWorkbench();
 
@@ -3069,6 +3060,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await within(dialog).findByLabelText("选择标签已有标签")).toBeInTheDocument();
         expect(within(dialog).getByLabelText("选择标签制度")).toBeInTheDocument();
+        expect(within(dialog).getByLabelText("选择标签技术文档")).toBeInTheDocument();
     });
 
     test("opens upload records after successful upload and supports moving uploaded file folder", async () => {

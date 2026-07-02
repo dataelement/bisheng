@@ -1,18 +1,17 @@
 import json
 import re
-from typing import Iterable, List, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 from langchain_core.documents import Document
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
+from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileSource,
@@ -20,26 +19,29 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileStatus,
 )
-from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
-    KnowledgeSpaceTagLibraryDao,
+from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
+    KnowledgeTagLibraryLinkDao,
 )
+from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+    KnowledgeSpaceAutoTagService,
+)
+from bisheng.llm.domain import LLMService
 from bisheng.sensitive_word.domain.schemas import (
     SensitiveWordBusinessType,
 )
-from bisheng.llm.domain import LLMService
-
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 
 REVIEW_TAG_MAX_CONTENT = 3000
 DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     "# role\n"
-    "你是一名经验丰富的\"文档标签专家\"，擅长针对不同类型的文档（例如：书籍、论文、标书、研究报告、规章制度、合同协议、会议纪要、产品手册、运维手册、需求说明书等）进行精准识别，并根据文档类型灵活调整标签策略，例如：\n"
+    '你是一名经验丰富的"文档标签专家"，擅长针对不同类型的文档（例如：书籍、论文、标书、研究报告、规章制度、合同协议、会议纪要、产品手册、运维手册、需求说明书等）进行精准识别，并根据文档类型灵活调整标签策略，例如：\n'
     "- 报告类文档需标注研究领域、研究方法、核心发现；\n"
     "- 制度类文档需标注适用范围、管理对象、制度层级；\n"
     "- 合同类文档需标注合同类型、业务领域、关键标的；\n"
     "- 会议纪要需标注会议性质、决策事项、责任主体；\n"
     "- 产品说明需标注产品类型、目标用户、核心功能。\n\n"
     "# constraints\n"
-    "在生成标签前，请先检查以下条件，任一条件不满足时均不生成候选标签，直接返回 `{\"tags\": []}`：\n"
+    '在生成标签前，请先检查以下条件，任一条件不满足时均不生成候选标签，直接返回 `{"tags": []}`：\n'
     "1. 仅当文件解析成功后才生成候选标签；\n"
     "2. 文件解析失败时不生成候选标签；\n"
     "3. 文件命中用户指定的安全违规内容时不生成候选标签；\n"
@@ -54,39 +56,39 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     "5. 按相关性从高到低排序。\n\n"
     "# tag rules\n"
     "- 标签使用中文，统一小写，专有名词除外。\n"
-    "- 复合概念用连字符\"-\"连接，如\"机器学习-模型训练\"。\n"
+    '- 复合概念用连字符"-"连接，如"机器学习-模型训练"。\n'
     "- 禁止出现文档中未涉及的内容；\n"
-    "- 禁止过于宽泛的标签，如\"文档\"、\"资料\"、\"其他\"；\n"
-    "- **候选标签需去除首尾空格，过滤空值和明显无意义标签**（如\"无\"、\"null\"、\"undefined\"、\"\"等）。\n\n"
+    '- 禁止过于宽泛的标签，如"文档"、"资料"、"其他"；\n'
+    '- **候选标签需去除首尾空格，过滤空值和明显无意义标签**（如"无"、"null"、"undefined"、""等）。\n\n'
     "# output format\n"
     "仅输出纯 JSON 格式，不要包含任何其他解释文字、markdown 代码块标记或额外说明。\n"
-    "1. 若满足所有条件且提取到有效标签，输出：`{\"tags\": [\"标签1\", \"标签2\", ...]}`。\n"
-    "2. 若因任何限制条件（constraints）不满足、或经标签规则（tag rules）过滤后无有效标签、或最终候选标签为空，则必须输出：`{\"tags\": []}`\n\n"
+    '1. 若满足所有条件且提取到有效标签，输出：`{"tags": ["标签1", "标签2", ...]}`。\n'
+    '2. 若因任何限制条件（constraints）不满足、或经标签规则（tag rules）过滤后无有效标签、或最终候选标签为空，则必须输出：`{"tags": []}`\n\n'
     "# result example\n"
-    "{\"tags\": [\"会议纪要\", \"季度业务\", \"销售目标\", \"市场推广\", \"新产品上市\", \"团队组建\", \"决策事项\"]}\n\n"
+    '{"tags": ["会议纪要", "季度业务", "销售目标", "市场推广", "新产品上市", "团队组建", "决策事项"]}\n\n'
 )
 
 
 class KnowledgeSpaceReviewTagService:
-    
     @classmethod
     def apply_after_review_upload_parse(
         cls,
         knowledge: Knowledge,
         db_file: KnowledgeFile,
-        documents: Optional[Sequence[Document]] = None,
+        documents: Sequence[Document] | None = None,
     ) -> None:
         try:
             if not cls._should_run(knowledge, db_file):
                 return
 
-            library = KnowledgeSpaceTagLibraryDao.get(knowledge.auto_tag_library_id if knowledge.auto_tag_library_id else 1)
-            if not library or not library.tags:
+            library_ids = KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge)
+            manual_tags, ai_tags = KnowledgeSpaceAutoTagService._collect_library_tags(library_ids)
+            if not manual_tags and not ai_tags:
                 logger.info(
-                    "auto_tag_skip_empty_library space_id={} file_id={} library_id={}",
+                    "auto_tag_skip_empty_library space_id={} file_id={} library_ids={}",
                     knowledge.id,
                     db_file.id,
-                    knowledge.auto_tag_library_id,
+                    library_ids,
                 )
                 return
 
@@ -97,12 +99,16 @@ class KnowledgeSpaceReviewTagService:
             # 获取安全违规内容
             check_text = cls._collect_all_content(documents, db_file)
             non_compliant = SensitiveWordPolicyService.check_text(
-                                tenant_id=db_file.tenant_id,
-                                business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
-                                text=check_text,
-                            )
+                tenant_id=db_file.tenant_id,
+                business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+                text=check_text,
+            )
             if non_compliant.enabled and non_compliant.hits:
-                logger.error("review_tag_skip_empty_content content safety reason is sensitive_check, auto_reply={}, hits={}", non_compliant.auto_reply, [hit.model_dump() for hit in non_compliant.hits])
+                logger.error(
+                    "review_tag_skip_empty_content content safety reason is sensitive_check, auto_reply={}, hits={}",
+                    non_compliant.auto_reply,
+                    [hit.model_dump() for hit in non_compliant.hits],
+                )
                 return
 
             text = cls._collect_content(documents, db_file)
@@ -121,22 +127,14 @@ class KnowledgeSpaceReviewTagService:
                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
                 user_id=db_file.user_id,
             )
-            system_prompt = (
-                (llm_config.review_tag_prompt or "").strip()
-                or DEFAULT_REVIEW_TAG_SYSTEM_PROMPT
-            )
-            
-            tags_list = list(dict.fromkeys(
-                                        tag for tag in (library.tags or []) + (library.ai_tags or [])
-                                        if tag  # 过滤 None、空字符串等假值
-                                    ))
-            
+            system_prompt = (llm_config.review_tag_prompt or "").strip() or DEFAULT_REVIEW_TAG_SYSTEM_PROMPT
+
+            tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
+
             selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
             matched = cls._match_library_tags(selected, tags_list)
             if not matched:
-                logger.info(
-                    "review_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id
-                )
+                logger.info("review_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
                 return
 
             cls._append_file_tags(
@@ -145,7 +143,6 @@ class KnowledgeSpaceReviewTagService:
                 tag_names=matched,
                 user_id=db_file.user_id or 0,
                 tenant_id=db_file.tenant_id,
-                library=library,
             )
             logger.info(
                 "auto_tag_success space_id={} file_id={} tags={}",
@@ -162,15 +159,17 @@ class KnowledgeSpaceReviewTagService:
 
     @staticmethod
     def _should_run(knowledge: Knowledge, db_file: KnowledgeFile) -> bool:
+        has_libraries = bool(
+            KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(int(knowledge.id)) or knowledge.auto_tag_library_id
+        )
         return (
             knowledge
             and db_file
             and knowledge.type == KnowledgeTypeEnum.SPACE.value
-            and bool(knowledge.auto_tag_library_id)
+            and has_libraries
             and db_file.file_type == FileType.FILE.value
             and db_file.status == KnowledgeFileStatus.SUCCESS.value
-            and db_file.file_source
-            in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}
+            and db_file.file_source in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}
         )
 
     @staticmethod
@@ -179,10 +178,8 @@ class KnowledgeSpaceReviewTagService:
         return bool(metadata.get("manual_upload_tags_applied"))
 
     @staticmethod
-    def _collect_content(
-        documents: Optional[Sequence[Document]], db_file: KnowledgeFile
-    ) -> str:
-        parts: List[str] = []
+    def _collect_content(documents: Sequence[Document] | None, db_file: KnowledgeFile) -> str:
+        parts: list[str] = []
         for doc in documents or []:
             if not doc or not doc.page_content:
                 continue
@@ -195,10 +192,8 @@ class KnowledgeSpaceReviewTagService:
         return content[:REVIEW_TAG_MAX_CONTENT]
 
     @staticmethod
-    def _collect_all_content(
-        documents: Optional[Sequence[Document]], db_file: KnowledgeFile
-    ) -> str:
-        parts: List[str] = []
+    def _collect_all_content(documents: Sequence[Document] | None, db_file: KnowledgeFile) -> str:
+        parts: list[str] = []
         for doc in documents or []:
             if not doc or not doc.page_content:
                 continue
@@ -212,9 +207,9 @@ class KnowledgeSpaceReviewTagService:
     def _invoke_llm(
         llm,
         text: str,
-        library_tags: List[str],
+        library_tags: list[str],
         system_prompt: str = DEFAULT_REVIEW_TAG_SYSTEM_PROMPT,
-    ) -> List[str]:
+    ) -> list[str]:
         candidate_text = "\n".join(f"- {tag}" for tag in library_tags)
         response = llm.invoke(
             [
@@ -225,12 +220,10 @@ class KnowledgeSpaceReviewTagService:
                 },
             ]
         )
-        return KnowledgeSpaceReviewTagService._parse_llm_tags(
-            getattr(response, "content", "") or ""
-        )
+        return KnowledgeSpaceReviewTagService._parse_llm_tags(getattr(response, "content", "") or "")
 
     @staticmethod
-    def _parse_llm_tags(raw: str) -> List[str]:
+    def _parse_llm_tags(raw: str) -> list[str]:
         text = raw.strip()
         if not text:
             return []
@@ -248,11 +241,9 @@ class KnowledgeSpaceReviewTagService:
         return [str(tag).strip() for tag in tags if str(tag).strip()]
 
     @staticmethod
-    def _match_library_tags(
-        selected: Iterable[str], library_tags: List[str]
-    ) -> List[str]:
+    def _match_library_tags(selected: Iterable[str], library_tags: list[str]) -> list[str]:
         not_allowed = {tag: tag for tag in library_tags}
-        matched: List[str] = []
+        matched: list[str] = []
         for tag in selected:
             if tag not in not_allowed and tag not in matched:
                 matched.append(tag)
@@ -262,10 +253,9 @@ class KnowledgeSpaceReviewTagService:
     def _append_file_tags(
         space_id: int,
         file_id: int,
-        tag_names: List[str],
+        tag_names: list[str],
         user_id: int,
-        tenant_id: Optional[int],
-        library=None,
+        tenant_id: int | None,
     ) -> None:
         if not tag_names:
             return
@@ -278,21 +268,13 @@ class KnowledgeSpaceReviewTagService:
                 )
             ).all()
             tag_by_name = {tag.name: tag for tag in existing_tags}
-            system_tags = set(library.tags or []) if library else set()
-            ai_tags = set(library.ai_tags or []) if library else set()
             for tag_name in tag_names:
                 if tag_name not in tag_by_name:
-                    if tag_name in system_tags:
-                        resource_type = TagResourceTypeEnum.SYSTEM_TAG
-                    elif tag_name in ai_tags:
-                        resource_type = TagResourceTypeEnum.AI_AUTO_TAG
-                    else:
-                        resource_type = TagResourceTypeEnum.AI_AUTO_TAG
                     tag = ReviewTag(
                         name=tag_name,
                         business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
                         business_id=str(space_id),
-                        resource_type=resource_type,
+                        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
                         user_id=user_id,
                         tenant_id=tenant_id,
                     )
@@ -300,9 +282,7 @@ class KnowledgeSpaceReviewTagService:
                     session.flush()
                     tag_by_name[tag_name] = tag
 
-            tag_ids = [
-                tag_by_name[name].id for name in tag_names if tag_by_name.get(name)
-            ]
+            tag_ids = [tag_by_name[name].id for name in tag_names if tag_by_name.get(name)]
             existing_links = session.exec(
                 select(ReviewTagLink).where(
                     ReviewTagLink.resource_id == str(file_id),

@@ -5,6 +5,9 @@ export interface KnowledgeSpaceTagLibraryListItem {
   name: string
   description?: string | null
   tag_count: number
+  bound_space_count?: number
+  bound_space_names?: string[]
+  used_knowledge_count?: number
   is_builtin: boolean
 }
 
@@ -62,8 +65,17 @@ export async function updateKnowledgeSpaceTagApi(
   return await axios.post(`/api/v1/workstation/tags/update`, data)
 }
 
+export interface KnowledgeSpaceTagLibraryTagItem {
+  name: string
+  resource_type: string
+  resource_count?: number
+  create_time?: string | null
+  creator_name?: string | null
+}
+
 export interface KnowledgeSpaceTagLibraryDetail extends KnowledgeSpaceTagLibraryListItem {
   tags: string[]
+  tag_items?: KnowledgeSpaceTagLibraryTagItem[]
 }
 
 export interface KnowledgeSpaceTagLibraryPage {
@@ -98,6 +110,7 @@ export async function updateKnowledgeSpaceTagLibraryApi(
     name?: string
     description?: string
     tags?: string[]
+    ai_tags?: string[]
   },
 ): Promise<KnowledgeSpaceTagLibraryDetail> {
   return await axios.put(`/api/v1/knowledge/space/tag-libraries/${id}`, data)
@@ -116,6 +129,8 @@ export interface ReviewTagResourceItem {
   file_source?: string
   file_name?: string
   submit_time?: string
+  knowledge_id?: number
+  file_url?: string
   [key: string]: any
 }
 
@@ -124,6 +139,7 @@ export interface ReviewTagItem {
   resource_type: string
   tags_total: number
   resource_files: ReviewTagResourceItem[]
+  knowledge_ids?: number[]
 }
 
 export interface ReviewTagPage {
@@ -138,11 +154,19 @@ export async function getKnowledgeSpaceReviewTagListApi(params: {
   return await axios.post("/api/v1/workstation/tags/list_review", params)
 }
 
+export async function getKnowledgeSpaceTagLibrariesByKnowledgeApi(
+  knowledgeId: number,
+): Promise<KnowledgeSpaceTagLibraryListItem[]> {
+  return await axios.get(`/api/v1/knowledge/space/tag-libraries/by-knowledge/${knowledgeId}`)
+}
+
 export async function approveOrRejectReviewTagApi(data: {
   tag_name: string
   status: number
   resource_type: string
   reject_reason?: string
+  tag_library_id?: number
+  knowledge_id?: number
 }): Promise<boolean> {
   return await axios.post("/api/v1/workstation/tags/approve_or_reject", data)
 }

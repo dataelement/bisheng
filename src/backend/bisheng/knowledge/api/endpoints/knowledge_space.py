@@ -1,49 +1,49 @@
-from typing import Any, Optional, List
+from typing import Any
 
-from fastapi import APIRouter, Depends, Body, Query, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
+from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.schemas.api import resp_200, SSEResponse, resp_500
+from bisheng.common.schemas.api import SSEResponse, resp_200, resp_500
 from bisheng.knowledge.api.dependencies import (
-    get_knowledge_space_service,
     get_knowledge_space_chat_service,
+    get_knowledge_space_service,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
-    DepartmentKnowledgeSpaceBatchCreateReq,
-    KnowledgeSpaceCreateReq,
-    KnowledgeSpaceUpdateReq,
-    FolderCreateReq,
-    FolderRenameReq,
-    FileCreateReq,
-    WebLinkCreateReq,
-    FileRenameReq,
-    FileEncodingUpdateReq,
-    MoveFileFolderReq,
-    MoveFolderReq,
-    UploadFolderRecommendationReq,
     BatchDeleteReq,
     BatchDownloadReq,
-    UpdateSpaceMemberRoleRequest,
-    RemoveSpaceMemberRequest,
-    KnowledgeSpaceFolderStatsReq,
-    ChatReq,
     ChatFolderReq,
-)
-from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
-    KnowledgeSpaceChatService,
+    ChatReq,
+    DepartmentKnowledgeSpaceBatchCreateReq,
+    FileCreateReq,
+    FileEncodingUpdateReq,
+    FileRenameReq,
+    FolderCreateReq,
+    FolderRenameReq,
+    KnowledgeSpaceCreateReq,
+    KnowledgeSpaceFolderStatsReq,
+    KnowledgeSpaceUpdateReq,
+    MoveFileFolderReq,
+    MoveFolderReq,
+    RemoveSpaceMemberRequest,
+    UpdateSpaceMemberRoleRequest,
+    UploadFolderRecommendationReq,
+    WebLinkCreateReq,
 )
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
+    KnowledgeSpaceChatService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
+from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
@@ -70,26 +70,27 @@ async def create_space(
         user_group_id=req.user_group_id,
         auto_tag_enabled=req.auto_tag_enabled,
         auto_tag_library_id=req.auto_tag_library_id,
+        auto_tag_library_ids=req.auto_tag_library_ids,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
     )
     return resp_200(await svc.get_space_info(space.id))
 
 
-@router.get('/create-options')
+@router.get("/create-options")
 async def get_create_options(
-        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     options = await svc.get_create_options()
     return resp_200(options)
 
 
-@router.get('/create-options/departments')
+@router.get("/create-options/departments")
 async def get_create_option_departments(
-        keyword: str = Query(default=''),
-        page: int = Query(default=1, ge=1),
-        page_size: int = Query(default=20, ge=1, le=100),
-        approval_request: bool = Query(default=False),
-        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    approval_request: bool = Query(default=False),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     options = await svc.get_create_departments(
         keyword=keyword,
@@ -100,12 +101,12 @@ async def get_create_option_departments(
     return resp_200(options)
 
 
-@router.get('/create-options/user-groups')
+@router.get("/create-options/user-groups")
 async def get_create_option_user_groups(
-        keyword: str = Query(default=''),
-        page: int = Query(default=1, ge=1),
-        page_size: int = Query(default=20, ge=1, le=100),
-        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     options = await svc.get_create_user_groups(
         keyword=keyword,
@@ -132,6 +133,21 @@ async def get_auto_tag_visibility(
     ) = await WorkStationService.get_knowledge_space_config_with_meta()
     visible = bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
     return resp_200({"visible": visible})
+
+
+@router.get("/review-tag-visibility")
+async def get_review_tag_visibility(
+    _: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    """Whether pending-review tag submission is enabled for the current tenant."""
+    (
+        cfg,
+        _inherited,
+        _src,
+        _has_override,
+    ) = await WorkStationService.get_knowledge_space_config_with_meta()
+    enabled = bool(getattr(cfg, "review_tag_visible", True)) if cfg else True
+    return resp_200({"enabled": enabled})
 
 
 @router.get("/options")
@@ -175,6 +191,7 @@ async def update_space(
         is_released=req.is_released,
         auto_tag_enabled=req.auto_tag_enabled,
         auto_tag_library_id=req.auto_tag_library_id,
+        auto_tag_library_ids=req.auto_tag_library_ids,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
     )
     return resp_200(space)
@@ -201,6 +218,7 @@ async def delete_space(
 
 
 # ──────────────────────────── Space Listings ───────────────────────────────────
+
 
 @router.get("/grouped")
 async def get_grouped_spaces(
@@ -301,9 +319,9 @@ async def get_knowledge_square(
 async def list_my_uploaded_files(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    space_id: Optional[int] = Query(default=None),
-    status: Optional[int] = Query(default=None),
-    keyword: Optional[str] = Query(default=None),
+    space_id: int | None = Query(default=None),
+    status: int | None = Query(default=None),
+    keyword: str | None = Query(default=None),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.list_my_uploaded_files(
@@ -324,7 +342,7 @@ async def get_space_members(
     space_id: int,
     page: int = Query(1, description="Page number"),
     page_size: int = Query(20, description="Page size"),
-    keyword: Optional[str] = Query(None, description="Search keyword"),
+    keyword: str | None = Query(None, description="Search keyword"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_space_members(space_id, page, page_size, keyword)
@@ -356,20 +374,18 @@ async def remove_member(
 @router.get("/{space_id}/children")
 async def list_space_children(
     space_id: int,
-    parent_id: Optional[int] = None,
-    file_ids: List[int] = Query(default=None, description="精确文件ID列表"),
+    parent_id: int | None = None,
+    file_ids: list[int] = Query(default=None, description="精确文件ID列表"),
     order_field: str = "file_type",
     order_sort: str = "asc",
-    file_status: List[int] = Query(default=None, description="文件状态列表"),
+    file_status: list[int] = Query(default=None, description="文件状态列表"),
     page_size: int = 20,
-    cursor: Optional[str] = Query(
+    cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "
-                    "`next_cursor`. Omit (or pass empty) to fetch the first page.",
+        "`next_cursor`. Omit (or pass empty) to fetch the first page.",
     ),
-    file_type: Optional[int] = Query(
-        default=None, description="0=DIR only, 1=FILE only, empty=both"
-    ),
+    file_type: int | None = Query(default=None, description="0=DIR only, 1=FILE only, empty=both"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """List space children (F027 cursor-based pagination).
@@ -415,14 +431,14 @@ async def global_search_files(
 @router.get("/{space_id}/search")
 async def search_space_children(
     space_id: int,
-    parent_id: Optional[int] = None,
+    parent_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
     order_field: str = "file_type",
     order_sort: str = "asc",
-    tag_ids: List[int] = Query(default=None, description="标签ID列表"),
-    file_status: List[int] = Query(default=None, description="文件状态列表"),
-    keyword: Optional[str] = None,
+    tag_ids: list[int] = Query(default=None, description="标签ID列表"),
+    file_status: list[int] = Query(default=None, description="文件状态列表"),
+    keyword: str | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_space_children(
@@ -468,11 +484,11 @@ async def delete_space_tags(
     return resp_200(result)
 
 
-@router.post('/{space_id}/tag/delete')
+@router.post("/{space_id}/tag/delete")
 async def delete_space_tags_by_post(
-        space_id: int,
-        tag_id: int = Body(..., embed=True, description='标签ID'),
-        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    space_id: int,
+    tag_id: int = Body(..., embed=True, description="标签ID"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.delete_space_tag(space_id, tag_id)
     return resp_200(result)
@@ -691,8 +707,8 @@ async def get_file_download(
 async def update_file_tags(
     space_id: int,
     file_id: int,
-    tag_ids: List[int] = Body(default=[], embed=True, description="标签ID列表"),
-    review_tag_ids: List[int] = Body(default=[], embed=True, description="审核标签ID列表"),
+    tag_ids: list[int] = Body(default=[], embed=True, description="标签ID列表"),
+    review_tag_ids: list[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     if not tag_ids and not review_tag_ids and len(tag_ids) == 0 and len(review_tag_ids) == 0:
@@ -727,9 +743,9 @@ async def batch_delete(
 @router.post("/{space_id}/files/batch-tag")
 async def batch_update_tags(
     space_id: int,
-    file_ids: List[int] = Body(..., embed=True, description="文件ID列表"),
-    tag_ids: List[int] = Body(default=[], embed=True, description="标签ID列表"),
-    review_tag_ids: List[int] = Body(default=[], embed=True, description="审核标签ID列表"),
+    file_ids: list[int] = Body(..., embed=True, description="文件ID列表"),
+    tag_ids: list[int] = Body(default=[], embed=True, description="标签ID列表"),
+    review_tag_ids: list[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     if not tag_ids and not review_tag_ids and len(tag_ids) == 0 and len(review_tag_ids) == 0:
@@ -741,7 +757,7 @@ async def batch_update_tags(
 @router.post("/{space_id}/files/batch-retry")
 async def batch_retry_failed_files(
     space_id: int,
-    file_ids: List[int] = Body(..., embed=True, description="file or folder ids"),
+    file_ids: list[int] = Body(..., embed=True, description="file or folder ids"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.batch_retry_failed_files(space_id, file_ids)
@@ -792,9 +808,7 @@ async def chat_single_file(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_single_file(
-                space_id, file_id, req.query, req.model_id
-            ):
+            async for one in svc.chat_single_file(space_id, file_id, req.query, req.model_id):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
@@ -888,9 +902,7 @@ async def chat_folder(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_folder(
-                space_id, req.folder_id, req.chat_id, req.query, req.model_id, req.tags
-            ):
+            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.model_id, req.tags):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
@@ -905,7 +917,7 @@ async def chat_folder(
 
 
 class SensitiveWordCheckRequest(BaseModel):
-    texts: List[str]
+    texts: list[str]
 
 
 @router.post("/{space_id}/sensitive-word-check")
@@ -926,7 +938,7 @@ async def check_sensitive_words(
         business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
         texts=req.texts,
     )
-    violated: List[str] = []
+    violated: list[str] = []
     for text, result in zip(req.texts, results):
         if result.enabled and result.hits:
             violated.append(text)
@@ -943,8 +955,9 @@ async def get_file_stats(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     """Return view count for a specific file. Downloads are not tracked, always 0."""
-    from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
     import asyncio
+
+    from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
 
     views, downloads = await asyncio.gather(
         PortalTelemetryEventService.count_file_views(file_id),

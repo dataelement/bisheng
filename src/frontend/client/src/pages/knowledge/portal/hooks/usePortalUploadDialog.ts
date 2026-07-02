@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import {
     addFilesApi,
     createFolderApi,
-    getKnowledgeSpaceTagLibrariesApi,
-    getKnowledgeSpaceTagLibraryDetailApi,
+    getBoundTagLibraryTagsForKnowledgeApi,
     getSimilarCandidatesApi,
     getSpaceTagsApi,
     linkAsNewVersionApi,
@@ -54,6 +53,7 @@ import {
 import {
     buildPortalUploadMetadataPayload,
     buildUploadTagOptions,
+    extractUniqueLibraryTagNames,
     EMPTY_PORTAL_UPLOAD_METADATA,
     type PortalUploadMetadataPayload,
     type PortalUploadTagOption,
@@ -386,33 +386,19 @@ export function usePortalUploadDialog({
         let cancelled = false;
         const loadUploadTagOptions = async () => {
             setUploadTagLoading(true);
-            const [existingTagsResult, librariesResult] = await Promise.allSettled([
+            const [existingTagsResult, libraryTagsResult] = await Promise.allSettled([
                 getSpaceTagsApi(activeSpace.id),
-                getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 200 }),
+                getBoundTagLibraryTagsForKnowledgeApi(activeSpace.id),
             ]);
             if (cancelled) return;
 
             const existingTags = existingTagsResult.status === "fulfilled" ? existingTagsResult.value : [];
-            let commonTagNames: string[] = [];
-            if (librariesResult.status === "fulfilled") {
-                const libraries = librariesResult.value.data ?? [];
-                const commonLibrary = libraries.find((item) => item.name === "通用标签库")
-                    ?? libraries.find((item) => item.is_builtin)
-                    ?? libraries[0];
-                if (commonLibrary?.id) {
-                    try {
-                        const detail = await getKnowledgeSpaceTagLibraryDetailApi(commonLibrary.id);
-                        if (!cancelled) {
-                            commonTagNames = Array.isArray(detail.tags) ? detail.tags : [];
-                        }
-                    } catch {
-                        commonTagNames = [];
-                    }
-                }
-            }
+            const libraryTagNames = libraryTagsResult.status === "fulfilled"
+                ? extractUniqueLibraryTagNames(libraryTagsResult.value)
+                : [];
 
             if (!cancelled) {
-                setUploadTagOptions(buildUploadTagOptions(existingTags, commonTagNames));
+                setUploadTagOptions(buildUploadTagOptions(existingTags, libraryTagNames));
                 setUploadTagLoading(false);
             }
         };

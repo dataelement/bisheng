@@ -176,3 +176,18 @@ export function buildUploadTagOptions(
 
     return options;
 }
+
+/** Deduplicate tag names from bound tag libraries (by display name). */
+export function extractUniqueLibraryTagNames(
+    items: Array<{ name?: string | null }>,
+): string[] {
+    const seenNames = new Set<string>();
+    const names: string[] = [];
+    for (const item of items) {
+        const name = String(item.name ?? "").trim();
+        if (!name || seenNames.has(name)) continue;
+        seenNames.add(name);
+        names.push(name);
+    }
+    return names;
+}

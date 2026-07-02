@@ -1,27 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useQuery } from "@tanstack/react-query";
-import { Upload, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Label } from "~/components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
+import MultiSelect from "~/components/ui/MultiSelect";
 import {
     Sheet,
     SheetContent,
     SheetHeader,
-    SheetTitle
+    SheetTitle,
 } from "~/components/ui/Sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import {
     getCreateSpaceOptionsApi,
     getCreateSpaceDepartmentsApi,
     getKnowledgeSpaceTagLibrariesApi,
+    getKnowledgeSpaceTagLibrariesByKnowledgeApi,
     getKnowledgeSpaceTagLibraryDetailApi,
+    getSpaceInfoApi,
     SpaceLevel,
     VisibilityType,
     type KnowledgeSpace,
@@ -34,20 +35,78 @@ import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permi
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
-const MAX_AUTO_TAG_CUSTOM_TAGS = 200;
-const AUTO_TAG_PREVIEW_LIMIT = 20;
-type AutoTagMode = "library" | "custom";
+const AUTO_TAG_PREVIEW_LIMIT = 10;
 
-function parseAutoTagText(text: string): string[] {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const line of text.split(/\r?\n/)) {
-        const value = line.trim();
-        if (!value || seen.has(value)) continue;
-        seen.add(value);
-        result.push(value);
+function normalizeTagLibraryId(value: unknown): number | null {
+    const id = Number(value);
+    return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function resolveEditingSpaceLibraryIds(space?: KnowledgeSpace | null): number[] {
+    if (!space) return [];
+    if (space.autoTagLibraryIds?.length) {
+        return space.autoTagLibraryIds
+            .map(normalizeTagLibraryId)
+            .filter((id): id is number => id !== null);
     }
-    return result;
+    const legacyId = normalizeTagLibraryId(space.autoTagLibraryId);
+    return legacyId ? [legacyId] : [];
+}
+
+function mergeLibraryIdSources(...groups: Array<number[] | undefined | null>): number[] {
+    const merged: number[] = [];
+    const seen = new Set<number>();
+    for (const group of groups) {
+        for (const rawId of group ?? []) {
+            const id = normalizeTagLibraryId(rawId);
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            merged.push(id);
+        }
+    }
+    return merged;
+}
+
+function mergeTagLibraryListItems(
+    ...groups: KnowledgeSpaceTagLibraryListItem[][]
+): KnowledgeSpaceTagLibraryListItem[] {
+    const merged = new Map<number, KnowledgeSpaceTagLibraryListItem>();
+    for (const group of groups) {
+        for (const library of group) {
+            const id = normalizeTagLibraryId(library?.id);
+            if (id) {
+                merged.set(id, { ...library, id });
+            }
+        }
+    }
+    return Array.from(merged.values());
+}
+
+async function hydrateMissingTagLibraries(
+    libraryIds: number[],
+    current: KnowledgeSpaceTagLibraryListItem[],
+): Promise<KnowledgeSpaceTagLibraryListItem[]> {
+    const merged = new Map<number, KnowledgeSpaceTagLibraryListItem>(
+        mergeTagLibraryListItems(current).map((library) => [library.id, library]),
+    );
+    const missingIds = libraryIds.filter((id) => !merged.has(id));
+    if (!missingIds.length) {
+        return Array.from(merged.values());
+    }
+    const details = await Promise.all(
+        missingIds.map((id) => getKnowledgeSpaceTagLibraryDetailApi(id).catch(() => null)),
+    );
+    for (const detail of details) {
+        if (!detail?.id) continue;
+        merged.set(detail.id, {
+            id: detail.id,
+            name: detail.name,
+            description: detail.description ?? null,
+            tag_count: detail.tag_count ?? 0,
+            is_builtin: Boolean(detail.is_builtin),
+        });
+    }
+    return Array.from(merged.values());
 }
 
 /** 权限项文案：PingFang SC / 14px / 22px 行高 / 400 / #212121 */
@@ -72,9 +131,7 @@ export interface CreateKnowledgeSpaceFormData {
     departmentId?: number;
     userGroupId?: number;
     autoTagEnabled: boolean;
-    autoTagLibraryId: number | null;
-    /** Custom tag list when the user picks the "Custom Tags" tab; null when in library mode. */
-    autoTagCustomTags: string[] | null;
+    autoTagLibraryIds: number[];
 }
 
 interface CreateKnowledgeSpaceSubmitResult {
@@ -117,19 +174,11 @@ export function CreateKnowledgeSpaceDrawer({
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
-    const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
-    const [autoTagLibraryId, setAutoTagLibraryId] = useState<number | null>(null);
+    const [autoTagLibraryIds, setAutoTagLibraryIds] = useState<number[]>([]);
     const [autoTagLibraryTags, setAutoTagLibraryTags] = useState<string[]>([]);
     const [autoTagLibraryTagsLoading, setAutoTagLibraryTagsLoading] = useState(false);
-    const [autoTagPreviewExpanded, setAutoTagPreviewExpanded] = useState(false);
-    const [autoTagCustomTagsText, setAutoTagCustomTagsText] = useState("");
     const [tagLibraries, setTagLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
     const [tagLibrariesLoading, setTagLibrariesLoading] = useState(false);
-    const customTags = useMemo(
-        () => parseAutoTagText(autoTagCustomTagsText),
-        [autoTagCustomTagsText],
-    );
-    const txtInputRef = useRef<HTMLInputElement | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
@@ -140,6 +189,28 @@ export function CreateKnowledgeSpaceDrawer({
         () => joinPolicy === "review" || joinPolicy === "public",
         [joinPolicy]
     );
+    const editingLibraryIds = useMemo(
+        () => resolveEditingSpaceLibraryIds(editingSpace),
+        [editingSpace],
+    );
+    const tagLibrarySelectOptions = useMemo(() => {
+        const optionMap = new Map<string, { label: string; value: string }>();
+        for (const library of tagLibraries) {
+            const id = normalizeTagLibraryId(library.id);
+            if (!id) continue;
+            optionMap.set(String(id), {
+                label: library.name || `#${id}`,
+                value: String(id),
+            });
+        }
+        for (const id of autoTagLibraryIds) {
+            const value = String(id);
+            if (!optionMap.has(value)) {
+                optionMap.set(value, { label: `#${id}`, value });
+            }
+        }
+        return Array.from(optionMap.values());
+    }, [tagLibraries, autoTagLibraryIds]);
     const originalEditJoinPolicy = useMemo<JoinPolicy>(() => {
         if (!editingSpace?.visibility) return joinPolicy;
         if (editingSpace.visibility === VisibilityType.PUBLIC) return "public";
@@ -214,11 +285,8 @@ export function CreateKnowledgeSpaceDrawer({
         setSpaceLevel(SpaceLevel.PERSONAL);
         setDepartmentSelection([]);
         setAutoTagEnabled(false);
-        setAutoTagMode("library");
-        setAutoTagLibraryId(null);
+        setAutoTagLibraryIds([]);
         setAutoTagLibraryTags([]);
-        setAutoTagPreviewExpanded(false);
-        setAutoTagCustomTagsText("");
         setShowSuccess(false);
         setSubmitting(false);
     };
@@ -265,17 +333,7 @@ export function CreateKnowledgeSpaceDrawer({
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setSpaceLevel(editingSpace.spaceLevel || SpaceLevel.PERSONAL);
             setAutoTagEnabled(Boolean(editingSpace.autoTagEnabled));
-            const editingMode: AutoTagMode = editingSpace.autoTagMode === "custom" ? "custom" : "library";
-            setAutoTagMode(editingMode);
-            if (editingMode === "custom") {
-                setAutoTagLibraryId(null);
-                setAutoTagCustomTagsText((editingSpace.autoTagCustomTags ?? []).join("\n"));
-                setAutoTagLibraryTags([]);
-            } else {
-                setAutoTagLibraryId(editingSpace.autoTagLibraryId ?? null);
-                setAutoTagCustomTagsText("");
-            }
-            setAutoTagPreviewExpanded(false);
+            setAutoTagLibraryTags([]);
             setShowSuccess(false);
         }
     }, [open, mode, editingSpace, initialSpaceLevel]);
@@ -289,41 +347,111 @@ export function CreateKnowledgeSpaceDrawer({
     }, [createOptions, enabledLevelOptions, mode, open, spaceLevel]);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            setTagLibrariesLoading(false);
+            return;
+        }
+        let cancelled = false;
         setTagLibrariesLoading(true);
-        getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 200 })
-            .then((res) => {
-                const libraries = res.data || [];
-                setTagLibraries(libraries);
-                if (!autoTagLibraryId && libraries.length === 1) {
-                    setAutoTagLibraryId(libraries[0].id);
-                }
-            })
-            .catch(() => {
-                showToast({
-                    message: localize("com_knowledge.load_tag_libraries_failed"),
-                    severity: NotificationSeverity.WARNING
-                });
-            })
-            .finally(() => setTagLibrariesLoading(false));
-    }, [open]);
+        const spaceId = editingSpace?.id;
 
-    // Pull the selected library's full tag list so we can render the preview chips.
-    // Only fires in library mode — the custom mode draws its tags from local state.
+        const loadTagLibraries = async () => {
+            try {
+                const [globalResult, boundResult, infoResult] = await Promise.allSettled([
+                    getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 200 }),
+                    mode === "edit" && spaceId
+                        ? getKnowledgeSpaceTagLibrariesByKnowledgeApi(spaceId)
+                        : Promise.resolve([] as KnowledgeSpaceTagLibraryListItem[]),
+                    mode === "edit" && spaceId
+                        ? getSpaceInfoApi(spaceId)
+                        : Promise.resolve(null),
+                ]);
+                if (cancelled) return;
+
+                const globalLibraries = globalResult.status === "fulfilled"
+                    ? (globalResult.value.data || [])
+                    : [];
+                const boundLibraries = boundResult.status === "fulfilled"
+                    ? boundResult.value
+                    : [];
+                const infoSpace = infoResult.status === "fulfilled" ? infoResult.value : null;
+
+                const boundIdsFromApi = boundLibraries
+                    .map((library) => normalizeTagLibraryId(library.id))
+                    .filter((id): id is number => id !== null);
+                const selectedIds = mode === "edit"
+                    ? mergeLibraryIdSources(
+                        boundIdsFromApi,
+                        resolveEditingSpaceLibraryIds(infoSpace),
+                        resolveEditingSpaceLibraryIds(editingSpace),
+                        editingLibraryIds,
+                    )
+                    : [];
+
+                let mergedLibraries = mergeTagLibraryListItems(globalLibraries, boundLibraries);
+                if (mode === "edit" && selectedIds.length > 0) {
+                    mergedLibraries = await hydrateMissingTagLibraries(selectedIds, mergedLibraries);
+                    if (!cancelled) {
+                        setAutoTagLibraryIds(selectedIds);
+                    }
+                }
+                if (!cancelled) {
+                    setTagLibraries(mergedLibraries);
+                }
+            } catch {
+                if (!cancelled) {
+                    showToast({
+                        message: localize("com_knowledge.load_tag_libraries_failed"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    const fallbackIds = mode === "edit"
+                        ? mergeLibraryIdSources(editingLibraryIds, resolveEditingSpaceLibraryIds(editingSpace))
+                        : [];
+                    if (mode === "edit" && fallbackIds.length > 0) {
+                        const hydrated = await hydrateMissingTagLibraries(fallbackIds, []);
+                        if (!cancelled) {
+                            setTagLibraries(hydrated);
+                            setAutoTagLibraryIds(fallbackIds);
+                        }
+                    } else if (!cancelled) {
+                        setTagLibraries([]);
+                    }
+                }
+            } finally {
+                if (!cancelled) {
+                    setTagLibrariesLoading(false);
+                }
+            }
+        };
+
+        void loadTagLibraries();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open, mode, editingSpace?.id, editingLibraryIds.join(",")]);
+
     useEffect(() => {
         if (!open) return;
-        if (autoTagMode !== "library" || !autoTagLibraryId) {
+        if (autoTagLibraryIds.length === 0) {
             setAutoTagLibraryTags([]);
-            setAutoTagPreviewExpanded(false);
             return;
         }
         let cancelled = false;
         setAutoTagLibraryTagsLoading(true);
-        getKnowledgeSpaceTagLibraryDetailApi(autoTagLibraryId)
-            .then((res) => {
+        Promise.all(autoTagLibraryIds.map((libraryId) => getKnowledgeSpaceTagLibraryDetailApi(libraryId)))
+            .then((results) => {
                 if (cancelled) return;
-                setAutoTagLibraryTags(Array.isArray(res.tags) ? res.tags : []);
-                setAutoTagPreviewExpanded(false);
+                const seen = new Set<string>();
+                const merged: string[] = [];
+                for (const result of results) {
+                    for (const tag of result.tags || []) {
+                        if (seen.has(tag)) continue;
+                        seen.add(tag);
+                        merged.push(tag);
+                    }
+                }
+                setAutoTagLibraryTags(merged);
             })
             .catch(() => {
                 if (cancelled) return;
@@ -336,37 +464,7 @@ export function CreateKnowledgeSpaceDrawer({
         return () => {
             cancelled = true;
         };
-    }, [open, autoTagMode, autoTagLibraryId]);
-
-    const handleAutoTagModeChange = (value: string) => {
-        const next = value === "custom" ? "custom" : "library";
-        setAutoTagMode(next);
-        if (next === "custom") {
-            setAutoTagLibraryTags([]);
-            setAutoTagPreviewExpanded(false);
-        }
-    };
-
-    const handleUploadTxt = (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        // Reset the input synchronously so picking the same filename twice in a
-        // row still fires onChange.
-        event.target.value = "";
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const raw = typeof reader.result === "string" ? reader.result : "";
-            const parsed = parseAutoTagText(raw);
-            if (parsed.length > MAX_AUTO_TAG_CUSTOM_TAGS) {
-                showToast({
-                    message: localize("com_knowledge.auto_tag_custom_tags_limit"),
-                    severity: NotificationSeverity.WARNING,
-                });
-            }
-            setAutoTagCustomTagsText(parsed.slice(0, MAX_AUTO_TAG_CUSTOM_TAGS).join("\n"));
-        };
-        reader.readAsText(file);
-    };
+    }, [open, autoTagLibraryIds]);
 
     const handleConfirm = async () => {
         // Guard against double-submit while the previous request is still in-flight.
@@ -389,35 +487,12 @@ export function CreateKnowledgeSpaceDrawer({
             return;
         }
         const effectiveAutoTagEnabled = autoTagEnabled;
-        let effectiveAutoTagLibraryId: number | null = null;
-        let effectiveAutoTagCustomTags: string[] | null = null;
-        if (effectiveAutoTagEnabled) {
-            if (autoTagMode === "library") {
-                if (!autoTagLibraryId) {
-                    showToast({
-                        message: localize("com_knowledge.auto_tag_library_required"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    return;
-                }
-                effectiveAutoTagLibraryId = autoTagLibraryId;
-            } else {
-                if (customTags.length === 0) {
-                    showToast({
-                        message: localize("com_knowledge.auto_tag_custom_tags_required"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    return;
-                }
-                if (customTags.length > MAX_AUTO_TAG_CUSTOM_TAGS) {
-                    showToast({
-                        message: localize("com_knowledge.auto_tag_custom_tags_limit"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    return;
-                }
-                effectiveAutoTagCustomTags = customTags;
-            }
+        if (effectiveAutoTagEnabled && autoTagLibraryIds.length === 0) {
+            showToast({
+                message: localize("com_knowledge.auto_tag_library_required"),
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
         }
         const effectiveJoinPolicy: JoinPolicy = mode === "edit" ? originalEditJoinPolicy : "review";
         const payload: CreateKnowledgeSpaceFormData = {
@@ -430,8 +505,7 @@ export function CreateKnowledgeSpaceDrawer({
             departmentId: shouldShowDepartmentSelector ? selectedDepartmentId : undefined,
             userGroupId: undefined,
             autoTagEnabled: effectiveAutoTagEnabled,
-            autoTagLibraryId: effectiveAutoTagLibraryId,
-            autoTagCustomTags: effectiveAutoTagCustomTags,
+            autoTagLibraryIds,
         };
         try {
             setSubmitting(true);
@@ -788,14 +862,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 </Label>
                                 <RadioGroup.Root
                                     value={autoTagEnabled ? "yes" : "no"}
-                                    onValueChange={(v) => {
-                                        const checked = v === "yes";
-                                        setAutoTagEnabled(checked);
-                                        if (!checked) return;
-                                        if (!autoTagLibraryId && tagLibraries.length === 1) {
-                                            setAutoTagLibraryId(tagLibraries[0].id);
-                                        }
-                                    }}
+                                    onValueChange={(v) => setAutoTagEnabled(v === "yes")}
                                     className="flex gap-6"
                                 >
                                     <label className="flex items-center gap-2 cursor-pointer">
@@ -817,138 +884,57 @@ export function CreateKnowledgeSpaceDrawer({
                                         <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
                                     </label>
                                 </RadioGroup.Root>
+                            </div>
 
-                                {autoTagEnabled && (
-                                    <Tabs
-                                        value={autoTagMode}
-                                        onValueChange={handleAutoTagModeChange}
-                                        className="space-y-3"
-                                    >
-                                            <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
-                                                <TabsTrigger
-                                                    value="library"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
-                                                >
-                                                    {localize("com_knowledge.auto_tag_mode_library")}
-                                                </TabsTrigger>
-                                                <TabsTrigger
-                                                    value="custom"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
-                                                >
-                                                    {localize("com_knowledge.auto_tag_mode_custom")}
-                                                </TabsTrigger>
-                                            </TabsList>
-
-                                            <TabsContent value="library" className="space-y-2">
-                                                <Label className="text-[14px] font-medium text-[#1D2129]">
-                                                    <span className="mr-1 text-[#F53F3F]">*</span>
-                                                    {localize("com_knowledge.auto_tag_library")}
-                                                </Label>
-                                                <Select
-                                                    value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
-                                                    onValueChange={(value) => setAutoTagLibraryId(Number(value))}
-                                                    disabled={true}
-                                                >
-                                                    <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
-                                                        <SelectValue
-                                                            placeholder={
-                                                                tagLibrariesLoading
-                                                                    ? localize("com_knowledge.loading")
-                                                                    : localize("com_knowledge.select_auto_tag_library")
-                                                            }
-                                                        />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="z-[150] bg-white">
-                                                        {tagLibraries.map((library) => (
-                                                            <SelectItem key={library.id} value={String(library.id)}>
-                                                                {library.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                {tagLibraries.length === 0 && !tagLibrariesLoading && (
-                                                    <p className="text-[12px] text-[#F53F3F]">
-                                                        {localize("com_knowledge.no_auto_tag_library")}
-                                                    </p>
-                                                )}
-                                                {autoTagLibraryId && (
-                                                    <div className="space-y-1.5 pt-1">
-                                                        <div className="text-[12px] text-[#86909C]">
-                                                            {localize("com_knowledge.auto_tag_library_preview")}
-                                                        </div>
-                                                        {autoTagLibraryTagsLoading ? (
-                                                            <div className="text-[12px] text-[#86909C]">
-                                                                {localize("com_knowledge.loading")}
-                                                            </div>
-                                                        ) : autoTagLibraryTags.length === 0 ? (
-                                                            <div className="text-[12px] text-[#86909C]">
-                                                                {localize("com_knowledge.auto_tag_library_preview_empty")}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex flex-wrap items-center">
-                                                                {(autoTagPreviewExpanded
-                                                                    ? autoTagLibraryTags
-                                                                    : autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT)
-                                                                ).map((tag, idx) => (
-                                                                    <span
-                                                                        key={`${tag}-${idx}`}
-                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
-                                                                    >
-                                                                        {tag}
-                                                                    </span>
-                                                                ))}
-                                                                {autoTagLibraryTags.length > AUTO_TAG_PREVIEW_LIMIT && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className="mb-1.5 text-[12px] text-[#165DFF] hover:underline"
-                                                                        onClick={() => setAutoTagPreviewExpanded((prev) => !prev)}
-                                                                    >
-                                                                        {autoTagPreviewExpanded
-                                                                            ? localize("com_knowledge.collapse")
-                                                                            : `${localize("com_knowledge.expand_more")} (+${autoTagLibraryTags.length - AUTO_TAG_PREVIEW_LIMIT})`}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </TabsContent>
-
-                                            <TabsContent value="custom" className="space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <Label className="text-[14px] font-medium text-[#1D2129]">
-                                                        <span className="mr-1 text-[#F53F3F]">*</span>
-                                                        {localize("com_knowledge.auto_tag_mode_custom")}
-                                                    </Label>
-                                                    <span className="text-[12px] text-[#86909C]">
-                                                        {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
-                                                    </span>
-                                                </div>
-                                                <div className="relative">
-                                                    <Textarea
-                                                        value={autoTagCustomTagsText}
-                                                        onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
-                                                        placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
-                                                        className="min-h-[120px] resize-none rounded-[6px] border-[#E5E6EB] bg-white pr-24 text-[14px]"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => txtInputRef.current?.click()}
-                                                        className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-[#165DFF] hover:underline"
+                            <div className="space-y-2">
+                                <Label className="text-[14px] font-medium text-[#1D2129]">
+                                    {localize("com_knowledge.auto_tag_library")}
+                                </Label>
+                                <MultiSelect
+                                    key={`${editingSpace?.id ?? "create"}-${autoTagLibraryIds.join(",")}-${tagLibrarySelectOptions.length}`}
+                                    multiple
+                                    className="w-full"
+                                    value={autoTagLibraryIds.map(String)}
+                                    options={tagLibrarySelectOptions}
+                                    placeholder={
+                                        tagLibrariesLoading
+                                            ? localize("com_knowledge.loading")
+                                            : localize("com_knowledge.select_auto_tag_library")
+                                    }
+                                    disabled={tagLibrariesLoading}
+                                    onChange={(values) => setAutoTagLibraryIds(values.map(Number))}
+                                />
+                                {tagLibraries.length === 0 && !tagLibrariesLoading && (
+                                    <p className="text-[12px] text-[#F53F3F]">
+                                        {localize("com_knowledge.no_auto_tag_library")}
+                                    </p>
+                                )}
+                                {autoTagLibraryIds.length > 0 && (
+                                    <div className="space-y-1.5 pt-1">
+                                        <div className="text-[12px] text-[#86909C]">
+                                            {localize("com_knowledge.auto_tag_library_preview")}
+                                        </div>
+                                        {autoTagLibraryTagsLoading ? (
+                                            <div className="text-[12px] text-[#86909C]">
+                                                {localize("com_knowledge.loading")}
+                                            </div>
+                                        ) : autoTagLibraryTags.length === 0 ? (
+                                            <div className="text-[12px] text-[#86909C]">
+                                                {localize("com_knowledge.auto_tag_library_preview_empty")}
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-wrap items-center">
+                                                {autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT).map((tag, idx) => (
+                                                    <span
+                                                        key={`${tag}-${idx}`}
+                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
                                                     >
-                                                        <Upload className="h-3 w-3" />
-                                                        {localize("com_knowledge.upload_txt")}
-                                                    </button>
-                                                    <input
-                                                        ref={txtInputRef}
-                                                        type="file"
-                                                        accept=".txt"
-                                                        className="hidden"
-                                                        onChange={handleUploadTxt}
-                                                    />
-                                                </div>
-                                            </TabsContent>
-                                    </Tabs>
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>

@@ -451,3 +451,44 @@ describe("mapChild", () => {
     expect(file.name).toBe("首钢官网");
   });
 });
+
+describe("extractReviewTagVisibilityFlag", () => {
+  it("parses boolean and string flags from nested payloads", async () => {
+    const { extractReviewTagVisibilityFlag } = await import("./knowledge");
+
+    expect(extractReviewTagVisibilityFlag({ enabled: false })).toBe(false);
+    expect(extractReviewTagVisibilityFlag({ enabled: "false" })).toBe(false);
+    expect(extractReviewTagVisibilityFlag({ data: { review_tag_visible: true } })).toBe(true);
+    expect(extractReviewTagVisibilityFlag({ config: { review_tag_visible: "0" } })).toBe(false);
+    expect(extractReviewTagVisibilityFlag(null)).toBe(null);
+  });
+});
+
+describe("getKnowledgeSpaceReviewTagVisibilityApi", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("returns enabled false when review-tag-visibility reports disabled", async () => {
+    const { getKnowledgeSpaceReviewTagVisibilityApi } = await import("./knowledge");
+    mockGet.mockResolvedValueOnce({ data: { enabled: false } });
+
+    const result = await getKnowledgeSpaceReviewTagVisibilityApi();
+
+    expect(result).toEqual({ enabled: false });
+    expect(mockGet).toHaveBeenCalledWith("/api/v1/knowledge/space/review-tag-visibility");
+  });
+
+  it("falls back to workstation config when primary endpoint fails", async () => {
+    const { getKnowledgeSpaceReviewTagVisibilityApi } = await import("./knowledge");
+    mockGet
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce({ data: { review_tag_visible: false } });
+
+    const result = await getKnowledgeSpaceReviewTagVisibilityApi();
+
+    expect(result).toEqual({ enabled: false });
+    expect(mockGet).toHaveBeenNthCalledWith(1, "/api/v1/knowledge/space/review-tag-visibility");
+    expect(mockGet).toHaveBeenNthCalledWith(2, "/api/v1/workstation/config/knowledge_space");
+  });
+});

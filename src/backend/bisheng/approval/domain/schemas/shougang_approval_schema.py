@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -14,16 +14,17 @@ from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
 
 class ShougangKnowledgeSpaceCreateBase(BaseModel):
     name: str = Field(..., max_length=200)
-    description: Optional[str] = None
-    icon: Optional[str] = None
+    description: str | None = None
+    icon: str | None = None
     auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC
     is_released: bool = False
     space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
-    department_id: Optional[int] = None
-    user_group_id: Optional[int] = None
+    department_id: int | None = None
+    user_group_id: int | None = None
     auto_tag_enabled: bool = False
-    auto_tag_library_id: Optional[int] = None
-    auto_tag_custom_tags: Optional[list[str]] = None
+    auto_tag_library_id: int | None = None
+    auto_tag_library_ids: list[int] | None = None
+    auto_tag_custom_tags: list[str] | None = None
 
 
 class ShougangKnowledgeSpaceCreateValidateReq(ShougangKnowledgeSpaceCreateBase):
@@ -31,7 +32,7 @@ class ShougangKnowledgeSpaceCreateValidateReq(ShougangKnowledgeSpaceCreateBase):
 
 
 class ShougangKnowledgeSpaceCreateSubmitReq(ShougangKnowledgeSpaceCreateBase):
-    reason: Optional[str] = Field(default=None, max_length=2000)
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 class ShougangKnowledgeSpaceCreateValidateResp(BaseModel):
@@ -41,16 +42,16 @@ class ShougangKnowledgeSpaceCreateValidateResp(BaseModel):
 class ShougangApprovalSubmitResp(BaseModel):
     decision: str
     created: bool = False
-    instance_id: Optional[int] = None
+    instance_id: int | None = None
     task_ids: list[int] = Field(default_factory=list)
-    space: Optional[dict[str, Any]] = None
+    space: dict[str, Any] | None = None
 
 
 class ShougangFilePublishTargetSpace(BaseModel):
     id: int
     name: str
     space_level: KnowledgeSpaceLevelEnum
-    owner_name: Optional[str] = None
+    owner_name: str | None = None
 
 
 class ShougangFilePublishTargetSpacesResp(BaseModel):
@@ -73,6 +74,6 @@ class ShougangFilePublishSubmitReq(BaseModel):
     source_file_id: int = Field(..., gt=0)
     target_space_id: int = Field(..., gt=0)
     target_folder_id: int | None = Field(default=None, gt=0)
-    target_document_id: Optional[int] = Field(default=None, gt=0)
-    target_file_id: Optional[int] = Field(default=None, gt=0)
-    reason: Optional[str] = Field(default=None, max_length=2000)
+    target_document_id: int | None = Field(default=None, gt=0)
+    target_file_id: int | None = Field(default=None, gt=0)
+    reason: str | None = Field(default=None, max_length=2000)

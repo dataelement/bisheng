@@ -38,7 +38,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
-import { submitKnowledgeSpaceCreate } from "./createKnowledgeSpaceApproval";
+import { submitKnowledgeSpaceCreate, buildAutoTagLibraryPayload } from "./createKnowledgeSpaceApproval";
 
 function reloadKnowledgePage() {
     if (typeof window === "undefined") return;
@@ -534,8 +534,7 @@ export default function Knowledge() {
                     auth_type,
                     is_released,
                     auto_tag_enabled: form.autoTagEnabled,
-                    auto_tag_library_id: form.autoTagLibraryId,
-                    auto_tag_custom_tags: form.autoTagCustomTags,
+                    ...buildAutoTagLibraryPayload(form.autoTagLibraryIds, { syncExplicitly: true }),
                 });
                 if (activeSpace?.id === updated.id) setActiveSpace({ ...updated, role: activeSpace.role });
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });

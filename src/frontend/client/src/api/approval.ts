@@ -243,7 +243,7 @@ export interface ShougangKnowledgeSpaceCreateApprovalPayload {
   user_group_id?: number;
   auto_tag_enabled?: boolean;
   auto_tag_library_id?: number | null;
-  auto_tag_custom_tags?: string[] | null;
+  auto_tag_library_ids?: number[];
   reason?: string;
 }
 

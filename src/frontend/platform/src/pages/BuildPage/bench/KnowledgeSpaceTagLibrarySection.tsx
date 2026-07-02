@@ -4,52 +4,92 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Portal } from "@/components/bs-ui/tooltip";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
     createKnowledgeSpaceTagLibraryApi,
     deleteKnowledgeSpaceTagLibraryApi,
-    deleteKnowledgeSpaceTagApi,
     getKnowledgeSpaceTagLibrariesApi,
-    getKnowledgeSpaceTagListApi,
     getKnowledgeSpaceTagLibraryApi,
     getKnowledgeSpaceTagLibraryUsageApi,
     updateKnowledgeSpaceTagLibraryApi,
-    updateKnowledgeSpaceTagApi,
-    createKnowledgeSpaceTagApi,
     type KnowledgeSpaceTagLibraryDetail,
     type KnowledgeSpaceTagLibraryListItem,
-    type KnowledgeSpaceTagListItem,
-    type KnowledgeSpaceTagDetail,
+    type KnowledgeSpaceTagLibraryTagItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Pencil, Plus, Trash2, Upload } from "lucide-react";
-import type { ChangeEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import type { MouseEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const LIST_PAGE_SIZE = 200;
+const PAGE_SIZE = 10;
 const TAG_LIMIT = 200;
+const TAG_LIBRARY_NAME_MAX_LENGTH = 20;
+const BOUND_SPACE_NAME_MAX_CHARS = 12;
+
+function BoundSpaceNamesCell({ names }: { names: string[] }) {
+    if (!names.length) {
+        return <span className="text-muted-foreground">-</span>;
+    }
+    const fullText = names.join("、");
+    const truncated =
+        fullText.length > BOUND_SPACE_NAME_MAX_CHARS
+            ? `${fullText.slice(0, BOUND_SPACE_NAME_MAX_CHARS)}...`
+            : fullText;
+
+    if (truncated === fullText) {
+        return <span className="block truncate">{fullText}</span>;
+    }
+
+    return (
+        <TooltipProvider delayDuration={100}>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span className="block cursor-default truncate">{truncated}</span>
+                </TooltipTrigger>
+                <Portal>
+                    <TooltipContent side="top" className="max-w-96">
+                        <div className="whitespace-normal break-all text-left">{fullText}</div>
+                    </TooltipContent>
+                </Portal>
+            </Tooltip>
+        </TooltipProvider>
+    );
+}
+
+function formatTagSource(resourceType: string, t: (key: string, defaultValue: string) => string) {
+    if (resourceType === "ai_auto_tag") {
+        return t("build.tagSourceAi", "AI标签");
+    }
+    if (resourceType === "system_tag" || resourceType === "manual_tag") {
+        return t("build.tagSourceSystem", "系统标签");
+    }
+    return t("build.tagSourceManual", "人工标签");
+}
+
+function formatDateTime(value?: string | null) {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    const pad = (num: number) => String(num).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function splitTagItems(items: KnowledgeSpaceTagLibraryTagItem[]) {
+    const manualTags = items
+        .filter((item) => item.resource_type === "manual_tag" || item.resource_type === "system_tag")
+        .map((item) => item.name);
+    const aiTags = items.filter((item) => item.resource_type === "ai_auto_tag").map((item) => item.name);
+    return { manualTags, aiTags };
+}
 
 interface KnowledgeSpaceTagLibrarySectionProps {
     visible: boolean;
     onToggle: (visible: boolean) => void;
 }
 
-interface KnowledgeSpaceTagSectionProps {
-    visible: boolean;
-    onToggle: (visible: boolean) => void;
-}
-
-interface TagDialogProps {
-    open: boolean;
-    mode: "create" | "edit";
-    initial?: KnowledgeSpaceTagDetail | null;
-    onOpenChange: (open: boolean) => void;
-    onSaved: () => void;
-}
-
-
-interface TagLibraryDialogProps {
+interface TagLibraryFormDialogProps {
     open: boolean;
     mode: "create" | "edit";
     initial?: KnowledgeSpaceTagLibraryDetail | null;
@@ -57,42 +97,25 @@ interface TagLibraryDialogProps {
     onSaved: () => void;
 }
 
-function parseTags(text: string) {
-    return text
-        .split(/\r?\n/)
-        .map((tag) => tag.trim())
-        .filter(Boolean);
+interface LibraryTagsDialogProps {
+    open: boolean;
+    library: KnowledgeSpaceTagLibraryListItem | null;
+    onOpenChange: (open: boolean) => void;
+    onUpdated: () => void;
 }
 
-function TagLibraryDialog({ open, mode, initial, onOpenChange, onSaved }: TagLibraryDialogProps) {
+function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: TagLibraryFormDialogProps) {
     const { t } = useTranslation();
     const { toast } = useToast();
-    const fileInputId = useRef(`tag-library-txt-${Math.random().toString(36).slice(2)}`).current;
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
-    const [tagsText, setTagsText] = useState("");
     const [saving, setSaving] = useState(false);
-    const tags = useMemo(() => parseTags(tagsText), [tagsText]);
 
     useEffect(() => {
         if (!open) return;
         setName(initial?.name || "");
         setDescription(initial?.description || "");
-        setTagsText((initial?.tags || []).join("\n"));
     }, [open, initial]);
-
-    const handleUploadTxt = (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (readerEvent) => {
-            const text = String(readerEvent.target?.result || "");
-            const merged = parseTags(text);
-            setTagsText(merged.join("\n"));
-        };
-        reader.readAsText(file);
-        event.target.value = "";
-    };
 
     const handleSave = async () => {
         const trimmedName = name.trim();
@@ -100,20 +123,22 @@ function TagLibraryDialog({ open, mode, initial, onOpenChange, onSaved }: TagLib
             toast({ variant: "error", description: t("build.tagLibraryNameRequired", "标签库名称不能为空") });
             return;
         }
-        if (tags.length > TAG_LIMIT) {
-            toast({ variant: "error", description: t("build.tagLibraryLimit", "单个标签库最多 200 个标签") });
+        if (trimmedName.length > TAG_LIBRARY_NAME_MAX_LENGTH) {
+            toast({
+                variant: "error",
+                description: t("build.tagLibraryNameMaxLength", "标签库名称不能超过20个字符"),
+            });
             return;
         }
         setSaving(true);
         const payload = {
             name: trimmedName,
             description: description.trim(),
-            tags,
         };
         const req =
             mode === "edit" && initial
                 ? updateKnowledgeSpaceTagLibraryApi(initial.id, payload)
-                : createKnowledgeSpaceTagLibraryApi({ ...payload });
+                : createKnowledgeSpaceTagLibraryApi({ ...payload, tags: [] });
         const res = await captureAndAlertRequestErrorHoc(req);
         setSaving(false);
         if (!res) return;
@@ -124,166 +149,278 @@ function TagLibraryDialog({ open, mode, initial, onOpenChange, onSaved }: TagLib
 
     const title =
         mode === "edit"
-            ? t("build.renameTag", "重命名标签")
-            : t("build.addTag", "新增标签");
+            ? t("build.editTagLibrary", "编辑标签库")
+            : t("build.createTagLibrary", "新增标签库");
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[680px] bg-background-login">
+            <DialogContent className="sm:max-w-[520px] bg-background-login">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-5 py-2">
+                <form
+                    autoComplete="off"
+                    className="space-y-5 py-2"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        void handleSave();
+                    }}
+                >
                     <div>
-                        <Label className="bisheng-label">
+                        <Label className="bisheng-label" htmlFor="tag-library-name">
                             {t("build.tagLibraryName", "标签库名称")}<span className="bisheng-tip">*</span>
                         </Label>
                         <Input
+                            id="tag-library-name"
+                            name="tag-library-name"
+                            type="text"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            data-1p-ignore
+                            data-lpignore="true"
+                            data-form-type="other"
                             className="mt-2"
                             value={name}
-                            maxLength={200}
+                            maxLength={TAG_LIBRARY_NAME_MAX_LENGTH}
+                            placeholder={t("build.tagLibraryNamePlaceholder", "请输入标签库名称")}
                             onChange={(e) => setName(e.target.value)}
                         />
                     </div>
                     <div>
-                        <Label className="bisheng-label">{t("build.description", "说明")}</Label>
+                        <Label className="bisheng-label" htmlFor="tag-library-description">
+                            {t("build.description", "说明")}
+                        </Label>
                         <Textarea
+                            id="tag-library-description"
+                            name="tag-library-description"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            data-1p-ignore
+                            data-lpignore="true"
+                            data-form-type="other"
                             className="mt-2 min-h-20"
                             value={description}
                             maxLength={1000}
                             onChange={(e) => setDescription(e.target.value)}
                         />
                     </div>
-                    <div>
-                        <div className="mb-2 flex items-center justify-between">
-                            <Label className="bisheng-label">{t("build.tags", "标签")}</Label>
-                            <span className="text-xs text-muted-foreground">{tags.length}/{TAG_LIMIT}</span>
-                        </div>
-                        <div className="relative">
-                            <Textarea
-                                className="min-h-64 resize-none pr-24 font-mono text-sm"
-                                value={tagsText}
-                                onChange={(e) => setTagsText(e.target.value)}
-                                placeholder={t("build.tagLibraryTagsPlaceholder", "每行一个标签")}
-                            />
-                            <input
-                                type="file"
-                                accept=".txt"
-                                id={fileInputId}
-                                className="hidden"
-                                onChange={handleUploadTxt}
-                            />
-                            <Label
-                                htmlFor={fileInputId}
-                                className="absolute right-2 top-2 flex cursor-pointer items-center gap-1"
-                            >
-                                <Upload color="blue" className="size-3" />
-                                <span className="text-xs text-primary">
-                                    {t("build.txtFile", "txt文件")}
-                                </span>
-                            </Label>
-                        </div>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
-                        {t("cancel", { ns: "bs" })}
-                    </Button>
-                    <Button className="px-8" disabled={saving} onClick={handleSave}>
-                        {t("confirm", { ns: "bs" })}
-                    </Button>
-                </DialogFooter>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
+                            {t("cancel", { ns: "bs" })}
+                        </Button>
+                        <Button type="submit" className="px-8" disabled={saving}>
+                            {t("confirm", { ns: "bs" })}
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     );
 }
 
-
-function TagDialog({ open, mode, initial, onOpenChange, onSaved }: TagDialogProps) {
+function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTagsDialogProps) {
     const { t } = useTranslation();
     const { toast } = useToast();
-    const fileInputId = useRef(`tag-library-txt-${Math.random().toString(36).slice(2)}`).current;
-    const [name, setName] = useState("");
-    const [originName, setOriginName] = useState("");
-    const [resourceType, setResourceType] = useState("");
+    const [tagItems, setTagItems] = useState<KnowledgeSpaceTagLibraryTagItem[]>([]);
+    const [newTag, setNewTag] = useState("");
+    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        if (!open) return;
-        setName("");
-        setOriginName(initial?.tag_name || "");
-        setResourceType(initial?.resource_type || "");
-    }, [open, initial]);
+    const loadTags = useCallback(async () => {
+        if (!library?.id) return;
+        setLoading(true);
+        const res = await captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibraryApi(library.id));
+        if (res) {
+            if (res.tag_items?.length) {
+                setTagItems(res.tag_items);
+            } else {
+                setTagItems(
+                    (res.tags || []).map((name) => ({
+                        name,
+                        resource_type: "manual_tag",
+                    })),
+                );
+            }
+        }
+        setLoading(false);
+    }, [library?.id]);
 
-    const handleSave = async () => {
-        const trimmedName = name.trim();
-        if (!trimmedName) {
+    useEffect(() => {
+        if (!open || !library?.id) return;
+        setNewTag("");
+        loadTags();
+    }, [open, library?.id, loadTags]);
+
+    const persistTagItems = async (nextItems: KnowledgeSpaceTagLibraryTagItem[]) => {
+        if (!library?.id) return false;
+        if (nextItems.length > TAG_LIMIT) {
+            toast({ variant: "error", description: t("build.tagLibraryLimit", "单个标签库最多 200 个标签") });
+            return false;
+        }
+        const { manualTags, aiTags } = splitTagItems(nextItems);
+        setSaving(true);
+        const res = await captureAndAlertRequestErrorHoc(
+            updateKnowledgeSpaceTagLibraryApi(library.id, { tags: manualTags, ai_tags: aiTags }),
+        );
+        setSaving(false);
+        if (!res) return false;
+        setTagItems(
+            res.tag_items?.length
+                ? res.tag_items
+                : (res.tags || []).map((name) => ({ name, resource_type: "manual_tag" })),
+        );
+        onUpdated();
+        return true;
+    };
+
+    const handleAddTag = async () => {
+        const trimmed = newTag.trim();
+        if (!trimmed) {
             toast({ variant: "error", description: t("build.tagNameRequired", "标签名称不能为空") });
             return;
         }
-        setSaving(true);
-        const payload = {
-            tag_name: trimmedName,
-            resource_type: resourceType,
-        };
-        const req =
-            mode === "edit" && initial
-                ? updateKnowledgeSpaceTagApi({ original_tag_name: originName, ...payload })
-                : createKnowledgeSpaceTagApi({ ...payload });
-        const res = await captureAndAlertRequestErrorHoc(req);
-        setSaving(false);
-        if (!res) return;
-        toast({ variant: "success", description: t("build.saved", "已保存") });
-        onOpenChange(false);
-        onSaved();
+        if (tagItems.some((item) => item.name === trimmed)) {
+            toast({ variant: "error", description: t("build.tagAlreadyExists", "标签已存在") });
+            return;
+        }
+        const ok = await persistTagItems([
+            ...tagItems,
+            { name: trimmed, resource_type: "manual_tag" },
+        ]);
+        if (ok) {
+            setNewTag("");
+            toast({ variant: "success", description: t("build.saved", "已保存") });
+        }
     };
 
-    const title =
-        mode === "edit"
-            ? t("build.renameTag", "重命名标签")
-            : t("build.addTag", "新增标签");
+    const handleDeleteTag = (item: KnowledgeSpaceTagLibraryTagItem) => {
+        bsConfirm({
+            title: t("build.deleteTagTitle", "删除标签"),
+            desc: t("build.deleteTagFromLibraryDesc", "确定从该标签库中删除此标签？"),
+            showClose: true,
+            okTxt: t("build.confirmDelete", "确认删除"),
+            canelTxt: t("cancel", { ns: "bs" }),
+            async onOk(next) {
+                const ok = await persistTagItems(
+                    tagItems.filter(
+                        (tag) => !(tag.name === item.name && tag.resource_type === item.resource_type),
+                    ),
+                );
+                if (ok) {
+                    toast({ variant: "success", description: t("build.deleted", "已删除") });
+                }
+                next?.();
+            },
+        });
+    };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[400px] bg-background-login">
+            <DialogContent className="sm:max-w-[920px] bg-background-login">
                 <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
+                    <DialogTitle>
+                        {t("build.tagLibraryTagsTitle", "标签库标签")} — {library?.name || ""}
+                    </DialogTitle>
                 </DialogHeader>
-                 <p className="mt-1 text-sm text-[#86909C]">
-                    {t(
-                        "build.autoTagGenerationDesc",
-                        "加入平台词表后，AI打标与人工选标均可使用。",
-                    )}
-                </p>
-                {mode === "edit" && (
-                    <div className="space-y-5 py-2">
-                        <div>
-                            <Label className="bisheng-label">
-                            {t("build.originalTagName", "原标签名")}: {originName}
-                            </Label>
-                        </div>
-                    </div>
-                )}
-                <div className="space-y-5 py-2">
-                    <div>
-                        <Label className="bisheng-label">
-                            {t("build.tagNewName", "新标签名")}<span className="bisheng-tip">*</span>
-                        </Label>
-                        <Input 
-                            placeholder={t("build.tagNamePlaceholder", "例如：安全生产")}
-                            className="mt-2"
-                            value={name}
+                <div className="space-y-4 py-2">
+                    <div className="flex items-center gap-2">
+                        <Input
+                            id="tag-library-tag-name"
+                            name="tag-library-tag-name"
+                            type="text"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            data-1p-ignore
+                            data-lpignore="true"
+                            data-form-type="other"
+                            className="flex-1"
+                            value={newTag}
                             maxLength={100}
-                            onChange={(e) => setName(e.target.value)}
+                            placeholder={t("build.tagNamePlaceholder", "例如：安全生产")}
+                            onChange={(e) => setNewTag(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleAddTag();
+                                }
+                            }}
                         />
+                        <Button disabled={saving} onClick={handleAddTag}>
+                            <Plus className="mr-1 size-4" />
+                            {t("build.addTag", "新增标签")}
+                        </Button>
                     </div>
+                    <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
+                        <table className="w-full table-fixed border-collapse">
+                            <thead className="sticky top-0 z-10 bg-background">
+                                <tr className="text-left text-sm text-muted-foreground">
+                                    <th className="w-[22%] px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
+                                    <th className="w-[14%] px-3 py-3 font-medium">{t("build.tagSource", "标签来源")}</th>
+                                    <th className="w-[12%] px-3 py-3 font-medium">{t("build.tagUsedCount", "使用知识数")}</th>
+                                    <th className="w-[18%] px-3 py-3 font-medium">{t("build.createTime", "创建时间")}</th>
+                                    <th className="w-[14%] px-3 py-3 font-medium">{t("build.creator", "创建者")}</th>
+                                    <th className="w-[10%] px-3 py-3 font-medium">{t("build.operation", "操作")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr>
+                                        <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
+                                            {t("loading")}
+                                        </td>
+                                    </tr>
+                                ) : tagItems.length === 0 ? (
+                                    <tr>
+                                        <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
+                                            {t("build.tagLibraryTagsEmpty", "暂无标签，请在上方添加")}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    tagItems.map((item) => (
+                                        <tr
+                                            key={`${item.resource_type}-${item.name}`}
+                                            className="border-t text-sm"
+                                        >
+                                            <td className="truncate px-3 py-3 font-medium">{item.name}</td>
+                                            <td className="truncate px-3 py-3 text-muted-foreground">
+                                                {formatTagSource(item.resource_type, t)}
+                                            </td>
+                                            <td className="px-3 py-3">{item.resource_count ?? 0}</td>
+                                            <td className="truncate px-3 py-3 text-muted-foreground">
+                                                {formatDateTime(item.create_time)}
+                                            </td>
+                                            <td className="truncate px-3 py-3 text-muted-foreground">
+                                                {item.creator_name || "-"}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    disabled={saving}
+                                                    onClick={() => handleDeleteTag(item)}
+                                                >
+                                                    <Trash2 className="size-4" />
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        {tagItems.length}/{TAG_LIMIT}
+                    </p>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
-                        {t("cancel", { ns: "bs" })}
-                    </Button>
-                    <Button className="px-8" disabled={saving} onClick={handleSave}>
-                        {t("confirm", { ns: "bs" })}
+                        {t("close", { ns: "bs", defaultValue: "关闭" })}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -291,29 +428,28 @@ function TagDialog({ open, mode, initial, onOpenChange, onSaved }: TagDialogProp
     );
 }
 
-
-const PAGE_SIZE = 10;
-
-export default function KnowledgeSpaceTagSection({
+export default function KnowledgeSpaceTagLibrarySection({
     visible,
     onToggle,
-}: KnowledgeSpaceTagSectionProps) {
+}: KnowledgeSpaceTagLibrarySectionProps) {
     const { t } = useTranslation();
     const { toast } = useToast();
     const [keyword, setKeyword] = useState("");
-    const [rows, setRows] = useState<KnowledgeSpaceTagListItem[]>([]);
+    const [rows, setRows] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
-    const [editing, setEditing] = useState<KnowledgeSpaceTagDetail | null>(null);
+    const [formDialogOpen, setFormDialogOpen] = useState(false);
+    const [formDialogMode, setFormDialogMode] = useState<"create" | "edit">("create");
+    const [editingLibrary, setEditingLibrary] = useState<KnowledgeSpaceTagLibraryDetail | null>(null);
+    const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
+    const [selectedLibrary, setSelectedLibrary] = useState<KnowledgeSpaceTagLibraryListItem | null>(null);
 
     const loadData = useCallback(async (targetPage: number) => {
         setLoading(true);
         const res = await captureAndAlertRequestErrorHoc(
-            getKnowledgeSpaceTagListApi({ page: targetPage, page_size: PAGE_SIZE, keyword: keyword }),
+            getKnowledgeSpaceTagLibrariesApi({ page: targetPage, page_size: PAGE_SIZE, keyword: keyword || undefined }),
         );
         if (res) {
             setRows(res.data || []);
@@ -334,48 +470,52 @@ export default function KnowledgeSpaceTagSection({
         loadData(newPage);
     };
 
-    const filteredRows = useMemo(() => {
-        return rows;
-    }, [rows]);
-
     const openCreate = () => {
-        setDialogMode("create");
-        setEditing(null);
-        setDialogOpen(true);
+        setFormDialogMode("create");
+        setEditingLibrary(null);
+        setFormDialogOpen(true);
     };
 
-    const openEdit = async (row: KnowledgeSpaceTagListItem) => {
-        setDialogMode("edit");
-        setEditing(row);
-        setDialogOpen(true);
+    const openEdit = async (row: KnowledgeSpaceTagLibraryListItem, event: MouseEvent) => {
+        event.stopPropagation();
+        const detail = await captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibraryApi(row.id));
+        if (!detail) return;
+        setFormDialogMode("edit");
+        setEditingLibrary(detail);
+        setFormDialogOpen(true);
     };
 
-    const handleDelete = async (row: KnowledgeSpaceTagListItem) => {
-        // Look up the blast radius before showing the confirm dialog so the admin
-        // sees exactly how many knowledge spaces will have their auto-tag binding
-        // cleared. Falls back to a generic warning if the lookup fails.
-        const count = row?.resource_count ?? 0;
-        const desc = count > 0
-            ? t(
-                "build.deleteTagDescWithCount",
-                "删除后将影响 {{count}} 个知识文件，这些文件的自动生成标签会被关闭。不能继续操作。",
-                { count },
-            )
-            : t(
-                "build.deleteTagDescEmpty",
-                "当前没有知识文件绑定此标签。是否继续删除？",
-            );
+    const openTagsDialog = (row: KnowledgeSpaceTagLibraryListItem) => {
+        setSelectedLibrary(row);
+        setTagsDialogOpen(true);
+    };
+
+    const handleDelete = async (row: KnowledgeSpaceTagLibraryListItem, event: MouseEvent) => {
+        event.stopPropagation();
+        if (row.tag_count > 0) {
+            toast({
+                variant: "error",
+                description: t("build.deleteTagLibraryHasTags", "标签库中存在标签，无法删除"),
+            });
+            return;
+        }
+        const usage = await captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibraryUsageApi(row.id));
+        const count = usage?.count ?? 0;
+        if (count > 0) {
+            toast({
+                variant: "error",
+                description: t("build.deleteTagLibraryHasBindings", "标签库已关联知识空间，无法删除"),
+            });
+            return;
+        }
         bsConfirm({
-            title: t("build.deleteTagTitle", "删除标签"),
-            desc,
+            title: t("build.deleteTagLibraryTitle", "删除标签库"),
+            desc: t("build.deleteTagLibraryConfirm", "确定删除该空标签库吗？"),
             showClose: true,
             okTxt: t("build.confirmDelete", "确认删除"),
             canelTxt: t("cancel", { ns: "bs" }),
-            okHidden: count > 0,
             async onOk(next) {
-                const res = await captureAndAlertRequestErrorHoc(
-                    deleteKnowledgeSpaceTagApi({ tag_name: row.tag_name, resource_type: row.resource_type }),
-                );
+                const res = await captureAndAlertRequestErrorHoc(deleteKnowledgeSpaceTagLibraryApi(row.id));
                 if (res) {
                     toast({ variant: "success", description: t("build.deleted", "已删除") });
                     loadData(page);
@@ -391,12 +531,12 @@ export default function KnowledgeSpaceTagSection({
                 <div className="flex items-center justify-between gap-4">
                     <div>
                         <p className="text-lg font-bold">
-                            {t("build.autoTagGenerationTitle", "标签管理")}
+                            {t("build.tagLibraryManagementTitle", "标签库管理")}
                         </p>
                         <p className="mt-1 text-sm text-[#86909C]">
                             {t(
-                                "build.autoTagGenerationDesc",
-                                "维护平台统一标签词表；AI打标优先从此选取，词表外推荐进入审核。",
+                                "build.tagLibraryManagementDesc",
+                                "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标从库中选取候选标签。",
                             )}
                         </p>
                     </div>
@@ -408,32 +548,38 @@ export default function KnowledgeSpaceTagSection({
                         <div className="mb-3 flex items-center gap-2">
                             <SearchInput
                                 className="w-[280px]"
-                                placeholder={t("build.searchTag", "按标签名搜索")}
+                                placeholder={t("build.searchTagLibrary", "按标签库名搜索")}
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                             />
                             <div className="ml-auto">
                                 <Button onClick={openCreate}>
                                     <Plus className="mr-2 size-4" />
-                                    {t("build.addTag", "新增标签")}
+                                    {t("build.createTagLibrary", "新增标签库")}
                                 </Button>
                             </div>
                         </div>
 
-                        <div className="max-h-[180px] overflow-y-auto rounded-md border bg-background">
-                            <table className="w-full table-fixed border-collapse">
+                        <div className="max-h-[220px] overflow-y-auto overflow-x-auto rounded-md border bg-background">
+                            <table className="w-full min-w-[760px] table-fixed border-collapse">
                                 <thead className="sticky top-0 z-10 bg-background">
                                     <tr className="text-left text-sm text-muted-foreground">
-                                        <th className="w-[28%] px-4 py-3 font-medium">
-                                            {t("build.tagName", "标签名称")}
+                                        <th className="w-[22%] px-4 py-3 font-medium">
+                                            {t("build.tagLibraryName", "标签库名称")}
                                         </th>
-                                        <th className="w-[28%] px-4 py-3 font-medium">
-                                            {t("build.tagSource", "标签来源")}
+                                        <th className="w-[10%] px-4 py-3 font-medium">
+                                            {t("build.tagCount", "标签数量")}
                                         </th>
-                                        <th className="w-[200px] px-4 py-3 font-medium">
-                                            {t("build.tagUsedCount", "使用知识数")}
+                                        <th className="w-[12%] px-4 py-3 font-medium">
+                                            {t("build.boundKnowledgeSpaces", "关联知识库")}
                                         </th>
-                                        <th className="w-[320px] px-4 py-3 font-medium">
+                                        <th className="w-[12%] px-4 py-3 font-medium">
+                                            {t("build.totalKnowledgeUsage", "使用知识总数")}
+                                        </th>
+                                        <th className="w-[12%] px-4 py-3 font-medium">
+                                            {t("build.viewTags", "查看标签")}
+                                        </th>
+                                        <th className="w-[32%] px-4 py-3 font-medium">
                                             {t("build.operation", "操作")}
                                         </th>
                                     </tr>
@@ -441,31 +587,47 @@ export default function KnowledgeSpaceTagSection({
                                 <tbody>
                                     {loading ? (
                                         <tr>
-                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={4}>
+                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={6}>
                                                 {t("loading")}
                                             </td>
                                         </tr>
-                                    ) : filteredRows.length === 0 ? (
+                                    ) : rows.length === 0 ? (
                                         <tr>
-                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={4}>
-                                                {t("build.tagEmpty", "暂无平台标签，请在右侧增加")}
+                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={6}>
+                                                {t("build.tagLibraryEmpty", "暂无标签库，请点击右上角新增")}
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredRows.map((row) => (
-                                            <tr key={row.tag_name} className="border-t text-sm">
-                                                <td className="truncate px-4 py-3 font-medium">{row.tag_name}</td>
-                                                <td className="truncate px-4 py-3 font-medium">{row.resource_type === "system_tag" ? "系统标签" : (row.resource_type === "ai_auto_tag" ? "AI标签" : "人工标签")}</td>
-                                                <td className="px-4 py-3">{row.resource_count}</td>
+                                        rows.map((row) => (
+                                            <tr
+                                                key={row.id}
+                                                className="border-t text-sm hover:bg-muted/40"
+                                            >
+                                                <td className="truncate px-4 py-3 font-medium">{row.name}</td>
+                                                <td className="px-4 py-3">{row.tag_count}</td>
+                                                <td className="px-4 py-3">
+                                                    <BoundSpaceNamesCell names={row.bound_space_names || []} />
+                                                </td>
+                                                <td className="px-4 py-3">{row.used_knowledge_count ?? 0}</td>
+                                                <td className="px-4 py-3">
+                                                    <Button
+                                                        variant="link"
+                                                        className="h-auto p-0"
+                                                        onClick={() => openTagsDialog(row)}
+                                                    >
+                                                        {t("build.viewTags", "查看标签")}
+                                                    </Button>
+                                                </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(row)}>
+                                                        <Button variant="ghost" size="icon" onClick={(e) => openEdit(row, e)}>
                                                             <Pencil className="size-4" />
                                                         </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            onClick={() => handleDelete(row)}
+                                                            disabled={row.tag_count > 0}
+                                                            onClick={(e) => handleDelete(row, e)}
                                                         >
                                                             <Trash2 className="size-4" />
                                                         </Button>
@@ -477,7 +639,7 @@ export default function KnowledgeSpaceTagSection({
                                 </tbody>
                             </table>
                         </div>
-                        {filteredRows.length > 0 && (
+                        {rows.length > 0 && (
                             <div className="mt-2 flex items-center justify-end gap-2">
                                 <Button
                                     variant="outline"
@@ -504,12 +666,19 @@ export default function KnowledgeSpaceTagSection({
                 )}
             </div>
 
-            <TagDialog
-                open={dialogOpen}
-                mode={dialogMode}
-                initial={editing}
-                onOpenChange={setDialogOpen}
+            <TagLibraryFormDialog
+                open={formDialogOpen}
+                mode={formDialogMode}
+                initial={editingLibrary}
+                onOpenChange={setFormDialogOpen}
                 onSaved={() => loadData(page)}
+            />
+
+            <LibraryTagsDialog
+                open={tagsDialogOpen}
+                library={selectedLibrary}
+                onOpenChange={setTagsDialogOpen}
+                onUpdated={() => loadData(page)}
             />
         </div>
     );

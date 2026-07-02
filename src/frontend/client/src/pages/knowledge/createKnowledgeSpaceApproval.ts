@@ -6,6 +6,22 @@ import {
 import { createSpaceApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
 import type { CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 
+export function buildAutoTagLibraryPayload(
+    libraryIds: number[],
+    options?: { syncExplicitly?: boolean },
+) {
+    const normalized = [...new Set(libraryIds.filter(Boolean).map(Number))];
+    if (!normalized.length) {
+        return options?.syncExplicitly
+            ? { auto_tag_library_ids: [] as number[], auto_tag_library_id: null }
+            : {};
+    }
+    return {
+        auto_tag_library_ids: normalized,
+        auto_tag_library_id: normalized[0],
+    };
+}
+
 export function mapCreateFormToShougangApprovalPayload(
     form: CreateKnowledgeSpaceFormData,
 ): ShougangKnowledgeSpaceCreateApprovalPayload {
@@ -24,8 +40,7 @@ export function mapCreateFormToShougangApprovalPayload(
         space_level: form.spaceLevel,
         department_id: form.departmentId,
         auto_tag_enabled: form.autoTagEnabled,
-        auto_tag_library_id: form.autoTagLibraryId,
-        auto_tag_custom_tags: form.autoTagCustomTags,
+        ...buildAutoTagLibraryPayload(form.autoTagLibraryIds),
         reason: form.reason,
     };
 }
@@ -49,8 +64,7 @@ export async function submitKnowledgeSpaceCreate(
             is_released: false,
             space_level: form.spaceLevel,
             auto_tag_enabled: form.autoTagEnabled,
-            auto_tag_library_id: form.autoTagLibraryId,
-            auto_tag_custom_tags: form.autoTagCustomTags,
+            ...buildAutoTagLibraryPayload(form.autoTagLibraryIds),
         });
         return {
             decision: "created",

@@ -40,14 +40,26 @@ def _make_space(space_id: int = 42) -> Knowledge:
 
 
 @pytest.mark.asyncio
-async def test_apply_disabled_clears_private_library_and_unbinds():
+async def test_apply_disabled_binds_public_libraries_without_auto_tag():
     space = _make_space()
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge",
-        new=AsyncMock(),
-    ) as delete_private:
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge",
+            new=AsyncMock(),
+        ) as delete_private,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new=AsyncMock(),
+        ) as validate,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.areplace_for_knowledge",
+            new=AsyncMock(),
+        ) as replace_links,
+    ):
         enabled, library_id = await KnowledgeSpaceService._apply_auto_tag_binding(
             knowledge=space,
             auto_tag_enabled=False,
@@ -58,8 +70,46 @@ async def test_apply_disabled_clears_private_library_and_unbinds():
         )
 
     assert enabled is False
-    assert library_id is None
+    assert library_id == 99
     delete_private.assert_awaited_once_with(space.id)
+    validate.assert_awaited_once_with([99])
+    replace_links.assert_awaited_once_with(space.id, 1, [99])
+
+
+@pytest.mark.asyncio
+async def test_apply_disabled_preserves_links_when_library_fields_omitted():
+    space = _make_space()
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+            new=AsyncMock(return_value=[12, 15]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.areplace_for_knowledge",
+            new=AsyncMock(),
+        ) as replace_links,
+    ):
+        enabled, library_id = await KnowledgeSpaceService._apply_auto_tag_binding(
+            knowledge=space,
+            auto_tag_enabled=False,
+            auto_tag_library_id=None,
+            auto_tag_library_ids=None,
+            auto_tag_custom_tags=None,
+            user_id=7,
+            tenant_id=1,
+        )
+
+    assert enabled is False
+    assert library_id == 12
+    replace_links.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -90,11 +140,17 @@ async def test_apply_custom_tags_upserts_private_and_returns_its_id():
         user_id=7,
     )
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryDao.aupsert_private",
-        new=AsyncMock(return_value=private),
-    ) as upsert:
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aupsert_private",
+            new=AsyncMock(return_value=private),
+        ) as upsert,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.areplace_for_knowledge",
+            new=AsyncMock(),
+        ) as replace_links,
+    ):
         enabled, library_id = await KnowledgeSpaceService._apply_auto_tag_binding(
             knowledge=space,
             auto_tag_enabled=True,
@@ -113,6 +169,7 @@ async def test_apply_custom_tags_upserts_private_and_returns_its_id():
     assert kwargs["tenant_id"] == 1
     assert kwargs["user_id"] == 7
     assert kwargs["tags"] == ["合同", "制度", "合同"]
+    replace_links.assert_awaited_once_with(space.id, 1, [555])
 
 
 @pytest.mark.asyncio
@@ -134,15 +191,23 @@ async def test_apply_custom_tags_rejects_empty_after_normalize():
 async def test_apply_library_mode_validates_and_clears_orphan_private():
     space = _make_space()
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryService.validate_bindable_library",
-        new=AsyncMock(),
-    ) as validate, patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge",
-        new=AsyncMock(),
-    ) as delete_private:
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new=AsyncMock(),
+        ) as validate,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge",
+            new=AsyncMock(),
+        ) as delete_private,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.areplace_for_knowledge",
+            new=AsyncMock(),
+        ) as replace_links,
+    ):
         enabled, library_id = await KnowledgeSpaceService._apply_auto_tag_binding(
             knowledge=space,
             auto_tag_enabled=True,
@@ -154,8 +219,9 @@ async def test_apply_library_mode_validates_and_clears_orphan_private():
 
     assert enabled is True
     assert library_id == 10
-    validate.assert_awaited_once_with(10)
+    validate.assert_awaited_once_with([10])
     delete_private.assert_awaited_once_with(space.id)
+    replace_links.assert_awaited_once_with(space.id, 1, [10])
 
 
 # ──────────────────────────── _decorate_auto_tag_for_info ──────────────────────
@@ -171,7 +237,12 @@ async def test_decorate_no_library_sets_library_mode_and_clears_tags():
         auto_tag_custom_tags=["leftover"],
     )
 
-    await KnowledgeSpaceService._decorate_auto_tag_for_info(result)
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+        new=AsyncMock(return_value=[]),
+    ):
+        await KnowledgeSpaceService._decorate_auto_tag_for_info(result)
 
     assert result.auto_tag_mode == "library"
     assert result.auto_tag_custom_tags is None
@@ -196,10 +267,20 @@ async def test_decorate_private_library_masks_id_and_returns_tags():
         user_id=7,
     )
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryDao.aget",
-        new=AsyncMock(return_value=private),
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=private),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.list_tag_names",
+            new=AsyncMock(return_value=(["合同", "制度"], [])),
+        ),
     ):
         await KnowledgeSpaceService._decorate_auto_tag_for_info(result)
 
@@ -227,16 +308,23 @@ async def test_decorate_public_library_keeps_id_and_marks_library_mode():
         user_id=7,
     )
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryDao.aget",
-        new=AsyncMock(return_value=public),
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=public),
+        ),
     ):
         await KnowledgeSpaceService._decorate_auto_tag_for_info(result)
 
     assert result.auto_tag_mode == "library"
     assert result.auto_tag_custom_tags is None
     assert result.auto_tag_library_id == 10
+    assert result.auto_tag_library_ids == [10]
 
 
 @pytest.mark.asyncio
@@ -260,10 +348,16 @@ async def test_decorate_private_library_owned_by_other_space_treated_as_library(
         user_id=7,
     )
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeSpaceTagLibraryDao.aget",
-        new=AsyncMock(return_value=foreign_private),
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=foreign_private),
+        ),
     ):
         await KnowledgeSpaceService._decorate_auto_tag_for_info(result)
 
@@ -280,9 +374,7 @@ async def test_visibility_gate_defaults_to_visible_when_config_missing():
     import bisheng.knowledge.domain.services.knowledge_space_service as svc
 
     fake_workstation = SimpleNamespace(
-        get_knowledge_space_config_with_meta=AsyncMock(
-            return_value=(None, False, "", False)
-        )
+        get_knowledge_space_config_with_meta=AsyncMock(return_value=(None, False, "", False))
     )
     with patch.object(svc, "WorkStationService", fake_workstation):
         assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is True
@@ -294,9 +386,7 @@ async def test_visibility_gate_honours_auto_tag_visible_flag():
 
     cfg = SimpleNamespace(auto_tag_visible=True)
     fake_workstation = SimpleNamespace(
-        get_knowledge_space_config_with_meta=AsyncMock(
-            return_value=(cfg, False, "", True)
-        )
+        get_knowledge_space_config_with_meta=AsyncMock(return_value=(cfg, False, "", True))
     )
     with patch.object(svc, "WorkStationService", fake_workstation):
         assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is True
@@ -308,9 +398,7 @@ async def test_visibility_gate_honours_explicit_auto_tag_hidden_flag():
 
     cfg = SimpleNamespace(auto_tag_visible=False)
     fake_workstation = SimpleNamespace(
-        get_knowledge_space_config_with_meta=AsyncMock(
-            return_value=(cfg, False, "", True)
-        )
+        get_knowledge_space_config_with_meta=AsyncMock(return_value=(cfg, False, "", True))
     )
     with patch.object(svc, "WorkStationService", fake_workstation):
         assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is False

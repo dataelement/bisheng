@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 
 export default function Preview({ onBeforView }) {
-        const { t } = useTranslation()
+    const { t } = useTranslation()
     const [open, setOpen] = useState(false)
     const benchUrl = location.origin + '/workspace/'
 

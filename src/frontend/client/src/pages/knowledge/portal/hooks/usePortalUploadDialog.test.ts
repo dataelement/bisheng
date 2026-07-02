@@ -4,9 +4,9 @@ import {
     FileType,
     addFilesApi,
     createFolderApi,
+    getBoundTagLibraryTagsForKnowledgeApi,
     getSimilarCandidatesApi,
-    getKnowledgeSpaceTagLibrariesApi,
-    getKnowledgeSpaceTagLibraryDetailApi,
+    getSpaceTagsApi,
     listKnowledgeFolders,
     recommendUploadFoldersApi,
     retryDuplicateFilesApi,
@@ -27,8 +27,8 @@ jest.mock("~/api/knowledge", () => ({
     addFilesApi: jest.fn(),
     createFolderApi: jest.fn(),
     getSimilarCandidatesApi: jest.fn(),
-    getKnowledgeSpaceTagLibrariesApi: jest.fn(),
-    getKnowledgeSpaceTagLibraryDetailApi: jest.fn(),
+    getBoundTagLibraryTagsForKnowledgeApi: jest.fn(),
+    getSpaceTagsApi: jest.fn(),
     linkAsNewVersionApi: jest.fn(),
     listKnowledgeFolders: jest.fn(),
     recommendUploadFoldersApi: jest.fn(),
@@ -78,8 +78,8 @@ describe("usePortalUploadDialog", () => {
         jest.clearAllMocks();
         jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
         jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
-        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({ data: [] } as any);
-        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({ tags: [] } as any);
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
+        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([] as any);
         jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
         jest.mocked(createFolderApi).mockResolvedValue({ id: 1, name: "研发资料" } as any);
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
@@ -445,6 +445,31 @@ describe("usePortalUploadDialog", () => {
             business_domain_code: "PP",
             manual_tag_ids: [1],
             manual_tag_names: ["制度"],
+        });
+    });
+
+    test("loads deduplicated tag options from all bound tag libraries", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 1, name: "已有标签" }] as any);
+        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([
+            { name: "制度", resource_type: "manual_tag" },
+            { name: "技术文档", resource_type: "system_tag" },
+            { name: "制度", resource_type: "ai_auto_tag" },
+            { name: "已有标签", resource_type: "manual_tag" },
+        ] as any);
+
+        const { hook } = renderUploadDialogHook();
+
+        act(() => {
+            hook.result.current.handleOpenUploadDialog();
+        });
+
+        await waitFor(() => {
+            expect(getBoundTagLibraryTagsForKnowledgeApi).toHaveBeenCalledWith("space-1");
+            expect(hook.result.current.uploadTagOptions).toEqual([
+                { label: "已有标签", value: "id:1" },
+                { label: "制度", value: "name:制度" },
+                { label: "技术文档", value: "name:技术文档" },
+            ]);
         });
     });
 });

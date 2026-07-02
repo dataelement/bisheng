@@ -1,6 +1,6 @@
-import { useState, KeyboardEvent, useEffect } from "react";
+import { useState, KeyboardEvent, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Trash2, X, Tag, Network, PencilLine } from "lucide-react";
+import { X, Tag, Network, PencilLine } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -13,11 +13,15 @@ import { useToastContext } from "~/Providers";
 import {
     SpaceTag,
     FileTag,
+    KnowledgeSpaceTagLibraryTagItem,
+    countSpaceNativeTags,
+    isBoundLibraryTagName,
     getSpaceTagsApi,
     addSpaceTagApi,
-    deleteSpaceTagApi,
     updateFileTagsApi,
     batchUpdateTagsApi,
+    getBoundTagLibraryTagsForKnowledgeApi,
+    getKnowledgeSpaceReviewTagVisibilityApi,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
@@ -40,6 +44,42 @@ interface EditTagsModalProps {
     initialTagIds?: number[];
 }
 
+function mergeRecommendedTags(items: KnowledgeSpaceTagLibraryTagItem[]): KnowledgeSpaceTagLibraryTagItem[] {
+    const seen = new Set<string>();
+    const merged: KnowledgeSpaceTagLibraryTagItem[] = [];
+    for (const item of items) {
+        const name = String(item.name ?? "").trim();
+        if (!name) continue;
+        const key = `${item.resource_type}:${name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push({ ...item, name });
+    }
+    return merged;
+}
+
+function findSpaceTagByName(tags: SpaceTag[], name: string): SpaceTag | undefined {
+    const normalized = name.trim().toLowerCase();
+    return tags.find((tag) => tag.name.trim().toLowerCase() === normalized);
+}
+
+function isPendingReviewSpaceTag(tag: SpaceTag): boolean {
+    return tag.review_status === 0;
+}
+
+function isApprovedSpaceTag(tag: SpaceTag): boolean {
+    if (tag.review_status === undefined || tag.review_status === null) {
+        return true;
+    }
+    // 1 = approved; 0 = pending; 2 = rejected
+    return tag.review_status === 1;
+}
+
+function isApprovedRecommendedTag(item: KnowledgeSpaceTagLibraryTagItem, spaceTags: SpaceTag[]): boolean {
+    const existing = findSpaceTagByName(spaceTags, item.name);
+    return !!existing && isApprovedSpaceTag(existing);
+}
+
 export function EditTagsModal({
     isOpen,
     onClose,
@@ -51,52 +91,232 @@ export function EditTagsModal({
 }: EditTagsModalProps) {
     const localize = useLocalize();
     const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
+    const [recommendedTags, setRecommendedTags] = useState<KnowledgeSpaceTagLibraryTagItem[]>([]);
+    const [recommendedLoading, setRecommendedLoading] = useState(false);
     // IDs of tags selected for this file
     const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
     // IDs of newly created manual tags that need review (picked during this dialog session)
     const [selectedReviewTagIds, setSelectedReviewTagIds] = useState<Set<number>>(new Set());
     const [inputValue, setInputValue] = useState("");
     const [loading, setLoading] = useState(false);
-    const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
+    const [spaceTagsLoading, setSpaceTagsLoading] = useState(false);
+    const [reviewTagConfigLoading, setReviewTagConfigLoading] = useState(true);
+    const [reviewTagEnabled, setReviewTagEnabled] = useState(false);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
     const isBatchMode = !!(fileIds && fileIds.length > 0);
+    const spaceNativeTagCount = countSpaceNativeTags(spaceTags, recommendedTags);
 
-    // Fetch space tags and reset state when opened
+    const isTagInputDisabled = reviewTagConfigLoading || !reviewTagEnabled;
+
+    // Fetch space tags and bound tag-library tags when opened
     useEffect(() => {
         if (!isOpen || !spaceId) return;
         setInputValue("");
         setSelectedTagIds(new Set(initialTagIds));
         setSelectedReviewTagIds(new Set());
+        setRecommendedTags([]);
+        setRecommendedLoading(true);
+        setSpaceTagsLoading(true);
+        setReviewTagConfigLoading(true);
+        setReviewTagEnabled(false);
+
+        getKnowledgeSpaceReviewTagVisibilityApi()
+            .then(({ enabled }) => setReviewTagEnabled(enabled))
+            .catch(() => setReviewTagEnabled(false))
+            .finally(() => setReviewTagConfigLoading(false));
+
         getSpaceTagsApi(spaceId)
             .then(setSpaceTags)
             .catch(() => {
                 showToast({ message: localize("com_knowledge.fetch_tags_failed"), status: "error" });
-            });
+            })
+            .finally(() => setSpaceTagsLoading(false));
+
+        getBoundTagLibraryTagsForKnowledgeApi(spaceId)
+            .then((items) => setRecommendedTags(mergeRecommendedTags(items)))
+            .catch(() => {
+                setRecommendedTags([]);
+            })
+            .finally(() => setRecommendedLoading(false));
     }, [isOpen, spaceId]);
+
+    // When review is off, drop pending/rejected tags from the current selection.
+    useEffect(() => {
+        if (!isOpen || reviewTagConfigLoading || spaceTagsLoading || reviewTagEnabled) return;
+
+        setSelectedTagIds((prev) => {
+            const approvedIds = [...prev].filter((id) => {
+                const tag = spaceTags.find((item) => item.id === id);
+                return tag && isApprovedSpaceTag(tag);
+            });
+            if (approvedIds.length === prev.size) return prev;
+            return new Set(approvedIds);
+        });
+        setSelectedReviewTagIds(new Set());
+    }, [isOpen, reviewTagConfigLoading, spaceTagsLoading, reviewTagEnabled, spaceTags]);
+
+    const isRecommendedTagSelected = (item: KnowledgeSpaceTagLibraryTagItem) =>
+        spaceTags.some(
+            (tag) => tag.name.trim().toLowerCase() === item.name.trim().toLowerCase() && selectedTagIds.has(tag.id),
+        );
+
+    const canSelectRecommendedTag = (item: KnowledgeSpaceTagLibraryTagItem) => {
+        if (spaceTagsLoading || recommendedLoading) return false;
+        if (!reviewTagEnabled) {
+            return isApprovedRecommendedTag(item, spaceTags);
+        }
+        return true;
+    };
+
+    const visibleRecommendedTags = useMemo(() => {
+        if (reviewTagEnabled || reviewTagConfigLoading) {
+            return recommendedTags;
+        }
+        if (spaceTagsLoading) {
+            return [];
+        }
+        return recommendedTags.filter((item) => isApprovedRecommendedTag(item, spaceTags));
+    }, [recommendedTags, reviewTagEnabled, reviewTagConfigLoading, spaceTagsLoading, spaceTags]);
+
+    const recommendedTagsLoading =
+        recommendedLoading || (!reviewTagEnabled && !reviewTagConfigLoading && spaceTagsLoading);
+
+    const addTagToSelection = (tag: SpaceTag) => {
+        if (!reviewTagEnabled && isPendingReviewSpaceTag(tag)) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
+        setSelectedTagIds((prev) => {
+            if (prev.has(tag.id)) return prev;
+            if (prev.size >= 10) {
+                showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
+                return prev;
+            }
+            return new Set(prev).add(tag.id);
+        });
+        if (isPendingReviewSpaceTag(tag)) {
+            setSelectedReviewTagIds((prev) => new Set(prev).add(tag.id));
+        }
+    };
 
     // Toggle a space tag selection
     const toggleTag = (tag: SpaceTag) => {
+        if (!reviewTagEnabled && isPendingReviewSpaceTag(tag) && !selectedTagIds.has(tag.id)) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
         setSelectedTagIds((prev) => {
             const next = new Set(prev);
             if (next.has(tag.id)) {
                 next.delete(tag.id);
+                if (isPendingReviewSpaceTag(tag)) {
+                    setSelectedReviewTagIds((reviewPrev) => {
+                        const reviewNext = new Set(reviewPrev);
+                        reviewNext.delete(tag.id);
+                        return reviewNext;
+                    });
+                }
             } else {
                 if (next.size >= 10) {
                     showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
                     return prev;
                 }
                 next.add(tag.id);
+                if (isPendingReviewSpaceTag(tag)) {
+                    setSelectedReviewTagIds((reviewPrev) => new Set(reviewPrev).add(tag.id));
+                }
             }
             return next;
         });
+    };
+
+    const resolveCreateTagErrorMessage = (err: any) => {
+        const statusCode = err?.status_code;
+        if (statusCode) {
+            const localized = localize(`api_errors.${statusCode}`);
+            if (localized && localized !== `api_errors.${statusCode}`) {
+                return localized;
+            }
+        }
+        return err?.status_message || localize("com_knowledge.create_tag_failed");
+    };
+
+    const selectOrCreateSpaceTag = async (tagName: string, resourceType?: string) => {
+        const trimmed = tagName.trim();
+        if (!trimmed) return;
+
+        const existing = findSpaceTagByName(spaceTags, trimmed);
+        if (existing) {
+            toggleTag(existing);
+            return;
+        }
+
+        if (!reviewTagEnabled) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
+
+        const fromBoundLibrary = isBoundLibraryTagName(trimmed, recommendedTags);
+
+        if (selectedTagIds.size >= 10) {
+            showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
+            return;
+        }
+
+        if (!fromBoundLibrary && spaceNativeTagCount >= 50) {
+            showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
+            return;
+        }
+
+        try {
+            const newTag = await addSpaceTagApi(spaceId, trimmed);
+            const enrichedTag: SpaceTag = {
+                ...newTag,
+                resource_type: resourceType || newTag.resource_type,
+            };
+            setSpaceTags((prev) => {
+                if (findSpaceTagByName(prev, trimmed)) return prev;
+                return [...prev, enrichedTag];
+            });
+            addTagToSelection(enrichedTag);
+            queryClient.invalidateQueries({ queryKey: ["spaceTags", spaceId] });
+        } catch (err: any) {
+            if (err?.status_code === 18050) {
+                try {
+                    const refreshed = await getSpaceTagsApi(spaceId);
+                    setSpaceTags(refreshed);
+                    const refetched = findSpaceTagByName(refreshed, trimmed);
+                    if (refetched) {
+                        addTagToSelection(refetched);
+                        return;
+                    }
+                } catch {
+                    // fall through to toast
+                }
+            }
+            showToast({ message: resolveCreateTagErrorMessage(err), status: "error" });
+        }
+    };
+
+    const handleSelectRecommendedTag = async (item: KnowledgeSpaceTagLibraryTagItem) => {
+        if (!canSelectRecommendedTag(item)) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
+        await selectOrCreateSpaceTag(item.name, item.resource_type);
     };
 
     // Enter key: create a new space tag, then select it
     const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key !== "Enter") return;
         e.preventDefault();
+        if (reviewTagConfigLoading) return;
+        if (!reviewTagEnabled) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
         const trimmed = inputValue.trim();
         if (!trimmed) return;
 
@@ -111,40 +331,30 @@ export function EditTagsModal({
         }
 
         // Check if the tag already exists in the space
-        const existing = spaceTags.find((t) => t.name === trimmed);
+        const existing = findSpaceTagByName(spaceTags, trimmed);
         if (existing) {
-            // Just select it
-            setSelectedTagIds((prev) => new Set(prev).add(existing.id));
+            addTagToSelection(existing);
             setInputValue("");
             return;
         }
 
-        if (spaceTags.length >= 50) {
+        if (spaceNativeTagCount >= 50) {
             showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
             return;
         }
 
-        // Create a new tag in the space
-        try {
-            const newTag = await addSpaceTagApi(spaceId, trimmed);
-            if (!newTag || newTag.id === undefined || newTag.id === null) {
-                showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "error" });
-                return;
-            }
-            setSpaceTags((prev) => [...prev, newTag]);
-            setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
-            setSelectedReviewTagIds((prev) => new Set(prev).add(newTag.id));
-            setInputValue("");
-            // Invalidate shared cache so search dropdown updates
-            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
-        } catch (err: any) {
-            showToast({ message: err?.status_message || localize("com_knowledge.create_tag_failed"), status: "error" });
-        }
+        await selectOrCreateSpaceTag(trimmed);
+        setInputValue("");
     };
 
     // Save: update file tags via API
     const handleSave = async () => {
         const pendingText = inputValue.trim();
+
+        if (!reviewTagEnabled && selectedReviewTagIds.size > 0) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
 
         setLoading(true);
 
@@ -172,32 +382,12 @@ export function EditTagsModal({
                 onSaved?.(savedTags);
             }
             // Invalidate shared spaceTags cache so search dropdown picks up new tags
-            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
+            queryClient.invalidateQueries({ queryKey: ["spaceTags", spaceId] });
             onClose(true);
         } catch {
             showToast({ message: localize("com_knowledge.tag_save_failed"), status: "error" });
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleDeleteSpaceTag = async (tag: SpaceTag) => {
-        if (deletingTagId !== null) return;
-        setDeletingTagId(tag.id);
-        try {
-            await deleteSpaceTagApi(spaceId, tag.id);
-            setSpaceTags((prev) => prev.filter((item) => item.id !== tag.id));
-            setSelectedTagIds((prev) => {
-                const next = new Set(prev);
-                next.delete(tag.id);
-                return next;
-            });
-            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
-            showToast({ message: localize("com_knowledge.delete_tag_success"), status: "success" });
-        } catch {
-            showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "error" });
-        } finally {
-            setDeletingTagId(null);
         }
     };
 
@@ -210,7 +400,43 @@ export function EditTagsModal({
     };
 
     // Derive selected tag names for display in input area
-    const selectedTags = spaceTags.filter((t) => selectedTagIds.has(t.id));
+    const selectedTags = spaceTags.filter(
+        (tag) =>
+            selectedTagIds.has(tag.id)
+            && (reviewTagEnabled || reviewTagConfigLoading || isApprovedSpaceTag(tag)),
+    );
+
+    const systemTags = visibleRecommendedTags.filter(
+        (t) => t.resource_type === "system_tag" || t.resource_type === "manual_tag",
+    );
+    const aiTags = visibleRecommendedTags.filter((t) => t.resource_type === "ai_auto_tag");
+    const manualTags = visibleRecommendedTags.filter(
+        (t) =>
+            t.resource_type !== "system_tag"
+            && t.resource_type !== "manual_tag"
+            && t.resource_type !== "ai_auto_tag",
+    );
+
+    const renderRecommendedTagItem = (item: KnowledgeSpaceTagLibraryTagItem) => {
+        const isSelected = isRecommendedTagSelected(item);
+        const isClickable = canSelectRecommendedTag(item);
+        return (
+            <span
+                key={`${item.resource_type}:${item.name}`}
+                onClick={() => {
+                    void handleSelectRecommendedTag(item);
+                }}
+                className={`px-2 h-7 flex items-center justify-center gap-1 text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
+                    ? "text-[#165dff] cursor-default bg-primary/10"
+                    : isClickable
+                        ? "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
+                        : "bg-[#f2f3f5] text-[#c9cdd4] cursor-not-allowed"
+                    }`}
+            >
+                {item.name}
+            </span>
+        );
+    };
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
@@ -219,7 +445,7 @@ export function EditTagsModal({
                 onInteractOutside={(e) => e.preventDefault()}
                 className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
             >
-                <DialogHeader className="h-auto shrink-0 space-y-0 px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
+                <DialogHeader className="h-auto shrink-0 space-y-0 border-b border-[#EBECF0] px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
@@ -232,15 +458,26 @@ export function EditTagsModal({
                         <X className="size-4" />
                     </button>
                 </DialogHeader>
-                <div className="flex items-start gap-0.5 px-6 text-[12px] leading-5 text-[#F53F3F]">
+                <div className="flex flex-1 flex-col gap-2 px-6 pt-5 pb-5 touch-mobile:px-4 touch-mobile:pt-5 touch-mobile:pb-5">
+                {reviewTagEnabled && (
+                    <div className="flex items-start gap-0.5 text-[12px] leading-5 text-[#F53F3F]">
                         <span className="shrink-0">***</span>
-                        <span>手动新增加的标签，需要后台管理员审核通过之后才能生效。</span>
-                </div>
-                <div className="flex flex-1 flex-col gap-0.5 px-6 py-2 pb-2 touch-mobile:px-4 touch-mobile:py-4">
+                        <span>{localize("com_knowledge.manual_tag_review_hint")}</span>
+                    </div>
+                )}
+                {!reviewTagEnabled && !reviewTagConfigLoading && (
+                    <div className="flex items-start gap-0.5 text-[12px] leading-5 text-[#86909c]">
+                        <span>{localize("com_knowledge.review_tag_input_disabled_placeholder")}</span>
+                    </div>
+                )}
+                <div className="flex flex-1 flex-col gap-0.5">
                     {/* Tags Input Box */}
                     <div
-                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"
-                        onClick={() => document.getElementById("tag-input")?.focus()}
+                        className={`relative flex min-h-8 flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors ${isTagInputDisabled ? "cursor-not-allowed bg-[#f7f8fa]" : "cursor-text focus-within:border-primary"}`}
+                        onClick={() => {
+                            if (isTagInputDisabled) return;
+                            document.getElementById("tag-input")?.focus();
+                        }}
                     >
                         {selectedTags.map((tag) => (
                             <span
@@ -263,14 +500,23 @@ export function EditTagsModal({
                             id="tag-input"
                             type="text"
                             value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
+                            onChange={(e) => {
+                                if (isTagInputDisabled) return;
+                                setInputValue(e.target.value);
+                            }}
                             onKeyDown={handleKeyDown}
+                            disabled={reviewTagConfigLoading}
+                            readOnly={!reviewTagEnabled && !reviewTagConfigLoading}
                             placeholder={
-                                selectedTags.length === 0 && !inputValue
-                                    ? localize("com_knowledge.input_tags_placeholder")
-                                    : ""
+                                reviewTagConfigLoading
+                                    ? localize("com_knowledge.loading")
+                                    : selectedTags.length === 0 && !inputValue
+                                        ? reviewTagEnabled
+                                            ? localize("com_knowledge.input_tags_placeholder")
+                                            : localize("com_knowledge.review_tag_input_disabled_placeholder")
+                                        : ""
                             }
-                            className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#86909c] min-h-[22px]"
+                            className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#86909c] min-h-[22px] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
                         // maxLength={8}
                         />
                         <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-[#999]">
@@ -278,80 +524,53 @@ export function EditTagsModal({
                         </span>
                     </div>
 
-                    {/* <div className="w-full h-px bg-[#ebecf0] my-[-1px]" /> */}
-
                     {/* 推荐标签 */}
                     <div className="flex flex-col gap-3 pt-1">
                         <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.recommended_tags")}</div>
-                        {spaceTags.length === 0 && (
+                        {recommendedTagsLoading && (
+                            <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.loading")}</span>
+                        )}
+                        {!recommendedTagsLoading && visibleRecommendedTags.length === 0 && (
                             <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
                         )}
-                        {(() => {
-                            const systemTags = spaceTags.filter((t) => t.resource_type === "system_tag");
-                            const aiTags = spaceTags.filter((t) => t.resource_type === "ai_auto_tag");
-                            const manualTags = spaceTags.filter((t) => !t.resource_type || t.resource_type === "manual_tag");
-
-                            const renderTagItem = (tag: SpaceTag) => {
-                                const isSelected = selectedTagIds.has(tag.id);
-                                return (
-                                    <span
-                                        key={tag.id}
-                                        onClick={() => toggleTag(tag)}
-                                        className={`px-2 h-7 flex items-center justify-center gap-1 text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
-                                            ? "text-[#165dff] cursor-default bg-primary/10"
-                                            : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
-                                            }`}
-                                    >
-                                        {tag.name}
-                                        <button
-                                            type="button"
-                                            className="flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void handleDeleteSpaceTag(tag);
-                                            }}
-                                            disabled={deletingTagId === tag.id}
-                                            title={localize("com_knowledge.delete")}
-                                        >
-                                            <Trash2 className="size-3" />
-                                        </button>
-                                    </span>
-                                );
-                            };
-
-                            return (
-                                <>
-                                    {systemTags.length > 0 && (
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex flex-wrap items-center gap-1">
-                                                <Network className="size-3.5 text-[#4e5969] shrink-0" />
-                                                {systemTags.map(renderTagItem)}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {aiTags.length > 0 && (
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex flex-wrap items-center gap-1">
-                                                <Tag className="size-3.5 text-[#4e5969] shrink-0" />
-                                                {aiTags.map(renderTagItem)}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {manualTags.length > 0 && (
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex flex-wrap items-center gap-1">
-                                                <PencilLine className="size-3.5 text-[#4e5969] shrink-0" />
-                                                {manualTags.map(renderTagItem)}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            );
-                        })()}
+                        {!recommendedTagsLoading && systemTags.length > 0 && (
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1 text-[12px] leading-5 text-[#86909c]">
+                                    <Network className="size-3.5 shrink-0" />
+                                    <span>{localize("com_knowledge.tag_type_system")}</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1">
+                                    {systemTags.map(renderRecommendedTagItem)}
+                                </div>
+                            </div>
+                        )}
+                        {!recommendedTagsLoading && aiTags.length > 0 && (
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1 text-[12px] leading-5 text-[#86909c]">
+                                    <Tag className="size-3.5 shrink-0" />
+                                    <span>{localize("com_knowledge.tag_type_ai")}</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1">
+                                    {aiTags.map(renderRecommendedTagItem)}
+                                </div>
+                            </div>
+                        )}
+                        {!recommendedTagsLoading && manualTags.length > 0 && (
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1 text-[12px] leading-5 text-[#86909c]">
+                                    <PencilLine className="size-3.5 shrink-0" />
+                                    <span>{localize("com_knowledge.tag_type_manual")}</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1">
+                                    {manualTags.map(renderRecommendedTagItem)}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
+                </div>
 
-                <DialogFooter className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:!mt-auto touch-mobile:!h-auto touch-mobile:!flex-row touch-mobile:!justify-stretch touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
+                <DialogFooter className="flex h-16 shrink-0 items-center justify-end gap-3 border-t border-[#EBECF0] px-6 py-3 touch-mobile:!mt-auto touch-mobile:!h-auto touch-mobile:!flex-row touch-mobile:!justify-stretch touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
                     <Button variant="outline" className="h-8 rounded-[6px] px-4 font-normal touch-mobile:flex-1" onClick={handleClose}>
                         {localize("com_knowledge.cancel")}</Button>
                     <Button

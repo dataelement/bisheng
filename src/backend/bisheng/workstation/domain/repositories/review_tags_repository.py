@@ -1,11 +1,19 @@
 from datetime import datetime
-from sqlalchemy import update, select, func, delete
+
+from sqlalchemy import delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
-from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink, ApproveOrRejectEnum
-from bisheng.workstation.domain.repositories.tags_repository import TagRepositoryImpl
-from bisheng.common.errcode.tag import NewTagExistedError, OriginalTagNotFoundError, TagLibraryNotFoundError, TargetTagInUsedError
-from bisheng.database.models.tag import TagResourceTypeEnum
+
+from bisheng.common.errcode.tag import (
+    NewTagExistedError,
+    OriginalTagNotFoundError,
+    TagLibraryNotFoundError,
+    TargetTagInUsedError,
+)
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
+from bisheng.database.models.tag import TagResourceTypeEnum
+from bisheng.workstation.domain.repositories.tags_repository import TagRepositoryImpl
+
 
 class ReviewTagsRepositoryImpl:
     """ReviewTag Base Repository Class"""
@@ -21,70 +29,106 @@ class ReviewTagsRepositoryImpl:
             .values(is_deleted=True, update_time=datetime.now())
         )
 
-    async def delete_review_tag_id(self, tag_id: int, business_type: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+    async def delete_review_tag_id(
+        self, tag_id: int, business_type: str, resource_type: TagResourceTypeEnum, tenant_id: int
+    ):
         await self.session.exec(
             update(ReviewTag)
-            .where(ReviewTag.id == tag_id, ReviewTag.business_type == business_type, ReviewTag.resource_type == resource_type, ReviewTag.tenant_id == tenant_id)
+            .where(
+                ReviewTag.id == tag_id,
+                ReviewTag.business_type == business_type,
+                ReviewTag.resource_type == resource_type,
+                ReviewTag.tenant_id == tenant_id,
+            )
             .values(is_deleted=True, update_time=datetime.now())
         )
         await self.delete_review_tag_link(tag_id, tenant_id)
 
     async def approve_review_tag(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
         await self.session.exec(
-            delete(ReviewTagLink)
-            .where(
+            delete(ReviewTagLink).where(
                 ReviewTagLink.tag_id.in_(
-                    select(ReviewTag.id).where(ReviewTag.name == tag_name, ReviewTag.tenant_id == tenant_id, ReviewTag.resource_type == resource_type, ReviewTag.is_deleted == False)
+                    select(ReviewTag.id).where(
+                        ReviewTag.name == tag_name,
+                        ReviewTag.tenant_id == tenant_id,
+                        ReviewTag.resource_type == resource_type,
+                        ReviewTag.is_deleted == False,
+                    )
                 ),
-                ReviewTagLink.tenant_id == tenant_id
+                ReviewTagLink.tenant_id == tenant_id,
             )
         )
         await self.session.exec(
-            delete(ReviewTag)
-            .where(ReviewTag.name == tag_name, ReviewTag.tenant_id == tenant_id, ReviewTag.resource_type == resource_type, ReviewTag.is_deleted == False)
+            delete(ReviewTag).where(
+                ReviewTag.name == tag_name,
+                ReviewTag.tenant_id == tenant_id,
+                ReviewTag.resource_type == resource_type,
+                ReviewTag.is_deleted == False,
+            )
         )
 
-    async def reject_review_tag(self, tag_name: str, reject_reason: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+    async def reject_review_tag(
+        self, tag_name: str, reject_reason: str, resource_type: TagResourceTypeEnum, tenant_id: int
+    ):
         await self.session.exec(
             update(ReviewTag)
-            .where(ReviewTag.name == tag_name, ReviewTag.tenant_id == tenant_id, ReviewTag.resource_type == resource_type)
-            .values(is_deleted=True, reject_reason=reject_reason, update_time=datetime.now(),
-                review_status=ApproveOrRejectEnum.REJECT.value, review_time=datetime.now()
+            .where(
+                ReviewTag.name == tag_name, ReviewTag.tenant_id == tenant_id, ReviewTag.resource_type == resource_type
+            )
+            .values(
+                is_deleted=True,
+                reject_reason=reject_reason,
+                update_time=datetime.now(),
+                review_status=ApproveOrRejectEnum.REJECT.value,
+                review_time=datetime.now(),
             )
         )
         await self.delete_review_tag_link_jilian(tag_name, resource_type, tenant_id)
 
-    
     async def delete_review_tag_link_jilian(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
         await self.session.exec(
             update(ReviewTagLink)
             .where(
                 ReviewTagLink.tag_id.in_(
-                    select(ReviewTag.id).where(ReviewTag.name == tag_name, ReviewTag.tenant_id == tenant_id, ReviewTag.resource_type == resource_type)
+                    select(ReviewTag.id).where(
+                        ReviewTag.name == tag_name,
+                        ReviewTag.tenant_id == tenant_id,
+                        ReviewTag.resource_type == resource_type,
+                    )
                 ),
-                ReviewTagLink.tenant_id == tenant_id
+                ReviewTagLink.tenant_id == tenant_id,
             )
             .values(is_deleted=True, update_time=datetime.now())
         )
 
-    
     async def get_review_tag_by_tag_id(self, tag_id: int, tenant_id: int):
-        statement = select(ReviewTag).where(ReviewTag.id == tag_id, ReviewTag.tenant_id == tenant_id, ReviewTag.is_deleted == False)
+        statement = select(ReviewTag).where(
+            ReviewTag.id == tag_id, ReviewTag.tenant_id == tenant_id, ReviewTag.is_deleted == False
+        )
         review_tag = await self.session.exec(statement)
         return review_tag.first()
 
     async def query_review_tag_link_list_by_tag_id(self, tag_id: int, tenant_id: int):
-        statement = select(ReviewTagLink).where(ReviewTagLink.tag_id == tag_id, ReviewTagLink.tenant_id == tenant_id, ReviewTagLink.is_deleted == False)
+        statement = select(ReviewTagLink).where(
+            ReviewTagLink.tag_id == tag_id, ReviewTagLink.tenant_id == tenant_id, ReviewTagLink.is_deleted == False
+        )
         review_tag_link = await self.session.exec(statement)
         return review_tag_link.scalars().all()
 
-
-    async def approve_tag_to_move(self, review_tag: ReviewTag, review_tag_link: list[ReviewTagLink]):
-        if review_tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG or review_tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG:
-            await self.create_tag_library_by_tag(review_tag.name, review_tag.tenant_id, review_tag.resource_type)
+    async def approve_tag_to_move(
+        self,
+        review_tag: ReviewTag,
+        review_tag_link: list[ReviewTagLink],
+        *,
+        skip_library_add: bool = False,
+    ):
+        if not skip_library_add:
+            if (
+                review_tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG
+                or review_tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG
+            ):
+                await self.create_tag_library_by_tag(review_tag.name, review_tag.tenant_id, review_tag.resource_type)
         await self.tags_repository.approve_tag_to_move(review_tag, review_tag_link)
-            
-    
 
     async def create_tag_library_by_tag(self, tag_name: str, tenant_id: int, resource_type: TagResourceTypeEnum):
         tag_library = await self.tags_repository.get_tag_library(tenant_id)
@@ -95,8 +139,9 @@ class ReviewTagsRepositoryImpl:
         else:
             raise TagLibraryNotFoundError.http_exception()
 
-
-    async def update_tag_library_by_tag(self, original_tag_name: str, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+    async def update_tag_library_by_tag(
+        self, original_tag_name: str, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int
+    ):
         tag_library = await self.tags_repository.get_tag_library(tenant_id)
         if tag_library:
             tags = tag_library.tags or []
@@ -113,7 +158,9 @@ class ReviewTagsRepositoryImpl:
         else:
             raise TagLibraryNotFoundError.http_exception()
 
-    async def update_tag_library_by_manual_tag(self, original_tag_name: str, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+    async def update_tag_library_by_manual_tag(
+        self, original_tag_name: str, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int
+    ):
         await self.tags_repository.update_tag_by_name(original_tag_name, resource_type, tag_name, tenant_id)
 
     async def delete_tag_library_by_tag(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
@@ -135,10 +182,12 @@ class ReviewTagsRepositoryImpl:
         if tag_library:
             tags = tag_library.tags or []
             ai_tags = tag_library.ai_tags or []
-            result = {v: TagResourceTypeEnum.SYSTEM_TAG for v in tags} | {v: TagResourceTypeEnum.AI_AUTO_TAG for v in ai_tags}
+            result = dict.fromkeys(tags, TagResourceTypeEnum.SYSTEM_TAG) | dict.fromkeys(
+                ai_tags, TagResourceTypeEnum.AI_AUTO_TAG
+            )
 
             all_tags_list = await self.tags_repository.get_all_library_list(tag_library)
-            if keyword :
+            if keyword:
                 tags_list = []
                 for tag in all_tags_list:
                     if keyword in tag:
@@ -154,10 +203,10 @@ class ReviewTagsRepositoryImpl:
         if tag_library:
             tags = tag_library.tags or []
             ai_tags = tag_library.ai_tags or []
-            result = {v: TagResourceTypeEnum.SYSTEM_TAG for v in tags}
+            result = dict.fromkeys(tags, TagResourceTypeEnum.SYSTEM_TAG)
 
             all_tags_list = await self.tags_repository.get_all_library_list(tag_library)
-            if keyword :
+            if keyword:
                 tags_list = []
                 for tag in all_tags_list:
                     if keyword in tag:
@@ -167,7 +216,7 @@ class ReviewTagsRepositoryImpl:
                 return all_tags_list, result
         else:
             return [], {}
-    
+
     async def get_tag_info_by_tag(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
         tag_list = await self.tags_repository.get_tag_list_by_tag_name(tag_name, resource_type, tenant_id)
         tags_count = 0
@@ -179,9 +228,8 @@ class ReviewTagsRepositoryImpl:
     async def get_not_exist_tag_info_by_tag(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
         tag_list = await self.tags_repository.get_tag_list_by_tag_name(tag_name, resource_type, tenant_id)
         if not tag_list or len(tag_list) == 0:
-             return {"tag_name": tag_name, "resource_type": resource_type, "resource_count": 0}
+            return {"tag_name": tag_name, "resource_type": resource_type, "resource_count": 0}
         return None
-
 
     async def get_review_tag_group_list_by_page(self, page: int, page_size: int, tenant_id: int):
         where_clause = (
@@ -203,19 +251,13 @@ class ReviewTagsRepositoryImpl:
         rows = result.all()
         return [{"name": row.name, "resource_type": row.resource_type} for row in rows]
 
-
     async def get_review_tag_group_count_by_page(self, tenant_id: int):
         where_clause = (
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
         )
-        subq = (
-                    select(1)
-                    .select_from(ReviewTag)
-                    .where(*where_clause)
-                    .group_by(ReviewTag.name, ReviewTag.resource_type)
-                )
+        subq = select(1).select_from(ReviewTag).where(*where_clause).group_by(ReviewTag.name, ReviewTag.resource_type)
         stmt = select(func.count()).select_from(subq.subquery())
         result = await self.session.exec(stmt)
         count = result.first()
@@ -225,8 +267,17 @@ class ReviewTagsRepositoryImpl:
             return count
         return int(count[0])
 
-    async def get_review_tag_resource_info_by_tag(self, group_tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+    async def get_review_tag_resource_info_by_tag(
+        self, group_tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int
+    ):
         tag_list = await self.get_review_tag_list_by_tag_name(group_tag_name, resource_type, tenant_id)
+        knowledge_ids = list(
+            dict.fromkeys(
+                int(tag.business_id)
+                for tag in (tag_list or [])
+                if tag.business_id is not None and str(tag.business_id).isdigit()
+            )
+        )
         if tag_list and len(tag_list) > 0:
             minio_client = await get_minio_storage()
             resource_list = []
@@ -235,14 +286,16 @@ class ReviewTagsRepositoryImpl:
             if review_tag_link_list and len(review_tag_link_list) > 0:
                 for tag_link in review_tag_link_list:
                     file_info = {}
-                    knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(tag_link.resource_id, tenant_id)
+                    knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
+                        tag_link.resource_id, tenant_id
+                    )
                     if knowledgefile:
                         if knowledgefile.object_name:
                             file_url = await minio_client.get_share_link(
-                                                            knowledgefile.object_name,
-                                                            minio_client.bucket,
-                                                            clear_host=False,
-                                                        )
+                                knowledgefile.object_name,
+                                minio_client.bucket,
+                                clear_host=False,
+                            )
                         else:
                             file_url = ""
                         file_info["file_url"] = file_url
@@ -256,21 +309,41 @@ class ReviewTagsRepositoryImpl:
                         file_info["file_level_path"] = knowledgefile.file_level_path
                         file_info["id"] = knowledgefile.id
                         file_info["knowledge_id"] = knowledgefile.knowledge_id
-                        file_info["submit_time"] = tag_link.create_time.strftime("%Y-%m-%d %H:%M:%S") if tag_link.create_time else ""
+                        file_info["submit_time"] = (
+                            tag_link.create_time.strftime("%Y-%m-%d %H:%M:%S") if tag_link.create_time else ""
+                        )
                     if file_info:
                         resource_list.append(file_info)
-                return {"tag_name": group_tag_name, "resource_type": resource_type, "tags_count": len(tag_list), "resource_files": resource_list or []}
+                return {
+                    "tag_name": group_tag_name,
+                    "resource_type": resource_type,
+                    "tags_count": len(tag_list),
+                    "resource_files": resource_list or [],
+                    "knowledge_ids": knowledge_ids,
+                }
 
-        return {"tag_name": group_tag_name, "resource_type": resource_type, "tags_count": len(tag_list or []), "resource_files": []}
+        return {
+            "tag_name": group_tag_name,
+            "resource_type": resource_type,
+            "tags_count": len(tag_list or []),
+            "resource_files": [],
+            "knowledge_ids": knowledge_ids,
+        }
 
-    
     async def get_review_tag_link_list_by_tag_id(self, tag_ids: list[int], tenant_id: int):
-        statement = select(ReviewTagLink).where(ReviewTagLink.tag_id.in_(tag_ids), ReviewTagLink.tenant_id == tenant_id, ReviewTagLink.is_deleted == False)
+        statement = select(ReviewTagLink).where(
+            ReviewTagLink.tag_id.in_(tag_ids), ReviewTagLink.tenant_id == tenant_id, ReviewTagLink.is_deleted == False
+        )
         review_tag_link_list = await self.session.exec(statement)
         return review_tag_link_list.scalars().all()
 
     async def get_review_tag_list_by_tag_name(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
-        statement = select(ReviewTag).where(ReviewTag.name == tag_name, ReviewTag.tenant_id == tenant_id, ReviewTag.is_deleted == False, ReviewTag.resource_type == resource_type)
+        statement = select(ReviewTag).where(
+            ReviewTag.name == tag_name,
+            ReviewTag.tenant_id == tenant_id,
+            ReviewTag.is_deleted == False,
+            ReviewTag.resource_type == resource_type,
+        )
         review_tag_list = await self.session.exec(statement)
         return review_tag_list.scalars().all()
 
@@ -293,16 +366,15 @@ class ReviewTagsRepositoryImpl:
     async def query_existed_tag_by_review_tag(self, review_tag: ReviewTag):
         return await self.tags_repository.query_existed_tag_by_review_tag(review_tag)
 
-
     async def get_not_exist_system_tag_by_name(self, keyword: str, tenant_id: int):
         tag_library = await self.tags_repository.get_tag_library(tenant_id)
         if tag_library:
             tags = tag_library.tags or []
             ai_tags = tag_library.ai_tags or []
-            result = {v: TagResourceTypeEnum.SYSTEM_TAG for v in tags}
+            result = dict.fromkeys(tags, TagResourceTypeEnum.SYSTEM_TAG)
 
             all_tags_list = await self.tags_repository.get_all_library_list(tag_library)
-            if keyword :
+            if keyword:
                 tags_list = []
                 for tag in all_tags_list:
                     if keyword in tag:

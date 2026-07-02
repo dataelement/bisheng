@@ -161,6 +161,7 @@ export interface KnowledgeSpace {
     isReleased: boolean;          // mapped from is_released
     autoTagEnabled?: boolean;
     autoTagLibraryId?: number | null;
+    autoTagLibraryIds?: number[];
     /** "library" when bound to a tenant tag library, "custom" when backed by per-space tags */
     autoTagMode?: "library" | "custom";
     /** Populated only when autoTagMode === "custom" */
@@ -258,6 +259,64 @@ export interface SpaceTag {
     id: number;
     name: string;
     resource_type?: string;
+    /** tag_library tags come from bound libraries; knowledge_space tags are space-native. */
+    business_type?: string;
+    /** Present on pending review tags returned by the space tag API. */
+    review_status?: number;
+}
+
+export function isLibrarySpaceTag(tag: SpaceTag): boolean {
+    return tag.business_type === "tag_library";
+}
+
+export function isBoundLibraryTagName(
+    tagName: string,
+    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+): boolean {
+    const normalized = tagName.trim().toLowerCase();
+    if (!normalized) return false;
+    return recommendedTags.some((item) => item.name.trim().toLowerCase() === normalized);
+}
+
+function parseBooleanConfigFlag(value: unknown): boolean | null {
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    return null;
+}
+
+/** Extract review-tag visibility from API envelopes (supports nested workstation config). */
+export function extractReviewTagVisibilityFlag(payload: unknown): boolean | null {
+    if (payload == null) return null;
+    if (typeof payload !== "object") {
+        return parseBooleanConfigFlag(payload);
+    }
+
+    const record = payload as Record<string, unknown>;
+    for (const key of ["enabled", "review_tag_visible", "reviewTagVisible", "visible"]) {
+        const parsed = parseBooleanConfigFlag(record[key]);
+        if (parsed !== null) return parsed;
+    }
+
+    for (const nestedKey of ["data", "config"]) {
+        const nested = record[nestedKey];
+        if (nested && typeof nested === "object") {
+            const parsed = extractReviewTagVisibilityFlag(nested);
+            if (parsed !== null) return parsed;
+        }
+    }
+
+    return null;
+}
+
+export function countSpaceNativeTags(
+    tags: SpaceTag[],
+    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+): number {
+    return tags.filter(
+        (tag) => !isLibrarySpaceTag(tag) && !isBoundLibraryTagName(tag.name, recommendedTags),
+    ).length;
 }
 
 /** Space member entity used by member-management dialog */
@@ -391,6 +450,7 @@ interface RawKnowledgeSpace {
     is_released?: boolean;
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
+    auto_tag_library_ids?: number[];
     auto_tag_mode?: "library" | "custom";
     auto_tag_custom_tags?: string[] | null;
     is_pending?: boolean;
@@ -409,6 +469,22 @@ export interface KnowledgeSpaceTagLibraryListItem {
     description?: string | null;
     tag_count: number;
     is_builtin: boolean;
+}
+
+export interface KnowledgeSpaceTagLibraryTagItem {
+    name: string;
+    resource_type: string;
+    resource_count?: number;
+    create_time?: string | null;
+    creator_name?: string | null;
+}
+
+/** Tag-library manual_tag entries are displayed as system tags (matches Platform). */
+export function normalizeTagLibraryResourceType(resourceType: string): string {
+    if (resourceType === "manual_tag") {
+        return "system_tag";
+    }
+    return resourceType;
 }
 
 export interface KnowledgeSpaceTagLibraryPage {
@@ -515,7 +591,12 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         tags: Array.isArray(raw.tags) ? raw.tags : [],
         isReleased: raw.is_released ?? false,
         autoTagEnabled: raw.auto_tag_enabled ?? false,
-        autoTagLibraryId: raw.auto_tag_library_id ?? null,
+        autoTagLibraryIds: Array.isArray(raw.auto_tag_library_ids) && raw.auto_tag_library_ids.length
+            ? raw.auto_tag_library_ids.map(Number)
+            : raw.auto_tag_library_id
+                ? [Number(raw.auto_tag_library_id)]
+                : [],
+        autoTagLibraryId: raw.auto_tag_library_id ?? (raw.auto_tag_library_ids?.[0] ?? null),
         autoTagMode: raw.auto_tag_mode ?? (raw.auto_tag_custom_tags ? "custom" : "library"),
         autoTagCustomTags: Array.isArray(raw.auto_tag_custom_tags)
             ? raw.auto_tag_custom_tags
@@ -1303,7 +1384,7 @@ export async function createSpaceApi(data: {
     user_group_id?: number;
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
-    auto_tag_custom_tags?: string[] | null;
+    auto_tag_library_ids?: number[];
 }): Promise<KnowledgeSpace> {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;
@@ -1330,7 +1411,7 @@ export async function updateSpaceApi(
         is_released?: boolean;
         auto_tag_enabled?: boolean;
         auto_tag_library_id?: number | null;
-        auto_tag_custom_tags?: string[] | null;
+        auto_tag_library_ids?: number[];
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");
@@ -1340,6 +1421,7 @@ export async function updateSpaceApi(
 
 export interface KnowledgeSpaceTagLibraryDetail extends KnowledgeSpaceTagLibraryListItem {
     tags: string[];
+    tag_items?: KnowledgeSpaceTagLibraryTagItem[];
 }
 
 /** Fetch a single tag library with its full tag list, used for the preview chips. */
@@ -1350,6 +1432,15 @@ export async function getKnowledgeSpaceTagLibraryDetailApi(
         `/api/v1/knowledge/space/tag-libraries/${library_id}`,
     );
     const payload: any = (res as any)?.data ?? res;
+    const tagItems = Array.isArray(payload?.tag_items)
+        ? payload.tag_items.map((item: any) => ({
+            name: String(item?.name ?? ""),
+            resource_type: normalizeTagLibraryResourceType(String(item?.resource_type ?? "manual_tag")),
+            resource_count: item?.resource_count !== undefined ? Number(item.resource_count) : undefined,
+            create_time: item?.create_time ?? null,
+            creator_name: item?.creator_name ?? null,
+        }))
+        : [];
     return {
         id: Number(payload?.id),
         name: String(payload?.name ?? ""),
@@ -1357,7 +1448,61 @@ export async function getKnowledgeSpaceTagLibraryDetailApi(
         tag_count: Number(payload?.tag_count ?? 0),
         is_builtin: Boolean(payload?.is_builtin),
         tags: Array.isArray(payload?.tags) ? payload.tags : [],
+        tag_items: tagItems,
     };
+}
+
+/** List tag libraries bound to a knowledge space. */
+export async function getKnowledgeSpaceTagLibrariesByKnowledgeApi(
+    knowledge_id: string | number,
+): Promise<KnowledgeSpaceTagLibraryListItem[]> {
+    const res = await request.get<ApiResponse<KnowledgeSpaceTagLibraryListItem[]>>(
+        `/api/v1/knowledge/space/tag-libraries/by-knowledge/${knowledge_id}`,
+    );
+    const payload: any = (res as any)?.data ?? res;
+    return extractList<KnowledgeSpaceTagLibraryListItem>(payload).map((library) => ({
+        ...library,
+        id: Number(library.id),
+    })).filter((library) => Number.isFinite(library.id) && library.id > 0);
+}
+
+/** Merge tag_items from all libraries bound to a knowledge space. */
+export async function getBoundTagLibraryTagsForKnowledgeApi(
+    knowledge_id: string | number,
+): Promise<KnowledgeSpaceTagLibraryTagItem[]> {
+    const libraries = await getKnowledgeSpaceTagLibrariesByKnowledgeApi(knowledge_id);
+    if (!libraries.length) {
+        return [];
+    }
+    const details = await Promise.all(
+        libraries.map((library) =>
+            getKnowledgeSpaceTagLibraryDetailApi(library.id).catch(() => null),
+        ),
+    );
+    const seen = new Set<string>();
+    const merged: KnowledgeSpaceTagLibraryTagItem[] = [];
+    for (const detail of details) {
+        const items = detail?.tag_items?.length
+            ? detail.tag_items
+            : (detail?.tags ?? []).map((name) => ({
+                name,
+                resource_type: "system_tag",
+            }));
+        for (const item of items) {
+            const name = String(item.name ?? "").trim();
+            if (!name) continue;
+            const normalizedItem = {
+                ...item,
+                name,
+                resource_type: normalizeTagLibraryResourceType(String(item.resource_type ?? "system_tag")),
+            };
+            const key = `${normalizedItem.resource_type}:${name}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            merged.push(normalizedItem);
+        }
+    }
+    return merged;
 }
 
 export async function getKnowledgeSpaceTagLibrariesApi(params?: {
@@ -1387,6 +1532,39 @@ export async function getKnowledgeSpaceAutoTagVisibilityApi(): Promise<{ visible
     );
     const payload: any = (res as any)?.data ?? res;
     return { visible: Boolean(payload?.visible) };
+}
+
+/**
+ * Whether pending-review tag submission (AI / manual tags) is enabled for the current tenant.
+ */
+export async function getKnowledgeSpaceReviewTagVisibilityApi(): Promise<{ enabled: boolean }> {
+    const readEnabled = (response: unknown): boolean | null => {
+        const root: any = response ?? {};
+        return (
+            extractReviewTagVisibilityFlag(root?.data ?? root)
+            ?? extractReviewTagVisibilityFlag(root)
+        );
+    };
+
+    try {
+        const res = await request.get<ApiResponse<{ enabled: boolean }>>(
+            `/api/v1/knowledge/space/review-tag-visibility`
+        );
+        const enabled = readEnabled(res);
+        if (enabled !== null) return { enabled };
+    } catch {
+        // fall through to workstation config
+    }
+
+    try {
+        const res = await request.get(`/api/v1/workstation/config/knowledge_space`);
+        const enabled = readEnabled(res);
+        if (enabled !== null) return { enabled };
+    } catch {
+        // fall through
+    }
+
+    return { enabled: false };
 }
 
 /**
@@ -1481,8 +1659,21 @@ export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
 export async function addSpaceTagApi(space_id: string, tag_name: string): Promise<SpaceTag> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = (await request.post(`/api/v1/knowledge/space/${space_id}/tag`, { tag_name })) as any;
-    // Handle both flat { id, name } and wrapped { data: { id, name } } responses
-    const tag = res?.data?.id !== undefined ? res.data : res?.data?.data;
+    const statusCode = res?.status_code ?? res?.code ?? 200;
+    if (statusCode !== 200) {
+        const err: any = new Error(res?.status_message || "addSpaceTagApi failed");
+        err.status_code = statusCode;
+        err.status_message = res?.status_message;
+        throw err;
+    }
+    const raw = res?.data;
+    const tag = raw?.id !== undefined ? raw : raw?.data;
+    if (!tag || tag.id === undefined || tag.id === null) {
+        const err: any = new Error(res?.status_message || "addSpaceTagApi: missing tag id");
+        err.status_code = statusCode;
+        err.status_message = res?.status_message;
+        throw err;
+    }
     return tag as SpaceTag;
 }
 

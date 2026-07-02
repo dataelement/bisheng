@@ -70,6 +70,17 @@ def _service() -> SimpleNamespace:
         ),
         delete_library=AsyncMock(return_value=None),
         get_library_usage=AsyncMock(return_value=3),
+        list_bound_libraries_for_knowledge=AsyncMock(
+            return_value=[
+                KnowledgeSpaceTagLibraryListItem(
+                    id=10,
+                    name="业务标签",
+                    description="",
+                    tag_count=2,
+                    is_builtin=False,
+                )
+            ]
+        ),
     )
 
 
@@ -78,9 +89,7 @@ def test_list_tag_libraries_returns_tag_count_without_tags():
     app = _mount_app(service)
 
     with TestClient(app) as client:
-        resp = client.get(
-            "/api/v1/knowledge/space/tag-libraries", params={"keyword": "业务"}
-        )
+        resp = client.get("/api/v1/knowledge/space/tag-libraries", params={"keyword": "业务"})
 
     assert resp.status_code == 200
     payload = resp.json()["data"]
@@ -88,9 +97,7 @@ def test_list_tag_libraries_returns_tag_count_without_tags():
     item = payload["data"][0]
     assert item["tag_count"] == 2
     assert "tags" not in item
-    service.list_libraries.assert_awaited_once_with(
-        page=1, page_size=20, keyword="业务"
-    )
+    service.list_libraries.assert_awaited_once_with(page=1, page_size=20, keyword="业务")
 
 
 def test_list_tag_libraries_accepts_page_size_up_to_500():
@@ -101,14 +108,10 @@ def test_list_tag_libraries_accepts_page_size_up_to_500():
     app = _mount_app(service)
 
     with TestClient(app) as client:
-        resp = client.get(
-            "/api/v1/knowledge/space/tag-libraries", params={"page_size": 200}
-        )
+        resp = client.get("/api/v1/knowledge/space/tag-libraries", params={"page_size": 200})
 
     assert resp.status_code == 200
-    service.list_libraries.assert_awaited_once_with(
-        page=1, page_size=200, keyword=None
-    )
+    service.list_libraries.assert_awaited_once_with(page=1, page_size=200, keyword=None)
 
 
 def test_get_tag_library_returns_tags():
@@ -147,9 +150,7 @@ def test_create_update_and_delete_tag_library_routes_thread_payloads():
 
     assert create_resp.status_code == 200
     assert create_resp.json()["data"]["tags"] == ["A", "B"]
-    service.create_library.assert_awaited_once_with(
-        "新标签库", "", ["A", "B"], is_builtin=True
-    )
+    service.create_library.assert_awaited_once_with("新标签库", "", ["A", "B"], is_builtin=True)
 
     assert update_resp.status_code == 200
     assert update_resp.json()["data"]["tags"] == ["合同"]
@@ -176,9 +177,7 @@ def test_create_tag_library_defaults_is_builtin_false():
         )
 
     assert resp.status_code == 200
-    service.create_library.assert_awaited_once_with(
-        "新标签库", "", ["A", "B"], is_builtin=False
-    )
+    service.create_library.assert_awaited_once_with("新标签库", "", ["A", "B"], is_builtin=False)
 
 
 def test_tag_library_usage_endpoint_returns_count():
@@ -205,3 +204,18 @@ def test_import_endpoint_is_removed():
 
     # The dedicated import endpoint was removed; FastAPI returns 404.
     assert resp.status_code == 404
+
+
+def test_list_tag_libraries_by_knowledge_returns_bound_libraries():
+    service = _service()
+    app = _mount_app(service)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/v1/knowledge/space/tag-libraries/by-knowledge/100")
+
+    assert resp.status_code == 200
+    payload = resp.json()["data"]
+    assert len(payload) == 1
+    assert payload[0]["id"] == 10
+    assert payload[0]["name"] == "业务标签"
+    service.list_bound_libraries_for_knowledge.assert_awaited_once_with(100)

@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import Optional, List, Dict, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
@@ -21,29 +21,25 @@ class SpaceSubscriptionStatusEnum(str, Enum):
 
 class KnowledgeSpaceCreateReq(BaseModel):
     name: str = Field(..., max_length=200, description="Knowledge Space Name")
-    description: Optional[str] = Field(None, description="Knowledge Space Description")
-    icon: Optional[str] = Field(None, description="Icon Object Name")
-    auth_type: AuthTypeEnum = Field(
-        AuthTypeEnum.PUBLIC, description="Authentication Type"
-    )
+    description: str | None = Field(None, description="Knowledge Space Description")
+    icon: str | None = Field(None, description="Icon Object Name")
+    auth_type: AuthTypeEnum = Field(AuthTypeEnum.PUBLIC, description="Authentication Type")
     is_released: bool = Field(default=False, description="Knowledge Space Status")
     space_level: KnowledgeSpaceLevelEnum = Field(
         default=KnowledgeSpaceLevelEnum.PERSONAL,
         description="Knowledge space level: public/department/team/personal",
     )
-    department_id: Optional[int] = Field(
-        None, description="Department id for department spaces"
+    department_id: int | None = Field(None, description="Department id for department spaces")
+    user_group_id: int | None = Field(None, description="User group id for team spaces")
+    auto_tag_enabled: bool = Field(default=False, description="Whether uploaded files participate in auto tagging")
+    auto_tag_library_id: int | None = Field(
+        default=None, description="Bound knowledge-space tag library ID (legacy single binding)"
     )
-    user_group_id: Optional[int] = Field(
-        None, description="User group id for team spaces"
+    auto_tag_library_ids: list[int] | None = Field(
+        default=None,
+        description="Bound knowledge-space tag library IDs (supports multiple libraries)",
     )
-    auto_tag_enabled: bool = Field(
-        default=False, description="Whether uploaded files participate in auto tagging"
-    )
-    auto_tag_library_id: Optional[int] = Field(
-        default=None, description="Bound knowledge-space tag library ID"
-    )
-    auto_tag_custom_tags: Optional[List[str]] = Field(
+    auto_tag_custom_tags: list[str] | None = Field(
         default=None,
         description=(
             "Custom auto-tag list for this space; mutually exclusive with "
@@ -55,44 +51,24 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     id: int = Field(..., description="Knowledge Space ID")
-    is_pinned: bool = Field(
-        default=False, description="Knowledge Space pinned by current user or not"
-    )
+    is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     user_name: str = Field(default="", description="Knowledge Space creator name")
-    avatar: Optional[str] = Field(
-        default=None, description="Knowledge Space creator avatar"
-    )
+    avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
-    is_followed: bool = Field(
-        default=False, description="Knowledge Space followed by current user or not"
-    )
-    is_pending: bool = Field(
-        default=False, description="Knowledge Space pending or not"
-    )
+    is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
+    is_pending: bool = Field(default=False, description="Knowledge Space pending or not")
     subscription_status: SpaceSubscriptionStatusEnum = Field(
         default=SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
         description="Current user subscription status",
     )
-    can_unsubscribe: bool = Field(
-        default=False, description="Whether current user can unsubscribe from this space"
-    )
-    user_role: Optional[UserRoleEnum] = Field(
-        default=None, description="Knowledge Space user role"
-    )
-    space_kind: Literal["normal", "department"] = Field(
-        default="normal", description="Knowledge space kind"
-    )
-    department_id: Optional[int] = Field(
-        default=None, description="Bound department id for department spaces"
-    )
-    department_name: Optional[str] = Field(
-        default=None, description="Bound department name for department spaces"
-    )
-    approval_enabled: Optional[bool] = Field(
-        default=None, description="Whether department-space uploads require approval"
-    )
-    sensitive_check_enabled: Optional[bool] = Field(
+    can_unsubscribe: bool = Field(default=False, description="Whether current user can unsubscribe from this space")
+    user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
+    space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
+    department_id: int | None = Field(default=None, description="Bound department id for department spaces")
+    department_name: str | None = Field(default=None, description="Bound department name for department spaces")
+    approval_enabled: bool | None = Field(default=None, description="Whether department-space uploads require approval")
+    sensitive_check_enabled: bool | None = Field(
         default=None,
         description="Whether department-space uploads require content safety check",
     )
@@ -100,25 +76,25 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=KnowledgeSpaceLevelEnum.PERSONAL,
         description="Knowledge space level",
     )
-    owner_type: Optional[KnowledgeSpaceOwnerTypeEnum] = Field(
-        default=None, description="Scope owner type"
-    )
-    owner_id: Optional[int] = Field(default=None, description="Scope owner id")
-    owner_name: Optional[str] = Field(
-        default=None, description="Scope owner display name"
-    )
+    owner_type: KnowledgeSpaceOwnerTypeEnum | None = Field(default=None, description="Scope owner type")
+    owner_id: int | None = Field(default=None, description="Scope owner id")
+    owner_name: str | None = Field(default=None, description="Scope owner display name")
     auto_tag_mode: Literal["library", "custom"] = Field(
         default="library",
         description="Discriminator: 'library' for an admin-managed tag library, 'custom' for a private library backed by user-entered tags.",
     )
-    auto_tag_custom_tags: Optional[List[str]] = Field(
+    auto_tag_custom_tags: list[str] | None = Field(
         default=None,
         description="Populated only when auto_tag_mode == 'custom'; mirrors the private library's tag list.",
+    )
+    auto_tag_library_ids: list[int] = Field(
+        default_factory=list,
+        description="Public tag libraries bound to this space when auto_tag_mode == 'library'.",
     )
 
 
 class ShougangPortalSpaceInfoReq(BaseModel):
-    space_ids: List[int] = Field(..., min_length=1, max_length=200, description="Knowledge Space IDs")
+    space_ids: list[int] = Field(..., min_length=1, max_length=200, description="Knowledge Space IDs")
 
 
 class ShougangPortalSpaceInfoError(BaseModel):
@@ -128,12 +104,12 @@ class ShougangPortalSpaceInfoError(BaseModel):
 
 class ShougangPortalSpaceInfoItemResp(BaseModel):
     id: int = Field(..., description="Knowledge Space ID")
-    data: Dict = Field(default_factory=dict, description="Knowledge Space info; empty when failed")
-    error: Optional[ShougangPortalSpaceInfoError] = Field(default=None, description="Error info when failed")
+    data: dict = Field(default_factory=dict, description="Knowledge Space info; empty when failed")
+    error: ShougangPortalSpaceInfoError | None = Field(default=None, description="Error info when failed")
 
 
 class ShougangPortalSpaceInfoResp(BaseModel):
-    spaces: List[ShougangPortalSpaceInfoItemResp] = Field(
+    spaces: list[ShougangPortalSpaceInfoItemResp] = Field(
         default_factory=list,
         description="Knowledge Space info items",
     )
@@ -142,7 +118,7 @@ class ShougangPortalSpaceInfoResp(BaseModel):
 class KnowledgeSpaceCreateOptionDepartment(BaseModel):
     id: int
     name: str
-    path_name: Optional[str] = None
+    path_name: str | None = None
 
 
 class KnowledgeSpaceCreateOptionUserGroup(BaseModel):
@@ -155,26 +131,26 @@ class KnowledgeSpaceCreateOptionsResp(BaseModel):
     can_create_department: bool = False
     can_create_team: bool = False
     can_create_personal: bool = True
-    departments: List[KnowledgeSpaceCreateOptionDepartment] = Field(default_factory=list)
-    user_groups: List[KnowledgeSpaceCreateOptionUserGroup] = Field(default_factory=list)
+    departments: list[KnowledgeSpaceCreateOptionDepartment] = Field(default_factory=list)
+    user_groups: list[KnowledgeSpaceCreateOptionUserGroup] = Field(default_factory=list)
     default_space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
 
 
 class KnowledgeSpaceCreateOptionDepartmentsResp(BaseModel):
-    data: List[Dict] = Field(default_factory=list)
+    data: list[dict] = Field(default_factory=list)
     total: int = 0
 
 
 class KnowledgeSpaceCreateOptionUserGroupsResp(BaseModel):
-    data: List[KnowledgeSpaceCreateOptionUserGroup] = Field(default_factory=list)
+    data: list[KnowledgeSpaceCreateOptionUserGroup] = Field(default_factory=list)
     total: int = 0
 
 
 class GroupedKnowledgeSpacesResp(BaseModel):
-    public_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
-    department_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
-    team_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
-    personal_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    public_spaces: list[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    department_spaces: list[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    team_spaces: list[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    personal_spaces: list[KnowledgeSpaceInfoResp] = Field(default_factory=list)
 
 
 class ShougangPortalSpaceLevelItem(BaseModel):
@@ -183,7 +159,7 @@ class ShougangPortalSpaceLevelItem(BaseModel):
 
 
 class ShougangPortalSpaceLevelsResp(BaseModel):
-    levels: List[ShougangPortalSpaceLevelItem] = Field(default_factory=list)
+    levels: list[ShougangPortalSpaceLevelItem] = Field(default_factory=list)
 
 
 class ShougangPortalPersonalSpaceItemResp(BaseModel):
@@ -196,7 +172,7 @@ class ShougangPortalPersonalSpaceItemResp(BaseModel):
 
 
 class ShougangPortalPersonalSpacesResp(BaseModel):
-    data: List[ShougangPortalPersonalSpaceItemResp] = Field(default_factory=list)
+    data: list[ShougangPortalPersonalSpaceItemResp] = Field(default_factory=list)
     total: int = 0
 
 
@@ -320,31 +296,37 @@ class ShougangPortalShareLinkAccessResp(BaseModel):
 
 
 class ShougangPortalTagSearchReq(BaseModel):
-    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
-    space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
+    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
 
 
 class ShougangPortalTagSearchResp(BaseModel):
-    tags: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class ShougangPortalDomainFileCountReq(BaseModel):
-    codes: List[str] = Field(default_factory=list, max_length=200, description="Business-domain codes, e.g. ['PP','QM']")
+    codes: list[str] = Field(
+        default_factory=list, max_length=200, description="Business-domain codes, e.g. ['PP','QM']"
+    )
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):
-    counts: Dict[str, int] = Field(default_factory=dict)
+    counts: dict[str, int] = Field(default_factory=dict)
 
 
 class ShougangPortalFileSearchReq(BaseModel):
-    q: Optional[str] = Field(default=None, description="Search keyword")
-    tag: Optional[str] = Field(default=None, description="Space tag name")
-    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
-    space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
-    file_ext: Optional[str] = Field(default=None, description="File extension filter")
-    document_type: Optional[str] = Field(default=None, description="Document type code from file_encoding segment 2")
-    sort: str = Field(default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc")
-    rerank_model_id: Optional[str] = Field(default=None, description="Optional rerank model ID for this portal search request")
+    q: str | None = Field(default=None, description="Search keyword")
+    tag: str | None = Field(default=None, description="Space tag name")
+    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
+    file_ext: str | None = Field(default=None, description="File extension filter")
+    document_type: str | None = Field(default=None, description="Document type code from file_encoding segment 2")
+    sort: str = Field(
+        default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc"
+    )
+    rerank_model_id: str | None = Field(
+        default=None, description="Optional rerank model ID for this portal search request"
+    )
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -361,26 +343,26 @@ class ShougangPortalFileItemResp(BaseModel):
     summary: str = ""
     source: str = ""
     updated_at: str = ""
-    tags: List[str] = Field(default_factory=list)
-    tag_infos: List[ShougangPortalFileTagResp] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    tag_infos: list[ShougangPortalFileTagResp] = Field(default_factory=list)
     file_ext: str = ""
     file_size: str = ""
     file_encoding: str = ""
     folder_path: str = Field(
         default="",
         description="Readable source folder path '<source space>/<folder>/<folder>'. "
-                    "Empty when the file has no resolvable source (e.g. uploaded "
-                    "directly to the public space without publish metadata).",
+        "Empty when the file has no resolvable source (e.g. uploaded "
+        "directly to the public space without publish metadata).",
     )
     source_path: str = Field(
         default="",
         description="Readable document source path '<source space>><folder>/<file>'; "
-                    "root-level source files use only '<source space>'.",
+        "root-level source files use only '<source space>'.",
     )
 
 
 class ShougangPortalFileSearchResp(BaseModel):
-    data: List[ShougangPortalFileItemResp] = Field(default_factory=list)
+    data: list[ShougangPortalFileItemResp] = Field(default_factory=list)
     total: int = 0
     page: int = 1
     page_size: int = 20
@@ -388,7 +370,7 @@ class ShougangPortalFileSearchResp(BaseModel):
 
 class ShougangPortalQaFileSearchReq(BaseModel):
     q: str = Field(..., min_length=1, description="File name keyword")
-    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -403,15 +385,15 @@ class ShougangPortalHomeSectionReq(BaseModel):
 
 
 class ShougangPortalHomeReq(BaseModel):
-    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
-    space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
-    sections: List[ShougangPortalHomeSectionReq] = Field(default_factory=list, max_length=20)
+    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
+    sections: list[ShougangPortalHomeSectionReq] = Field(default_factory=list, max_length=20)
     hot_tags_limit: int = Field(default=8, ge=0, le=100)
 
 
 class ShougangPortalHomeResp(BaseModel):
-    sections: Dict[str, List[ShougangPortalFileItemResp]] = Field(default_factory=dict)
-    tags: List[str] = Field(default_factory=list)
+    sections: dict[str, list[ShougangPortalFileItemResp]] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
 
 
 class ShougangPortalTelemetryEventReq(BaseModel):
@@ -421,12 +403,12 @@ class ShougangPortalTelemetryEventReq(BaseModel):
     entry_point: str = Field(..., min_length=1, max_length=128)
     resource_type: str = Field(default="document", max_length=64)
     status: Literal["success"] = "success"
-    space_id: Optional[int | str] = None
-    file_id: Optional[int | str] = None
-    target_space_id: Optional[int | str] = None
-    source_space_id: Optional[int | str] = None
-    source_file_id: Optional[int | str] = None
-    conversation_id: Optional[str] = Field(default=None, max_length=128)
+    space_id: int | str | None = None
+    file_id: int | str | None = None
+    target_space_id: int | str | None = None
+    source_space_id: int | str | None = None
+    source_file_id: int | str | None = None
+    conversation_id: str | None = Field(default=None, max_length=128)
 
 
 class ShougangPortalHomeStatsResp(BaseModel):
@@ -437,20 +419,22 @@ class ShougangPortalHomeStatsResp(BaseModel):
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):
-    name: Optional[str] = Field(
-        None, max_length=200, description="Knowledge Space Name"
-    )
-    description: Optional[str] = Field(None, description="Knowledge Space Description")
-    icon: Optional[str] = Field(None, description="Icon Object Name")
-    auth_type: Optional[AuthTypeEnum] = Field(None, description="Authentication Type")
+    name: str | None = Field(None, max_length=200, description="Knowledge Space Name")
+    description: str | None = Field(None, description="Knowledge Space Description")
+    icon: str | None = Field(None, description="Icon Object Name")
+    auth_type: AuthTypeEnum | None = Field(None, description="Authentication Type")
     is_released: bool = Field(default=False, description="Knowledge Space Status")
-    auto_tag_enabled: Optional[bool] = Field(
+    auto_tag_enabled: bool | None = Field(
         default=None, description="Whether uploaded files participate in auto tagging"
     )
-    auto_tag_library_id: Optional[int] = Field(
-        default=None, description="Bound knowledge-space tag library ID"
+    auto_tag_library_id: int | None = Field(
+        default=None, description="Bound knowledge-space tag library ID (legacy single binding)"
     )
-    auto_tag_custom_tags: Optional[List[str]] = Field(
+    auto_tag_library_ids: list[int] | None = Field(
+        default=None,
+        description="Bound knowledge-space tag library IDs (supports multiple libraries)",
+    )
+    auto_tag_custom_tags: list[str] | None = Field(
         default=None,
         description=(
             "Custom auto-tag list for this space; mutually exclusive with "
@@ -462,21 +446,15 @@ class KnowledgeSpaceUpdateReq(BaseModel):
 
 class DepartmentKnowledgeSpaceBatchItem(BaseModel):
     department_id: int = Field(..., description="Department.id")
-    name: Optional[str] = Field(
-        None, max_length=200, description="Optional custom space name"
-    )
-    description: Optional[str] = Field(
-        None, description="Optional custom space description"
-    )
-    icon: Optional[str] = Field(None, description="Optional icon object name")
-    auth_type: Optional[AuthTypeEnum] = Field(
-        None, description="Optional auth type override"
-    )
-    is_released: Optional[bool] = Field(None, description="Optional release override")
+    name: str | None = Field(None, max_length=200, description="Optional custom space name")
+    description: str | None = Field(None, description="Optional custom space description")
+    icon: str | None = Field(None, description="Optional icon object name")
+    auth_type: AuthTypeEnum | None = Field(None, description="Optional auth type override")
+    is_released: bool | None = Field(None, description="Optional release override")
 
 
 class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
-    items: List[DepartmentKnowledgeSpaceBatchItem] = Field(
+    items: list[DepartmentKnowledgeSpaceBatchItem] = Field(
         default_factory=list,
         description="Department knowledge space batch create items",
     )
@@ -484,7 +462,7 @@ class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
 
 class FolderCreateReq(BaseModel):
     name: str = Field(..., description="Folder Name")
-    parent_id: Optional[int] = Field(None, description="Parent Folder ID")
+    parent_id: int | None = Field(None, description="Parent Folder ID")
 
 
 class FolderRenameReq(BaseModel):
@@ -492,20 +470,20 @@ class FolderRenameReq(BaseModel):
 
 
 class MoveFolderReq(BaseModel):
-    target_folder_id: Optional[int] = Field(default=None, description="Target folder ID; null means root")
+    target_folder_id: int | None = Field(default=None, description="Target folder ID; null means root")
 
 
 class FileCreateReq(BaseModel):
-    file_path: List[str] = Field(..., description="File Path")
-    parent_id: Optional[int] = Field(None, description="Parent Folder ID")
-    file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
+    file_path: list[str] = Field(..., description="File Path")
+    parent_id: int | None = Field(None, description="Parent Folder ID")
+    file_category_code: str | None = Field(None, max_length=16, description="Selected business file category code")
 
 
 class WebLinkCreateReq(BaseModel):
     url: str = Field(..., min_length=1, max_length=2048, description="Web page URL")
-    title: Optional[str] = Field(None, max_length=200, description="Optional display title")
-    parent_id: Optional[int] = Field(None, description="Parent Folder ID")
-    file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
+    title: str | None = Field(None, max_length=200, description="Optional display title")
+    parent_id: int | None = Field(None, description="Parent Folder ID")
+    file_category_code: str | None = Field(None, max_length=16, description="Selected business file category code")
     overwrite: bool = Field(False, description="Overwrite an existing web link file with the same name or content")
 
 
@@ -515,7 +493,7 @@ class UploadFolderRecommendFileReq(BaseModel):
 
 
 class UploadFolderRecommendationReq(BaseModel):
-    files: List[UploadFolderRecommendFileReq] = Field(
+    files: list[UploadFolderRecommendFileReq] = Field(
         default_factory=list,
         max_length=100,
         description="Files that need upload folder recommendations",
@@ -525,32 +503,32 @@ class UploadFolderRecommendationReq(BaseModel):
 class UploadFolderRecommendationItemResp(BaseModel):
     client_file_id: str
     file_name: str
-    recommended_folder_id: Optional[int] = None
+    recommended_folder_id: int | None = None
     recommended_folder_name: str = "根目录"
     recommended_folder_path: str = "根目录"
     reason: str = ""
 
 
 class UploadFolderRecommendationResp(BaseModel):
-    items: List[UploadFolderRecommendationItemResp] = Field(default_factory=list)
+    items: list[UploadFolderRecommendationItemResp] = Field(default_factory=list)
 
 
 class MoveFileFolderReq(BaseModel):
-    target_folder_id: Optional[int] = Field(default=None, description="Target folder ID; null means root")
+    target_folder_id: int | None = Field(default=None, description="Target folder ID; null means root")
 
 
 class ShougangPortalUploadedFileResp(BaseModel):
     id: int
     knowledge_id: int
     knowledge_name: str = ""
-    space_level: Optional[KnowledgeSpaceLevelEnum] = None
+    space_level: KnowledgeSpaceLevelEnum | None = None
     file_name: str
     file_level_path: str = ""
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
     folder_path_name: str = "根目录"
-    status: Optional[int] = None
-    file_encoding: Optional[str] = None
-    tags: List[Dict] = Field(default_factory=list)
+    status: int | None = None
+    file_encoding: str | None = None
+    tags: list[dict] = Field(default_factory=list)
     abstract: str = ""
     create_time: str = ""
     update_time: str = ""
@@ -570,21 +548,13 @@ class FileEncodingUpdateReq(BaseModel):
 
 
 class BatchDeleteReq(BaseModel):
-    file_ids: List[int] = Field(
-        default_factory=list, description="List of file IDs to delete"
-    )
-    folder_ids: List[int] = Field(
-        default_factory=list, description="List of folder IDs to delete"
-    )
+    file_ids: list[int] = Field(default_factory=list, description="List of file IDs to delete")
+    folder_ids: list[int] = Field(default_factory=list, description="List of folder IDs to delete")
 
 
 class BatchDownloadReq(BaseModel):
-    file_ids: List[int] = Field(
-        default_factory=list, description="List of file IDs to download"
-    )
-    folder_ids: List[int] = Field(
-        default_factory=list, description="List of folder IDs to download"
-    )
+    file_ids: list[int] = Field(default_factory=list, description="List of file IDs to download")
+    folder_ids: list[int] = Field(default_factory=list, description="List of folder IDs to download")
 
 
 class ChatReq(BaseModel):
@@ -597,22 +567,16 @@ class ChatReq(BaseModel):
 class ChatFolderReq(ChatReq):
     folder_id: int = Field(default=0, description="Folder ID")
     chat_id: str = Field(..., description="Chat ID")
-    tags: Optional[List[Dict]] = Field(
-        None, description="List of Tag info for filtering"
-    )
+    tags: list[dict] | None = Field(None, description="List of Tag info for filtering")
 
 
 class SubscribeSpaceResp(BaseModel):
-    status: str = Field(
-        ..., description="Subscription status: 'subscribed' or 'pending'"
-    )
+    status: str = Field(..., description="Subscription status: 'subscribed' or 'pending'")
     space_id: int = Field(..., description="Knowledge Space ID")
 
 
 class SpaceListReq(BaseModel):
-    parent_id: Optional[int] = Field(
-        None, description="Parent Folder ID; omit for root level"
-    )
+    parent_id: int | None = Field(None, description="Parent Folder ID; omit for root level")
     page: int = Field(1, ge=1, description="Page number (1-indexed)")
     page_size: int = Field(20, ge=1, le=200, description="Items per page")
 
@@ -622,11 +586,9 @@ class SpaceMemberResponse(BaseModel):
 
     user_id: int = Field(..., description="User ID")
     user_name: str = Field(..., description="User Name")
-    user_avatar: Optional[str] = Field(None, description="User Avatar URL")
-    user_role: str = Field(
-        ..., description="User Role in Space: creator / admin / member"
-    )
-    user_groups: List[dict] = Field(
+    user_avatar: str | None = Field(None, description="User Avatar URL")
+    user_role: str = Field(..., description="User Role in Space: creator / admin / member")
+    user_groups: list[dict] = Field(
         default_factory=list,
         description="User Groups the member belongs to, each group is represented as a dict with group details",
     )
@@ -635,7 +597,7 @@ class SpaceMemberResponse(BaseModel):
 class SpaceMemberPageResponse(BaseModel):
     """Space Member Page Response"""
 
-    data: List[SpaceMemberResponse] = Field(
+    data: list[SpaceMemberResponse] = Field(
         default_factory=list, description="List of space members in the current page"
     )
     total: int = Field(..., description="Total number of space members")
@@ -646,9 +608,7 @@ class UpdateSpaceMemberRoleRequest(BaseModel):
 
     space_id: int = Field(default=0, description="Space ID")
     user_id: int = Field(..., description="Target User ID")
-    role: Literal["admin", "member"] = Field(
-        ..., description="New Role to Assign: admin / member"
-    )
+    role: Literal["admin", "member"] = Field(..., description="New Role to Assign: admin / member")
 
 
 class RemoveSpaceMemberRequest(BaseModel):
@@ -661,7 +621,7 @@ class RemoveSpaceMemberRequest(BaseModel):
 class KnowledgeSpaceFolderStatsReq(BaseModel):
     """Batch folder statistics request."""
 
-    folder_ids: List[int] = Field(
+    folder_ids: list[int] = Field(
         ...,
         min_length=1,
         max_length=200,
@@ -688,7 +648,7 @@ class KnowledgeSpaceFolderStatsItemResp(BaseModel):
 class KnowledgeSpaceFolderStatsResp(BaseModel):
     """Batch folder statistics response."""
 
-    stats: List[KnowledgeSpaceFolderStatsItemResp] = Field(
+    stats: list[KnowledgeSpaceFolderStatsItemResp] = Field(
         default_factory=list,
         description="Folder statistics items in request order",
     )
@@ -698,26 +658,14 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     """Knowledge Space File Response"""
 
     summary: str = Field(default="", description="Read-only summary mapped from file abstract")
-    old_file_level_path: Optional[str] = Field(None, description="Old File Level Path")
-    approval_request_id: Optional[int] = Field(
-        None, description="Approval request id for pending uploads"
-    )
-    approval_status: Optional[str] = Field(
-        None, description="Approval status for pending uploads"
-    )
-    approval_reason: Optional[str] = Field(
-        None, description="Approval or safety reject reason"
-    )
-    is_pending_approval: bool = Field(
-        default=False, description="Whether the file is still pending approval"
-    )
+    old_file_level_path: str | None = Field(None, description="Old File Level Path")
+    approval_request_id: int | None = Field(None, description="Approval request id for pending uploads")
+    approval_status: str | None = Field(None, description="Approval status for pending uploads")
+    approval_reason: str | None = Field(None, description="Approval or safety reject reason")
+    is_pending_approval: bool = Field(default=False, description="Whether the file is still pending approval")
     # Version management fields (populated by list_space_children when version feature is enabled)
-    version_no: Optional[int] = Field(
-        default=None, description="Primary version number for multi-version docs"
-    )
-    is_multi_version: bool = Field(
-        default=False, description="Whether this file's logical document has >1 version"
-    )
+    version_no: int | None = Field(default=None, description="Primary version number for multi-version docs")
+    is_multi_version: bool = Field(default=False, description="Whether this file's logical document has >1 version")
     has_similar: bool = Field(
         default=False,
         description="Whether this file has unresolved similar candidates (similar_status == 1)",

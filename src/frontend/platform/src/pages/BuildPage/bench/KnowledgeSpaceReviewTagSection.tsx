@@ -1,15 +1,24 @@
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Label } from "@/components/bs-ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/bs-ui/select";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
-    getKnowledgeSpaceReviewTagListApi,
     approveOrRejectReviewTagApi,
-    deleteReviewTagApi,
+    getKnowledgeSpaceReviewTagListApi,
+    getKnowledgeSpaceTagLibrariesByKnowledgeApi,
+    type KnowledgeSpaceTagLibraryListItem,
     type ReviewTagItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Check, Trash2, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,6 +27,134 @@ const PAGE_SIZE = 5;
 interface KnowledgeSpaceTagSectionProps {
     visible: boolean;
     onToggle: (visible: boolean) => void;
+}
+
+interface ApproveReviewTagDialogProps {
+    open: boolean;
+    row: ReviewTagItem | null;
+    knowledgeId: number | null;
+    onOpenChange: (open: boolean) => void;
+    onApproved: () => void;
+}
+
+function formatTagSourceLabel(resourceType: string, t: (key: string, defaultValue: string) => string) {
+    if (resourceType === "ai_auto_tag") {
+        return t("build.tagSourceAi", "AI标签");
+    }
+    if (resourceType === "system_tag" || resourceType === "manual_tag") {
+        return t("build.tagSourceSystem", "系统标签");
+    }
+    return t("build.tagSourceManual", "人工标签");
+}
+
+function ApproveReviewTagDialog({
+    open,
+    row,
+    knowledgeId,
+    onOpenChange,
+    onApproved,
+}: ApproveReviewTagDialogProps) {
+    const { t } = useTranslation();
+    const { toast } = useToast();
+    const [libraries, setLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
+    const [selectedLibraryId, setSelectedLibraryId] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (!open) {
+            setSelectedLibraryId("");
+            setLibraries([]);
+            return;
+        }
+        if (!knowledgeId) return;
+        setLoading(true);
+        captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibrariesByKnowledgeApi(knowledgeId)).then((res) => {
+            setLibraries(res || []);
+            setLoading(false);
+        });
+    }, [open, knowledgeId]);
+
+    const handleConfirm = async () => {
+        if (!row?.tag_name || !knowledgeId || !selectedLibraryId) {
+            toast({
+                variant: "error",
+                description: t("build.reviewTagSelectLibraryRequired", "请选择导入的标签库"),
+            });
+            return;
+        }
+        setSaving(true);
+        const res = await captureAndAlertRequestErrorHoc(
+            approveOrRejectReviewTagApi({
+                tag_name: row.tag_name,
+                status: 1,
+                resource_type: row.resource_type || "",
+                tag_library_id: Number(selectedLibraryId),
+                knowledge_id: knowledgeId,
+            }),
+        );
+        setSaving(false);
+        if (!res) return;
+        toast({ variant: "success", description: t("build.approved", "已通过") });
+        onOpenChange(false);
+        onApproved();
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[480px] bg-background-login">
+                <DialogHeader>
+                    <DialogTitle>{t("build.reviewTagApproveTitle", "审核通过")}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <p className="text-sm text-muted-foreground">
+                        {t(
+                            "build.reviewTagApproveDesc",
+                            "将标签「{{tagName}}」导入到该知识空间绑定的标签库中",
+                            { tagName: row?.tag_name || "" },
+                        )}
+                    </p>
+                    <div>
+                        <Label className="bisheng-label">
+                            {t("build.reviewTagSelectLibrary", "选择标签库")}
+                            <span className="bisheng-tip">*</span>
+                        </Label>
+                        <Select value={selectedLibraryId} onValueChange={setSelectedLibraryId} disabled={loading || saving}>
+                            <SelectTrigger className="mt-2">
+                                <SelectValue
+                                    placeholder={
+                                        loading
+                                            ? t("loading")
+                                            : t("build.reviewTagSelectLibraryPlaceholder", "请选择标签库")
+                                    }
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {libraries.map((library) => (
+                                    <SelectItem key={library.id} value={String(library.id)}>
+                                        {library.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {!loading && libraries.length === 0 && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                                {t("build.reviewTagNoBoundLibrary", "该知识空间尚未绑定标签库")}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
+                        {t("cancel", { ns: "bs" })}
+                    </Button>
+                    <Button className="px-8" disabled={saving || loading || libraries.length === 0} onClick={handleConfirm}>
+                        {t("confirm", { ns: "bs" })}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 export default function KnowledgeSpaceReviewTagSection({
@@ -31,8 +168,10 @@ export default function KnowledgeSpaceReviewTagSection({
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
-    const [hasMore, setHasMore] = useState(false);
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+    const [approveTarget, setApproveTarget] = useState<ReviewTagItem | null>(null);
+    const [approveKnowledgeId, setApproveKnowledgeId] = useState<number | null>(null);
 
     const loadData = useCallback(async (targetPage: number) => {
         setLoading(true);
@@ -42,7 +181,6 @@ export default function KnowledgeSpaceReviewTagSection({
         if (res) {
             setRows(res.data || []);
             setTotal(res.total || 0);
-            setHasMore((res.data || []).length === PAGE_SIZE);
         }
         setLoading(false);
     }, []);
@@ -55,9 +193,9 @@ export default function KnowledgeSpaceReviewTagSection({
     }, [visible, loadData]);
 
     const filteredRows = useMemo(() => {
-        const trimmed = (keyword || '').trim().toLowerCase();
+        const trimmed = (keyword || "").trim().toLowerCase();
         if (!trimmed) return rows;
-        return rows.filter((row) => (row.tag || '').toLowerCase().includes(trimmed));
+        return rows.filter((row) => (row.tag_name || "").toLowerCase().includes(trimmed));
     }, [rows, keyword]);
 
     const handlePageChange = (newPage: number) => {
@@ -65,21 +203,28 @@ export default function KnowledgeSpaceReviewTagSection({
         loadData(newPage);
     };
 
-    const handleApprove = async (row: ReviewTagItem) => {
-        if (!row.tag_name?.length) return;
-        const res = await captureAndAlertRequestErrorHoc(
-            approveOrRejectReviewTagApi({ tag_name: row.tag_name || '', status: 1, resource_type: row.resource_type || '' }),
-        );
-        if (res) {
-            toast({ variant: "success", description: t("build.approved", "已通过") });
-            loadData(page);
+    const openApproveDialog = (row: ReviewTagItem, knowledgeId?: number | null) => {
+        const resolvedKnowledgeId =
+            knowledgeId ??
+            row.resource_files?.find((file) => file.knowledge_id)?.knowledge_id ??
+            row.knowledge_ids?.[0] ??
+            null;
+        if (!resolvedKnowledgeId) {
+            toast({
+                variant: "error",
+                description: t("build.reviewTagMissingKnowledge", "无法确定标签所属知识空间"),
+            });
+            return;
         }
+        setApproveTarget(row);
+        setApproveKnowledgeId(resolvedKnowledgeId);
+        setApproveDialogOpen(true);
     };
 
     const handleReject = async (row: ReviewTagItem) => {
         if (!row.tag_name?.length) return;
         const res = await captureAndAlertRequestErrorHoc(
-            approveOrRejectReviewTagApi({ tag_name: row.tag_name || '', status: 2, resource_type: row.resource_type || '' }),
+            approveOrRejectReviewTagApi({ tag_name: row.tag_name || "", status: 2, resource_type: row.resource_type || "" }),
         );
         if (res) {
             toast({ variant: "success", description: t("build.rejected", "已拒绝") });
@@ -87,26 +232,16 @@ export default function KnowledgeSpaceReviewTagSection({
         }
     };
 
-    const handleDelete = async (row: ReviewTagItem) => {
-        if (!row.tag_name?.length) return;
-        bsConfirm({
-            title: t("build.deleteTagTitle", "删除标签"),
-            desc: t("build.deleteReviewTagDesc", "确认删除该待审核标签？"),
-            showClose: true,
-            okTxt: t("build.confirmDelete", "确认删除"),
-            canelTxt: t("cancel", { ns: "bs" }),
-            async onOk(next) {
-                const res = await captureAndAlertRequestErrorHoc(
-                    deleteReviewTagApi({ tag_name: row.tag_name || '', resource_type: row.resource_type || '' }),
-                );
-                if (res) {
-                    toast({ variant: "success", description: t("build.deleted", "已删除") });
-                    loadData(page);
-                }
-                next?.();
-            },
-        });
-    };
+    const renderActions = (row: ReviewTagItem, knowledgeId?: number | null) => (
+        <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => openApproveDialog(row, knowledgeId)}>
+                <Check className="mr-1 size-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => handleReject(row)}>
+                <X className="mr-1 size-4" />
+            </Button>
+        </div>
+    );
 
     return (
         <div className="p-5 rounded-lg">
@@ -157,13 +292,13 @@ export default function KnowledgeSpaceReviewTagSection({
                                 <tbody>
                                     {loading ? (
                                         <tr>
-                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={4}>
+                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
                                                 {t("loading")}
                                             </td>
                                         </tr>
                                     ) : filteredRows.length === 0 ? (
                                         <tr>
-                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={4}>
+                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
                                                 {t("build.tagEmpty", "暂无待审核标签")}
                                             </td>
                                         </tr>
@@ -173,21 +308,13 @@ export default function KnowledgeSpaceReviewTagSection({
                                                 return (
                                                     <tr key={group.tag_name} className="border-t text-sm">
                                                         <td className="truncate px-4 py-3 font-medium">{group.tag_name}</td>
-                                                        <td className="truncate px-4 py-3 font-medium">{group.resource_type === "system_tag" ? "系统标签" : (group.resource_type === "ai_auto_tag" ? "AI标签" : "人工标签")}</td>
+                                                        <td className="truncate px-4 py-3 font-medium">
+                                                            {formatTagSourceLabel(group.resource_type, t)}
+                                                        </td>
                                                         <td className="truncate px-4 py-3 text-muted-foreground">-</td>
                                                         <td className="px-4 py-3 text-muted-foreground">-</td>
                                                         <td className="px-4 py-3">
-                                                            <div className="flex items-center gap-1">
-                                                                <Button variant="ghost" size="sm" onClick={() => handleApprove(group)}>
-                                                                    <Check className="mr-1 size-4" />
-                                                                </Button>
-                                                                <Button variant="ghost" size="sm" onClick={() => handleReject(group)}>
-                                                                    <X className="mr-1 size-4" />
-                                                                </Button>
-                                                                {/* <Button variant="ghost" size="sm" onClick={() => handleDelete(group)}>
-                                                                    <Trash2 className="mr-1 size-4" />
-                                                                </Button> */}
-                                                            </div>
+                                                            {renderActions(group, group.knowledge_ids?.[0] ?? null)}
                                                         </td>
                                                     </tr>
                                                 );
@@ -201,7 +328,7 @@ export default function KnowledgeSpaceReviewTagSection({
                                                     )}
                                                     {idx === 0 && (
                                                         <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
-                                                            {group.resource_type === "system_tag" ? "系统标签" : (group.resource_type === "ai_auto_tag" ? "AI标签" : "人工标签")}
+                                                            {formatTagSourceLabel(group.resource_type, t)}
                                                         </td>
                                                     )}
                                                     <td className="truncate px-4 py-3">
@@ -219,21 +346,9 @@ export default function KnowledgeSpaceReviewTagSection({
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3">{resource.submit_time || "-"}</td>
-                                                    {idx === 0 && (
-                                                        <td rowSpan={group.resource_files.length} className="px-4 py-3 align-top">
-                                                            <div className="flex items-center gap-1">
-                                                                <Button variant="ghost" size="sm" onClick={() => handleApprove(group)}>
-                                                                    <Check className="mr-1 size-4" />
-                                                                </Button>
-                                                                <Button variant="ghost" size="sm" onClick={() => handleReject(group)}>
-                                                                    <X className="mr-1 size-4" />
-                                                                </Button>
-                                                                {/* <Button variant="ghost" size="sm" onClick={() => handleDelete(group)}>
-                                                                    <Trash2 className="mr-1 size-4" />
-                                                                </Button> */}
-                                                            </div>
-                                                        </td>
-                                                    )}
+                                                    <td className="px-4 py-3">
+                                                        {renderActions(group, resource.knowledge_id ?? null)}
+                                                    </td>
                                                 </tr>
                                             ));
                                         })
@@ -267,6 +382,14 @@ export default function KnowledgeSpaceReviewTagSection({
                     </div>
                 )}
             </div>
+
+            <ApproveReviewTagDialog
+                open={approveDialogOpen}
+                row={approveTarget}
+                knowledgeId={approveKnowledgeId}
+                onOpenChange={setApproveDialogOpen}
+                onApproved={() => loadData(page)}
+            />
         </div>
     );
 }

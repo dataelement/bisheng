@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
@@ -17,21 +19,15 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
 
 
 def test_tag_library_normalize_preserves_duplicates_and_rejects_over_limit():
-    assert KnowledgeSpaceTagLibraryService.normalize_tags(
-        [" 政策 ", "", "政策", "制度"]
-    ) == ["政策", "政策", "制度"]
+    assert KnowledgeSpaceTagLibraryService.normalize_tags([" 政策 ", "", "政策", "制度"]) == ["政策", "政策", "制度"]
 
     with pytest.raises(KnowledgeSpaceTagLibraryInvalidError):
         KnowledgeSpaceTagLibraryService.normalize_tags([f"tag-{i}" for i in range(201)])
 
 
 def test_auto_tag_parse_accepts_strict_json_and_json_fence():
-    assert KnowledgeSpaceAutoTagService._parse_llm_tags(
-        '{"tags": ["政策", "制度"]}'
-    ) == ["政策", "制度"]
-    assert KnowledgeSpaceAutoTagService._parse_llm_tags(
-        '```json\n{"tags": ["项目"]}\n```'
-    ) == ["项目"]
+    assert KnowledgeSpaceAutoTagService._parse_llm_tags('{"tags": ["政策", "制度"]}') == ["政策", "制度"]
+    assert KnowledgeSpaceAutoTagService._parse_llm_tags('```json\n{"tags": ["项目"]}\n```') == ["项目"]
     assert KnowledgeSpaceAutoTagService._parse_llm_tags("not-json") == []
 
 
@@ -39,13 +35,20 @@ def test_auto_tag_match_only_uses_library_tags_and_limits_result_count():
     selected = ["政策", "未知", "制度", "项目", "市场", "财务", "培训"]
     library_tags = ["政策", "制度", "项目", "市场", "财务", "培训"]
 
-    assert KnowledgeSpaceAutoTagService._match_library_tags(selected, library_tags) == [
-        "政策",
-        "制度",
-        "项目",
-        "市场",
-        "财务",
-    ]
+    matched, ai_matched = KnowledgeSpaceAutoTagService._match_library_tags(selected, library_tags, [])
+    assert matched == ["政策", "制度", "项目", "市场", "财务"]
+    assert ai_matched == []
+
+    selected_with_ai = ["政策", "AI-政策"]
+    matched, ai_matched = KnowledgeSpaceAutoTagService._match_library_tags(selected_with_ai, ["政策"], ["AI-政策"])
+    assert matched == ["政策"]
+    assert ai_matched == ["AI-政策"]
+
+
+_LINK_DAO_PATCH = (
+    "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service."
+    "KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge"
+)
 
 
 def test_auto_tag_should_run_only_for_successful_uploaded_space_file():
@@ -65,18 +68,19 @@ def test_auto_tag_should_run_only_for_successful_uploaded_space_file():
         status=KnowledgeFileStatus.SUCCESS.value,
     )
 
-    assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+    with patch(_LINK_DAO_PATCH, return_value=[]):
+        assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
 
-    db_file.file_source = FileSource.CHANNEL.value
-    assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+        db_file.file_source = FileSource.CHANNEL.value
+        assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
 
-    db_file.file_source = FileSource.UPLOAD.value
-    db_file.status = KnowledgeFileStatus.FAILED.value
-    assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+        db_file.file_source = FileSource.UPLOAD.value
+        db_file.status = KnowledgeFileStatus.FAILED.value
+        assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
 
-    db_file.status = KnowledgeFileStatus.SUCCESS.value
-    knowledge.type = KnowledgeTypeEnum.NORMAL.value
-    assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+        db_file.status = KnowledgeFileStatus.SUCCESS.value
+        knowledge.type = KnowledgeTypeEnum.NORMAL.value
+        assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
 
 
 def test_auto_tag_should_skip_manual_upload_tags():
@@ -97,4 +101,5 @@ def test_auto_tag_should_skip_manual_upload_tags():
         user_metadata={"manual_upload_tags_applied": True},
     )
 
-    assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+    with patch(_LINK_DAO_PATCH, return_value=[]):
+        assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)

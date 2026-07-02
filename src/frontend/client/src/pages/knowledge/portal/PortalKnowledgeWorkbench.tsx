@@ -43,6 +43,7 @@ import { useGetBsConfig, useGetPortalMetadataConfig } from "~/hooks/queries/endp
 import { useConfirm, useToastContext } from "~/Providers";
 import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
+import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, triggerUrlDownload, type UploadSizeEnvConfig } from "../knowledgeUtils";
@@ -1804,7 +1805,7 @@ export default function PortalKnowledgeWorkbench() {
                     auth_type: authType,
                     is_released: form.publishToSquare === "yes",
                     auto_tag_enabled: form.autoTagEnabled,
-                    auto_tag_library_id: form.autoTagLibraryId,
+                    ...buildAutoTagLibraryPayload(form.autoTagLibraryIds, { syncExplicitly: true }),
                 });
                 setActiveSpace((prev) => prev?.id === updated.id ? { ...updated, role: prev.role } : prev);
                 await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });

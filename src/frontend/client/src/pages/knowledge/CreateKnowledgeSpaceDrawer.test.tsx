@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { CreateKnowledgeSpaceDrawer } from "./CreateKnowledgeSpaceDrawer";
-import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
+import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, getKnowledgeSpaceTagLibrariesApi, getKnowledgeSpaceTagLibrariesByKnowledgeApi, getKnowledgeSpaceTagLibraryDetailApi, getSpaceInfoApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({ showToast: jest.fn() }),
@@ -35,6 +35,9 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.no": "否",
             "com_knowledge.auto_tag_generation": "自动标签生成",
             "com_knowledge.auto_tag_generation_desc": "上传文件解析成功后自动生成标签",
+            "com_knowledge.auto_tag_library": "标签库",
+            "com_knowledge.select_auto_tag_library": "请选择标签库",
+            "com_knowledge.loading": "加载中...",
         };
         return dict[key] || key;
     },
@@ -156,7 +159,9 @@ jest.mock("~/api/knowledge", () => ({
     getCreateSpaceUserGroupsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     getKnowledgeSpaceAutoTagVisibilityApi: jest.fn().mockResolvedValue({ visible: false }),
     getKnowledgeSpaceTagLibrariesApi: jest.fn().mockResolvedValue({ data: [] }),
+    getKnowledgeSpaceTagLibrariesByKnowledgeApi: jest.fn().mockResolvedValue([]),
     getKnowledgeSpaceTagLibraryDetailApi: jest.fn().mockResolvedValue({ tags: [] }),
+    getSpaceInfoApi: jest.fn().mockResolvedValue({ autoTagLibraryIds: [], autoTagLibraryId: null }),
 }));
 
 function renderDrawer(props: Partial<ComponentProps<typeof CreateKnowledgeSpaceDrawer>> = {}) {
@@ -354,9 +359,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
                 isReleased: true,
                 spaceLevel: SpaceLevel.TEAM,
                 autoTagEnabled: false,
-                autoTagLibraryId: null,
-                autoTagMode: "library",
-                autoTagCustomTags: null,
+                autoTagLibraryIds: [],
             } as any,
             onConfirm,
         });
@@ -391,14 +394,81 @@ describe("CreateKnowledgeSpaceDrawer", () => {
                 isReleased: false,
                 spaceLevel: SpaceLevel.DEPARTMENT,
                 autoTagEnabled: false,
-                autoTagLibraryId: null,
-                autoTagMode: "library",
-                autoTagCustomTags: null,
+                autoTagLibraryIds: [],
             } as any,
         });
 
         expect(screen.getByText("编辑知识库")).toBeInTheDocument();
         expect(screen.getByText("部门知识库")).toBeInTheDocument();
+    });
+
+    test("编辑模式回显已关联的标签库", async () => {
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
+            data: [{ id: 1, name: "通用标签库", tag_count: 10, is_builtin: true }],
+            total: 1,
+        } as any);
+        jest.mocked(getKnowledgeSpaceTagLibrariesByKnowledgeApi).mockResolvedValue([
+            { id: 2, name: "行业标签库", tag_count: 5, is_builtin: false },
+        ] as any);
+
+        renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                id: "137",
+                name: "测试1",
+                description: "",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.PERSONAL,
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+        });
+
+        await waitFor(() => {
+            expect(getKnowledgeSpaceTagLibrariesByKnowledgeApi).toHaveBeenCalledWith("137");
+            expect(screen.getAllByText("行业标签库").length).toBeGreaterThan(0);
+        });
+    });
+
+    test("编辑模式通过 space info 回显未出现在全局列表中的标签库", async () => {
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
+            data: [{ id: 1, name: "通用标签库", tag_count: 10, is_builtin: true }],
+            total: 1,
+        } as any);
+        jest.mocked(getKnowledgeSpaceTagLibrariesByKnowledgeApi).mockResolvedValue([]);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue({
+            id: "137",
+            autoTagLibraryIds: [9],
+            autoTagLibraryId: 9,
+        } as any);
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({
+            id: 9,
+            name: "专用标签库",
+            tags: ["A"],
+            tag_count: 1,
+            is_builtin: false,
+        } as any);
+
+        renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                id: "137",
+                name: "测试1",
+                description: "",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.PERSONAL,
+                autoTagEnabled: false,
+                autoTagLibraryIds: [9],
+            } as any,
+        });
+
+        await waitFor(() => {
+            expect(getSpaceInfoApi).toHaveBeenCalledWith("137");
+            expect(getKnowledgeSpaceTagLibraryDetailApi).toHaveBeenCalledWith(9);
+            expect(screen.getAllByText("专用标签库").length).toBeGreaterThan(0);
+        });
     });
 
     test("入口层级无创建权限时回退到第一个有权限层级", async () => {

@@ -1,6 +1,10 @@
 import { submitShougangKnowledgeSpaceCreateApprovalApi } from "~/api/approval";
 import { createSpaceApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
-import { submitKnowledgeSpaceCreate, submitKnowledgeSpaceCreateWithApproval } from "./createKnowledgeSpaceApproval";
+import {
+    buildAutoTagLibraryPayload,
+    submitKnowledgeSpaceCreate,
+    submitKnowledgeSpaceCreateWithApproval,
+} from "./createKnowledgeSpaceApproval";
 
 jest.mock("~/api/approval", () => ({
     submitShougangKnowledgeSpaceCreateApprovalApi: jest.fn(),
@@ -39,8 +43,7 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             spaceLevel: SpaceLevel.TEAM,
             departmentId: undefined,
             autoTagEnabled: true,
-            autoTagLibraryId: 9,
-            autoTagCustomTags: ["技术"],
+            autoTagLibraryIds: [9],
             reason: "申请创建团队知识库",
         } as any);
 
@@ -54,7 +57,7 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             department_id: undefined,
             auto_tag_enabled: true,
             auto_tag_library_id: 9,
-            auto_tag_custom_tags: ["技术"],
+            auto_tag_library_ids: [9],
             reason: "申请创建团队知识库",
         });
         expect(payload).not.toHaveProperty("user_group_id");
@@ -70,8 +73,7 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             spaceLevel: SpaceLevel.PERSONAL,
             departmentId: undefined,
             autoTagEnabled: true,
-            autoTagLibraryId: 3,
-            autoTagCustomTags: ["技术"],
+            autoTagLibraryIds: [3],
         } as any);
 
         expect(createSpaceApi).toHaveBeenCalledWith({
@@ -82,12 +84,19 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             space_level: SpaceLevel.PERSONAL,
             auto_tag_enabled: true,
             auto_tag_library_id: 3,
-            auto_tag_custom_tags: ["技术"],
+            auto_tag_library_ids: [3],
         });
         expect(submitShougangKnowledgeSpaceCreateApprovalApi).not.toHaveBeenCalled();
         expect(result).toEqual(expect.objectContaining({
             created: true,
             space: expect.objectContaining({ id: "personal-1" }),
         }));
+    });
+
+    it("buildAutoTagLibraryPayload syncExplicitly clears bindings on edit save", () => {
+        expect(buildAutoTagLibraryPayload([], { syncExplicitly: true })).toEqual({
+            auto_tag_library_ids: [],
+            auto_tag_library_id: null,
+        });
     });
 });
