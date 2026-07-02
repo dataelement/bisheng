@@ -12,6 +12,9 @@ const WEB_LINK_ERROR_KEY_MAP: Record<string, string> = {
     "this web link host is not allowed": "com_knowledge.web_link_host_not_allowed",
     "this web link address is not allowed": "com_knowledge.web_link_address_not_allowed",
     "web link host cannot be resolved": "com_knowledge.web_link_host_unresolved",
+    "target site refused server-side access": "com_knowledge.web_link_access_refused",
+    "target site requires authentication": "com_knowledge.web_link_auth_required",
+    "target site rate limited server-side access": "com_knowledge.web_link_rate_limited",
 };
 
 const MEDIA_ERROR_KEY_MAP: Record<string, string> = {

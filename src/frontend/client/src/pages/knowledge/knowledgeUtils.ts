@@ -132,7 +132,7 @@ export function getFileInputAccept(enableEtl4lm: boolean): string {
 export const DEFAULT_MAX_FILE_SIZE_MB = 200;
 
 /** Default maximum media file size in MB when env config is not available */
-export const DEFAULT_MEDIA_MAX_FILE_SIZE_MB = 1024;
+export const DEFAULT_MEDIA_MAX_FILE_SIZE_MB = 1;
 
 export const MEDIA_FILE_EXTENSIONS = [
     "mp3", "wav", "m4a", "aac", "flac", "ogg",

@@ -214,3 +214,46 @@ def test_navigation_page_login_urls_do_not_trigger_login_page_detection() -> Non
     assert not result.low_value_reason
     assert "登录、注册或权限入口页面" not in result.markdown
     assert "热搜新闻" in result.markdown
+
+
+def test_http_status_error_message_maps_common_status_codes() -> None:
+    assert KnowledgeWebLinkImportService._http_status_error_message(401) == (
+        "Target site requires authentication"
+    )
+    assert KnowledgeWebLinkImportService._http_status_error_message(403) == (
+        "Target site refused server-side access"
+    )
+    assert KnowledgeWebLinkImportService._http_status_error_message(429) == (
+        "Target site rate limited server-side access"
+    )
+    assert KnowledgeWebLinkImportService._http_status_error_message(500) == (
+        "Web link request failed with status 500"
+    )
+
+
+def test_navigation_portal_page_uses_expected_reason_text() -> None:
+    html = """
+    <html>
+      <head><title>门户首页</title></head>
+      <body>
+        <main>
+          <a href="/">首页</a>
+          <a href="/register">注册</a>
+          <a href="/login">登录</a>
+          <a href="/apps">应用</a>
+          <a href="/tools">工具</a>
+          <a href="/workspace">工作台</a>
+          <p>导航入口</p>
+        </main>
+      </body>
+    </html>
+    """
+
+    result = KnowledgeWebLinkImportService._extract_markdown(
+        html,
+        "https://example.com/portal",
+        "text/html",
+    )
+
+    assert result.low_value_reason
+    assert "该网页主要是以导航或门户入口页面" in result.markdown
