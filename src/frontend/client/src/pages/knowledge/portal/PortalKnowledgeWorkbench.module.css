@@ -1591,6 +1591,11 @@
   line-height: 22px;
 }
 
+.detailValueWrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .detailSelect {
   width: 100%;
   min-width: 0;

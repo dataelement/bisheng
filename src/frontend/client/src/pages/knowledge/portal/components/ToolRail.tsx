@@ -1,4 +1,4 @@
-import { Bot, BriefcaseBusiness, Clock, FileText, Link2, PanelRight } from "lucide-react";
+import { Bot, BriefcaseBusiness, Clock, FileText, Link2, Lock, PanelRight } from "lucide-react";
 import type { PanelKey, PortalToolRailKey } from "../types";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -13,6 +13,7 @@ const TOOLBAR_ITEMS: Array<{
     { key: "time", title: "时间", icon: Clock, panelKey: "time" },
     { key: "source", title: "来源", icon: Link2, panelKey: "source" },
     { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
+    { key: "permission", title: "权限", icon: Lock, panelKey: "permission" },
     { key: "ai", title: "AI 对话", icon: Bot },
 ];
 
