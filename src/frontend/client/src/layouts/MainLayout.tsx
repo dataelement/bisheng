@@ -335,6 +335,7 @@ export default function MainLayout() {
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
   /** 订阅 / 应用中心 / 应用对话：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
   const innerScrollShell =
+    /^\/(c|linsight)(\/|$)/.test(pathname) ||
     isChannelRoute ||
     isAppChatRoute ||
     (isAppsArea && !isAppsExploreRoute);
