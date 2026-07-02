@@ -307,8 +307,12 @@ class ShougangApprovalService:
 
         if not approval_required:
             created = await space_service.create_knowledge_space(**params)
-            get_info = getattr(space_service, 'get_space_info', None)
-            space_info = await get_info(created.id) if get_info else created
+            build_info = getattr(space_service, 'build_created_space_info', None)
+            if build_info:
+                space_info = build_info(created)
+            else:
+                get_info = getattr(space_service, 'get_space_info', None)
+                space_info = await get_info(created.id) if get_info else created
             if hasattr(space_info, 'model_dump'):
                 space_info = space_info.model_dump(mode='json')
             return {

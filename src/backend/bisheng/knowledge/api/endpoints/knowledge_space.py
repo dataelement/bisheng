@@ -40,6 +40,7 @@ from bisheng.knowledge.domain.services.department_knowledge_space_service import
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
@@ -57,7 +58,6 @@ router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 async def create_space(
     req: KnowledgeSpaceCreateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     space = await svc.create_knowledge_space(
         name=req.name,
@@ -73,7 +73,7 @@ async def create_space(
         auto_tag_library_ids=req.auto_tag_library_ids,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
     )
-    return resp_200(await svc.get_space_info(space.id))
+    return resp_200(svc.build_created_space_info(space))
 
 
 @router.get("/create-options")
@@ -226,6 +226,16 @@ async def get_grouped_spaces(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_grouped_spaces(order_by)
+    return resp_200(spaces)
+
+
+@router.get("/level/{space_level}")
+async def get_spaces_by_level(
+    space_level: KnowledgeSpaceLevelEnum,
+    order_by: str = "update_time",
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    spaces = await svc.get_spaces_by_level(space_level, order_by)
     return resp_200(spaces)
 
 
@@ -598,6 +608,9 @@ async def add_file(
         file_path=req.file_path,
         parent_id=req.parent_id,
         file_category_code=req.file_category_code,
+        business_domain_code=req.business_domain_code,
+        manual_tag_ids=req.manual_tag_ids,
+        manual_tag_names=req.manual_tag_names,
     )
     return resp_200(file_record)
 

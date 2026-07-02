@@ -86,6 +86,10 @@ function getUpdateTimeDisplay(updatedAt?: string | null) {
     return formatTime(updatedAt);
 }
 
+function getPersonDisplay(name?: string | null) {
+    return isNonEmptyText(name) ? name : EMPTY_FIELD_PLACEHOLDER;
+}
+
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
 // ============================================================
@@ -97,6 +101,8 @@ const COLUMN_CONFIG = {
     tags: { minWidth: 140, initialWidth: 200 },
     businessDomain: { minWidth: 140, initialWidth: 170 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
+    uploader: { minWidth: 100, initialWidth: 140 },
+    updater: { minWidth: 100, initialWidth: 140 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
@@ -485,7 +491,7 @@ function FileTableHeader({
                 >
                     <div className="flex h-full items-center justify-center">
                         <Checkbox
-                            className="rounded-[3px] border-[#AEB7C0] data-[state=checked]:border-primary"
+                            className="size-[14px] rounded-[2px] border-[#AEB7C0] data-[state=checked]:border-primary"
                             checked={isIndeterminate ? "indeterminate" : isAllSelected}
                             onCheckedChange={onSelectAll}
                         />
@@ -591,6 +597,28 @@ function FileTableHeader({
                     </TableHead>
                 )}
 
+                {/* 上传人 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{ width: columnWidths.uploader, minWidth: columnWidths.uploader, maxWidth: columnWidths.uploader }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        上传人
+                    </div>
+                    <ResizeHandle columnKey="uploader" onResizeStart={onResizeStart} />
+                </TableHead>
+
+                {/* 更新人 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{ width: columnWidths.updater, minWidth: columnWidths.updater, maxWidth: columnWidths.updater }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        更新人
+                    </div>
+                    <ResizeHandle columnKey="updater" onResizeStart={onResizeStart} />
+                </TableHead>
+
                 {/* 更新时间 */}
                 <SortableHeader
                     sortKey={SortType.UPDATE_TIME}
@@ -603,7 +631,7 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* 状态 — 管理员始终可见；普通成员仅在存在审批状态时展示 */}
+                {/* 状态 */}
                 {showStatusColumn && (
                     <TableHead
                         className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
@@ -682,7 +710,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
-    const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
+    const showStatusColumn = true;
     const localize = useLocalize();
     const { showToast } = useToastContext();
 
@@ -1204,7 +1232,7 @@ function FileRow({
                     <Checkbox
                         checked={isSelected}
                         onCheckedChange={onSelect}
-                        className={`size-4 rounded-[3px] border-[#AEB7C0] ${isSelected ? "border-primary" : ""}`}
+                        className={`size-[14px] rounded-[2px] border-[#AEB7C0] ${isSelected ? "border-primary" : ""}`}
                     />
                 </div>
             </TableCell>
@@ -1457,6 +1485,26 @@ function FileRow({
                 </TableCell>
             )}
 
+            {/* 上传人 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.uploader, minWidth: columnWidths.uploader, maxWidth: columnWidths.uploader }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getPersonDisplay(file.user_name)}
+                </span>
+            </TableCell>
+
+            {/* 更新人 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{ width: columnWidths.updater, minWidth: columnWidths.updater, maxWidth: columnWidths.updater }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {getPersonDisplay(file.updater_name || file.user_name)}
+                </span>
+            </TableCell>
+
             {/* 更新时间 — 操作按钮改到行末占位列，避免盖住文字 */}
             <TableCell
                 className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
@@ -1465,29 +1513,25 @@ function FileRow({
                 <span className="block truncate whitespace-nowrap">{getUpdateTimeDisplay(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态：管理员看解析状态；普通成员只看审批状态 */}
+            {/* 状态 */}
             {showStatusColumn && (
                 <TableCell
                     className={cn("relative overflow-visible py-3 align-middle", rowBg)}
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
                     {isFolder ? (
-                        isAdmin ? (
-                            file.folderStatsLoading ? (
-                                <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
-                            ) : file.folderStatsError ? (
-                                <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
-                            ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
-                                <span className="whitespace-nowrap text-sm">
-                                    <span className="text-[#00b42a]">{file.successFileNum}</span>
-                                    <span className="text-[#86909c]">/{file.fileNum}</span>
-                                </span>
-                            ) : null
+                        file.folderStatsLoading ? (
+                            <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
+                        ) : file.folderStatsError ? (
+                            <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
+                        ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
+                            <span className="whitespace-nowrap text-sm">
+                                <span className="text-[#00b42a]">{file.successFileNum}</span>
+                                <span className="text-[#86909c]">/{file.fileNum}</span>
+                            </span>
                         ) : null
                     ) : (
-                        isAdmin || file.approvalStatus
-                            ? <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
-                            : null
+                        <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
                     )}
                 </TableCell>
             )}

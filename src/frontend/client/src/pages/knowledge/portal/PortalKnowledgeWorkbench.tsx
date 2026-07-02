@@ -155,9 +155,9 @@ export default function PortalKnowledgeWorkbench() {
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [spaceSidebarCollapsed, setSpaceSidebarCollapsed] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<Record<SpaceGroupKey, boolean>>({
-        public: true,
-        department: true,
-        team: true,
+        public: false,
+        department: false,
+        team: false,
         personal: true,
     });
     const [selectedFile, setSelectedFile] = useState<KnowledgeFile | null>(null);
@@ -237,6 +237,13 @@ export default function PortalKnowledgeWorkbench() {
         activeGroup,
         getSpacePermissions,
     } = usePortalSpaces({ activeSpace, setActiveSpace });
+
+    useEffect(() => {
+        if (!activeGroup) return;
+        setExpandedGroups((prev) => (
+            prev[activeGroup.key] ? prev : { ...prev, [activeGroup.key]: true }
+        ));
+    }, [activeGroup?.key]);
 
     const scrollToGroup = useCallback((groupKey: SpaceGroupKey) => {
         const run = () => {
@@ -1817,12 +1824,12 @@ export default function PortalKnowledgeWorkbench() {
 
             if (result.created && result.space) {
                 setActiveSpace(result.space);
-                await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
 
-            await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
             return { showSuccess: false };
         } catch (error) {

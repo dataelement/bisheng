@@ -384,6 +384,7 @@ export interface KnowledgeFile {
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
     user_name?: string;           // mapped from user_name — original uploader of this file
+    updater_name?: string;        // mapped from updater_name — last updater of this file
     // Transient UI-only fields
     isCreating?: boolean;
     /** 0–100 upload progress for in-flight uploads */
@@ -910,6 +911,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         is_multi_version: Boolean(raw?.is_multi_version),
         has_similar: Boolean(raw?.has_similar),
         user_name: raw?.user_name ?? undefined,
+        updater_name: raw?.updater_name ?? undefined,
     };
 }
 
@@ -1059,6 +1061,17 @@ export async function getDepartmentSpacesApi(params?: {
     order_by?: string;
 }): Promise<KnowledgeSpace[]> {
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/department`, {
+        params: {
+            order_by: params?.order_by,
+        },
+    });
+    return extractKnowledgeSpaceList(res).map(mapSpace);
+}
+
+export async function getSpacesByLevelApi(spaceLevel: SpaceLevel, params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/level/${spaceLevel}`, {
         params: {
             order_by: params?.order_by,
         },

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { FileStatus, FileType, SpaceRole, SortDirection, SortType, type KnowledgeFile } from "~/api/knowledge";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
@@ -21,6 +21,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.update_time": "更新时间",
             "com_knowledge.status": "状态",
             "com_knowledge.success": "成功",
+            "com_knowledge.parsing_status": "解析中",
             "com_permission.manage_permission": "权限管理",
             "com_knowledge.version.menu_version_management": "版本管理",
             "com_knowledge.version.menu_version_history": "版本历史",
@@ -131,6 +132,8 @@ const baseFile: KnowledgeFile = {
     createdAt: "2026-05-24T08:00:00Z",
     fileEncoding: "",
     spaceId: "space-1",
+    user_name: "张三",
+    updater_name: "李四",
 } as any;
 
 beforeAll(() => {
@@ -181,6 +184,60 @@ describe("普通知识空间文件发布入口", () => {
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
     });
 
+    test("表格展示上传人和更新人", () => {
+        const folder = {
+            ...baseFile,
+            id: "folder-1",
+            name: "制度文件夹",
+            type: FileType.FOLDER,
+            user_name: "文件夹创建人",
+            updater_name: undefined,
+        } as KnowledgeFile;
+        const fallbackFile = {
+            ...baseFile,
+            id: "file-2",
+            name: "更新人兜底.pdf",
+            user_name: "王五",
+            updater_name: undefined,
+        } as KnowledgeFile;
+
+        render(
+            <FileTable
+                files={[folder, baseFile, fallbackFile]}
+                selectedFiles={new Set()}
+                handleSelectAll={jest.fn()}
+                handleSelectFile={jest.fn()}
+                isAdmin={false}
+                currentUserRole={SpaceRole.MEMBER}
+                onDownload={jest.fn()}
+                onEditTags={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+                onValidateName={() => null}
+                sortBy={SortType.UPDATE_TIME}
+                sortDirection={SortDirection.DESC}
+                onSort={jest.fn()}
+            />
+        );
+
+        expect(screen.getByText("上传人")).toBeInTheDocument();
+        expect(screen.getByText("更新人")).toBeInTheDocument();
+
+        const folderRow = screen.getByText("制度文件夹").closest("tr")!;
+        expect(within(folderRow).getAllByText("--").length).toBeGreaterThan(0);
+        expect(within(folderRow).getByText("文件夹创建人")).toBeInTheDocument();
+
+        const fileRow = screen.getByText(baseFile.name).closest("tr")!;
+        expect(within(fileRow).getByText("张三")).toBeInTheDocument();
+        expect(within(fileRow).getByText("李四")).toBeInTheDocument();
+
+        const fallbackRow = screen.getByText("更新人兜底.pdf").closest("tr")!;
+        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(2);
+    });
+
     test("卡片更多菜单展示发布并触发发布回调", () => {
         render(
             <FileCard
@@ -203,6 +260,26 @@ describe("普通知识空间文件发布入口", () => {
         fireEvent.click(screen.getByRole("button", { name: "发布" }));
 
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
+    });
+
+    test("普通成员卡片展示文件解析状态", () => {
+        render(
+            <FileCard
+                file={{ ...baseFile, status: FileStatus.PROCESSING }}
+                userRole={SpaceRole.MEMBER}
+                isSelected={false}
+                onSelect={jest.fn()}
+                onDownload={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onEditTags={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+            />
+        );
+
+        expect(screen.getByText("解析中")).toBeInTheDocument();
     });
 
     test("移动端卡片菜单展示发布并触发发布回调", () => {

@@ -1,4 +1,3 @@
-import { FolderPlus, FunnelIcon, Globe2, SquarePen, Upload } from "lucide-react";
 import type { FileStatus } from "~/api/knowledge";
 import {
     DropdownMenu,
@@ -7,6 +6,7 @@ import {
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { STATUS_FILTER_OPTIONS } from "../constants";
+import { StatusFilterIcon } from "./SpaceIcons";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 interface PortalHeaderActionsProps {
@@ -57,16 +57,6 @@ export function PortalHeaderActions({
             <button
                 type="button"
                 className={s.folderAction}
-                onClick={onShowUnavailable}
-                title="在线创建文档"
-                aria-label="在线创建文档"
-            >
-                {/* <SquarePen size={14} /> */}
-                <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/create-doc.svg`} alt="" className="size-[16px]" />
-            </button>
-            <button
-                type="button"
-                className={s.folderAction}
                 onClick={onCreateFolder}
                 disabled={!canCreateFolder}
                 title={canCreateFolder ? "新建文件夹" : "无创建权限"}
@@ -84,7 +74,7 @@ export function PortalHeaderActions({
                         title={statusFilter.length ? `筛选：已选择 ${statusFilter.length} 项` : "筛选"}
                         aria-label="筛选"
                     >
-                        <FunnelIcon size={16} />
+                        <StatusFilterIcon className="size-[16px]" style={{ color: statusFilter.length ? "#2c76f4" : "#545A60" }} />
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className={s.actionMenu}>

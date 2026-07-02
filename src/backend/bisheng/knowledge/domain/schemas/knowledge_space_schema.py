@@ -1,9 +1,10 @@
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, field_validator, Field
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -51,7 +52,13 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     id: int = Field(..., description="Knowledge Space ID")
-    is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
+    business_domain_codes: List[str] = Field(
+        default_factory=list,
+        description="Portal business-domain codes bound to this knowledge space",
+    )
+    is_pinned: bool = Field(
+        default=False, description="Knowledge Space pinned by current user or not"
+    )
     user_name: str = Field(default="", description="Knowledge Space creator name")
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
@@ -87,10 +94,15 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=None,
         description="Populated only when auto_tag_mode == 'custom'; mirrors the private library's tag list.",
     )
-    auto_tag_library_ids: list[int] = Field(
-        default_factory=list,
-        description="Public tag libraries bound to this space when auto_tag_mode == 'library'.",
-    )
+
+    @field_validator("business_domain_codes", mode="before")
+    @classmethod
+    def normalize_business_domain_codes(cls, value: Any):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item).strip().upper() for item in value if str(item).strip()]
+        return value
 
 
 class ShougangPortalSpaceInfoReq(BaseModel):
@@ -311,7 +323,20 @@ class ShougangPortalDomainFileCountReq(BaseModel):
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):
-    counts: dict[str, int] = Field(default_factory=dict)
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
+class ShougangPortalSpaceBusinessDomainCodesItem(BaseModel):
+    space_id: int = Field(..., gt=0)
+    business_domain_codes: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ShougangPortalSpaceBusinessDomainCodesSyncReq(BaseModel):
+    bindings: List[ShougangPortalSpaceBusinessDomainCodesItem] = Field(default_factory=list, max_length=500)
+
+
+class ShougangPortalSpaceBusinessDomainCodesSyncResp(BaseModel):
+    updated: int = 0
 
 
 class ShougangPortalFileSearchReq(BaseModel):
@@ -477,6 +502,35 @@ class FileCreateReq(BaseModel):
     file_path: list[str] = Field(..., description="File Path")
     parent_id: int | None = Field(None, description="Parent Folder ID")
     file_category_code: str | None = Field(None, max_length=16, description="Selected business file category code")
+    business_domain_code: Optional[str] = Field(None, max_length=16, description="Selected business domain code")
+    manual_tag_ids: List[int] = Field(default_factory=list, description="Selected existing tag IDs")
+    manual_tag_names: List[str] = Field(default_factory=list, description="Selected tag names")
+
+    @field_validator("business_domain_code", mode="before")
+    @classmethod
+    def normalize_business_domain_code_field(cls, value: Any):
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError("business_domain_code is invalid")
+        return normalized
+
+    @field_validator("manual_tag_ids", mode="before")
+    @classmethod
+    def normalize_manual_tag_ids(cls, value: Any):
+        if value is None:
+            return []
+        return value
+
+    @field_validator("manual_tag_names", mode="before")
+    @classmethod
+    def normalize_manual_tag_names(cls, value: Any):
+        if value is None:
+            return []
+        return value
 
 
 class WebLinkCreateReq(BaseModel):

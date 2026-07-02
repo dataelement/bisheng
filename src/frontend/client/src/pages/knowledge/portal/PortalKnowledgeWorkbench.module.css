@@ -12,8 +12,8 @@
 
 .spaceSidebar {
   position: relative;
-  width: 216px;
-  min-width: 216px;
+  width: 280px;
+  min-width: 280px;
   height: 100%;
   min-height: 0;
   max-height: 100%;
@@ -134,8 +134,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 24px 0 14px;
+  padding: 0 0 14px;
+}
+
+.collapsedHeader {
+  width: 100%;
+  height: 56px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .collapsedGroupList {
@@ -143,6 +151,7 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  margin-top: 10px;
 }
 
 .collapsedGroupButton,
@@ -205,6 +214,14 @@
   height: 16px;
   flex: 0 0 auto;
   object-fit: contain;
+}
+
+.groupIconExpanded {
+  color: #3662e3;
+}
+
+.groupToggleButton.groupToggleButtonExpanded strong {
+  color: #3662e3;
 }
 
 .groupToggleButton strong {
@@ -600,7 +617,7 @@
 }
 
 .treeExpandButton:hover {
-  color: #2c76f4;
+  color: #545a60;
 }
 
 .treeCheckbox {
@@ -1572,6 +1589,11 @@
   color: #273142;
   font-size: 14px;
   line-height: 22px;
+}
+
+.detailValueWrap {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .detailSelect {
@@ -2596,8 +2618,8 @@
 
 @media (max-width: 1280px) {
   .spaceSidebar {
-    width: 240px;
-    min-width: 240px;
+    width: 280px;
+    min-width: 280px;
   }
 
   .filePane {

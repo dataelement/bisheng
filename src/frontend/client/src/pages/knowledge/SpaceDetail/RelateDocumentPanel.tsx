@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Link2, Search } from "lucide-react";
+import { Loader2, Link2, Search, Check } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -12,6 +12,7 @@ import {
     getVersionRecommendationsApi,
     searchVersionSourcesApi,
     mergeIntoCurrentApi,
+    dismissSimilarApi,
     type SimilarCandidateEntry,
     type SearchableDocumentEntry,
     type LinkAsNewVersionResponse,
@@ -26,6 +27,7 @@ interface RelateDocumentPanelProps {
     fileId: number;
     file: KnowledgeFile;
     onLinked: (response: LinkAsNewVersionResponse) => void;
+    onDismissed?: () => void;
     className?: string;
 }
 
@@ -138,6 +140,7 @@ export function RelateDocumentPanel({
     fileId,
     file,
     onLinked,
+    onDismissed,
     className,
 }: RelateDocumentPanelProps): JSX.Element {
     const localize = useLocalize();
@@ -197,7 +200,20 @@ export function RelateDocumentPanel({
         }
     };
 
+    const dismissMutation = useMutation({
+        mutationFn: (id: number) => dismissSimilarApi(id),
+        onSuccess: () => {
+            showToast({
+                message: localize("com_knowledge.version.toast_dismiss_success"),
+                status: "success",
+            });
+            onDismissed?.();
+        },
+        onError: () => undefined,
+    });
+
     const isLinking = linkMutation.isPending;
+    const isDismissing = dismissMutation.isPending;
     const hasSearched = debouncedKeyword.length >= 1;
 
     return (
@@ -329,6 +345,33 @@ export function RelateDocumentPanel({
                     )}
                 </section>
             </div>
+
+            {/* ── Section 4: Dismiss ──────────────────────────────────── */}
+            <section className="flex items-center justify-between gap-4 rounded-[8px] border border-[#EBECF0] bg-white px-4 py-3 shrink-0">
+                <div className="min-w-0">
+                    <p className="text-[14px] font-medium text-[#1d2129]">
+                        {localize("com_knowledge.version.section_dismiss")}
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-[#86909c]">
+                        {localize("com_knowledge.version.section_dismiss_subtitle")}
+                    </p>
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isDismissing || isLinking}
+                    onClick={() => dismissMutation.mutate(fileId)}
+                    className="h-8 shrink-0 rounded-[6px] px-4 text-[12px] text-[#4e5969] border-[#EBECF0]"
+                >
+                    {isDismissing ? (
+                        <Loader2 className="mr-1.5 size-4 animate-spin" />
+                    ) : (
+                        <Check className="mr-1.5 size-4" />
+                    )}
+                    {localize("com_knowledge.version.btn_dismiss")}
+                </Button>
+            </section>
         </div>
     );
 }

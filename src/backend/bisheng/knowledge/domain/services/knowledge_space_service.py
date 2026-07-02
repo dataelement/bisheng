@@ -49,6 +49,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError,
     SpaceInvalidLevelError,
     SpaceInvalidScopeOwnerError,
+    SpaceBusinessDomainCodeInvalidError,
     SpaceLimitError,
     SpaceNameDuplicateError,
     SpaceNameSensitiveWordError,
@@ -81,6 +82,7 @@ from bisheng.core.openfga.client import (
     finish_fga_read_stats,
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -154,6 +156,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalSharePermissions,
     ShougangPortalShareType,
     ShougangPortalShareVisibility,
+    ShougangPortalSpaceBusinessDomainCodesSyncReq,
     ShougangPortalSpaceInfoError,
     ShougangPortalSpaceInfoItemResp,
     ShougangPortalUploadedFileResp,
@@ -389,6 +392,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
+        self._created_space_scope_by_id: Dict[
+            int,
+            tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
+        ] = {}
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -737,6 +744,79 @@ class KnowledgeSpaceService(KnowledgeUtils):
             grants=[grant],
             enforce_fga_success=True,
         )
+
+    def build_created_space_info(
+        self,
+        space: Knowledge,
+        *,
+        level: KnowledgeSpaceLevelEnum | str | None = None,
+        owner_type: KnowledgeSpaceOwnerTypeEnum | str | None = None,
+        owner_id: Optional[int] = None,
+    ) -> KnowledgeSpaceInfoResp:
+        result = KnowledgeSpaceInfoResp(**space.model_dump())
+        result.user_name = self.login_user.user_name
+        result.user_role = UserRoleEnum.CREATOR
+        result.follower_num = 1
+        result.file_num = 0
+        result.can_unsubscribe = False
+        cached_scope = self._created_space_scope_by_id.get(int(space.id)) if space.id else None
+        if cached_scope is not None:
+            cached_level, cached_owner_type, cached_owner_id = cached_scope
+            level = level or cached_level
+            owner_type = owner_type or cached_owner_type
+            owner_id = owner_id if owner_id is not None else cached_owner_id
+        result.space_level = self._normalize_space_level(level)
+        if owner_type is not None and not isinstance(owner_type, KnowledgeSpaceOwnerTypeEnum):
+            owner_type = KnowledgeSpaceOwnerTypeEnum(owner_type)
+        result.owner_type = owner_type
+        result.owner_id = owner_id
+        if owner_type == KnowledgeSpaceOwnerTypeEnum.USER:
+            result.owner_name = self.login_user.user_name
+        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+        return result
+
+    @staticmethod
+    def _enqueue_knowledge_space_index_init(space_id: int, invoke_user_id: int) -> None:
+        try:
+            from bisheng.worker.knowledge.space_init_worker import init_knowledge_space_indices
+
+            init_knowledge_space_indices.delay(space_id, invoke_user_id)
+        except Exception:
+            _logger.exception(
+                "Failed to enqueue knowledge space index init: space_id=%s user_id=%s",
+                space_id,
+                invoke_user_id,
+            )
+            raise
+
+    @staticmethod
+    def _enqueue_default_scope_permissions(
+        *,
+        level: KnowledgeSpaceLevelEnum,
+        owner_id: int,
+        space_id: int,
+    ) -> None:
+        if level not in {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+        }:
+            return
+        try:
+            from bisheng.worker.knowledge.space_init_worker import grant_knowledge_space_scope_permissions
+
+            grant_knowledge_space_scope_permissions.delay(
+                space_id=space_id,
+                level=level.value,
+                owner_id=owner_id,
+            )
+        except Exception:
+            _logger.exception(
+                "Failed to enqueue knowledge space scope permissions: space_id=%s level=%s owner_id=%s",
+                space_id,
+                level.value,
+                owner_id,
+            )
+            raise
 
     async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
         return KnowledgeSpaceCreateOptionsResp(
@@ -2087,6 +2167,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
+        perf_start = time.perf_counter()
+        perf_last = perf_start
+
+        def log_perf_stage(stage: str) -> None:
+            nonlocal perf_last
+            now = time.perf_counter()
+            _logger.info(
+                "knowledge_space_create_perf stage=%s elapsed_ms=%.2f total_ms=%.2f user_id=%s",
+                stage,
+                (now - perf_last) * 1000,
+                (now - perf_start) * 1000,
+                self.login_user.user_id,
+            )
+            perf_last = now
+
         name = self._normalize_space_name(name)
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
@@ -2111,6 +2206,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_type=owner_type,
             owner_id=owner_id,
         )
+        log_perf_stage("validate")
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
         # a private library, so defer the auto-tag fields until after insert.
@@ -2126,16 +2222,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_id=None,
         )
 
-        knowledge_space = KnowledgeService.create_knowledge_base(
-            self.request, self.login_user, db_knowledge, skip_hook=True
+        knowledge_space = await KnowledgeService.acreate_knowledge_base(
+            self.request,
+            self.login_user,
+            db_knowledge,
+            skip_hook=True,
+            initialize_indices=False,
         )
+        log_perf_stage("db_create")
+        self._enqueue_knowledge_space_index_init(
+            int(knowledge_space.id),
+            int(self.login_user.user_id),
+        )
+        log_perf_stage("enqueue_index_init")
 
-        if (
-            auto_tag_enabled
-            or auto_tag_library_id is not None
-            or auto_tag_library_ids is not None
-            or auto_tag_custom_tags is not None
-        ):
+        if auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None:
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=knowledge_space,
                 auto_tag_enabled=auto_tag_enabled,
@@ -2149,6 +2250,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_enabled = resolved_enabled
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
+            log_perf_stage("auto_tag")
 
         member = SpaceChannelMember(
             business_id=str(knowledge_space.id),
@@ -2172,6 +2274,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.id,
                 e,
             )
+        log_perf_stage("owner_tuple")
 
         await self._create_space_scope(
             space_id=int(knowledge_space.id),
@@ -2179,15 +2282,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_type=owner_type,
             owner_id=owner_id,
         )
-        await self._grant_default_scope_permissions(
+        self._created_space_scope_by_id[int(knowledge_space.id)] = (level, owner_type, owner_id)
+        log_perf_stage("scope_create")
+        self._enqueue_default_scope_permissions(
             level=level,
             owner_id=owner_id,
             space_id=int(knowledge_space.id),
         )
+        log_perf_stage("enqueue_scope_permission")
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
             self.login_user, self.request, knowledge_space
+        )
+        log_perf_stage("audit")
+        _logger.info(
+            "knowledge_space_create_perf stage=total total_ms=%.2f user_id=%s space_id=%s",
+            (time.perf_counter() - perf_start) * 1000,
+            self.login_user.user_id,
+            knowledge_space.id,
         )
 
         return knowledge_space
@@ -3009,9 +3122,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         permission_map = dict(zip(space_map.keys(), permission_results))
 
-        visible_space_ids: list[int] = []
-        has_content_permission_map: dict[int, bool] = {}
-        error_map: dict[int, ShougangPortalSpaceInfoError] = {}
+        visible_space_ids: List[int] = []
+        has_content_permission_map: Dict[int, bool] = {}
+        error_map: Dict[int, ShougangPortalSpaceInfoError] = {}
+        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, 'is_admin', None)) else False
         for space_id in unique_space_ids:
             space = space_map.get(space_id)
             if not space:
@@ -3019,6 +3133,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     code=SpaceNotFoundError.Code,
                     message=SpaceNotFoundError.Msg,
                 )
+                continue
+            if is_admin:
+                visible_space_ids.append(space_id)
+                has_content_permission_map[space_id] = True
                 continue
             permission_result = permission_map.get(space_id)
             if isinstance(permission_result, Exception):
@@ -3178,7 +3296,41 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         return items
 
-    async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> dict:
+    @classmethod
+    def _normalize_shougang_portal_business_domain_codes(cls, codes: List[str]) -> List[str]:
+        normalized_codes: List[str] = []
+        seen: set[str] = set()
+        for raw_code in codes or []:
+            code = normalize_business_domain_code(raw_code)
+            if code is None:
+                raise SpaceBusinessDomainCodeInvalidError()
+            if code not in seen:
+                normalized_codes.append(code)
+                seen.add(code)
+        return normalized_codes
+
+    async def sync_shougang_portal_space_business_domain_codes(
+        self,
+        req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
+    ) -> Dict[str, int]:
+        if not req.bindings:
+            return {"updated": 0}
+
+        bindings: Dict[int, List[str]] = {}
+        for item in req.bindings:
+            bindings[int(item.space_id)] = self._normalize_shougang_portal_business_domain_codes(
+                item.business_domain_codes
+            )
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(list(bindings.keys()), order_by='update_time')
+        existing_space_ids = {int(space.id) for space in spaces}
+        if existing_space_ids != set(bindings.keys()):
+            raise SpaceNotFoundError()
+
+        updated = await KnowledgeDao.async_update_space_business_domain_codes(bindings)
+        return {"updated": updated}
+
+    async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> Dict:
         perf = PortalSearchPerfContext(started_at=time.monotonic())
         perf.keyword = (req.q or "").strip()
         perf.sort = req.sort
@@ -4886,10 +5038,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             required_permission_id="view_space",
         )
 
-    async def get_grouped_spaces(
+    async def _list_accessible_spaces(
         self,
-        order_by: str = "update_time",
-    ) -> GroupedKnowledgeSpacesResp:
+        order_by: str = 'update_time',
+    ) -> List[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members if str(member.business_id).isdigit()}
         created_ids, accessible_ids, public_space_ids = await asyncio.gather(
@@ -4913,12 +5065,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             space_ids.update(int(space_id) for space_id in accessible_ids if str(space_id).isdigit())
 
-        spaces = await self._format_accessible_spaces(
+        return await self._format_accessible_spaces(
             list(space_ids),
             order_by,
             memberships=members,
             required_permission_id="view_space",
         )
+
+    async def get_grouped_spaces(
+        self,
+        order_by: str = 'update_time',
+    ) -> GroupedKnowledgeSpacesResp:
+        spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
         for space in spaces:
             if space.space_level == KnowledgeSpaceLevelEnum.PUBLIC:
@@ -4930,6 +5088,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 grouped.personal_spaces.append(space)
         return grouped
+
+    async def get_spaces_by_level(
+        self,
+        space_level: KnowledgeSpaceLevelEnum | str,
+        order_by: str = 'update_time',
+    ) -> List[KnowledgeRead]:
+        target_level = self._normalize_space_level(space_level)
+        favorite_space_id: Optional[int] = None
+        if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
+            favorite_space = await self._ensure_favorite_space()
+            favorite_space_id = int(favorite_space.id)
+
+        spaces = await self._list_accessible_spaces(order_by)
+        result = [
+            space
+            for space in spaces
+            if space.space_level == target_level
+        ]
+
+        if favorite_space_id is not None:
+            for space in result:
+                if int(space.id) == favorite_space_id:
+                    space.is_favorite = True
+            result.sort(key=lambda space: (not bool(getattr(space, 'is_favorite', False))))
+
+        return result
 
     async def global_search_files(
         self,
@@ -7272,6 +7456,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_path: list[str],
         parent_id: int | None = None,
         file_category_code: str | None = None,
+        business_domain_code: Optional[str] = None,
+        manual_tag_ids: Optional[List[int]] = None,
+        manual_tag_names: Optional[List[str]] = None,
         file_source: FileSource = None,
         skip_approval: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
@@ -7339,6 +7526,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_file_category_code = self.normalize_file_category_code(file_category_code)
         if normalized_file_category_code:
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code
+        normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
+        if normalized_business_domain_code:
+            split_rule_dict[self.business_domain_code_key] = normalized_business_domain_code
         process_files = []
         failed_files = []
         preview_cache_keys = []
@@ -7439,6 +7629,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     parent_type,
                     parent_resource_id,
                 )
+            await KnowledgeService.apply_manual_upload_tags(
+                login_user=self.login_user,
+                knowledge=db_knowledge,
+                files=process_files,
+                manual_tag_ids=manual_tag_ids,
+                manual_tag_names=manual_tag_names,
+            )
         except Exception:
             try:
                 await cleanup_created_files()
@@ -7808,11 +8005,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_file_retry:
             return []
         file_category_code = self.normalize_file_category_code(req_data.get("file_category_code"))
+        business_domain_code = self.normalize_business_domain_code(req_data.get("business_domain_code"))
         if file_category_code:
             for retry_file in db_file_retry:
                 retry_file["split_rule"] = self.with_file_category_code_in_split_rule(
                     retry_file.get("split_rule"),
                     file_category_code,
+                )
+        if business_domain_code:
+            for retry_file in db_file_retry:
+                retry_file["split_rule"] = self.with_business_domain_code_in_split_rule(
+                    retry_file.get("split_rule"),
+                    business_domain_code,
                 )
 
         id2input = {file.get("id"): file for file in db_file_retry}
@@ -7827,6 +8031,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_resource_permission("can_edit", "knowledge_file", db_file.id)
 
         tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
+        await KnowledgeService.apply_manual_upload_tags(
+            login_user=self.login_user,
+            knowledge=space,
+            files=tmp,
+            manual_tag_ids=req_data.get("manual_tag_ids"),
+            manual_tag_names=req_data.get("manual_tag_names"),
+        )
         if tmp:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async([one.id for one in tmp])
 

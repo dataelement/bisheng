@@ -1,1 +1,13 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 8H38L50 20V52C50 54.2091 48.2091 56 46 56H16C13.7909 56 12 54.2091 12 52V12C12 9.79086 13.7909 8 16 8Z" fill="#00B42A"/><path d="M38 8V18C38 19.1046 38.8954 20 40 20H50L38 8Z" fill="#7BE188"/><text x="31" y="38" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="13" font-weight="700" font-family="Arial, Helvetica, sans-serif">XLS</text></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="16px" height="16px" viewBox="0 0 16 16" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>excel文件</title>
+    <g id="我的知识" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="管理员弹窗" transform="translate(-366.000000, -514.000000)">
+            <g id="excel文件" transform="translate(366.000000, 514.000000)">
+                <rect id="矩形" fill="#D8D8D8" opacity="0" x="0" y="0" width="16" height="16"></rect>
+                <path d="M1.62049862,0 L11.4709141,0 L15,3.51219513 L15,15.4146341 C15,15.6878049 14.6897507,16 14.3795014,16 L1.62049862,16 C1.31024931,16 1,15.6878049 1,15.3756097 L1,0.585365866 C1,0.312195125 1.31024931,0 1.62049862,0 Z M5.1495845,5.5804878 L7.20498615,8.54634146 L4.99445983,11.7073171 L6.1966759,11.7073171 L7.74792244,9.32682927 L9.29916898,11.7073171 L10.501385,11.7073171 L8.36842106,8.54634146 L10.4238227,5.5804878 L9.22160665,5.5804878 L7.78670362,7.72682928 L6.35180057,5.5804878 L5.1495845,5.5804878 Z" id="形状" fill="#30BE71" fill-rule="nonzero"></path>
+                <path d="M11.2382272,0 L11.2382272,3.08292683 C11.2382272,3.43414634 11.5872576,3.74634147 11.8975069,3.74634147 L14.9612188,3.74634147 L11.2382272,0 Z" id="路径" fill="#91E7B8" fill-rule="nonzero"></path>
+            </g>
+        </g>
+    </g>
+</svg>

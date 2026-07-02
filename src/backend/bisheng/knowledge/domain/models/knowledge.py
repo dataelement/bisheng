@@ -82,6 +82,10 @@ class KnowledgeBase(SQLModelSerializable):
         default=None,
         sa_column=Column(Integer, nullable=True, index=True, comment='绑定的自动标签库ID'),
     )
+    business_domain_codes: Optional[List[str]] = Field(
+        default_factory=list,
+        sa_column=Column(JsonType, nullable=True, comment='门户业务域编码列表，仅知识空间使用'),
+    )
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -926,6 +930,30 @@ class KnowledgeDao(KnowledgeBase):
             await session.commit()
             await session.refresh(space)
             return space
+
+    @classmethod
+    async def async_update_space_business_domain_codes(
+        cls,
+        bindings: Dict[int, List[str]],
+    ) -> int:
+        """Async: update portal business-domain codes for knowledge spaces."""
+        if not bindings:
+            return 0
+
+        space_ids = list(bindings.keys())
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Knowledge).where(
+                    Knowledge.id.in_(space_ids),
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                )
+            )
+            spaces = result.all()
+            for space in spaces:
+                space.business_domain_codes = list(bindings.get(int(space.id), []))
+                session.add(space)
+            await session.commit()
+            return len(spaces)
 
     @classmethod
     async def async_get_public_spaces_paginated(

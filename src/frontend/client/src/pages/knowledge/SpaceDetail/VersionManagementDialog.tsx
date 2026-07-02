@@ -18,6 +18,7 @@ interface VersionManagementDialogProps {
     spaceId: number;
     file: KnowledgeFile | null;
     onLinked?: () => void;
+    onDismissed?: () => void;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ export function VersionManagementDialog({
     spaceId,
     file,
     onLinked,
+    onDismissed,
 }: VersionManagementDialogProps): JSX.Element | null {
     const localize = useLocalize();
 
@@ -37,6 +39,11 @@ export function VersionManagementDialog({
 
     const handleLinked = (_response: LinkAsNewVersionResponse) => {
         onLinked?.();
+        onOpenChange(false);
+    };
+
+    const handleDismissed = () => {
+        onDismissed?.();
         onOpenChange(false);
     };
 
@@ -65,6 +72,7 @@ export function VersionManagementDialog({
                         fileId={typeof file.id === "string" ? parseInt(file.id, 10) : file.id}
                         file={file}
                         onLinked={handleLinked}
+                        onDismissed={handleDismissed}
                     />
                 </div>
 

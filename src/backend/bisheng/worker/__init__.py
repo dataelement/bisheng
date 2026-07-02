@@ -6,6 +6,10 @@ from bisheng.worker.knowledge.file_worker import file_copy_celery, parse_knowled
     retry_knowledge_file_celery
 from bisheng.worker.knowledge.qa import insert_qa_celery, copy_qa_knowledge_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
+from bisheng.worker.knowledge.space_init_worker import (
+    grant_knowledge_space_scope_permissions,
+    init_knowledge_space_indices,
+)
 from bisheng.worker.org_sync.reconcile_tasks import (
     reconcile_all_organizations,
     report_ts_conflicts_daily_escalation,

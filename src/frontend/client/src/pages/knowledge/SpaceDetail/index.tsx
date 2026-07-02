@@ -1576,6 +1576,10 @@ export function KnowledgeSpaceContent({
                             handleVersionAction();
                             setVersionMgmtFile(null);
                         }}
+                        onDismissed={() => {
+                            handleVersionAction();
+                            setVersionMgmtFile(null);
+                        }}
                     />
                     <VersionHistorySheet
                         open={versionHistoryFile !== null}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
-import { getFileStatsApi } from "~/api/knowledge";
+import { SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
 import type { PanelKey, PortalFileCategoryOption } from "../types";
 import {
     BUSINESS_DOMAIN_OPTIONS,
@@ -20,6 +20,7 @@ const DETAIL_TABS: Array<{ key: Exclude<PanelKey, "share">; label: string }> = [
     { key: "time", label: "时间" },
     { key: "source", label: "来源" },
     { key: "usage", label: "使用" },
+    { key: "permission", label: "权限" },
 ];
 
 const DEFAULT_DEPARTMENT_NAME = "产品研发中心-数智组";
@@ -51,6 +52,44 @@ function getStorageFormat(file?: KnowledgeFile | null) {
 
 function formatVersionText(versionNo?: number) {
     return versionNo ? `1.${versionNo}.0` : "-";
+}
+
+function spaceLevelLabel(level?: SpaceLevel): string {
+    const map: Record<SpaceLevel, string> = {
+        [SpaceLevel.PUBLIC]: "公共知识库",
+        [SpaceLevel.DEPARTMENT]: "部门知识库",
+        [SpaceLevel.TEAM]: "团队知识库",
+        [SpaceLevel.PERSONAL]: "个人知识库",
+    };
+    return level ? (map[level] ?? level) : "-";
+}
+
+function spaceRoleLabel(role?: SpaceRole): string {
+    const map: Record<SpaceRole, string> = {
+        [SpaceRole.CREATOR]: "创建者",
+        [SpaceRole.ADMIN]: "管理员",
+        [SpaceRole.MEMBER]: "成员",
+    };
+    return role ? (map[role] ?? role) : "-";
+}
+
+function visibilityLabel(vis?: VisibilityType): string {
+    const map: Record<VisibilityType, string> = {
+        [VisibilityType.PUBLIC]: "全员可见",
+        [VisibilityType.PRIVATE]: "仅成员可见",
+        [VisibilityType.APPROVAL]: "申请后可见",
+    };
+    return vis ? (map[vis] ?? vis) : "-";
+}
+
+function permissionScopeDescription(role?: SpaceRole, level?: SpaceLevel): string {
+    if (role === SpaceRole.CREATOR || role === SpaceRole.ADMIN) {
+        return "可查阅、上传、编辑、删除库内所有文档，并管理成员权限。";
+    }
+    if (level === SpaceLevel.PUBLIC) {
+        return "可查阅库内所有公开文档，无上传及管理权限。";
+    }
+    return "可查阅库内已授权文档，无上传及管理权限。";
 }
 
 interface PortalInfoDrawerProps {
@@ -96,7 +135,6 @@ export function PortalInfoDrawer({
     }, [activePanel, selectedFile?.id, activeSpace?.id]);
 
     if (!activePanel) return null;
-    if (activePanel === "permission") return null;
 
     const panelTitleMap: Record<PanelKey, string> = {
         properties: "属性",
@@ -344,6 +382,31 @@ export function PortalInfoDrawer({
                                 复制分享链接
                             </button>
                         </div>
+                    </div>
+                ) : null}
+
+                {activePanel === "permission" ? (
+                    <div
+                        id="portal-drawer-panel-permission"
+                        role="tabpanel"
+                        aria-labelledby="portal-drawer-tab-permission"
+                        className={s.detailList}
+                    >
+                        {renderDetailItem("当前角色", spaceRoleLabel(activeSpace?.role))}
+                        {renderDetailItem("知识库类型", spaceLevelLabel(activeSpace?.spaceLevel))}
+                        {renderDetailItem("可见性", visibilityLabel(activeSpace?.visibility))}
+                        <div className={s.detailItem}>
+                            <span className={s.detailLabel}>权限范围</span>
+                            <span className={`${s.detailValue} ${s.detailValueWrap}`}>
+                                {permissionScopeDescription(activeSpace?.role, activeSpace?.spaceLevel)}
+                            </span>
+                        </div>
+                        {activeSpace?.description ? (
+                            <div className={s.detailItem}>
+                                <span className={s.detailLabel}>说明</span>
+                                <span className={`${s.detailValue} ${s.detailValueWrap}`}>{activeSpace.description}</span>
+                            </div>
+                        ) : null}
                     </div>
                 ) : null}
             </div>

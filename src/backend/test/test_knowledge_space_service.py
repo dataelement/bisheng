@@ -323,6 +323,27 @@ def _make_space(
     return space
 
 
+def test_build_created_space_info_uses_created_scope_cache():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    space = _make_space(space_id=11, user_id=7)
+    svc._created_space_scope_by_id[11] = (
+        KnowledgeSpaceLevelEnum.TEAM,
+        KnowledgeSpaceOwnerTypeEnum.USER_GROUP,
+        42,
+    )
+
+    result = svc.build_created_space_info(space)
+
+    assert result.space_level == KnowledgeSpaceLevelEnum.TEAM
+    assert result.owner_type == KnowledgeSpaceOwnerTypeEnum.USER_GROUP
+    assert result.owner_id == 42
+    assert result.user_role == UserRoleEnum.CREATOR
+    assert result.file_num == 0
+    assert result.subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+
+
 @pytest.mark.asyncio
 async def test_create_options_allow_team_space_without_user_groups():
     KnowledgeSpaceService = _load_service_class()
@@ -613,9 +634,10 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
         new_callable=AsyncMock,
         return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+        new_callable=AsyncMock,
         return_value=created_space,
-    ), patch(
+    ) as mock_create_knowledge_base, patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
         new_callable=AsyncMock,
     ), patch(
@@ -645,7 +667,74 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
     assert mock_create_scope.await_args.kwargs['level'] == KnowledgeSpaceLevelEnum.TEAM
     assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER
     assert mock_create_scope.await_args.kwargs['owner_id'] == 7
+    mock_create_knowledge_base.assert_awaited_once()
+    assert mock_create_knowledge_base.await_args.kwargs['initialize_indices'] is False
     mock_authorize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_department_space_enqueues_default_scope_permissions():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    login_user.is_admin = lambda: True
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+    created_space = _make_space(
+        space_id=11,
+        user_id=7,
+        space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+    )
+    department = SimpleNamespace(id=99, status='active')
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=department,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+        new_callable=AsyncMock,
+        return_value=created_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ) as mock_authorize, patch.object(
+        KnowledgeSpaceService,
+        '_enqueue_default_scope_permissions',
+    ) as mock_enqueue_scope, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+        new_callable=AsyncMock,
+    ):
+        result = await svc.create_knowledge_space(
+            name='部门空间',
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            department_id=99,
+        )
+
+    assert result.id == 11
+    mock_authorize.assert_not_awaited()
+    mock_enqueue_scope.assert_called_once_with(
+        level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        owner_id=99,
+        space_id=11,
+    )
 
 
 @pytest.mark.asyncio
@@ -690,7 +779,8 @@ async def test_create_space_keeps_auto_tag_binding_when_visibility_flag_is_false
         new_callable=AsyncMock,
         return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+        new_callable=AsyncMock,
         return_value=created_space,
     ), patch.object(
         svc,
@@ -3667,7 +3757,14 @@ def clear_portal_visible_space_cache():
     cache = getattr(service_module, '_PORTAL_VISIBLE_SPACE_CACHE', None)
     if cache is not None:
         cache.clear()
-    yield
+    with patch.object(
+        service_module.KnowledgeSpaceService,
+        '_enqueue_knowledge_space_index_init',
+    ), patch.object(
+        service_module.KnowledgeSpaceService,
+        '_enqueue_default_scope_permissions',
+    ):
+        yield
     if cache is not None:
         cache.clear()
 
@@ -4062,7 +4159,8 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=False,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+            new_callable=AsyncMock,
             return_value=created_space,
         ) as mock_create_knowledge_base, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
@@ -4093,7 +4191,7 @@ class TestCreateSpace:
             exclude_id=None,
         )
         mock_get_global.assert_not_awaited()
-        mock_create_knowledge_base.assert_not_called()
+        mock_create_knowledge_base.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_create_personal_allows_name_used_by_non_personal_space(self, service):
@@ -4135,7 +4233,8 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=False,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+            new_callable=AsyncMock,
             return_value=created_space,
         ) as mock_create_knowledge_base, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
@@ -4159,7 +4258,7 @@ class TestCreateSpace:
             result = await service.create_knowledge_space(name='重复空间')
 
         assert result.id == 23
-        mock_create_knowledge_base.assert_called_once()
+        mock_create_knowledge_base.assert_awaited_once()
         mock_get_personal.assert_awaited_once_with(
             owner_id=service.login_user.user_id,
             name='重复空间',
@@ -4202,7 +4301,8 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=False,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+            new_callable=AsyncMock,
             return_value=created_space,
         ) as mock_create_knowledge_base, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
@@ -4226,7 +4326,7 @@ class TestCreateSpace:
             result = await service.create_knowledge_space(name='重复空间')
 
         assert result.id == 23
-        mock_create_knowledge_base.assert_called_once()
+        mock_create_knowledge_base.assert_awaited_once()
         mock_get_personal.assert_awaited_once_with(
             owner_id=service.login_user.user_id,
             name='重复空间',
@@ -4270,7 +4370,8 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=False,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+            new_callable=AsyncMock,
             return_value=created_space,
         ) as mock_create_knowledge_base, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
@@ -4300,7 +4401,7 @@ class TestCreateSpace:
         assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
         mock_get_non_personal.assert_awaited_once_with(name='重复空间', exclude_id=None)
         mock_get_global.assert_not_awaited()
-        mock_create_knowledge_base.assert_not_called()
+        mock_create_knowledge_base.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_create_non_personal_allows_name_used_only_by_personal_space(self, service):
@@ -4338,7 +4439,8 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=False,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+            new_callable=AsyncMock,
             return_value=created_space,
         ) as mock_create_knowledge_base, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
@@ -4365,7 +4467,7 @@ class TestCreateSpace:
             )
 
         assert result.id == 23
-        mock_create_knowledge_base.assert_called_once()
+        mock_create_knowledge_base.assert_awaited_once()
         mock_get_non_personal.assert_awaited_once_with(name='重复空间', exclude_id=None)
         mock_get_global.assert_not_awaited()
 
@@ -4395,7 +4497,8 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=False,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base',
+            new_callable=AsyncMock,
             return_value=created_space,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
