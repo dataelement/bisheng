@@ -21,8 +21,12 @@ const WEB_LINK_ERROR_KEY_MAP: Record<string, string> = {
     "this web link host is not allowed": "webLinkHostNotAllowed",
     "this web link address is not allowed": "webLinkAddressNotAllowed",
     "web link host cannot be resolved": "webLinkHostUnresolved",
+    "target site refused server-side access": "webLinkAccessRefused",
+    "target site requires authentication": "webLinkAuthRequired",
+    "target site rate limited server-side access": "webLinkRateLimited",
     "media file does not exist": "mediaFileMissing",
     "asr returned empty text": "mediaAsrEmpty",
+    "no recognizable audio detected": "mediaNoRecognizableAudio",
     "asr api key is missing": "mediaAsrApiKeyMissing",
     "ffmpeg is not installed": "mediaFfmpegMissing",
     "media audio extraction failed": "mediaAudioExtractionFailed",
@@ -65,13 +69,14 @@ export default function WebLinkImportDialog({
         ).trim();
 
         const normalizedStatusMessage = statusMessage.toLowerCase();
-        const mappedKey = normalizedStatusMessage.startsWith("web link request failed")
-            ? "webLinkRequestFailed"
-            : normalizedStatusMessage.startsWith("knowledge media transcription only supports aliyun/qwen asr")
-                ? "mediaAsrProviderUnsupported"
-                : normalizedStatusMessage.startsWith("asr request failed")
-                    ? "mediaAsrRequestFailed"
-                    : WEB_LINK_ERROR_KEY_MAP[normalizedStatusMessage];
+        const mappedKey = WEB_LINK_ERROR_KEY_MAP[normalizedStatusMessage]
+            ?? (normalizedStatusMessage.startsWith("web link request failed")
+                ? "webLinkRequestFailed"
+                : normalizedStatusMessage.startsWith("knowledge media transcription only supports aliyun/qwen asr")
+                    ? "mediaAsrProviderUnsupported"
+                    : normalizedStatusMessage.startsWith("asr request failed")
+                        ? "mediaAsrRequestFailed"
+                        : undefined);
         if (mappedKey) {
             const translated = t(mappedKey, { defaultValue: "" });
             if (translated) return translated;

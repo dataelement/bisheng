@@ -154,7 +154,7 @@ class KnowledgeWebLinkImportService:
 
                         if response.status_code >= 400:
                             raise KnowledgeWebLinkImportError(
-                                msg=f"Web link request failed with status {response.status_code}"
+                                msg=cls._http_status_error_message(response.status_code)
                             )
 
                         content_type = response.headers.get("content-type", "").lower()
@@ -269,6 +269,16 @@ class KnowledgeWebLinkImportService:
             or ip_address.is_multicast
             or ip_address.is_unspecified
         )
+
+    @staticmethod
+    def _http_status_error_message(status_code: int) -> str:
+        if status_code == 401:
+            return "Target site requires authentication"
+        if status_code == 403:
+            return "Target site refused server-side access"
+        if status_code == 429:
+            return "Target site rate limited server-side access"
+        return f"Web link request failed with status {status_code}"
 
     @staticmethod
     def _is_supported_content_type(content_type: str) -> bool:
@@ -726,7 +736,7 @@ class KnowledgeWebLinkImportService:
         meaningful = re.sub(r"!\[[^\]]*]\([^)]+\)|\[[^\]]+]\([^)]+\)", "", meaningful)
         meaningful = re.sub(r"[#*_`>\-\s|:：,，.。/\\{}()[\]\"'=;；]+", "", meaningful)
         if nav_hits >= 4 and len(meaningful) < 220:
-            return "该网页主要是导航或门户入口页面，正文信息不足，不建议作为知识库网页正文导入。"
+            return "该网页主要是以导航或门户入口页面，正文信息不足，不建议作为知识库网页正文导入。"
 
         return ""
 

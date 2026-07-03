@@ -7,7 +7,10 @@ from typing import Any
 from dashscope.audio.asr import Recognition, RecognitionResult
 from loguru import logger
 
-from bisheng.common.errcode.knowledge import KnowledgeMediaTranscriptionError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeMediaNoRecognizableAudioError,
+    KnowledgeMediaTranscriptionError,
+)
 from bisheng.common.errcode.server import (
     AsrModelConfigDeletedError,
     AsrModelOfflineError,
@@ -71,7 +74,7 @@ class KnowledgeMediaTranscriptionService:
 
         text = "\n".join(segment.text for segment in segments if segment.text).strip()
         if not text:
-            raise KnowledgeMediaTranscriptionError(msg="ASR returned empty text")
+            raise KnowledgeMediaNoRecognizableAudioError()
 
         markdown = cls._build_markdown(
             source_file_name=source_file_name,
@@ -143,8 +146,23 @@ class KnowledgeMediaTranscriptionService:
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
             logger.warning("ffmpeg media conversion failed: {}", stderr[-1000:])
+            if cls._is_missing_audio_stream_error(stderr):
+                raise KnowledgeMediaNoRecognizableAudioError() from exc
             raise KnowledgeMediaTranscriptionError(msg="Media audio extraction failed") from exc
         return wav_path
+
+    @staticmethod
+    def _is_missing_audio_stream_error(stderr: str) -> bool:
+        normalized = stderr.lower()
+        return any(
+            marker in normalized
+            for marker in (
+                "does not contain any stream",
+                "matches no streams",
+                "stream specifier ':a'",
+                "audio: none",
+            )
+        )
 
     @classmethod
     def _call_aliyun_asr(

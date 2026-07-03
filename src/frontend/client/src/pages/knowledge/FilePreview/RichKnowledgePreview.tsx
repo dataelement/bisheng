@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import i18next from "i18next";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
+import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { TopBar } from "./TopBar";
-import { HtmlViewer } from "./viewers/HtmlViewer";
 
 interface RichKnowledgePreviewProps {
     fileName: string;
@@ -81,6 +82,64 @@ function MarkdownBlock({ content }: { content: string }) {
     );
 }
 
+function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
+    const localize = useLocalize();
+    const [content, setContent] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!fileUrl) {
+            setLoading(false);
+            setContent("");
+            setError("");
+            return () => {
+                cancelled = true;
+            };
+        }
+        setLoading(true);
+        setError("");
+        fetch(resolveKnowledgePreviewUrl(fileUrl))
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(i18next.t("com_knowledge.failure_status", { 0: response.status }));
+                }
+                return response.text();
+            })
+            .then((text) => {
+                if (!cancelled) setContent(text);
+            })
+            .catch((err: Error) => {
+                if (!cancelled) {
+                    setError(err.message || i18next.t("com_knowledge.load_file_failed"));
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [fileUrl]);
+
+    if (loading) {
+        return (
+            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-[#86909c]">
+                {localize("com_knowledge.loading")}
+            </div>
+        );
+    }
+    if (error) {
+        return (
+            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-[#86909c]">
+                {error}
+            </div>
+        );
+    }
+    return <MarkdownBlock content={content} />;
+}
+
 function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const localize = useLocalize();
     const [activeTab, setActiveTab] = useState<MediaTab>("recognized");
@@ -99,7 +158,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
         }
         setLoading(true);
         setError("");
-        fetch(fileUrl)
+        fetch(resolveKnowledgePreviewUrl(fileUrl))
             .then((response) => {
                 if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 return response.text();
@@ -164,8 +223,11 @@ export function RichKnowledgePreview({
     const localize = useLocalize();
     const isMedia = isMediaPreview(preview);
     const isVideo = isVideoPreview(preview);
-    const htmlUrl = preview.html_preview_url;
-    const mediaTextUrl = preview.preview_url && !isMediaUrl(preview.preview_url) ? preview.preview_url : "";
+    const mediaTextUrl = preview.preview_url && !isMediaUrl(preview.preview_url)
+        ? resolveKnowledgePreviewUrl(preview.preview_url)
+        : "";
+    const webLinkMarkdownUrl = resolveKnowledgePreviewUrl(preview.preview_url || preview.original_url || "");
+    const mediaPlaybackUrl = resolveKnowledgePreviewUrl(preview.original_url || "");
 
     const title = useMemo(() => {
         if (preview.file_source === "web_link") {
@@ -192,11 +254,11 @@ export function RichKnowledgePreview({
                             {isVideo ? (
                                 <video
                                     className="max-h-[420px] w-full rounded-[6px] bg-black"
-                                    src={preview.original_url}
+                                    src={mediaPlaybackUrl}
                                     controls
                                 />
                             ) : (
-                                <audio className="w-full" src={preview.original_url} controls />
+                                <audio className="w-full" src={mediaPlaybackUrl} controls />
                             )}
                         </section>
                         {mediaTextUrl ? <MediaTranscriptTabs fileUrl={mediaTextUrl} /> : null}
@@ -217,8 +279,8 @@ export function RichKnowledgePreview({
                 />
             )}
             <div className="flex min-h-0 flex-1 overflow-hidden">
-                {htmlUrl ? (
-                    <HtmlViewer fileUrl={htmlUrl} zoomLevel={100} />
+                {webLinkMarkdownUrl ? (
+                    <MarkdownFromUrl fileUrl={webLinkMarkdownUrl} />
                 ) : (
                     <div className="flex h-full items-center justify-center text-sm text-[#86909c]">
                         {localize("com_knowledge.fetch_preview_link_failed")}

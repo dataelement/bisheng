@@ -86,6 +86,34 @@ describe("useFileUpload helpers", () => {
     expect(extractKnowledgeFileError({ remark })).toBe("File parsing failed: rebuild error");
   });
 
+  test("extractKnowledgeFileError formats no recognizable audio failures", () => {
+    const remark = JSON.stringify({
+      status_code: 10956,
+      status_message: "No recognizable audio detected",
+      data: {
+        exception: "No recognizable audio detected",
+      },
+    });
+
+    expect(extractKnowledgeFileError({ remark })).toBe(
+      "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。",
+    );
+  });
+
+  test("extractKnowledgeFileError formats legacy media extraction failures", () => {
+    const remark = JSON.stringify({
+      status_code: 10954,
+      status_message: "Media transcription failed",
+      data: {
+        exception: "Media audio extraction failed",
+      },
+    });
+
+    expect(extractKnowledgeFileError({ remark })).toBe(
+      "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。",
+    );
+  });
+
   test("extractKnowledgeFileError formats sensitive check hits for violation detail", () => {
     const remark = JSON.stringify({
       reason: "sensitive_check",

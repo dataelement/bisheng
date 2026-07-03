@@ -114,6 +114,8 @@ export type BishengConfig = {
   enable_registration: boolean;
   /** 最大上传文件大小 mb */
   uploaded_files_maximum_size: number;
+  /** 音视频单文件最大上传大小 mb */
+  uploaded_media_maximum_size?: number;
   /** System YAML `env.workbench_menu_unavailable_message` — plain text on /menu-unavailable */
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
