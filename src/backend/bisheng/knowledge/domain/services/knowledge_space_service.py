@@ -100,7 +100,10 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
-from bisheng.knowledge.domain.services.web_link_import_service import KnowledgeWebLinkImportService
+from bisheng.knowledge.domain.services.web_link_import_service import (
+    KnowledgeWebLinkImportService,
+    is_web_link_non_dedup_markdown,
+)
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
@@ -3377,7 +3380,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         markdown_bytes = import_result.markdown.encode("utf-8")
         html_snapshot_bytes = (import_result.html_snapshot or "").encode("utf-8")
 
-        content_repeat = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, md5_=import_result.content_hash)
+        skip_content_dedup = is_web_link_non_dedup_markdown(import_result.markdown)
+        content_repeat = (
+            []
+            if skip_content_dedup
+            else KnowledgeFileDao.get_file_by_condition(
+                knowledge_id=knowledge_id,
+                md5_=import_result.content_hash,
+            )
+        )
         name_repeat = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, file_name=file_name)
         duplicate_file = content_repeat[0] if content_repeat else (name_repeat[0] if name_repeat else None)
         if duplicate_file and not overwrite:
