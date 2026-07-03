@@ -1,9 +1,11 @@
 import { FileType, type KnowledgeFile } from "~/api/knowledge";
+import { fileEncodingCategoryLabel } from "./uploadMetadata";
 import {
     createTreeNode,
     dedupeFilesById,
     dedupeTreeNodesByFileId,
     extractExt,
+    normalizePortalFileCategoryOptions,
 } from "./utils";
 
 function makeFile(overrides: Partial<KnowledgeFile>): KnowledgeFile {
@@ -75,6 +77,29 @@ describe("portal preview utils", () => {
                 },
                 sibling,
             ]);
+        });
+    });
+
+    describe("file category options", () => {
+        it("removes hidden characters before matching file encoding codes", () => {
+            expect(
+                normalizePortalFileCategoryOptions([
+                    { code: "STD\u200B", label: "标准规范\u200B" },
+                    { code: "\uFEFFcas", label: "\u200C案例" },
+                    { code: "CAS", label: "重复案例" },
+                ]),
+            ).toEqual([
+                { code: "STD", label: "标准规范" },
+                { code: "CAS", label: "案例" },
+            ]);
+        });
+
+        it("matches category labels against normalized option codes", () => {
+            expect(
+                fileEncodingCategoryLabel("CAS", [
+                    { code: "CAS\u200B", label: "案例\u200B" },
+                ]),
+            ).toBe("CAS / 案例");
         });
     });
 });

@@ -10,6 +10,7 @@ import {
     type LegacyFileIconType,
 } from "./constants";
 import type { PortalFileCategoryOption, PortalFileTreeNode, PortalUploadFolderNode } from "./types";
+import { cleanEncodingText, normalizeEncodingCode } from "./uploadMetadata";
 
 export function isFolder(file: KnowledgeFile) {
     return file.type === FileType.FOLDER;
@@ -19,14 +20,16 @@ export function normalizePortalFileCategoryOptions(rawOptions: unknown): PortalF
     if (!Array.isArray(rawOptions)) {
         return DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
     }
+    const seenCodes = new Set<string>();
     const options = rawOptions
         .map((item) => {
             if (!item || typeof item !== "object") return null;
             const rawCode = (item as any).code;
             const rawLabel = (item as any).label;
-            const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : "";
-            const label = typeof rawLabel === "string" ? rawLabel.trim() : "";
-            if (!code || !label) return null;
+            const code = normalizeEncodingCode(typeof rawCode === "string" ? rawCode : "");
+            const label = cleanEncodingText(typeof rawLabel === "string" ? rawLabel : "");
+            if (!code || !label || seenCodes.has(code)) return null;
+            seenCodes.add(code);
             return { code, label };
         })
         .filter(Boolean) as PortalFileCategoryOption[];

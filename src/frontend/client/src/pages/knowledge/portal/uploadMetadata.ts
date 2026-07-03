@@ -60,8 +60,12 @@ export const EMPTY_PORTAL_UPLOAD_METADATA: PortalUploadMetadataState = {
     selectedTagValues: [],
 };
 
+export function cleanEncodingText(value?: string | null): string {
+    return String(value ?? "").replace(/[\u200B\u200C\u200D\uFEFF]/g, "").trim();
+}
+
 export function normalizeEncodingCode(value?: string | null): string {
-    return String(value ?? "").trim().toUpperCase();
+    return cleanEncodingText(value).toUpperCase();
 }
 
 export function normalizeBusinessDomainOptions(
@@ -72,7 +76,7 @@ export function normalizeBusinessDomainOptions(
     (options ?? []).forEach((option) => {
         const code = normalizeEncodingCode(option?.code);
         if (!code || seen.has(code)) return;
-        const name = String(option?.name ?? option?.label ?? code).trim() || code;
+        const name = cleanEncodingText(option?.name ?? option?.label ?? code) || code;
         normalizedOptions.push({ code, name });
         seen.add(code);
     });
@@ -135,9 +139,11 @@ export function composeFileEncoding(
 }
 
 export function fileEncodingCategoryLabel(code: string, options: PortalFileCategoryOption[]): string {
-    if (!code) return "未识别";
-    const option = options.find((item) => item.code === code);
-    return option ? `${code} / ${option.label}` : `${code} / 未配置类型`;
+    const normalizedCode = normalizeEncodingCode(code);
+    if (!normalizedCode) return "未识别";
+    const option = options.find((item) => normalizeEncodingCode(item.code) === normalizedCode);
+    const label = option ? cleanEncodingText(option.label) : "";
+    return label ? `${normalizedCode} / ${label}` : `${normalizedCode} / 未配置类型`;
 }
 
 export function fileEncodingBusinessDomainLabel(
