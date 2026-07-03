@@ -22,7 +22,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useRecoilValue } from "recoil";
+import { useRecoilValue, useResetRecoilState } from "recoil";
+import { knowledgeSelectedFilesState } from "../../selectionStore";
 import {
     Tooltip,
     TooltipContent,
@@ -74,6 +75,23 @@ export function KnowledgeAiBottomDock({
     useEffect(() => {
         setShowHistory(false);
     }, [spaceId, folderId]);
+
+    /** Default vs active (input-focused) state — distinct from the mobile-keyboard
+     *  `keyboardVisible` flag so styling can hang off it later without coupling. */
+    const [isActive, setIsActive] = useState(false);
+
+    // Clears the file-list selection (shared atom). File selection and AI Q&A are
+    // independent: focusing or sending in the input clears any lingering selection
+    // so the two never read as coupled.
+    const resetFileSelection = useResetRecoilState(knowledgeSelectedFilesState);
+
+    /** Input focus/blur. On focus we both mark the dock active and clear the file
+     *  selection; also drives the mobile keyboard-overlay flag. */
+    const handleInputFocusChange = (focused: boolean) => {
+        setIsActive(focused);
+        setKeyboardVisible(focused);
+        if (focused) resetFileSelection();
+    };
 
     /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
      *  keyboard. Mirrors `ArticleAiDock`. See that file for the full rationale. */
@@ -146,6 +164,9 @@ export function KnowledgeAiBottomDock({
 
     const handleSend = (text: string, files?: any[] | null, tag?: FolderChatTag) => {
         sendMessage(text, files, tag);
+        // Sending is an AI interaction — clear any file selection made while typing
+        // so selection never appears to feed the Q&A.
+        resetFileSelection();
         // First send slides the panel up — the input itself stays put. Clear any
         // latched direct-history state so the conversation (not history) shows.
         if (!open) {
@@ -310,7 +331,7 @@ export function KnowledgeAiBottomDock({
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant="box"
-                        onFocusChange={setKeyboardVisible}
+                        onFocusChange={handleInputFocusChange}
                     />
                 </div>
 
@@ -362,6 +383,9 @@ export function KnowledgeAiBottomDock({
                 )}
             >
                 <div
+                    // data-active exposes the default/active (input-focused) state for future
+                    // styling hooks and QA, without coupling to the mobile keyboard flag.
+                    data-active={isActive}
                     className={cn(
                         // pointer-events-auto restores interactivity on the card itself (its parent
                         // backdrop is pointer-events-none so the file list behind stays clickable).
@@ -546,7 +570,7 @@ export function KnowledgeAiBottomDock({
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}
-                        onFocusChange={setKeyboardVisible}
+                        onFocusChange={handleInputFocusChange}
                     />
 
                     {/* Standard-entry history — overlays the expanded card. */}

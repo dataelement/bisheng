@@ -1,5 +1,6 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
-import { useRecoilValue } from "recoil";
+import { useRecoilValue, useRecoilState } from "recoil";
+import { knowledgeSelectedFilesState } from "../selectionStore";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
@@ -195,7 +196,9 @@ export function KnowledgeSpaceContent({
         localStorage.setItem("knowledge-view-mode", mode);
     };
 
-    const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    // Shared atom (not local state) so the bottom AI dock can clear the selection
+    // on focus/send without prop drilling. See selectionStore.ts.
+    const [selectedFiles, setSelectedFiles] = useRecoilState(knowledgeSelectedFilesState);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);

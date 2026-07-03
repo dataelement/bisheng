@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Outlined } from 'bisheng-icons';
-import { ChevronRight, Download, Loader2 } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -174,7 +173,7 @@ function CitationReferenceCard({
       {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
         {isLoading ? (
           <span className="inline-flex items-center gap-2 text-[#86909C]">
-            <Loader2 className="size-3.5 animate-spin" />
+            <Outlined.Loading className="size-3.5 animate-spin" />
             加载溯源详情...
           </span>
         ) : hasError ? (
@@ -645,7 +644,7 @@ export default function CitationReferencesDrawer({
           )}
           aria-label="下载文档"
         >
-          <Download className="size-4" strokeWidth={1.75} />
+          <Outlined.Download className="size-4" strokeWidth={1.75} />
         </button>
         <button
           type="button"
@@ -719,7 +718,7 @@ export default function CitationReferencesDrawer({
           </div>
           <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
             <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
-            <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
+            <Outlined.Right className="size-4 text-[#818181]" strokeWidth={1.5} />
           </div>
         </button>
       </div>

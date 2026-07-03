@@ -184,12 +184,12 @@ export default function AppCenter() {
                             <LoadingIcon className="size-20 text-primary" />
                         </div>
                     ) : apps.length === 0 ? (
-                        // Empty state: fill the region and place content at ~40% of the region
-                        // height via 8:12 flex spacers (region-relative, not viewport vh).
+                        // Empty state: fill the region and place content via flex spacers at a
+                        // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
                         <div className="w-full flex-1 flex flex-col items-center">
-                            <div className="flex-[8]" aria-hidden />
+                            <div className="flex-[8] md:flex-[9]" aria-hidden />
                             <AppEmptyState />
-                            <div className="flex-[12]" aria-hidden />
+                            <div className="flex-[12] md:flex-[11]" aria-hidden />
                         </div>
                     ) : (
                         <div

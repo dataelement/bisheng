@@ -11,7 +11,50 @@ import { Button } from '~/components/ui/Button';
 import { OGDialog, OGDialogTrigger } from '~/components/ui/OriginalDialog';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { Label } from '~/components/ui/Label';
+import { useConfirm } from '~/Providers';
 import { Section, Demo, DemoGrid, CompareTable } from '../components/kit';
+
+/** Demos for the app-wide `useConfirm()` service (ConfirmContext, AlertDialog-based). */
+function UseConfirmDemos() {
+  const confirm = useConfirm();
+  return (
+    <>
+      <Demo
+        label="C 套 · useConfirm 危险态"
+        note="ConfirmContext.tsx · variant: destructive · 红图标+红标题+暂不/确认删除"
+      >
+        <Button
+          variant="outline"
+          onClick={() =>
+            confirm({
+              variant: 'destructive',
+              description:
+                '确认删除知识空间 "默认组织的知识空间" 吗？此操作不可逆，请谨慎删除！',
+            })
+          }
+        >
+          打开
+        </Button>
+      </Demo>
+      <Demo
+        label="C 套 · useConfirm 普通态"
+        note="ConfirmContext.tsx · variant: default · 橙色警示图标+主色确认"
+      >
+        <Button
+          variant="outline"
+          onClick={() =>
+            confirm({
+              variant: 'default',
+              description: '切换频道后未保存的编辑将丢失，是否继续？',
+            })
+          }
+        >
+          打开
+        </Button>
+      </Demo>
+    </>
+  );
+}
 
 /** One confirm-dialog demo replicating a real business usage. */
 function ConfirmDemo({
@@ -65,12 +108,41 @@ export function ConfirmDialogSection() {
       title="二次确认弹窗"
       subtitle={
         <>
-          删除/危险操作时的「确认 / 取消」小弹窗，全部走 <code>OGDialogTemplate</code> 的{' '}
-          <code>selection</code> 用法（<b>21 个业务文件</b>）。确认按钮样式由各页面用{' '}
-          <code>selectClasses</code> 自带 —— 目前存在 <b>9 种写法</b>。下面每个卡片都复刻业务里的真实写法，逐个打开对比。
+          删除/危险操作时的「确认 / 取消」小弹窗。两套体系：旧页面走{' '}
+          <code>OGDialogTemplate selection</code>（剩 16 文件），新页面走 <code>useConfirm()</code>
+          （21 文件，含已迁入的 5 处）。<b>收敛第一步已完成</b>：B 套壳与按钮已对齐 C 套，历史 9 种 selectClasses
+          被自动折叠为 danger / primary 两档 —— 下方旧写法卡片现在应呈现统一外观，逐个打开即是验收。
+          （另有 9 个文件手拼 <code>AlertDialog</code> —— 属于普通弹窗，归 Modal 改造范围，本期不动。）
         </>
       }
     >
+      {/* The three coexisting confirm-dialog systems */}
+      <div className="mb-6">
+        <CompareTable
+          head={['体系', '实现', '业务文件数', '用在哪', '样式一致性']}
+          rows={[
+            [
+              'B 套模板',
+              <>
+                <code>OGDialogTemplate</code> + <code>selection</code>
+              </>,
+              '16（原 21，迁移中）',
+              '旧页面（会话/书签/Agent/设置/Prompt…LibreChat 血统）',
+              '差 · 确认按钮 9 种写法',
+            ],
+            [
+              'C 套服务',
+              <>
+                <code>useConfirm()</code>（ConfirmContext + AlertDialog）
+              </>,
+              '21（收敛目标，含已迁入 5 处）',
+              '新页面（知识空间 / 订阅频道 / 权限）',
+              '好 · 样式集中在一个文件，destructive/default 两档',
+            ],
+          ]}
+        />
+      </div>
+
       {/* Inventory table: every selectClasses variant found in business code */}
       <div className="mb-6">
         <CompareTable
@@ -79,8 +151,8 @@ export function ConfirmDialogSection() {
             [
               '1',
               <code key="c">bg-red-700 dark:bg-red-600 hover:bg-red-800 …</code>,
-              '删除（会话/书签/工具/分享链接…）',
-              '8 · 最多',
+              '删除（书签/工具/分享链接…）· 删会话 2 处已迁 C',
+              '6（原 8）',
             ],
             [
               '2',
@@ -97,8 +169,8 @@ export function ConfirmDialogSection() {
             [
               '4',
               <code key="c">bg-destructive hover:bg-destructive/80</code>,
-              '清空聊天 / 删缓存 / 撤销密钥',
-              '3',
+              '清空聊天 / 删缓存 / 撤销密钥 —— ✅ 已全部迁 C 套',
+              '0（原 3）',
             ],
             [
               '5',
@@ -138,69 +210,57 @@ export function ConfirmDialogSection() {
         />
       </div>
 
-      {/* Current anatomy — the hardcoded values the designer needs to re-decide */}
+      {/* Anatomy after step-1 convergence — B shell/buttons now mirror the C look */}
       <div className="mb-6">
         <CompareTable
-          head={['部位', '当前写死的值', '出处']}
+          head={['部位', '对齐后的值（B 套 = C 套）', '备注']}
           rows={[
-            ['弹窗容器', <code key="c">rounded-2xl p-6 gap-4 shadow-lg</code>, 'OriginalDialog.tsx'],
+            [
+              '弹窗容器',
+              <code key="c">rounded-2xl p-5 gap-4 border #ebebeb + 淡投影</code>,
+              '圆角 16 / padding 20，与 C 套一致',
+            ],
             [
               '遮罩',
               <>
-                <code>bg-black/80</code>（无模糊）
+                <code>bg-gray-500/90</code> + <code>backdrop-blur-md</code>
               </>,
-              'OriginalDialog.tsx',
+              '灰底毛玻璃，与 C 套一致',
             ],
-            ['标题', <code key="c">text-lg font-semibold</code>, 'OriginalDialog.tsx'],
-            [
-              '正文区',
-              <>
-                <code>px-0 py-2</code>（各页再自带 Label 样式）
-              </>,
-              'OGDialogTemplate.tsx',
-            ],
-            [
-              '按钮排布',
-              <code key="c">footer 右对齐 · gap-3 · 取消在左确认在右（移动端反转）</code>,
-              'OGDialogTemplate.tsx',
-            ],
+            ['标题', <code key="c">text-base font-medium leading-6</code>, '与 C 套一致'],
             [
               '确认按钮',
-              <code key="c">h-10 rounded-lg px-4 py-2 text-sm</code>,
-              'OGDialogTemplate.tsx（颜色由各页 selectClasses 传入）',
+              <>
+                两档：danger <code>#f53f3f</code> / primary 品牌主色（<code>selectVariant</code>{' '}
+                指定，旧 selectClasses 自动折叠，未识别的原样放行）
+              </>,
+              'cva 档位 · 特例走 selectClasses 口子',
             ],
             [
               '取消按钮',
               <>
-                <code>btn btn-neutral rounded-lg text-sm</code>（全局 CSS 类，非 Button 组件）
+                白底描边 <code>hover:bg-[#f7f8fa]</code>，<code>focus-visible</code> 焦点环
               </>,
-              'OGDialogTemplate.tsx',
+              '与 C 套一致（含知识空间同款 hover）',
             ],
             [
-              '宽度',
-              <>
-                <code>w-11/12</code> + 各页自带 <code>max-w-[450px]</code> /{' '}
-                <code>max-w-lg</code>
-              </>,
-              '各业务页',
-            ],
-            [
-              'Loading',
-              '两种写法并存：selection.isLoading（模板内置 Spinner）vs 各页自己把 Spinner 塞进 selectText',
-              '不统一',
+              '待定项',
+              '宽度仍由各页传（max-w-[450px]/max-w-lg vs C 套 400px）；Loading 仍有 4 处页面自塞 Spinner',
+              '随第三步迁移一并清理',
             ],
           ]}
         />
       </div>
 
       <DemoGrid cols={3}>
+        <UseConfirmDemos />
         <ConfirmDemo
-          label="① red-700 系（8 处 · 最多）"
-          note="删除会话 — ConvoOptions/DeleteButton.tsx 原样复刻"
-          title="删除会话"
+          label="① red-700 系（6 处，原 8）"
+          note="删除书签 — Bookmarks/DeleteBookmarkButton.tsx（原例子删会话已迁 C 套）"
+          title="删除书签"
           body={
             <>
-              确认删除该会话？<strong>「与 Claude 的对话」</strong>
+              确认删除书签 <strong>「工作」</strong>？
             </>
           }
           selectText="删除"
@@ -213,14 +273,6 @@ export function ConfirmDialogSection() {
           body="确定要删除这个助手吗？此操作不可撤销。"
           selectText="删除"
           selectClasses="bg-red-600 hover:bg-red-700 dark:hover:bg-red-800 text-white"
-        />
-        <ConfirmDemo
-          label="④ bg-destructive 系（3 处）"
-          note="清空聊天 — SettingsTabs/Data/ClearChats.tsx"
-          title="清空聊天记录"
-          body="确定要清空所有聊天记录吗？此操作不可撤销。"
-          selectText="删除"
-          selectClasses="bg-destructive text-white transition-all duration-200 hover:bg-destructive/80"
         />
         <ConfirmDemo
           label="⑤ surface-destructive 系（2 处）"
@@ -248,7 +300,7 @@ export function ConfirmDialogSection() {
         />
         <ConfirmDemo
           label="Loading 态（isLoading: true）"
-          note="模板内置 Spinner · 另有 4 处是各页自己塞 Spinner"
+          note="模板内置 Spinner · 自塞 Spinner 的只剩 SharedLinks 1 处（原 4 处，3 处已迁 C）"
           title="删除会话"
           body="确认按钮处于加载中。"
           selectText="删除"

@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { Loader2 } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
@@ -264,7 +264,7 @@ function CitationPreviewCard({
   if (isLoading) {
     return (
       <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
-        <Loader2 className="mr-2 size-4 animate-spin" />
+        <Outlined.Loading className="mr-2 size-4 animate-spin" />
         加载溯源详情...
       </div>
     );
