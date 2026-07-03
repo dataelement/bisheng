@@ -43,9 +43,9 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     );
 };
 
-/** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
+/** 操作列：下载 / 更多 — 无边框 ghost 图标按钮、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-[8px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-[8px] text-[#818181] hover:text-[#212121] transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -55,11 +55,11 @@ const COLUMN_CONFIG = {
     // Fluid column: no fixed width — absorbs all leftover horizontal space so the
     // file name grows as the window widens. Its width value is used as a min only.
     name: { minWidth: 200, initialWidth: 200 },
-    fileType: { minWidth: 88, initialWidth: 76 },
-    size: { minWidth: 88, initialWidth: 94 },
-    tags: { minWidth: 140, initialWidth: 140 },
+    fileType: { minWidth: 88, initialWidth: 100 },
+    size: { minWidth: 88, initialWidth: 100 },
+    tags: { minWidth: 160, initialWidth: 160 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
-    updateTime: { minWidth: 150, initialWidth: 156 },
+    updateTime: { minWidth: 150, initialWidth: 160 },
     actions: { minWidth: 96, initialWidth: 96 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
@@ -453,14 +453,13 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_name")}</SortableHeader>
 
-                {/* 标签 — 不排序 */}
+                {/* 标签 — 不排序、不可拖拽调宽 */}
                 <TableHead
                     className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
                     style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
                         {localize("com_knowledge.tag")}</div>
-                    <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
                 </TableHead>
 
                 {/* 大小 */}
@@ -993,8 +992,10 @@ function FileRow({
     };
 
     const rowActions = (
+        // pl-1.5 (6px) + icon's 6px inset inside the size-7 button = 12px,
+        // matching the header cell's pl-3 so the download icon left-aligns with the "操作" label.
         <div
-            className="flex h-full items-center justify-center gap-1 px-2"
+            className="flex h-full items-center justify-start gap-1 pl-1.5 pr-2"
         >
             {canDownload && (
                 <button
@@ -1008,6 +1009,9 @@ function FileRow({
                 >
                     <Outlined.Download className="size-4" />
                 </button>
+            )}
+            {canDownload && showMoreMenu && (
+                <div className="h-3.5 w-px shrink-0 bg-[#E5E6EB]" />
             )}
             {showMoreMenu && (
                 <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
