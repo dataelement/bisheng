@@ -22,7 +22,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useRecoilValue } from "recoil";
+import { useRecoilValue, useResetRecoilState } from "recoil";
+import { knowledgeSelectedFilesState } from "../../selectionStore";
 import {
     Tooltip,
     TooltipContent,
@@ -65,6 +66,22 @@ export function KnowledgeAiBottomDock({
 
     const [open, setOpen] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    /** Default vs active (input-focused) state — distinct from the mobile-keyboard
+     *  `keyboardVisible` flag so styling can hang off it later without coupling. */
+    const [isActive, setIsActive] = useState(false);
+
+    // Clears the file-list selection (shared atom). File selection and AI Q&A are
+    // independent: focusing or sending in the input clears any lingering selection
+    // so the two never read as coupled.
+    const resetFileSelection = useResetRecoilState(knowledgeSelectedFilesState);
+
+    /** Input focus/blur. On focus we both mark the dock active and clear the file
+     *  selection; also drives the mobile keyboard-overlay flag. */
+    const handleInputFocusChange = (focused: boolean) => {
+        setIsActive(focused);
+        setKeyboardVisible(focused);
+        if (focused) resetFileSelection();
+    };
 
     /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
      *  keyboard. Mirrors `ArticleAiDock`. See that file for the full rationale. */
@@ -137,6 +154,9 @@ export function KnowledgeAiBottomDock({
 
     const handleSend = (text: string, files?: any[] | null, tag?: FolderChatTag) => {
         sendMessage(text, files, tag);
+        // Sending is an AI interaction — clear any file selection made while typing
+        // so selection never appears to feed the Q&A.
+        resetFileSelection();
         // First send slides the panel up — the input itself stays put.
         if (!open) setOpen(true);
     };
@@ -145,14 +165,8 @@ export function KnowledgeAiBottomDock({
         await createSession();
     };
 
-    // Collapsed-state entry points (the floating buttons shown when history exists).
-    // History opens the panel straight into the history list; the expand arrow opens
-    // a fresh conversation — existing history stays in `sessions`, reachable via history.
-    const handleOpenHistory = () => {
-        setShowHistory(true);
-        setOpen(true);
-    };
-
+    // Collapsed-state expand button — opens a fresh conversation. Existing history
+    // stays in `sessions` and is reachable via the toggle inside the expanded panel.
     const handleExpandNew = async () => {
         setShowHistory(false);
         // Reuse the current view if it's already an empty new chat; otherwise spin up a
@@ -284,7 +298,7 @@ export function KnowledgeAiBottomDock({
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant="box"
-                        onFocusChange={setKeyboardVisible}
+                        onFocusChange={handleInputFocusChange}
                     />
                 </div>
 
@@ -335,6 +349,9 @@ export function KnowledgeAiBottomDock({
                 )}
             >
                 <div
+                    // data-active exposes the default/active (input-focused) state for future
+                    // styling hooks and QA, without coupling to the mobile keyboard flag.
+                    data-active={isActive}
                     className={cn(
                         // pointer-events-auto restores interactivity on the card itself (its parent
                         // backdrop is pointer-events-none so the file list behind stays clickable).
@@ -343,45 +360,28 @@ export function KnowledgeAiBottomDock({
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {/* Floating collapsed-state controls — shown whenever any conversation
-                        exists. Gate on `sessions`, not `messages`: starting a new chat clears
-                        `messages` but the session history is still there, so the controls must
-                        persist. Left = history (opens the history list), right = expand (opens a
-                        fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks. */}
+                    {/* Floating expand button — shown whenever any conversation exists.
+                        Gate on `sessions`, not `messages`: starting a new chat clears
+                        `messages` but the session history is still there, so the button must
+                        persist. Opens a fresh conversation. Shared by desktop + mobile-collapsed
+                        docks. History stays reachable via the toggle inside the expanded panel. */}
                     {!open && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
-                            <div className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex items-center justify-end gap-2">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            type="button"
-                                            onClick={handleOpenHistory}
-                                            aria-label={localize("com_knowledge.history_chat")}
-                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
-                                        >
-                                            <Outlined.History className="size-4" />
-                                        </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>{localize("com_knowledge.history_chat")}</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            type="button"
-                                            onClick={handleExpandNew}
-                                            aria-label={localize("com_ui_expand")}
-                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
-                                        >
-                                            <Outlined.DoubleDown className="size-4 rotate-180" />
-                                        </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>{localize("com_ui_expand")}</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        onClick={handleExpandNew}
+                                        aria-label={localize("com_ui_expand")}
+                                        className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                    >
+                                        <Outlined.DoubleDown className="size-4 rotate-180" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>{localize("com_ui_expand")}</p>
+                                </TooltipContent>
+                            </Tooltip>
                         </TooltipProvider>
                     )}
 
@@ -495,7 +495,7 @@ export function KnowledgeAiBottomDock({
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}
-                        onFocusChange={setKeyboardVisible}
+                        onFocusChange={handleInputFocusChange}
                     />
 
                     {open && showHistory && (

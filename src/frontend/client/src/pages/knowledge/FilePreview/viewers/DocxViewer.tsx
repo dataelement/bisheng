@@ -1,6 +1,7 @@
 import * as mammoth from "mammoth";
 import { useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { sanitizeHtml } from "~/utils/sanitizeHtml";
 
 interface DocxViewerProps {
     fileUrl: string;
@@ -97,7 +98,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
                     `}</style>
                     <div
                         className="docx-content"
-                        dangerouslySetInnerHTML={{ __html: htmlContent }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(htmlContent) }}
                     />
                 </div>
             </div>

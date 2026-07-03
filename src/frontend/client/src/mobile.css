@@ -1,3 +1,10 @@
+/* Disable the long-press callout menu in mobile WebView.
+   Text selection stays enabled (no user-select override) so users can
+   still select and copy text where needed. */
+html {
+  -webkit-touch-callout: none;
+}
+
 .hover-button.active {
   display: block;
   visibility: visible;

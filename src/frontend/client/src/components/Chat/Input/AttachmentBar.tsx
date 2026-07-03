@@ -91,8 +91,10 @@ const CardShell = ({
             <button
                 type="button"
                 onClick={onRemove}
-                // Hover-reveal on desktop; always visible on touch (no hover there).
-                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex touch-mobile:flex"
+                // Hover-reveal on hover-capable pointers; always visible where the
+                // pointer can't hover (touch) — gated by CSS hover capability, not
+                // screen width, so a small-screen PC still gets the hover behaviour.
+                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex coarse-pointer:flex"
                 aria-label="Remove"
             >
                 <Outlined.Close size={12} />

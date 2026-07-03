@@ -6,6 +6,7 @@ import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
 import { Button } from "~/components/ui/Button"
+import { EmptyStateIllustration } from "~/components/illustrations"
 import { useLocalize, useMediaQuery } from "~/hooks"
 import { useGetBsConfig } from "~/hooks/queries/data-provider"
 import { cn, copyText } from "~/utils"
@@ -153,7 +154,17 @@ export default function ExplorePlaza() {
     }
 
     return (
-        <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white">
+        <div
+            className={cn(
+                'flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
+                // Mobile explore renders in document-scroll mode (not innerScrollShell in
+                // MainLayout), so h-full/flex-1 collapse to content height and the region has
+                // no height for the empty/loading content to position against. In those states
+                // (no scrollable grid) pin the page to one viewport tall so the region below the
+                // header becomes a real, measurable area. Gated by state → has-content path untouched.
+                (loading || agents.length === 0) && 'max-[767px]:h-[100dvh]',
+            )}
+        >
             {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
             <div
                 className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
@@ -225,9 +236,12 @@ export default function ExplorePlaza() {
                     ref={loaderRef}
                     className={cn(
                         'flex w-full flex-col items-center',
-                        (loading || agents.length === 0) ? 'flex-1 justify-center' : 'py-10',
+                        // Empty/loading: fill the region and place content via flex spacers at a
+                        // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
+                        (loading || agents.length === 0) ? 'flex-1' : 'py-10',
                     )}
                 >
+                    {(loading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
                     {loading ? (
                         <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
@@ -243,8 +257,12 @@ export default function ExplorePlaza() {
                         <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_end_of_list')}</p>
                     )}
                     {!loading && agents.length === 0 && (
-                        <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_no_agents')}</p>
+                        <div className="flex flex-col items-center">
+                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">{localize('com_app_explore_no_agents')}</p>
+                        </div>
                     )}
+                    {(loading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
                 </div>
                 </div>
             </main>

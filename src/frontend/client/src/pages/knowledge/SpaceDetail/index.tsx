@@ -1,5 +1,6 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, type MouseEvent } from "react";
-import { useRecoilValue } from "recoil";
+import { useRecoilValue, useRecoilState } from "recoil";
+import { knowledgeSelectedFilesState } from "../selectionStore";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Link2 } from "lucide-react";
@@ -215,7 +216,9 @@ export function KnowledgeSpaceContent({
         localStorage.setItem("knowledge-view-mode", mode);
     };
 
-    const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    // Shared atom (not local state) so the bottom AI dock can clear the selection
+    // on focus/send without prop drilling. See selectionStore.ts.
+    const [selectedFiles, setSelectedFiles] = useRecoilState(knowledgeSelectedFilesState);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
@@ -385,6 +388,8 @@ export function KnowledgeSpaceContent({
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
     const canUseAddActions = (canCreateFolder || canUploadFile) && !isSearching;
+    // Blank-area right-click menu opens when the user can upload a file OR create a folder.
+    const canUseContextMenuActions = (canUploadFile || canCreateFolder) && !isSearching;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -620,13 +625,13 @@ export function KnowledgeSpaceContent({
     };
 
     useEffect(() => {
-        if (!canUseAddActions) {
+        if (!canUseContextMenuActions) {
             setContextMenuOpen(false);
         }
-    }, [canUseAddActions]);
+    }, [canUseContextMenuActions]);
 
     const handleContentContextMenu = (e: MouseEvent<HTMLDivElement>) => {
-        if (!canUseAddActions) return;
+        if (!canUseContextMenuActions) return;
         const target = e.target;
         if (target instanceof Element && target.closest("[data-knowledge-file-item]")) return;
 

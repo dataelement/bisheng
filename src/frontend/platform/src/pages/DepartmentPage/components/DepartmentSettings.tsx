@@ -68,6 +68,12 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
   // from the root layer; ``parentDisplayName`` from a path-tree lookup (used for
   // the read-only parent field when the parent can't be edited).
   const [isVisibleRootDept, setIsVisibleRootDept] = useState(false)
+  // Whether the visible-root determination (below) has completed for the current
+  // dept. ``isVisibleRootDept`` starts false, so without this gate the editable
+  // parent picker would mount for one render on a visible-root dept and locate its
+  // OUT-OF-SCOPE parent via path-tree (21009). Keep the parent read-only until we
+  // actually know whether this dept is a root.
+  const [visibleRootResolved, setVisibleRootResolved] = useState(false)
   const [parentDisplayName, setParentDisplayName] = useState("-")
 
   const adminSelectValueRef = useRef<DepartmentUserOption[]>([])
@@ -82,7 +88,7 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
   /** 仅部门名称对第三方同步部门只读；管理员与默认角色仍可保存 */
   const canEditName = !isArchived && !isSynced
   const canEditPermissions = !isArchived
-  const canEditParent = !isArchived && !isSynced && !isRootDept
+  const canEditParent = !isArchived && !isSynced && !isRootDept && visibleRootResolved
 
   /** 最近一次从服务端加载成功的快照（父部门变更判断、保存后更新） */
   const baselineRef = useRef<{
@@ -102,6 +108,8 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
   // selecting the dept's own subtree via excludeSubtreePath={dept.path} instead.
   useEffect(() => {
     let cancelled = false
+    // Re-defer the editable parent picker until this dept's root-ness is known.
+    setVisibleRootResolved(false)
     if (dept.parent_id == null || dept.is_tenant_root) {
       // Absolute root, or a tenant root whose parent is the system root: there is
       // no in-scope / meaningful parent to resolve. ``isRootDept`` already covers
@@ -109,12 +117,14 @@ export function DepartmentSettings({ dept, onChanged, onMarkAsTenant }: Departme
       // entirely (a tenant admin would be denied; a super admin doesn't need it).
       setIsVisibleRootDept(false)
       setParentDisplayName("-")
+      setVisibleRootResolved(true)
       return
     }
     captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null)).then((roots) => {
       if (cancelled) return
       const visibleRoot = Array.isArray(roots) && roots.some((n) => n.id === dept.id)
       setIsVisibleRootDept(visibleRoot)
+      setVisibleRootResolved(true)
       // When the dept sits at the top of the viewer's visible tree, its parent is
       // OUTSIDE the viewer's scope (e.g. a sub-tenant admin's tenant-root dept,
       // whose parent is the global root). Fetching that parent's path-tree would

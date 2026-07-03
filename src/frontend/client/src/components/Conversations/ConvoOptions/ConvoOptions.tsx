@@ -7,7 +7,7 @@ import { useLocalize, useArchiveHandler, useNavigateToConvo } from '~/hooks';
 import { useToastContext, useChatContext } from '~/Providers';
 import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
-import DeleteButton from './DeleteButton';
+import { useDeleteConversationConfirm } from './useDeleteConversationConfirm';
 import ShareButton from './ShareButton';
 import { cn } from '~/utils';
 
@@ -36,7 +36,7 @@ function ConvoOptions({
   const { showToast } = useToastContext();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const deleteConversationConfirm = useDeleteConversationConfirm();
 
   const duplicateConversation = useDuplicateConversationMutation({
     onSuccess: (data) => {
@@ -65,7 +65,10 @@ function ConvoOptions({
   };
 
   const handleDelete = () => {
-    setShowDeleteDialog(true);
+    if (!conversationId) {
+      return;
+    }
+    deleteConversationConfirm({ conversationId, title: title ?? '', retainView });
   };
 
   return (
@@ -110,16 +113,6 @@ function ConvoOptions({
           conversationId={conversationId ?? ''}
           open={showShareDialog}
           onOpenChange={setShowShareDialog}
-          triggerRef={triggerRef}
-        />
-      )}
-      {showDeleteDialog && (
-        <DeleteButton
-          title={title ?? ''}
-          retainView={retainView}
-          conversationId={conversationId ?? ''}
-          showDeleteDialog={showDeleteDialog}
-          setShowDeleteDialog={setShowDeleteDialog}
           triggerRef={triggerRef}
         />
       )}

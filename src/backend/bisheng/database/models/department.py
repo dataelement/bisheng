@@ -533,6 +533,12 @@ class DepartmentDao:
                 update(Department)
                 .where(Department.path.like(f"{old_prefix}%"))
                 .values(path=func.replace(Department.path, old_prefix, new_prefix))
+                # This LIKE-prefix WHERE is not Python-evaluatable, so the ORM would
+                # fall to the "fetch" sync strategy and inject RETURNING. DM's
+                # RETURNING ... INTO is single-row only, so a multi-row rewrite fails
+                # with [CODE:-5016] Invalid return into multi rows. We don't reuse the
+                # updated rows in-session, so disable sync to emit a plain UPDATE.
+                .execution_options(synchronize_session=False)
             )
             session.commit()
 
@@ -543,6 +549,10 @@ class DepartmentDao:
                 update(Department)
                 .where(Department.path.like(f"{old_prefix}%"))
                 .values(path=func.replace(Department.path, old_prefix, new_prefix))
+                # synchronize_session=False: avoid the ORM "fetch" strategy injecting
+                # RETURNING, which DM rejects for multi-row UPDATE ([CODE:-5016]). See
+                # update_paths_batch above.
+                .execution_options(synchronize_session=False)
             )
             await session.commit()
 
@@ -571,6 +581,10 @@ class DepartmentDao:
                 update(Department)
                 .where(Department.path.like(f"{old_path}%"))
                 .values(path=func.replace(Department.path, old_path, new_path))
+                # synchronize_session=False: avoid the ORM "fetch" strategy injecting
+                # RETURNING, which DM rejects for multi-row UPDATE ([CODE:-5016]). Also
+                # keeps res.rowcount reliable as the plain affected-row count.
+                .execution_options(synchronize_session=False)
             )
             await session.execute(update(Department).where(Department.id == dept_id).values(parent_id=new_parent_id))
             await session.commit()

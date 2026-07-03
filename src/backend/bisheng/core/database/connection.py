@@ -1,13 +1,15 @@
 """Database Connection Management Module"""
 
 import logging
+import time
 from collections.abc import Generator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -15,6 +17,57 @@ from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+def _install_db_metric_events(engine: Engine, engine_name: str) -> None:
+    """Attach cursor-timing metric listeners to a sync Engine (F042 T005).
+
+    Called once per engine right after creation. For the async engine, pass its
+    underlying ``sync_engine`` (cursor events fire on the sync core). Best-effort:
+    a wiring failure logs a warning but never blocks engine creation. The metric
+    work itself is gated + exception-isolated inside ``record_db_query``.
+    """
+    try:
+        # Lazy import (established pattern, e.g. tenant_filter/manager): connection.py
+        # is imported very early; a top-level metric_log import risks a cycle through
+        # the partially-initialized bisheng.common.services package (design §5 坑 anchor).
+        from bisheng.common.services.metric_log import record_db_query
+
+        pool = engine.pool
+
+        @event.listens_for(engine, "before_cursor_execute")
+        def _before(conn, cursor, statement, parameters, context, executemany):
+            context._bs_metric_start = time.monotonic()
+
+        @event.listens_for(engine, "after_cursor_execute")
+        def _after(conn, cursor, statement, parameters, context, executemany):
+            start = getattr(context, "_bs_metric_start", None)
+            if start is None:
+                return
+            now = time.monotonic()
+            record_db_query(engine_name, pool, statement, (now - start) * 1000.0, now, "ok")
+
+        @event.listens_for(engine, "handle_error")
+        def _on_error(exc_ctx):
+            ctx = exc_ctx.execution_context
+            if ctx is None:
+                return
+            start = getattr(ctx, "_bs_metric_start", None)
+            now = time.monotonic()
+            elapsed_ms = (now - start) * 1000.0 if start is not None else 0.0
+            record_db_query(engine_name, pool, getattr(ctx, "statement", "") or "", elapsed_ms, now, "error")
+    except Exception:
+        # Metrics are best-effort; never let wiring break the engine.
+        logger.warning("failed to install db metric events for %s engine", engine_name)
+
+
+def _emit_pool_wait_timeout_if_needed(engine_name: str, exc: BaseException) -> None:
+    """Emit a ``db_pool result=wait_timeout`` line when a session failed because
+    the pool was exhausted (SQLAlchemy raises ``TimeoutError`` from checkout)."""
+    if isinstance(exc, SQLAlchemyTimeoutError):
+        from bisheng.common.services.metric_log import emit_metric
+
+        emit_metric("db_pool", engine=engine_name, result="wait_timeout")
 
 
 class DatabaseConnectionManager:
@@ -131,6 +184,7 @@ class DatabaseConnectionManager:
             # DaMeng URLs are already normalized in __init__ (schema moved to
             # the query string), so database_url is used as-is for every engine.
             self._engine = create_engine(self.database_url, **config)
+            _install_db_metric_events(self._engine, "sync")
             logger.debug(f"Created sync database engine for {self.database_url}")
 
         return self._engine
@@ -146,6 +200,9 @@ class DatabaseConnectionManager:
             config.pop("poolclass", None)
 
             self._async_engine = create_async_engine(self.async_database_url, **config)
+            # Cursor events fire on the underlying sync engine; the async pool is
+            # reached via sync_engine.pool (design §5 坑 9).
+            _install_db_metric_events(self._async_engine.sync_engine, "async")
             logger.debug(f"Created async database engine for {self.async_database_url}")
 
         return self._async_engine
@@ -168,6 +225,7 @@ class DatabaseConnectionManager:
                 session.rollback()
                 if isinstance(e, Exception):
                     logger.error(f"Database session rolled back due to error: {e}")
+                _emit_pool_wait_timeout_if_needed("sync", e)
                 raise
             finally:
                 session.close()
@@ -192,6 +250,7 @@ class DatabaseConnectionManager:
                 await session.rollback()
                 if isinstance(e, Exception):
                     logger.error(f"Database session rolled back due to error: {e}")
+                _emit_pool_wait_timeout_if_needed("async", e)
                 raise
             finally:
                 await session.close()

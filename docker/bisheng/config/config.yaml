@@ -7,7 +7,7 @@ database_url:
 # 注意：连接池是“每进程每引擎”一套，总连接数 ≈ 进程数 ×（pool_size + max_overflow）。
 # 调优时务必让该总数小于数据库服务端的最大会话数（如达梦 MAX_SESSIONS）。
 database_pool:
-  pool_size: 10      # 每进程常驻连接数
+  pool_size: 50      # 每进程常驻连接数
   max_overflow: 20    # 高峰允许超出 pool_size 的临时连接数
   pool_timeout: 30    # 等待空闲连接的超时秒数
   pool_recycle: 3600  # 连接最大存活秒数，超过则回收重建

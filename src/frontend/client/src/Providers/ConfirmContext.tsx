@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useRef, useState } from "react"
 
-import { AlertCircle, Trash2 } from "lucide-react"
+import { Outlined } from "bisheng-icons"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -17,7 +17,8 @@ import { useLocalize } from "~/hooks"
 
 interface ConfirmOptions {
     title?: string
-    description?: string
+    /** Body content. Accepts rich nodes (e.g. a bolded target name), not just text. */
+    description?: React.ReactNode
     cancelText?: string
     confirmText?: string
     variant?: "default" | "destructive"
@@ -88,8 +89,8 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
         ? "bg-[#f53f3f] hover:bg-[#f53f3f]/90"
         : "btn-brand-primary bg-primary hover:bg-primary/90"
     const accentIcon = options.icon ?? (isDestructive
-        ? <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />
-        : <AlertCircle className="size-5 shrink-0 text-[#ff7d00]" />)
+        ? <Outlined.Delete className="size-5 shrink-0 text-[#f53f3f]" />
+        : <Outlined.Attention className="size-5 shrink-0 text-[#ff7d00]" />)
     const defaultTitle = isDestructive
         ? localize("com_knowledge.confirm_delete_title")
         : localize("com_knowledge.prompt")
@@ -108,7 +109,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     equal buttons. PC: left-aligned title + right-aligned hug buttons. */}
                 <AlertDialogContent
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-[20px] border border-[#ebebeb] p-6 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-[20px]"
+                    className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-2xl border border-[#ebebeb] p-5 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-2xl"
                 >
                     <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
                         {accentIcon}
@@ -124,13 +125,13 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
                         <AlertDialogCancel
                             onClick={handleCancel}
-                            className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-white/70 sm:mt-0 sm:flex-none"
+                            className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-[#f7f8fa] focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
                         >
                             {options.cancelText || defaultCancel}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={handleConfirm}
-                            className={`h-auto flex-1 rounded-[6px] px-4 py-[5px] text-sm font-normal text-white sm:flex-none ${confirmColor}`}
+                            className={`h-auto flex-1 rounded-[6px] px-4 py-[5px] text-sm font-normal text-white focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:flex-none ${confirmColor}`}
                         >
                             {options.confirmText || defaultConfirm}
                         </AlertDialogAction>

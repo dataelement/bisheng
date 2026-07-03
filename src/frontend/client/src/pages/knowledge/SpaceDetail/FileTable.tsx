@@ -841,6 +841,9 @@ function FileRow({
         setMoreMenuOpen(open);
         if (open) onEnsureFilePermissions?.(file);
     };
+    // Right-click context menu mirrors the row "..." action menu, positioned at the cursor.
+    const [contextMenuOpen, setContextMenuOpen] = useState(false);
+    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
     // Uploading placeholder rows have no backend identity yet — not movable.
@@ -887,6 +890,101 @@ function FileRow({
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = (rowHovered || moreMenuOpen) && !isUploadingFolderPlaceholder;
+    // Shared action-menu items, reused by the row "..." dropdown and the right-click menu.
+    const moreMenuItems = (
+        <>
+            {isAdmin && !isFolder && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onEditTags();
+                    }}
+                    icon={<Outlined.Tag />}
+                    label={localize("com_knowledge.edit_tags")}
+                />
+            )}
+            {canRename && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        startRenaming();
+                    }}
+                    icon={<Outlined.Edit />}
+                    label={localize("com_knowledge.rename")}
+                />
+            )}
+            {showMoveItem && (
+                <ActionMenuItem
+                    disabled={!canMove || isUploading}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onMove?.();
+                    }}
+                    icon={<Outlined.MoveToFolder />}
+                    label={localize("com_knowledge.move")}
+                />
+            )}
+            {isAdmin && hasRetryOption && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRetry?.();
+                    }}
+                    icon={<Outlined.Refresh />}
+                    label={localize("com_knowledge.retry")}
+                />
+            )}
+            {onManagePermission && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onManagePermission();
+                    }}
+                    icon={<Outlined.PeopleSafe />}
+                    label={localize("com_permission.manage_permission")}
+                />
+            )}
+            {showVersionManagement && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenVersionManagement?.(file);
+                    }}
+                    icon={<GitBranch />}
+                    label={localize("com_knowledge.version.menu_version_management")}
+                />
+            )}
+            {showVersionHistory && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenVersionHistory?.(file);
+                    }}
+                    icon={<History />}
+                    label={localize("com_knowledge.version.menu_version_history")}
+                />
+            )}
+            {canDelete && (
+                <ActionMenuItem
+                    danger
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete();
+                    }}
+                    icon={<Outlined.Delete />}
+                    label={localize("com_knowledge.delete")}
+                />
+            )}
+        </>
+    );
+
+    const handleRowContextMenu = (e: React.MouseEvent<HTMLTableRowElement>) => {
+        if (!showMoreMenu) return;
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuOpen(true);
+    };
+
     const rowActions = (
         <div
             className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
@@ -912,88 +1010,7 @@ function FileRow({
                         </button>
                     </DropdownMenuTrigger>
                     <ActionMenuContent align="end">
-                        {isAdmin && !isFolder && (
-                            <ActionMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEditTags();
-                                }}
-                                icon={<Outlined.Tag />}
-                                label={localize("com_knowledge.edit_tags")}
-                            />
-                        )}
-                        {canRename && (
-                            <ActionMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    startRenaming();
-                                }}
-                                icon={<Outlined.Edit />}
-                                label={localize("com_knowledge.rename")}
-                            />
-                        )}
-                        {showMoveItem && (
-                            <ActionMenuItem
-                                disabled={!canMove || isUploading}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onMove?.();
-                                }}
-                                icon={<Outlined.MoveToFolder />}
-                                label={localize("com_knowledge.move")}
-                            />
-                        )}
-                        {isAdmin && hasRetryOption && (
-                            <ActionMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onRetry?.();
-                                }}
-                                icon={<Outlined.Refresh />}
-                                label={localize("com_knowledge.retry")}
-                            />
-                        )}
-                        {onManagePermission && (
-                            <ActionMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onManagePermission();
-                                }}
-                                icon={<Outlined.PeopleSafe />}
-                                label={localize("com_permission.manage_permission")}
-                            />
-                        )}
-                        {showVersionManagement && (
-                            <ActionMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onOpenVersionManagement?.(file);
-                                }}
-                                icon={<GitBranch />}
-                                label={localize("com_knowledge.version.menu_version_management")}
-                            />
-                        )}
-                        {showVersionHistory && (
-                            <ActionMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onOpenVersionHistory?.(file);
-                                }}
-                                icon={<History />}
-                                label={localize("com_knowledge.version.menu_version_history")}
-                            />
-                        )}
-                        {canDelete && (
-                            <ActionMenuItem
-                                danger
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDelete();
-                                }}
-                                icon={<Outlined.Delete />}
-                                label={localize("com_knowledge.delete")}
-                            />
-                        )}
+                        {moreMenuItems}
                     </ActionMenuContent>
                 </DropdownMenu>
             )}
@@ -1017,6 +1034,7 @@ function FileRow({
             )}
             onMouseEnter={() => setRowHovered(true)}
             onMouseLeave={() => setRowHovered(false)}
+            onContextMenu={handleRowContextMenu}
         >
             {/* 复选框 — 左侧固定 */}
             <TableCell
@@ -1234,6 +1252,23 @@ function FileRow({
             >
                 <StickyColumnShadowRight show={showRightShadow} />
                 {showRowActions && rowActions}
+                {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
+                {showMoreMenu && (
+                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-hidden="true"
+                                tabIndex={-1}
+                                className="fixed size-0 opacity-0"
+                                style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                            />
+                        </DropdownMenuTrigger>
+                        <ActionMenuContent align="start">
+                            {moreMenuItems}
+                        </ActionMenuContent>
+                    </DropdownMenu>
+                )}
             </TableCell>
         </TableRow>
     );
