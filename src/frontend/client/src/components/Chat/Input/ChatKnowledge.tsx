@@ -656,10 +656,13 @@ export const ChatKnowledge = ({
           // Mobile width override only applies to the knowledge variant — the
           // "+" menu shows short action items and matches the desktop 160px
           // width on phones too. (knowledge needs more room for search + list)
-          // Mobile knowledge popup: match desktop's `pt-2 px-2 pb-0` so the
-          // scroll list's own `pb-2` handles the last-item spacing and there's
-          // no dead padding strip below the visible list edge.
-          isMobile && variant === 'knowledge' && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
+          // Mobile: any "tall" panel (knowledge, or the "+" menu drilled into
+          // skill / org lists) needs the wider width; 160px is fine only for
+          // the compact root of the "+" menu (short action items).
+          isMobile && mobileTallPanel && 'touch-mobile:w-[min(calc(100vw-24px),320px)]',
+          // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
+          // the scroll list's own `pb-2` handles the last-item spacing.
+          isMobile && variant === 'knowledge' && 'touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
