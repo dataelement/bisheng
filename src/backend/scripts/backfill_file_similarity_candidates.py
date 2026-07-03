@@ -31,6 +31,7 @@ if _BACKEND_ROOT not in sys.path:
 from sqlmodel import select  # noqa: E402
 from sqlmodel.ext.asyncio.session import AsyncSession  # noqa: E402
 
+from bisheng.core.context.manager import close_app_context  # noqa: E402
 from bisheng.core.context.tenant import bypass_tenant_filter  # noqa: E402
 from bisheng.core.database import get_async_db_session  # noqa: E402
 from bisheng.knowledge.domain.models.knowledge import Knowledge  # noqa: E402
@@ -175,34 +176,37 @@ async def backfill(
 
 
 async def _run(args: argparse.Namespace) -> int:
-    if args.batch_size <= 0:
-        print("--batch-size must be greater than 0", file=sys.stderr)
-        return 2
-    if args.limit is not None and args.limit <= 0:
-        print("--limit must be greater than 0", file=sys.stderr)
-        return 2
-    if args.sleep_ms < 0:
-        print("--sleep-ms must be >= 0", file=sys.stderr)
-        return 2
+    try:
+        if args.batch_size <= 0:
+            print("--batch-size must be greater than 0", file=sys.stderr)
+            return 2
+        if args.limit is not None and args.limit <= 0:
+            print("--limit must be greater than 0", file=sys.stderr)
+            return 2
+        if args.sleep_ms < 0:
+            print("--sleep-ms must be >= 0", file=sys.stderr)
+            return 2
 
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            report = await backfill(
-                session,
-                apply=args.apply,
-                knowledge_id=args.knowledge_id,
-                limit=args.limit,
-                batch_size=args.batch_size,
-                sleep_ms=args.sleep_ms,
-            )
-    print(report)
-    if report.errors:
-        for error in report.errors[:20]:
-            print(f"error: {error}", file=sys.stderr)
-        if len(report.errors) > 20:
-            print(f"error: ... {len(report.errors) - 20} more", file=sys.stderr)
-        return 1
-    return 0
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                report = await backfill(
+                    session,
+                    apply=args.apply,
+                    knowledge_id=args.knowledge_id,
+                    limit=args.limit,
+                    batch_size=args.batch_size,
+                    sleep_ms=args.sleep_ms,
+                )
+        print(report)
+        if report.errors:
+            for error in report.errors[:20]:
+                print(f"error: {error}", file=sys.stderr)
+            if len(report.errors) > 20:
+                print(f"error: ... {len(report.errors) - 20} more", file=sys.stderr)
+            return 1
+        return 0
+    finally:
+        await close_app_context()
 
 
 def main() -> int:

@@ -572,6 +572,7 @@ class KnowledgeVersionService:
         cached_rows: list[KnowledgeFileSimilarityCandidate],
         *,
         limit: int,
+        require_single_version: bool = False,
     ) -> list:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
@@ -606,6 +607,10 @@ class KnowledgeVersionService:
                 continue
             if int(version.knowledge_file_id) != int(row.candidate_file_id):
                 continue
+            if require_single_version:
+                chain = await self.version_repo.find_by_document_id(int(doc.id))
+                if len(chain) != 1:
+                    continue
             candidate = await self.knowledge_file_repo.find_by_id(int(version.knowledge_file_id))
             if candidate is None:
                 continue
@@ -659,7 +664,12 @@ class KnowledgeVersionService:
                 # scanner but no persisted candidate rows until the backfill runs.
                 # Do not clear similar_status from a read path in that case.
                 continue
-            candidates = await self._similar_candidate_entries_from_cache(kf.id, cached, limit=3)
+            candidates = await self._similar_candidate_entries_from_cache(
+                kf.id,
+                cached,
+                limit=3,
+                require_single_version=True,
+            )
             if not candidates:
                 kf.similar_status = 0
                 await self.knowledge_file_repo.update(kf)
@@ -707,73 +717,16 @@ class KnowledgeVersionService:
         *,
         limit: int = 3,
     ) -> list:
-        """Top-N single-version similar candidates for the version management dialog.
-
-        Same scoring as get_similar_candidates_for_file but additionally filters out
-        documents that already have multiple versions — multi-version docs cannot be
-        merged in (they own their own version chain).
-        """
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
-
-        kf = await self.knowledge_file_repo.find_by_id(current_file_id)
-        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+        """Read cached single-version candidates for the version management dialog."""
+        if self.similar_candidate_repo is None:
             return []
-        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
-            return []
-
-        conf = await bisheng_settings.async_get_knowledge()
-        vmc = getattr(conf, "version_management", None)
-        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
-
-        self_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
-        self_doc_id = self_v.document_id if self_v else None
-
-        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id,
-            exclude_file_id=current_file_id,
+        cached = await self.similar_candidate_repo.find_by_source_file_id(current_file_id)
+        return await self._similar_candidate_entries_from_cache(
+            current_file_id,
+            cached,
+            limit=limit,
+            require_single_version=True,
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for c in candidates:
-            if not self._has_valid_simhash(getattr(c, "simhash", None)):
-                continue
-            if not self._shougang_encoding_matches(kf, c):
-                continue
-            sim = _similarity(kf.simhash, c.simhash)
-            if sim < threshold:
-                continue
-            scored.append((sim, c))
-
-        # TF-IDF refine: drop simhash false positives + re-rank by content cosine.
-        refined = await self._refine_candidates_by_tfidf(kf, scored)
-
-        out: list[SimilarCandidateEntry] = []
-        for sim, refined_sim, c in refined:
-            if len(out) >= limit:
-                break
-            v = await self.version_repo.find_by_knowledge_file_id(c.id)
-            if v is None:
-                continue
-            if self_doc_id is not None and v.document_id == self_doc_id:
-                continue
-            # Single-version filter (the merge-source eligibility constraint)
-            chain = await self.version_repo.find_by_document_id(v.document_id)
-            if len(chain) != 1:
-                continue
-            out.append(
-                SimilarCandidateEntry(
-                    target_document_id=v.document_id,
-                    title=c.file_name,
-                    doc_code=getattr(c, "file_encoding", None),
-                    current_primary_version_no=v.version_no,
-                    similarity=sim,
-                    refined_similarity=refined_sim,
-                    primary_uploader_name=getattr(c, "user_name", None),
-                    primary_upload_time=getattr(c, "create_time", None),
-                )
-            )
-        return out
 
     async def search_version_sources(
         self,
@@ -883,6 +836,7 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 
         parts: dict[int, list[str]] = {}
+        es_client = None
         try:
             es_client = await KnowledgeRag.init_knowledge_es_vectorstore(
                 knowledge=knowledge,
@@ -908,6 +862,14 @@ class KnowledgeVersionService:
         except Exception as e:
             logger.warning(f"act=tfidf_fetch_chunk_texts knowledge_id={getattr(knowledge, 'id', None)} error={e}")
             return {}
+        finally:
+            if es_client is not None:
+                try:
+                    await es_client.client.close()
+                except Exception as e:
+                    logger.warning(
+                        f"act=tfidf_fetch_chunk_texts_close knowledge_id={getattr(knowledge, 'id', None)} error={e}"
+                    )
         return {fid: "\n".join(chunks) for fid, chunks in parts.items()}
 
     # Redis token-cache: key folds in simhash so a re-parsed file (new content

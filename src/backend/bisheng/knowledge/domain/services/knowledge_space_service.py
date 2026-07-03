@@ -224,6 +224,9 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
         KnowledgeDocumentVersionRepository,
     )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
+        KnowledgeFileSimilarityCandidateRepository,
+    )
     from bisheng.message.domain.services.message_service import MessageService
 
 # Maximum number of Knowledge Spaces a user can create
@@ -395,6 +398,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
+        self.similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository | None = None
         self._created_space_scope_by_id: dict[
             int,
             tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
@@ -5885,6 +5889,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 rows = (await session.execute(stmt)).all()
             doc_version_counts = {row[0]: row[1] for row in rows}
 
+        actionable_similar_file_ids: set[int] | None = None
+        similar_candidate_repo = getattr(self, "similar_candidate_repo", None)
+        if similar_candidate_repo is not None:
+            single_version_source_file_ids: list[int] = []
+            for item in file_items:
+                if item.similar_status != 1:
+                    continue
+                ver = ver_by_file.get(item.id)
+                if ver is not None and doc_version_counts.get(ver.document_id, 1) > 1:
+                    continue
+                single_version_source_file_ids.append(int(item.id))
+            actionable_similar_file_ids = await similar_candidate_repo.find_actionable_source_file_ids(
+                single_version_source_file_ids
+            )
+
         for item in file_items:
             ver = ver_by_file.get(item.id)
             if ver is not None:
@@ -5894,7 +5913,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 item._version_no = None
                 item._is_multi_version = False
-            item._has_similar = item.similar_status == 1
+            if actionable_similar_file_ids is None:
+                item._has_similar = item.similar_status == 1
+            else:
+                item._has_similar = item.id in actionable_similar_file_ids
 
         return items
 

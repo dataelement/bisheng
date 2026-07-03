@@ -195,6 +195,76 @@ async def test_list_pending_clears_stale_status_when_cached_candidates_invalid(
 
 
 @pytest.mark.asyncio
+async def test_list_pending_clears_status_when_only_cached_candidates_are_multi_version(
+    enable_switch, async_db_session, monkeypatch
+):
+    from contextlib import asynccontextmanager
+    from unittest.mock import patch
+
+    @asynccontextmanager
+    async def _ctx():
+        yield async_db_session
+
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
+    await _seed_file_with_doc(
+        async_db_session,
+        100,
+        similar_status=1,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000001",
+    )
+    target_doc = await _seed_file_with_doc(
+        async_db_session,
+        101,
+        similar_status=2,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000002",
+    )
+    async_db_session.add(
+        KnowledgeFile(
+            id=102,
+            knowledge_id=1,
+            file_name="f102.pdf",
+            file_type=1,
+            status=2,
+            similar_status=2,
+            simhash="aaaaaaaaaaaaaaaa",
+            file_encoding="GF-ZD-SC-20260500000003",
+        )
+    )
+    await async_db_session.commit()
+    async_db_session.add(
+        KnowledgeDocumentVersion(
+            document_id=target_doc.id,
+            knowledge_file_id=102,
+            version_no=2,
+            is_primary=False,
+        )
+    )
+    async_db_session.add(
+        KnowledgeFileSimilarityCandidate(
+            tenant_id=1,
+            knowledge_id=1,
+            source_file_id=100,
+            candidate_file_id=101,
+            candidate_document_id=target_doc.id,
+            similarity=1.0,
+            sort_order=0,
+        )
+    )
+    await async_db_session.commit()
+
+    with patch("bisheng.knowledge.domain.models.knowledge_file.get_async_db_session", side_effect=lambda: _ctx()):
+        svc = _build_svc(async_db_session)
+        results = await svc.list_pending_similar_files(knowledge_id=1)
+
+    assert results == []
+    kf = await async_db_session.get(KnowledgeFile, 100)
+    assert kf.similar_status == 0
+
+
+@pytest.mark.asyncio
 async def test_dismiss_sets_status_to_2(enable_switch, async_db_session, monkeypatch):
     async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
     await async_db_session.commit()

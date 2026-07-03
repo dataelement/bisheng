@@ -4,18 +4,18 @@ Two test areas:
 1. DAO level — SpaceFileDao.async_list_children with exclude_file_ids parameter.
 2. Service level — KnowledgeSpaceService._enrich_with_version_info sets version fields.
 """
+
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from sqlalchemy.dialects import sqlite
-from sqlmodel import select
-
 
 # ---------------------------------------------------------------------------
 # Fake session for SQL-inspection tests (no real DB)
 # ---------------------------------------------------------------------------
+
 
 class _FakeListResult:
     def __init__(self, values=None):
@@ -60,6 +60,7 @@ def _compile_sql(statement) -> str:
 # ---------------------------------------------------------------------------
 # DAO SQL-level tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_async_list_children_exclude_file_ids_adds_notin_clause():
@@ -132,6 +133,7 @@ async def test_async_list_children_empty_exclude_file_ids_no_notin_clause():
 # Repository-level integration test using real async_db_session
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_find_non_primary_file_ids_returns_correct_ids(async_db_session):
     """find_non_primary_file_ids returns only the non-primary file ids."""
@@ -190,6 +192,7 @@ async def test_find_primary_versions_by_file_ids_returns_primary_only(async_db_s
 # Service enrichment helper test
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_enrich_with_version_info_sets_fields(async_db_session):
     """_enrich_with_version_info sets _version_no, _is_multi_version, _has_similar on file items.
@@ -198,9 +201,6 @@ async def test_enrich_with_version_info_sets_fields(async_db_session):
     is pre-mocked by conftest) by loading it via importlib at test runtime, following
     the same pattern used in test_add_file_creates_document_v1.py.
     """
-    import importlib
-    import sys
-
     from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
     from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
     from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
@@ -229,6 +229,7 @@ async def test_enrich_with_version_info_sets_fields(async_db_session):
     # helpers; here we rely on the premock_import_chain already run by conftest.py).
     # We bypass __init__ using object.__new__ after loading the real class.
     from test.test_knowledge_space_service import _load_service_class
+
     KnowledgeSpaceService = _load_service_class()
     svc = object.__new__(KnowledgeSpaceService)
     svc.version_repo = repo
@@ -246,7 +247,7 @@ async def test_enrich_with_version_info_sets_fields(async_db_session):
         "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
         new=_session_ctx,
     ):
-        result = await svc._enrich_with_version_info([kf_101, kf_200])
+        await svc._enrich_with_version_info([kf_101, kf_200])
 
     # kf_101: primary V2 of doc_multi (which has 2 versions total)
     assert getattr(kf_101, "_version_no", None) == 2
@@ -257,3 +258,116 @@ async def test_enrich_with_version_info_sets_fields(async_db_session):
     assert getattr(kf_200, "_version_no", None) == 1
     assert getattr(kf_200, "_is_multi_version", False) is False
     assert getattr(kf_200, "_has_similar", None) is True  # similar_status=1
+
+
+@pytest.mark.asyncio
+async def test_enrich_with_version_info_requires_actionable_similar_candidate(async_db_session):
+    """has_similar is true only when cached candidates include a single-version merge target."""
+    from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+    from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import KnowledgeFileSimilarityCandidate
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+        KnowledgeFileSimilarityCandidateRepositoryImpl,
+    )
+
+    def _file(file_id: int, similar_status: int = 0) -> KnowledgeFile:
+        return KnowledgeFile(
+            id=file_id,
+            knowledge_id=1,
+            file_name=f"f{file_id}.pdf",
+            file_type=1,
+            status=2,
+            similar_status=similar_status,
+            simhash="aaaaaaaaaaaaaaaa",
+            file_encoding=f"GF-ZD-SC-20260500000{file_id}",
+        )
+
+    async_db_session.add_all(
+        [
+            _file(100, similar_status=1),
+            _file(101, similar_status=1),
+            _file(200),
+            _file(300),
+            _file(301),
+        ]
+    )
+    await async_db_session.commit()
+
+    doc_source_100 = KnowledgeDocument(knowledge_id=1)
+    doc_source_101 = KnowledgeDocument(knowledge_id=1)
+    doc_single = KnowledgeDocument(knowledge_id=1)
+    doc_multi = KnowledgeDocument(knowledge_id=1)
+    async_db_session.add_all([doc_source_100, doc_source_101, doc_single, doc_multi])
+    await async_db_session.commit()
+    for doc in [doc_source_100, doc_source_101, doc_single, doc_multi]:
+        await async_db_session.refresh(doc)
+
+    versions = [
+        KnowledgeDocumentVersion(document_id=doc_source_100.id, knowledge_file_id=100, version_no=1, is_primary=True),
+        KnowledgeDocumentVersion(document_id=doc_source_101.id, knowledge_file_id=101, version_no=1, is_primary=True),
+        KnowledgeDocumentVersion(document_id=doc_single.id, knowledge_file_id=200, version_no=1, is_primary=True),
+        KnowledgeDocumentVersion(document_id=doc_multi.id, knowledge_file_id=300, version_no=1, is_primary=True),
+        KnowledgeDocumentVersion(document_id=doc_multi.id, knowledge_file_id=301, version_no=2, is_primary=False),
+    ]
+    async_db_session.add_all(versions)
+    await async_db_session.commit()
+    for version in versions:
+        await async_db_session.refresh(version)
+    for doc, version in [
+        (doc_source_100, versions[0]),
+        (doc_source_101, versions[1]),
+        (doc_single, versions[2]),
+        (doc_multi, versions[3]),
+    ]:
+        doc.primary_version_id = version.id
+        async_db_session.add(doc)
+    async_db_session.add_all(
+        [
+            KnowledgeFileSimilarityCandidate(
+                tenant_id=1,
+                knowledge_id=1,
+                source_file_id=100,
+                candidate_file_id=200,
+                candidate_document_id=doc_single.id,
+                similarity=1.0,
+                sort_order=0,
+            ),
+            KnowledgeFileSimilarityCandidate(
+                tenant_id=1,
+                knowledge_id=1,
+                source_file_id=101,
+                candidate_file_id=300,
+                candidate_document_id=doc_multi.id,
+                similarity=1.0,
+                sort_order=0,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    from test.test_knowledge_space_service import _load_service_class
+
+    KnowledgeSpaceService = _load_service_class()
+    svc = object.__new__(KnowledgeSpaceService)
+    svc.version_repo = KnowledgeDocumentVersionRepositoryImpl(async_db_session)
+    svc.similar_candidate_repo = KnowledgeFileSimilarityCandidateRepositoryImpl(async_db_session)
+
+    kf_100 = SimpleNamespace(id=100, file_type=1, similar_status=1)
+    kf_101 = SimpleNamespace(id=101, file_type=1, similar_status=1)
+
+    @asynccontextmanager
+    async def _session_ctx():
+        yield async_db_session
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+        new=_session_ctx,
+    ):
+        await svc._enrich_with_version_info([kf_100, kf_101])
+
+    assert getattr(kf_100, "_has_similar", None) is True
+    assert getattr(kf_101, "_has_similar", None) is False

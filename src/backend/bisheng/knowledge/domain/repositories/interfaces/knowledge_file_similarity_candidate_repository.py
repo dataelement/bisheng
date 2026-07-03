@@ -24,6 +24,20 @@ class KnowledgeFileSimilarityCandidateRepository(
         """Return cached candidates for one source file."""
 
     @abstractmethod
+    async def find_by_source_file_ids(
+        self,
+        source_file_ids: list[int],
+    ) -> list[KnowledgeFileSimilarityCandidate]:
+        """Return cached candidates for multiple source files."""
+
+    @abstractmethod
+    async def find_actionable_source_file_ids(
+        self,
+        source_file_ids: list[int],
+    ) -> set[int]:
+        """Return source file IDs that have at least one merge-actionable candidate."""
+
+    @abstractmethod
     async def replace_for_source_file(
         self,
         source_file_id: int,

@@ -1,5 +1,6 @@
 """Tests for scan_similar_for_file and get_similar_candidates_for_file."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -50,6 +51,37 @@ def _build_svc(session):
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
         similar_candidate_repo=KnowledgeFileSimilarityCandidateRepositoryImpl(session),
     )
+
+
+@pytest.mark.asyncio
+async def test_fetch_chunk_texts_closes_es_client(async_db_session, monkeypatch):
+    """TF-IDF chunk fetch must close its per-call AsyncElasticsearch client."""
+
+    close = AsyncMock()
+
+    class FakeIndices:
+        async def exists(self, index):
+            return True
+
+    class FakeClient:
+        indices = FakeIndices()
+
+        async def search(self, index, body):
+            return {"hits": {"hits": [{"_source": {"metadata": {"document_id": "100"}, "text": "hello"}}]}}
+
+        async def close(self):
+            await close()
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_es_vectorstore",
+        AsyncMock(return_value=SimpleNamespace(client=FakeClient())),
+    )
+
+    svc = _build_svc(async_db_session)
+    texts = await svc._fetch_chunk_texts(SimpleNamespace(id=1, index_name="idx"), [100])
+
+    assert texts == {100: "hello"}
+    close.assert_awaited_once()
 
 
 async def _seed_file_with_doc(
@@ -313,9 +345,7 @@ async def test_replace_similarity_candidates_retries_after_unique_conflict(
     monkeypatch,
 ):
     async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
-    async_db_session.add(
-        KnowledgeFile(id=100, knowledge_id=1, file_name="source.pdf", file_type=1, status=2)
-    )
+    async_db_session.add(KnowledgeFile(id=100, knowledge_id=1, file_name="source.pdf", file_type=1, status=2))
     await async_db_session.commit()
 
     repo = KnowledgeFileSimilarityCandidateRepositoryImpl(async_db_session)
@@ -502,9 +532,66 @@ async def test_version_recommendations_require_first_three_encoding_segments(ena
     )
 
     svc = _build_svc(async_db_session)
+    await svc.scan_similar_for_file(knowledge_file_id=100)
     candidates = await svc.get_version_recommendations(current_file_id=100, limit=10)
 
     assert [one.target_document_id for one in candidates] == [matched_doc.id]
+
+
+@pytest.mark.asyncio
+async def test_version_recommendations_skip_cached_multi_version_candidates(enable_switch, async_db_session):
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
+    target_doc = await _seed_file_with_doc(
+        async_db_session,
+        200,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000002",
+    )
+    await _seed_file_with_doc(
+        async_db_session,
+        100,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000001",
+    )
+    async_db_session.add(
+        KnowledgeFile(
+            id=201,
+            knowledge_id=1,
+            file_name="f201.pdf",
+            file_type=1,
+            status=2,
+            similar_status=2,
+            simhash="aaaaaaaaaaaaaaaa",
+            file_encoding="GF-ZD-SC-20260500000003",
+        )
+    )
+    await async_db_session.commit()
+    async_db_session.add(
+        KnowledgeDocumentVersion(
+            document_id=target_doc.id,
+            knowledge_file_id=201,
+            version_no=2,
+            is_primary=False,
+        )
+    )
+    async_db_session.add(
+        KnowledgeFileSimilarityCandidate(
+            tenant_id=1,
+            knowledge_id=1,
+            source_file_id=100,
+            candidate_file_id=200,
+            candidate_document_id=target_doc.id,
+            similarity=1.0,
+            sort_order=0,
+        )
+    )
+    await async_db_session.commit()
+
+    svc = _build_svc(async_db_session)
+    candidates = await svc.get_version_recommendations(current_file_id=100, limit=10)
+
+    assert candidates == []
 
 
 @pytest.mark.asyncio
