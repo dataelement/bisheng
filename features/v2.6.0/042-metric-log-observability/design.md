@@ -233,3 +233,4 @@ BS_METRIC domain=eplus_notify result=ok http_status=200 biz_code=0 elapsed_ms=88
 | 2026-07-03 | 初版设计（brainstorming 定案：日志方案 + 契约 + DB 双行 + 存储口径 + 配置项） | 需求评审 |
 | 2026-07-03 | 连接池澄清回填（§3 决策 6、§5 坑 8-10、§6.1 db_pool 契约由 waiters 改饱和度 Gauge） | 用户追问 checkout 语义 |
 | 2026-07-03 | /sdd-review design 过审：决策 5 补备选/触发条件、显式声明不记 SQL 原文（§2 + 坑 11）、§7 补具体命令、spec 标 N/A | Constitution Check PASS |
+| 2026-07-03 | 实现完成（T001-T012，12/12）：四域埋点全接入 + 契约文档 `docs/observability/metric-log-contract.md`；§5 补坑 12（E+ 高频短路不 meter） | 实现落地 |

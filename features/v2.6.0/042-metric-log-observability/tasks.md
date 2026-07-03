@@ -11,7 +11,7 @@
 |------|------|------|
 | design.md | ✅ 已评审 | /sdd-review design 过审（Constitution Check PASS，2 medium+1 low 已修）；接手第一入口 |
 | tasks.md | ✅ 已拆解 | /sdd-review tasks 过审（21 项，1 medium+2 low 已修） |
-| 实现 | 🚧 进行中 | 11 / 12 完成（Wave 1+2 ✅，剩 T012 文档）。偏差处理见 design.md 顶部调整原则 |
+| 实现 | ✅ 完成 | 12 / 12 完成（Wave 1+2+3 ✅）。偏差处理见 design.md 顶部调整原则 |
 
 ---
 
@@ -106,7 +106,7 @@
 
 ### Wave 3 — 监控层契约文档
 
-- [ ] **T012**: 监控层解析契约文档
+- [x] **T012**: 监控层解析契约文档
   **文件**: `docs/observability/metric-log-contract.md`（新增）
   **逻辑**: 从 design §6.1 提炼给监控团队：`BS_METRIC domain=*` 字段字典 + 每类指标算法口径 + Loki LogQL / ES 查询示例（DB QPS=Σcount/窗口、DB P95=Σle_* 桶后 histogram_quantile、存储成功率排除 excluded、TTFT P95、E+ 事件计数、pool 饱和度告警 `at_capacity`/`wait_timeout`）。标注契约变更约束（新增字段兼容、重命名/删字段/改 marker 需通知监控团队）。
   **覆盖**: design §6.1
