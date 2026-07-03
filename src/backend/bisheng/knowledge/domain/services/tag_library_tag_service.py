@@ -8,7 +8,7 @@ from datetime import datetime
 
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import delete, func, select
+from sqlmodel import delete, func, select, update
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -521,6 +521,40 @@ class TagLibraryTagService:
 
         return list(dict.fromkeys(name for name in rows if name))
 
+    @staticmethod
+    def _resolve_new_tag_id(
+        name: str,
+        resource_type: str,
+        new_tags: list[Tag],
+    ) -> int | None:
+        for tag in new_tags:
+            if tag.id is not None and tag.name == name and tag.resource_type == resource_type:
+                return int(tag.id)
+        if resource_type in (TagResourceTypeEnum.SYSTEM_TAG.value, TagResourceTypeEnum.MANUAL_TAG.value):
+            for alt_type in (TagResourceTypeEnum.SYSTEM_TAG.value, TagResourceTypeEnum.MANUAL_TAG.value):
+                if alt_type == resource_type:
+                    continue
+                for tag in new_tags:
+                    if tag.id is not None and tag.name == name and tag.resource_type == alt_type:
+                        return int(tag.id)
+        return None
+
+    @classmethod
+    async def _remap_tag_links_after_library_replace(
+        cls,
+        session,
+        *,
+        old_id_by_key: dict[tuple[str, str], int],
+        new_tags: list[Tag],
+        now: datetime,
+    ) -> None:
+        """Keep file tag links valid after library tag rows are recreated with new ids."""
+        for (name, resource_type), old_id in old_id_by_key.items():
+            new_id = cls._resolve_new_tag_id(name, resource_type, new_tags)
+            if new_id is None or new_id == old_id:
+                continue
+            await session.exec(update(TagLink).where(TagLink.tag_id == old_id).values(tag_id=new_id, update_time=now))
+
     @classmethod
     async def replace_tags(
         cls,
@@ -545,6 +579,10 @@ class TagLibraryTagService:
                 )
             ).all()
             existing_meta = {(tag.name, tag.resource_type): (tag.create_time, tag.user_id) for tag in existing}
+            old_id_by_key: dict[tuple[str, str], int] = {}
+            for tag in existing:
+                if tag.id is not None and tag.name:
+                    old_id_by_key[(tag.name, tag.resource_type)] = int(tag.id)
             await session.exec(
                 delete(Tag).where(
                     Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
@@ -597,6 +635,21 @@ class TagLibraryTagService:
                         update_time=now,
                     )
                 )
+            await session.flush()
+            new_tags = (
+                await session.exec(
+                    select(Tag).where(
+                        Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                        Tag.business_id == cls._business_id(library_id),
+                    )
+                )
+            ).all()
+            await cls._remap_tag_links_after_library_replace(
+                session,
+                old_id_by_key=old_id_by_key,
+                new_tags=new_tags,
+                now=now,
+            )
             await session.commit()
         return system, manual, ai
 
