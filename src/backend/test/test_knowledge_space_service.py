@@ -1329,7 +1329,7 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
         new_callable=AsyncMock,
         return_value=spaces,
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=files,
     ) as mock_batch_files, patch.object(
@@ -1360,15 +1360,16 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
         result = await service.search_shougang_portal_files(
             ShougangPortalFileSearchReq(
                 space_ids=[12, 18],
-                page=1,
-                page_size=10,
+                limit=10,
                 sort='updated_at',
             )
         )
 
     mock_batch_files.assert_awaited_once()
     assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
-    assert result['total'] == 2
+    assert result['has_more'] is False
+    assert result['next_cursor'] is None
+    assert len(result['data']) == 2
     assert [item['space_id'] for item in result['data']] == [12, 18]
     assert result['data'][0]['tags'] == ['热轧']
     assert result['data'][0]['tag_infos'] == [{'tag_name': '热轧', 'resource_type': ''}]
@@ -1393,14 +1394,14 @@ async def test_shougang_portal_file_search_filters_document_type_before_paginati
     new_report = _make_file(file_id=1582, knowledge_id=12, file_name='设备运行报告.pdf')
     new_report.file_encoding = 'SGGF-RPT-PP-202604-01203'
     new_report.update_time = datetime(2026, 4, 15, 10, 30, 0)
-    files = [new_report, standard, old_report]
+    files = [old_report, new_report]
 
     with patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
         new_callable=AsyncMock,
         return_value=[space],
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=files,
     ) as mock_batch_files, patch.object(
@@ -1418,16 +1419,15 @@ async def test_shougang_portal_file_search_filters_document_type_before_paginati
             ShougangPortalFileSearchReq(
                 space_ids=[12],
                 document_type='rpt',
-                page=1,
-                page_size=1,
+                limit=1,
                 sort='updated_at_asc',
             )
         )
 
     assert mock_batch_files.await_args.kwargs['order_sort'] == 'asc'
-    assert result['total'] == 2
-    assert result['page'] == 1
-    assert result['page_size'] == 1
+    assert mock_batch_files.await_args.kwargs['document_type'] == 'rpt'
+    assert result['has_more'] is True
+    assert result['next_cursor']
     assert [item['id'] for item in result['data']] == [1580]
 
 
@@ -1455,7 +1455,7 @@ async def test_shougang_portal_file_search_filters_business_domain_code_before_p
         new_callable=AsyncMock,
         return_value=[space],
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=files,
     ), patch.object(
@@ -1473,15 +1473,29 @@ async def test_shougang_portal_file_search_filters_business_domain_code_before_p
             ShougangPortalFileSearchReq(
                 space_ids=[12],
                 business_domain_code='pm',
-                page=1,
-                page_size=10,
+                limit=10,
                 sort='updated_at',
             )
         )
 
-    assert result['total'] == 1
+    assert result['has_more'] is False
+    assert result['next_cursor'] is None
+    assert len(result['data']) == 1
     assert [item['id'] for item in result['data']] == [1580]
     assert result['data'][0]['file_encoding'] == 'SGGF-STD-PM-202604-01201'
+
+
+def test_shougang_portal_file_encoding_parses_dash_prefix_from_right(service):
+    file_record = _make_file(file_id=1588, knowledge_id=12, file_name='多段前缀报告.pdf')
+    file_record.file_encoding = 'GF-PP-EXTRA-RPT-QM-202604-01288'
+    file_item = file_record.model_dump()
+
+    assert service._get_shougang_document_type_code(file_record) == 'RPT'
+    assert service._get_shougang_business_domain_code(file_record) == 'QM'
+    assert service._get_shougang_document_type_code(file_item) == 'RPT'
+    assert service._get_shougang_business_domain_code(file_item) == 'QM'
+    assert service._filter_shougang_portal_files_by_document_type([file_record], 'rpt') == [file_record]
+    assert service._filter_shougang_portal_files_by_business_domain_code([file_record], 'qm') == [file_record]
 
 
 @pytest.mark.asyncio
@@ -1742,8 +1756,6 @@ async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_p
             ShougangPortalFileSearchReq(
                 q='热轧振动纹',
                 space_ids=[12],
-                page=3,
-                page_size=20,
                 sort='relevance',
             )
         )
@@ -1754,9 +1766,9 @@ async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_p
     assert mock_vector_search.await_args.kwargs['limit'] == (
         PORTAL_SEARCH_VECTOR_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR
     )
-    assert result['page'] == 1
-    assert result['page_size'] == 50
-    assert result['total'] == 2
+    assert result['has_more'] is False
+    assert result['next_cursor'] is None
+    assert len(result['data']) == 2
     assert [item['id'] for item in result['data']] == [1580, 1801]
 
 
@@ -1773,7 +1785,7 @@ async def test_shougang_portal_search_emits_permission_performance_log(service):
             ShougangPortalFileSearchReq(q='热轧', space_ids=[12], sort='relevance')
         )
 
-    assert result == {'data': [], 'total': 0, 'page': 1, 'page_size': 50}
+    assert result == {'data': [], 'has_more': False, 'next_cursor': None}
     perf_calls = [
         call for call in mock_info.call_args_list
         if call.args and '[perf][portal.search]' in str(call.args[0])
@@ -2290,15 +2302,12 @@ async def test_shougang_portal_file_search_returns_top_50_without_pagination(ser
             ShougangPortalFileSearchReq(
                 q='语义检索',
                 space_ids=[12],
-                page=2,
-                page_size=20,
                 sort='relevance',
             )
         )
 
-    assert result['page'] == 1
-    assert result['page_size'] == 50
-    assert result['total'] == 50
+    assert result['has_more'] is False
+    assert result['next_cursor'] is None
     assert len(result['data']) == 50
     assert result['data'][0]['id'] == 2000
     assert result['data'][-1]['id'] == 2049
@@ -2372,7 +2381,7 @@ async def test_shougang_portal_semantic_search_filters_candidates_in_batches(ser
     assert loaded_batches
     assert len(loaded_batches[0]) == 50
     assert len(loaded_batches) == 1
-    assert result['total'] == 50
+    assert len(result['data']) == 50
 
 
 @pytest.mark.asyncio
@@ -2389,7 +2398,7 @@ async def test_shougang_portal_public_space_fast_path_skips_child_permission_fil
         new_callable=AsyncMock,
         return_value=[public_space],
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=[file_record],
     ), patch.object(
@@ -2407,7 +2416,8 @@ async def test_shougang_portal_public_space_fast_path_skips_child_permission_fil
             ShougangPortalFileSearchReq(space_ids=[12], sort='updated_at')
         )
 
-    assert result['total'] == 1
+    assert len(result['data']) == 1
+    assert result['has_more'] is False
     assert result['data'][0]['id'] == 4100
 
 
@@ -2426,7 +2436,7 @@ async def test_shougang_portal_non_public_space_keeps_child_permission_filter(se
         new_callable=AsyncMock,
         return_value=[private_space],
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=[file_record],
     ), patch.object(
@@ -2439,7 +2449,8 @@ async def test_shougang_portal_non_public_space_keeps_child_permission_filter(se
             ShougangPortalFileSearchReq(space_ids=[12], sort='updated_at')
         )
 
-    assert result['total'] == 0
+    assert result['data'] == []
+    assert result['has_more'] is False
     mock_filter.assert_awaited_once()
 
 
@@ -2490,7 +2501,7 @@ async def test_shougang_portal_file_search_returns_full_source_path(service):
         new_callable=AsyncMock,
         side_effect=fake_get_spaces_by_ids,
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=files,
     ), patch(
@@ -2524,7 +2535,7 @@ async def test_shougang_portal_file_search_returns_full_source_path(service):
         ],
     ):
         result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(space_ids=[12], page=1, page_size=10, sort='updated_at')
+            ShougangPortalFileSearchReq(space_ids=[12], limit=10, sort='updated_at')
         )
 
     assert result['data'][0]['source_path'] == '信息>桃树栽培/CO_2施肥对设施油桃生物学特性的影响.pdf'
@@ -2559,7 +2570,7 @@ async def test_shougang_portal_file_search_uses_current_file_path_without_publis
         new_callable=AsyncMock,
         return_value=[space],
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=[file_record],
     ), patch(
@@ -2584,7 +2595,7 @@ async def test_shougang_portal_file_search_uses_current_file_path_without_publis
         ],
     ):
         result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(space_ids=[12], page=1, page_size=10, sort='updated_at')
+            ShougangPortalFileSearchReq(space_ids=[12], limit=10, sort='updated_at')
         )
 
     assert result['data'][0]['source_path'] == '信息>桃树栽培/CO_2施肥对设施油桃生物学特性的影响.pdf'
@@ -2628,7 +2639,7 @@ async def test_shougang_portal_file_search_uses_document_folder_path_when_file_i
         new_callable=AsyncMock,
         return_value=[space],
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor',
         new_callable=AsyncMock,
         return_value=[file_record],
     ), patch(
@@ -2653,7 +2664,7 @@ async def test_shougang_portal_file_search_uses_document_folder_path_when_file_i
         ],
     ):
         result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(space_ids=[109], page=1, page_size=10, sort='updated_at')
+            ShougangPortalFileSearchReq(space_ids=[109], limit=10, sort='updated_at')
         )
 
     assert result['data'][0]['source_path'] == '信息>桃树栽培/CO_2施肥对设施油桃生物学特性的影响.pdf'

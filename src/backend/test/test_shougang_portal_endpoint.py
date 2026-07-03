@@ -160,9 +160,8 @@ class _FakeKnowledgeSpaceService:
                     "file_encoding": "GF-ZD-SC-202604-01201",
                 }
             ],
-            "total": 1,
-            "page": req.page,
-            "page_size": req.page_size,
+            "has_more": False,
+            "next_cursor": None,
         }
 
     async def search_shougang_portal_tags(self, space_ids, space_level, business_domain_code=None):
@@ -436,8 +435,7 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
             document_type="RPT",
             business_domain_code="pm",
             sort="relevance",
-            page=1,
-            page_size=10,
+            limit=10,
         )
         response = await endpoint.search_shougang_portal_files(req, svc=fake_service)
     finally:
@@ -451,7 +449,9 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
     assert fake_service.search_request.space_ids == [12, 18]
     assert fake_service.search_request.document_type == "RPT"
     assert fake_service.search_request.business_domain_code == "PM"
-    assert response.data["total"] == 1
+    assert fake_service.search_request.limit == 10
+    assert response.data["has_more"] is False
+    assert response.data["next_cursor"] is None
     assert response.data["data"][0]["space_id"] == 12
 
 

@@ -366,8 +366,8 @@ class ShougangPortalFileSearchReq(BaseModel):
     rerank_model_id: str | None = Field(
         default=None, description="Optional rerank model ID for this portal search request"
     )
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    cursor: str | None = Field(default=None, description="Cursor returned by the previous request")
+    limit: int = Field(default=20, ge=1, le=100)
 
     @field_validator("business_domain_code", mode="before")
     @classmethod
@@ -412,9 +412,8 @@ class ShougangPortalFileItemResp(BaseModel):
 
 class ShougangPortalFileSearchResp(BaseModel):
     data: list[ShougangPortalFileItemResp] = Field(default_factory=list)
-    total: int = 0
-    page: int = 1
-    page_size: int = 20
+    has_more: bool = False
+    next_cursor: str | None = None
 
 
 class ShougangPortalQaFileSearchReq(BaseModel):
@@ -424,8 +423,11 @@ class ShougangPortalQaFileSearchReq(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
 
 
-class ShougangPortalQaFileSearchResp(ShougangPortalFileSearchResp):
-    pass
+class ShougangPortalQaFileSearchResp(BaseModel):
+    data: list[ShougangPortalFileItemResp] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
 
 
 class ShougangPortalHomeSectionReq(BaseModel):

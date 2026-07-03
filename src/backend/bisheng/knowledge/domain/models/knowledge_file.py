@@ -5,7 +5,7 @@ from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, or_, text, Text
+from sqlalchemy import Column, DateTime, Integer, String, and_, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -609,6 +609,86 @@ class KnowledgeFileDao(KnowledgeFileBase):
         normalized_ext = (file_ext or '').strip().lower().lstrip('.')
         if normalized_ext:
             statement = statement.where(func.lower(KnowledgeFile.file_name).like(f'%.{normalized_ext}'))
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def aget_file_by_space_filters_cursor(
+            cls,
+            knowledge_ids: List[int],
+            file_name: str = None,
+            status: List[int] = None,
+            file_ids: List[int] = None,
+            extra_file_ids: List[int] = None,
+            file_ext: str = None,
+            document_type: str = None,
+            business_domain_code: str = None,
+            order_sort: str = "desc",
+            cursor: Optional[List[Any]] = None,
+            limit: int = 20,
+            match_file_encoding: bool = False,
+    ) -> List[KnowledgeFile]:
+        unique_knowledge_ids = list(dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id))
+        if not unique_knowledge_ids:
+            return []
+
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id.in_(unique_knowledge_ids),
+            KnowledgeFile.file_type == FileType.FILE.value,
+        )
+        statement = cls._build_file_filters_statement(
+            statement,
+            file_name,
+            status,
+            file_ids,
+            extra_file_ids=extra_file_ids,
+            match_file_encoding=match_file_encoding,
+        )
+
+        normalized_ext = (file_ext or '').strip().lower().lstrip('.')
+        if normalized_ext:
+            statement = statement.where(func.lower(KnowledgeFile.file_name).like(f'%.{normalized_ext}'))
+
+        normalized_document_type = (document_type or '').strip().upper()
+        if normalized_document_type:
+            statement = statement.where(KnowledgeFile.file_encoding.like(f'%-{normalized_document_type}-%'))
+
+        normalized_business_domain_code = (business_domain_code or '').strip().upper()
+        if normalized_business_domain_code:
+            statement = statement.where(KnowledgeFile.file_encoding.like(f'%-{normalized_business_domain_code}-%'))
+
+        normalized_order_sort = 'asc' if str(order_sort or '').lower() == 'asc' else 'desc'
+        if cursor and len(cursor) >= 2:
+            cursor_update_time = cursor[0]
+            cursor_id = int(cursor[1])
+            if normalized_order_sort == 'asc':
+                statement = statement.where(
+                    or_(
+                        col(KnowledgeFile.update_time) > cursor_update_time,
+                        and_(
+                            col(KnowledgeFile.update_time) == cursor_update_time,
+                            col(KnowledgeFile.id) > cursor_id,
+                        ),
+                    )
+                )
+            else:
+                statement = statement.where(
+                    or_(
+                        col(KnowledgeFile.update_time) < cursor_update_time,
+                        and_(
+                            col(KnowledgeFile.update_time) == cursor_update_time,
+                            col(KnowledgeFile.id) < cursor_id,
+                        ),
+                    )
+                )
+
+        if normalized_order_sort == 'asc':
+            statement = statement.order_by(col(KnowledgeFile.update_time).asc(), col(KnowledgeFile.id).asc())
+        else:
+            statement = statement.order_by(col(KnowledgeFile.update_time).desc(), col(KnowledgeFile.id).desc())
+
+        safe_limit = min(max(int(limit or 20), 1), 500)
+        statement = statement.limit(safe_limit)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
