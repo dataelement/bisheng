@@ -236,12 +236,12 @@ export default function ExplorePlaza() {
                     ref={loaderRef}
                     className={cn(
                         'flex w-full flex-col items-center',
-                        // Empty/loading: fill the region and place content at ~40% of the region
-                        // height via 8:12 flex spacers (region-relative, not viewport vh).
+                        // Empty/loading: fill the region and place content via flex spacers at a
+                        // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
                         (loading || agents.length === 0) ? 'flex-1' : 'py-10',
                     )}
                 >
-                    {(loading || agents.length === 0) && <div className="flex-[8]" aria-hidden />}
+                    {(loading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
                     {loading ? (
                         <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
@@ -262,7 +262,7 @@ export default function ExplorePlaza() {
                             <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">{localize('com_app_explore_no_agents')}</p>
                         </div>
                     )}
-                    {(loading || agents.length === 0) && <div className="flex-[12]" aria-hidden />}
+                    {(loading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
                 </div>
                 </div>
             </main>
