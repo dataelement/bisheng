@@ -4,13 +4,9 @@ from collections.abc import Iterable, Sequence
 
 from langchain_core.documents import Document
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink, TagResourceTypeEnum
+from bisheng.database.models.tag import TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileSource,
@@ -255,58 +251,11 @@ class KnowledgeSpaceAutoTagService:
         tenant_id: int | None,
         resource_type: TagResourceTypeEnum,
     ) -> None:
-        if not tag_names:
-            return
-        with get_sync_db_session() as session:
-            existing_tags = session.exec(
-                select(Tag).where(
-                    Tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                    Tag.business_id == str(space_id),
-                    Tag.name.in_(tag_names),
-                )
-            ).all()
-            tag_by_name = {tag.name: tag for tag in existing_tags}
-            for tag_name in tag_names:
-                if tag_name not in tag_by_name:
-                    tag = Tag(
-                        name=tag_name,
-                        business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                        business_id=str(space_id),
-                        resource_type=resource_type,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                    )
-                    session.add(tag)
-                    session.flush()
-                    tag_by_name[tag_name] = tag
-
-            tag_ids = [tag_by_name[name].id for name in tag_names if tag_by_name.get(name)]
-            existing_links = session.exec(
-                select(TagLink).where(
-                    TagLink.resource_id == str(file_id),
-                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
-                    TagLink.tag_id.in_(tag_ids),
-                )
-            ).all()
-            existing_tag_ids = {link.tag_id for link in existing_links}
-            for tag_id in tag_ids:
-                if tag_id in existing_tag_ids:
-                    continue
-                session.add(
-                    TagLink(
-                        tag_id=tag_id,
-                        resource_id=str(file_id),
-                        resource_type=ResourceTypeEnum.SPACE_FILE.value,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                    )
-                )
-            try:
-                session.commit()
-            except IntegrityError:
-                session.rollback()
-                logger.info(
-                    "auto_tag_duplicate_link_ignored space_id={} file_id={}",
-                    space_id,
-                    file_id,
-                )
+        TagLibraryTagService.append_file_library_tags_sync(
+            space_id=space_id,
+            file_id=file_id,
+            tag_names=tag_names,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+        )

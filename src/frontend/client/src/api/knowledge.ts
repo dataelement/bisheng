@@ -1774,13 +1774,23 @@ export async function updateFileTagsApi(
  */
 export async function batchUpdateTagsApi(
     space_id: string,
-    data: { file_ids: number[]; tag_ids: number[] }
+    data: { file_ids: number[]; tag_ids: number[]; review_tag_ids?: number[] }
 ): Promise<void> {
     return withKnowledgeMutationLog(
         "batch-update-tags",
-        { method: "POST", space_id, file_ids: data.file_ids, tag_ids: data.tag_ids },
+        {
+            method: "POST",
+            space_id,
+            file_ids: data.file_ids,
+            tag_ids: data.tag_ids,
+            review_tag_ids: data.review_tag_ids,
+        },
         async () => {
-            await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag`, data);
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag`, {
+                file_ids: data.file_ids,
+                tag_ids: data.tag_ids,
+                review_tag_ids: data.review_tag_ids ?? [],
+            });
         }
     );
 }

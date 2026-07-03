@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import {
     addFilesApi,
     createFolderApi,
-    getBoundTagLibraryTagsForKnowledgeApi,
     getSimilarCandidatesApi,
     getSpaceTagsApi,
     linkAsNewVersionApi,
@@ -53,7 +52,6 @@ import {
 import {
     buildPortalUploadMetadataPayload,
     buildUploadTagOptions,
-    extractUniqueLibraryTagNames,
     EMPTY_PORTAL_UPLOAD_METADATA,
     type BusinessDomainOptionItem,
     type PortalUploadMetadataPayload,
@@ -396,20 +394,19 @@ export function usePortalUploadDialog({
         let cancelled = false;
         const loadUploadTagOptions = async () => {
             setUploadTagLoading(true);
-            const [existingTagsResult, libraryTagsResult] = await Promise.allSettled([
-                getSpaceTagsApi(activeSpace.id),
-                getBoundTagLibraryTagsForKnowledgeApi(activeSpace.id),
-            ]);
-            if (cancelled) return;
-
-            const existingTags = existingTagsResult.status === "fulfilled" ? existingTagsResult.value : [];
-            const libraryTagNames = libraryTagsResult.status === "fulfilled"
-                ? extractUniqueLibraryTagNames(libraryTagsResult.value)
-                : [];
-
-            if (!cancelled) {
-                setUploadTagOptions(buildUploadTagOptions(existingTags, libraryTagNames));
-                setUploadTagLoading(false);
+            try {
+                const existingTags = await getSpaceTagsApi(activeSpace.id);
+                if (!cancelled) {
+                    setUploadTagOptions(buildUploadTagOptions(existingTags, []));
+                }
+            } catch {
+                if (!cancelled) {
+                    setUploadTagOptions([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setUploadTagLoading(false);
+                }
             }
         };
         void loadUploadTagOptions().catch(() => {

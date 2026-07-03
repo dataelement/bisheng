@@ -4,7 +4,6 @@ import {
     FileType,
     addFilesApi,
     createFolderApi,
-    getBoundTagLibraryTagsForKnowledgeApi,
     getSimilarCandidatesApi,
     getSpaceTagsApi,
     listKnowledgeFolders,
@@ -27,7 +26,6 @@ jest.mock("~/api/knowledge", () => ({
     addFilesApi: jest.fn(),
     createFolderApi: jest.fn(),
     getSimilarCandidatesApi: jest.fn(),
-    getBoundTagLibraryTagsForKnowledgeApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     linkAsNewVersionApi: jest.fn(),
     listKnowledgeFolders: jest.fn(),
@@ -79,7 +77,6 @@ describe("usePortalUploadDialog", () => {
         jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
         jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
-        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([] as any);
         jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
         jest.mocked(createFolderApi).mockResolvedValue({ id: 1, name: "研发资料" } as any);
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
@@ -448,13 +445,11 @@ describe("usePortalUploadDialog", () => {
         });
     });
 
-    test("loads deduplicated tag options from all bound tag libraries", async () => {
-        jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 1, name: "已有标签" }] as any);
-        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([
-            { name: "制度", resource_type: "manual_tag" },
-            { name: "技术文档", resource_type: "system_tag" },
-            { name: "制度", resource_type: "ai_auto_tag" },
-            { name: "已有标签", resource_type: "manual_tag" },
+    test("loads deduplicated tag options from space tags", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 1, name: "已有标签", business_type: "tag_library" },
+            { id: 2, name: "制度", business_type: "tag_library" },
+            { id: 3, name: "技术文档", business_type: "tag_library" },
         ] as any);
 
         const { hook } = renderUploadDialogHook();
@@ -464,11 +459,11 @@ describe("usePortalUploadDialog", () => {
         });
 
         await waitFor(() => {
-            expect(getBoundTagLibraryTagsForKnowledgeApi).toHaveBeenCalledWith("space-1");
+            expect(getSpaceTagsApi).toHaveBeenCalledWith("space-1");
             expect(hook.result.current.uploadTagOptions).toEqual([
                 { label: "已有标签", value: "id:1" },
-                { label: "制度", value: "name:制度" },
-                { label: "技术文档", value: "name:技术文档" },
+                { label: "制度", value: "id:2" },
+                { label: "技术文档", value: "id:3" },
             ]);
         });
     });

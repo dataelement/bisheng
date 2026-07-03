@@ -6314,6 +6314,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ]
         }
 
+    async def _load_file_tags_batch(self, file_ids: list[int]) -> dict[int, list[dict]]:
+        """Load approved file tags only (pending review tags are excluded)."""
+        if not file_ids:
+            return {}
+
+        resource_ids = [str(file_id) for file_id in file_ids]
+        tag_dict = await asyncio.to_thread(
+            TagDao.get_tags_by_resource_batch,
+            [ResourceTypeEnum.SPACE_FILE],
+            resource_ids,
+        )
+        file_tags: dict[int, list[dict]] = {}
+        for fid_str, tags in tag_dict.items():
+            try:
+                normalized_file_id = int(fid_str)
+            except (TypeError, ValueError):
+                continue
+            file_tags[normalized_file_id] = [
+                {"id": tag.id, "name": tag.name, "resource_type": tag.resource_type} for tag in tags
+            ]
+        return file_tags
+
     async def _handle_file_folder_extra_info(
         self,
         res: list[KnowledgeFile],
@@ -6338,15 +6360,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_counts = await self._load_folder_stat_counts(folders)
 
         # file need find all tags
-        file_tags = {}
-        if file_ids:
-            tag_dict = await asyncio.to_thread(
-                TagDao.get_tags_by_resource_batch,
-                [ResourceTypeEnum.SPACE_FILE],
-                [str(fid) for fid in file_ids],
-            )
-            for fid_str, tags in tag_dict.items():
-                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name, "resource_type": t.resource_type} for t in tags]
+        file_tags = await self._load_file_tags_batch(file_ids) if file_ids else {}
 
         result = []
         for one in res:
@@ -7229,19 +7243,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_map = {int(folder.id): folder for folder in folder_records if getattr(folder, "id", None) is not None}
 
         file_ids = [int(file.id) for file in files if getattr(file, "id", None) is not None]
-        file_tags: dict[int, list[dict]] = {}
-        if file_ids:
-            tag_dict = await asyncio.to_thread(
-                TagDao.get_tags_by_resource_batch,
-                [ResourceTypeEnum.SPACE_FILE],
-                [str(file_id) for file_id in file_ids],
-            )
-            for file_id, tags in tag_dict.items():
-                try:
-                    normalized_file_id = int(file_id)
-                except (TypeError, ValueError):
-                    continue
-                file_tags[normalized_file_id] = [{"id": tag.id, "name": tag.name} for tag in tags]
+        file_tags = await self._load_file_tags_batch(file_ids) if file_ids else {}
 
         data = [
             ShougangPortalUploadedFileResp(
@@ -8248,37 +8250,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     # ──────────────────────────── Tags ───────────────────────────────────
-    async def get_space_tags(self, space_id: int) -> list[Tag | ReviewTag]:
+    async def get_space_tags(self, space_id: int) -> list[Tag]:
+        """Return tags from all tag libraries bound to the knowledge space."""
         await self._require_read_permission(space_id)
         await self._require_permission_id("knowledge_space", space_id, "view_space")
-        tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE, business_id=str(space_id)
-        )
-        review_tags = await ReviewTagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-        )
-        approved_names = {(tag.name or "").strip().lower() for tag in tags if (tag.name or "").strip()}
-        merged: list[Tag | ReviewTag] = list(tags)
-        for review_tag in review_tags:
-            if getattr(review_tag, "review_status", 0) != 0:
-                continue
-            name = (review_tag.name or "").strip()
-            if name and name.lower() not in approved_names:
-                merged.append(review_tag)
 
-        seen_names = {(tag.name or "").strip().lower() for tag in merged if (tag.name or "").strip()}
         library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+        merged: list[Tag] = []
+        seen_keys: set[str] = set()
         for library_id in library_ids:
             library_tags = await TagLibraryTagService.list_tags(int(library_id))
             for library_tag in library_tags:
                 name = (library_tag.name or "").strip()
                 if not name:
                     continue
-                name_key = name.lower()
-                if name_key in seen_names:
+                resource_type = (library_tag.resource_type or "").strip().lower()
+                dedupe_key = f"{resource_type}:{name.lower()}"
+                if dedupe_key in seen_keys:
                     continue
-                seen_names.add(name_key)
+                seen_keys.add(dedupe_key)
                 merged.append(library_tag)
 
         return merged
@@ -8353,13 +8343,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return normalized_tags, normalized_review
 
         async with get_async_db_session() as session:
+            tag_rows = (await session.exec(select(Tag.id).where(Tag.id.in_(normalized_tags)))).all()
             review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(normalized_tags)))).all()
+        tag_id_set = {int(row) for row in tag_rows}
         review_id_set = {int(row) for row in review_rows}
-        if not review_id_set:
+        misclassified_review = review_id_set - tag_id_set
+        if not misclassified_review:
             return normalized_tags, normalized_review
 
-        normalized_review = list(dict.fromkeys(normalized_review + list(review_id_set)))
-        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in review_id_set]
+        normalized_review = list(dict.fromkeys(normalized_review + list(misclassified_review)))
+        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in misclassified_review]
         return normalized_tags, normalized_review
 
     async def _promote_review_tags_existing_in_libraries(

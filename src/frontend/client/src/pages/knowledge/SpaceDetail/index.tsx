@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, type MouseEvent,
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -1033,13 +1033,39 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    // Called after tags are saved successfully — refresh file list
-    const handleTagsSaved = () => {
+    // Called after tags are saved successfully — patch in place, then refresh from parent.
+    const handleTagsSaved = (tags?: FileTag[], context?: { fileIds?: string[] }) => {
+        const savedFileId = editingTagsFileId;
+        const batchFileIds = context?.fileIds ?? [];
         setEditingTagsFileId(null);
         setIsBatchTagging(false);
         setSelectedFiles(new Set());
-        // Trigger a refresh of the file list from parent
-        onEditTags(editingTagsFileId || "");
+
+        if (savedFileId && tags !== undefined) {
+            setFiles((prev) => prev.map((file) => (
+                file.id === savedFileId ? { ...file, tags } : file
+            )));
+            onEditTags(savedFileId);
+            return;
+        }
+
+        if (batchFileIds.length > 0 && tags && tags.length > 0) {
+            const batchIdSet = new Set(batchFileIds);
+            setFiles((prev) => prev.map((file) => {
+                if (!batchIdSet.has(file.id)) return file;
+                const merged = new Map((file.tags ?? []).map((tag) => [tag.id, tag]));
+                tags.forEach((tag) => {
+                    if (!merged.has(tag.id)) {
+                        merged.set(tag.id, tag);
+                    }
+                });
+                return { ...file, tags: Array.from(merged.values()) };
+            }));
+        }
+
+        if (batchFileIds.length > 0) {
+            onEditTags(batchFileIds[0]);
+        }
     };
 
     const handleBatchDelete = async () => {
@@ -1488,6 +1514,11 @@ export function KnowledgeSpaceContent({
                 initialTagIds={
                     editingTagsFileId && !isBatchTagging
                         ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags?.map(t => t.id) || [])
+                        : []
+                }
+                initialTags={
+                    editingTagsFileId && !isBatchTagging
+                        ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags || [])
                         : []
                 }
             />

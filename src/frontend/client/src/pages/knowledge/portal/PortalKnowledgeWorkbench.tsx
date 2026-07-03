@@ -2246,7 +2246,7 @@ export default function PortalKnowledgeWorkbench() {
                 onTagsSaved={(tags) => {
                     setTagModalOpen(false);
                     // 编辑单个文件标签后，只就地更新该文件的标签状态，不刷新整个文件列表。
-                    if (tags && selectedFile) {
+                    if (tags !== undefined && selectedFile) {
                         patchFileById(selectedFile.id, (file) => ({ ...file, tags }));
                     } else {
                         void loadRootTree(1);

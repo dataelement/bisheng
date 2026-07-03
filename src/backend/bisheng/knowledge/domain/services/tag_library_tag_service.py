@@ -6,15 +6,21 @@ from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime
 
+from loguru import logger
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import (
     Tag,
     TagBusinessTypeEnum,
     TagDao,
     TagLink,
     TagResourceTypeEnum,
+)
+from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
+    KnowledgeTagLibraryLinkDao,
 )
 
 
@@ -357,6 +363,120 @@ class TagLibraryTagService:
         )
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    def _first_library_id_for_space(cls, space_id: int) -> int | None:
+        library_ids = KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(space_id)
+        return library_ids[0] if library_ids else None
+
+    @classmethod
+    def _find_library_tag_in_session(
+        cls,
+        session,
+        *,
+        tenant_id: int | None,
+        tag_name: str,
+    ) -> Tag | None:
+        normalized = (tag_name or "").strip()
+        if not normalized or tenant_id is None:
+            return None
+        return session.exec(
+            select(Tag)
+            .where(
+                Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                Tag.tenant_id == tenant_id,
+                Tag.name == normalized,
+            )
+            .limit(1)
+        ).first()
+
+    @classmethod
+    def append_file_library_tags_sync(
+        cls,
+        *,
+        space_id: int,
+        file_id: int,
+        tag_names: list[str],
+        user_id: int,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum,
+    ) -> None:
+        """Resolve tag names in ``tag`` table and link them to a space file.
+
+        Reuses an existing tenant-wide library tag row when the name already exists.
+        Otherwise inserts into the first tag library bound to ``space_id``.
+        """
+        normalized_names = cls._normalize_names(tag_names)
+        if not normalized_names:
+            return
+
+        library_id = cls._first_library_id_for_space(space_id)
+        with get_sync_db_session() as session:
+            tag_by_name: dict[str, Tag] = {}
+            for tag_name in normalized_names:
+                if tag_name in tag_by_name:
+                    continue
+                existing = cls._find_library_tag_in_session(
+                    session,
+                    tenant_id=tenant_id,
+                    tag_name=tag_name,
+                )
+                if existing:
+                    tag_by_name[tag_name] = existing
+                    continue
+                if library_id is None:
+                    logger.warning(
+                        "skip_tag_insert_no_library space_id={} file_id={} tag_name={}",
+                        space_id,
+                        file_id,
+                        tag_name,
+                    )
+                    continue
+                tag = Tag(
+                    name=tag_name,
+                    business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    business_id=cls._business_id(library_id),
+                    resource_type=resource_type.value,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                )
+                session.add(tag)
+                session.flush()
+                tag_by_name[tag_name] = tag
+
+            tag_ids = [tag.id for name in normalized_names if (tag := tag_by_name.get(name)) and tag.id is not None]
+            if not tag_ids:
+                return
+
+            existing_links = session.exec(
+                select(TagLink).where(
+                    TagLink.resource_id == str(file_id),
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    TagLink.tag_id.in_(tag_ids),
+                )
+            ).all()
+            existing_tag_ids = {link.tag_id for link in existing_links}
+            for tag_id in tag_ids:
+                if tag_id in existing_tag_ids:
+                    continue
+                session.add(
+                    TagLink(
+                        tag_id=tag_id,
+                        resource_id=str(file_id),
+                        resource_type=ResourceTypeEnum.SPACE_FILE.value,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                    )
+                )
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                logger.info(
+                    "append_file_library_tags_duplicate_link_ignored space_id={} file_id={}",
+                    space_id,
+                    file_id,
+                )
 
     @classmethod
     async def list_tenant_library_tag_name_keys(cls, tenant_id: int | None) -> set[str]:

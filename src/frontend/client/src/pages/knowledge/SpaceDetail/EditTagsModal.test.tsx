@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { EditTagsModal } from "./EditTagsModal";
 import {
     getSpaceTagsApi,
-    getBoundTagLibraryTagsForKnowledgeApi,
     getKnowledgeSpaceReviewTagVisibilityApi,
     addSpaceTagApi,
     updateFileTagsApi,
@@ -27,7 +26,6 @@ jest.mock("@tanstack/react-query", () => ({
 
 jest.mock("~/api/knowledge", () => ({
     getSpaceTagsApi: jest.fn(),
-    getBoundTagLibraryTagsForKnowledgeApi: jest.fn(),
     getKnowledgeSpaceReviewTagVisibilityApi: jest.fn(),
     addSpaceTagApi: jest.fn(),
     updateFileTagsApi: jest.fn(),
@@ -74,11 +72,11 @@ describe("EditTagsModal recommended tags", () => {
         jest.clearAllMocks();
         jest.mocked(useToastContext).mockReturnValue({ showToast: mockShowToast });
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: true });
-        jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 1, name: "已有标签" }]);
-        jest.mocked(getBoundTagLibraryTagsForKnowledgeApi).mockResolvedValue([
-            { name: "系统A", resource_type: "system_tag" },
-            { name: "AI-B", resource_type: "ai_auto_tag" },
-            { name: "人工C", resource_type: "manual_tag" },
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 1, name: "已有标签", business_type: "tag_library", resource_type: "manual_tag" },
+            { id: 10, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
+            { id: 11, name: "AI-B", business_type: "tag_library", resource_type: "ai_auto_tag" },
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
         ]);
     });
 
@@ -102,12 +100,14 @@ describe("EditTagsModal recommended tags", () => {
             expect(screen.getByText("人工C")).toBeInTheDocument();
         });
 
-        expect(getBoundTagLibraryTagsForKnowledgeApi).toHaveBeenCalledWith("100");
+        expect(getSpaceTagsApi).toHaveBeenCalledWith("100");
     });
 
     it("selects an existing space tag when clicking a recommended tag", async () => {
         const user = userEvent.setup();
-        jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 2, name: "人工C" }]);
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 2, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
         render(
             <EditTagsModal
                 isOpen
@@ -127,9 +127,8 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
-    it("creates a space tag when clicking a recommended tag that does not exist yet", async () => {
+    it("selects a library tag without creating a new tag when it already exists in space tags", async () => {
         const user = userEvent.setup();
-        jest.mocked(addSpaceTagApi).mockResolvedValue({ id: 99, name: "人工C", review_status: 0 });
 
         render(
             <EditTagsModal
@@ -146,7 +145,7 @@ describe("EditTagsModal recommended tags", () => {
         await user.click(screen.getByText("人工C"));
 
         await waitFor(() => {
-            expect(addSpaceTagApi).toHaveBeenCalledWith("100", "人工C");
+            expect(addSpaceTagApi).not.toHaveBeenCalled();
         });
     });
 
@@ -250,9 +249,9 @@ describe("EditTagsModal recommended tags", () => {
     it("shows only approved recommended tags when review feature is disabled", async () => {
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: false });
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
-            { id: 42, name: "AI-B", resource_type: "ai_auto_tag" },
-            { id: 2, name: "人工C" },
-            { id: 99, name: "系统A", review_status: 0 },
+            { id: 42, name: "AI-B", resource_type: "ai_auto_tag", business_type: "tag_library" },
+            { id: 2, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+            { id: 99, name: "系统A", review_status: 0, business_type: "tag_library", resource_type: "system_tag" },
         ]);
 
         render(
@@ -301,7 +300,7 @@ describe("EditTagsModal recommended tags", () => {
         const user = userEvent.setup();
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: false });
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
-            { id: 42, name: "AI-B", resource_type: "ai_auto_tag" },
+            { id: 42, name: "AI-B", resource_type: "ai_auto_tag", business_type: "tag_library" },
         ]);
 
         render(
@@ -403,13 +402,10 @@ describe("EditTagsModal recommended tags", () => {
             id: index + 1,
             name: `native-${index + 1}`,
         }));
-        jest.mocked(getSpaceTagsApi).mockResolvedValue(nativeTags);
-        jest.mocked(addSpaceTagApi).mockResolvedValue({
-            id: 900,
-            name: "安全生产",
-            business_type: "tag_library",
-            resource_type: "system_tag",
-        });
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            ...nativeTags,
+            { id: 901, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
+        ]);
 
         render(
             <EditTagsModal
@@ -425,7 +421,7 @@ describe("EditTagsModal recommended tags", () => {
         await user.click(screen.getByText("系统A"));
 
         await waitFor(() => {
-            expect(addSpaceTagApi).toHaveBeenCalledWith("100", "系统A");
+            expect(addSpaceTagApi).not.toHaveBeenCalled();
         });
     });
 });

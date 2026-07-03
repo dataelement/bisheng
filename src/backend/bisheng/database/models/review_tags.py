@@ -2,11 +2,11 @@ from datetime import datetime
 from enum import Enum
 
 from pydantic import Field
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, and_
 from sqlmodel import Field, col, delete, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.models.group_resource import ResourceTypeEnum
 
@@ -168,3 +168,87 @@ class ReviewTagDao(ReviewTag):
                 )
             await session.commit()
             return True
+
+    @classmethod
+    def get_tags_by_resource_batch(
+        cls,
+        resource_types: list[ResourceTypeEnum],
+        resource_ids: list[str],
+        *,
+        tenant_id: int | None = None,
+    ) -> dict[str, list[ReviewTag]]:
+        """Query all review tags linked to resources (sync, for batch file listing)."""
+        if not resource_ids:
+            return {}
+        with get_sync_db_session() as session:
+            statement = (
+                select(
+                    ReviewTag.id,
+                    ReviewTag.name,
+                    ReviewTagLink.resource_id,
+                    ReviewTag.resource_type,
+                    ReviewTag.review_status,
+                )
+                .join(
+                    ReviewTagLink,
+                    and_(
+                        ReviewTag.id == ReviewTagLink.tag_id,
+                        ReviewTagLink.resource_id.in_(resource_ids),
+                        ReviewTagLink.resource_type.in_([item.value for item in resource_types]),
+                        ReviewTagLink.is_deleted == False,
+                    ),
+                )
+                .where(ReviewTag.is_deleted == False)
+            )
+            if tenant_id is not None:
+                statement = statement.where(ReviewTagLink.tenant_id == tenant_id)
+            result = session.exec(statement).all()
+            ret: dict[str, list[ReviewTag]] = {}
+            for row in result:
+                resource_id = row[2]
+                if resource_id not in ret:
+                    ret[resource_id] = []
+                ret[resource_id].append(ReviewTag(id=row[0], name=row[1], resource_type=row[3], review_status=row[4]))
+            return ret
+
+    @classmethod
+    def get_tags_by_resource_batch(
+        cls,
+        resource_types: list[ResourceTypeEnum],
+        resource_ids: list[str],
+        *,
+        tenant_id: int | None = None,
+    ) -> dict[str, list[ReviewTag]]:
+        """Query all review tags linked to resources (sync, for batch file listing)."""
+        if not resource_ids:
+            return {}
+        with get_sync_db_session() as session:
+            statement = (
+                select(
+                    ReviewTag.id,
+                    ReviewTag.name,
+                    ReviewTagLink.resource_id,
+                    ReviewTag.resource_type,
+                    ReviewTag.review_status,
+                )
+                .join(
+                    ReviewTagLink,
+                    and_(
+                        ReviewTag.id == ReviewTagLink.tag_id,
+                        ReviewTagLink.resource_id.in_(resource_ids),
+                        ReviewTagLink.resource_type.in_([item.value for item in resource_types]),
+                        ReviewTagLink.is_deleted == False,
+                    ),
+                )
+                .where(ReviewTag.is_deleted == False)
+            )
+            if tenant_id is not None:
+                statement = statement.where(ReviewTagLink.tenant_id == tenant_id)
+            result = session.exec(statement).all()
+            ret: dict[str, list[ReviewTag]] = {}
+            for row in result:
+                resource_id = row[2]
+                if resource_id not in ret:
+                    ret[resource_id] = []
+                ret[resource_id].append(ReviewTag(id=row[0], name=row[1], resource_type=row[3], review_status=row[4]))
+            return ret

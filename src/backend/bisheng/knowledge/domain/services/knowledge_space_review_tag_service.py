@@ -29,6 +29,11 @@ from bisheng.llm.domain import LLMService
 from bisheng.sensitive_word.domain.schemas import (
     SensitiveWordBusinessType,
 )
+
+from bisheng.knowledge.domain.services.tag_library_tag_service import (
+    TagLibraryTagService,
+)
+
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 
 REVIEW_TAG_MAX_CONTENT = 3000

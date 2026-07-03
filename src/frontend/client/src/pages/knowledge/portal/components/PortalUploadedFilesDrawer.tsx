@@ -655,6 +655,7 @@ export function PortalUploadedFilesDrawer({
                 spaceId={editingTagsRecord.spaceId}
                 fileId={editingTagsRecord.id}
                 initialTagIds={(editingTagsRecord.tags ?? []).map((tag) => tag.id).filter((id) => id >= 0)}
+                initialTags={editingTagsRecord.tags ?? []}
             />
         ) : null}
         </>
