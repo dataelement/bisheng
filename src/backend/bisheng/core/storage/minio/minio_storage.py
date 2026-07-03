@@ -1,8 +1,11 @@
 import asyncio
+import functools
 import json
 import os
 import re
+import time
 from abc import ABC
+from contextlib import contextmanager
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
@@ -17,6 +20,7 @@ from minio.lifecycleconfig import Expiration, LifecycleConfig, Rule
 from urllib3 import BaseHTTPResponse
 
 from bisheng.common.services.config_service import settings as _bisheng_settings
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.base import BaseStorage
@@ -80,6 +84,90 @@ def _thaw_s3_error(exc: BaseException) -> BaseException:
         object_name=exc.object_name,
     )
     return thawed.with_traceback(exc.__traceback__)
+
+
+# F042: object-storage metric aspect. Classify an operation's outcome for the
+# success-rate metric (design 决策 4): 401/403 signature/permission expiry is
+# *excluded* (not a service failure); NoSuchKey / genuine cross-tenant miss is
+# *ok* (storage responded correctly, object absent); timeout / 5xx / connection
+# errors are *error*. http_status/err_code are read here, inside the storage
+# boundary, before the (possibly frozen) S3Error escapes (design §5 坑 6).
+_STORAGE_EXCLUDED_CODES = frozenset(
+    {"AccessDenied", "SignatureDoesNotMatch", "ExpiredToken", "InvalidAccessKeyId", "TokenRefreshRequired"}
+)
+
+
+def _classify_storage_exc(exc: BaseException):
+    """Return ``(result, http_status, err_code)`` for a storage exception."""
+    from bisheng.common.errcode.tenant_sharing import StorageSharingFallbackError
+
+    if isinstance(exc, StorageSharingFallbackError):
+        return "ok", None, None
+    if isinstance(exc, S3Error):
+        code = getattr(exc, "code", None)
+        status = getattr(getattr(exc, "response", None), "status", None)
+        if code == "NoSuchKey":
+            return "ok", status, code
+        if status in (401, 403) or code in _STORAGE_EXCLUDED_CODES:
+            return "excluded", status, code
+        return "error", status, code
+    return "error", None, type(exc).__name__
+
+
+@contextmanager
+def _storage_metric(op: str):
+    """Time + classify a put/get and emit ``obj_storage`` (best-effort).
+
+    A plain (sync) context manager: it wraps ``await`` bodies too, so both the
+    sync leaves and the async ``put_object`` share one aspect.
+    """
+    start = time.monotonic()
+    result, http_status, err_code = "ok", None, None
+    try:
+        yield
+    except Exception as exc:
+        result, http_status, err_code = _classify_storage_exc(exc)
+        # Re-raise a thawed mirror: this CM adds a generator frame whose
+        # gen.throw() would reassign __traceback__ on a frozen S3Error and mask
+        # the real error with FrozenInstanceError (design §5 坑 6).
+        raise _thaw_s3_error(exc) from None
+    finally:
+        emit_metric(
+            "obj_storage",
+            op=op,
+            result=result,
+            http_status=http_status,
+            err_code=err_code,
+            elapsed_ms=(time.monotonic() - start) * 1000.0,
+        )
+
+
+def _metered(op: str):
+    """Decorator wrapping a leaf put/get I/O method with ``_storage_metric``.
+
+    Applied only to the methods that perform the actual S3 call (not the
+    delegating wrappers) so each operation is counted once. Handles both sync
+    and async methods.
+    """
+
+    def deco(fn):
+        if asyncio.iscoroutinefunction(fn):
+
+            @functools.wraps(fn)
+            async def awrapper(*args, **kwargs):
+                with _storage_metric(op):
+                    return await fn(*args, **kwargs)
+
+            return awrapper
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            with _storage_metric(op):
+                return fn(*args, **kwargs)
+
+        return wrapper
+
+    return deco
 
 
 def _translate_to_root_prefix(object_name: str) -> str | None:
@@ -205,6 +293,7 @@ class MinioStorage(BaseStorage, ABC):
         if self.minio_client_sync.bucket_exists(bucket_name):
             self.minio_client_sync.remove_bucket(bucket_name)
 
+    @_metered("put")
     async def put_object(
         self,
         *,
@@ -255,6 +344,7 @@ class MinioStorage(BaseStorage, ABC):
             bucket_name=bucket_name, object_name=object_name, data=data_stream, content_type=content_type, **kwargs
         )
 
+    @_metered("put")
     def put_object_sync(
         self,
         *,
@@ -336,6 +426,7 @@ class MinioStorage(BaseStorage, ABC):
     async def get_object(self, bucket_name: str | None = None, object_name: str = None) -> bytes | None:
         return await asyncio.to_thread(self.get_object_sync, bucket_name=bucket_name, object_name=object_name)
 
+    @_metered("get")
     def get_object_sync(self, bucket_name: str | None = None, object_name: str = None) -> bytes | None:
 
         if bucket_name is None:
@@ -382,6 +473,7 @@ class MinioStorage(BaseStorage, ABC):
             response.close()
             response.release_conn()
 
+    @_metered("get")
     def download_object_sync(self, bucket_name: str | None = None, object_name: str = None) -> BaseHTTPResponse:
         # This method is intended for streaming downloads, returning the raw response object for the caller to handle the stream.
         # The caller is responsible for closing the response and releasing the connection after consuming the stream.
