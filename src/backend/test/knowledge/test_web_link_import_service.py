@@ -1,4 +1,10 @@
-from bisheng.knowledge.domain.services.web_link_import_service import KnowledgeWebLinkImportService
+from bisheng.knowledge.domain.services.web_link_import_service import (
+    KnowledgeWebLinkImportService,
+    WEB_LINK_DYNAMIC_RENDER_MARKDOWN,
+    WEB_LINK_LOGIN_ENTRY_MARKDOWN,
+    WEB_LINK_NAVIGATION_PORTAL_MARKDOWN,
+    is_web_link_non_dedup_markdown,
+)
 
 
 def test_extract_markdown_removes_stylesheet_and_css_noise() -> None:
@@ -257,3 +263,17 @@ def test_navigation_portal_page_uses_expected_reason_text() -> None:
 
     assert result.low_value_reason
     assert "该网页主要是以导航或门户入口页面" in result.markdown
+
+
+def test_is_web_link_non_dedup_markdown_matches_three_placeholder_bodies() -> None:
+    for body in (
+        WEB_LINK_LOGIN_ENTRY_MARKDOWN,
+        WEB_LINK_NAVIGATION_PORTAL_MARKDOWN,
+        WEB_LINK_DYNAMIC_RENDER_MARKDOWN,
+    ):
+        assert is_web_link_non_dedup_markdown(body)
+        assert is_web_link_non_dedup_markdown(f"{body}\n")
+
+
+def test_is_web_link_non_dedup_markdown_rejects_normal_article_body() -> None:
+    assert not is_web_link_non_dedup_markdown("这是一篇正常文章正文。\n")

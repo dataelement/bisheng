@@ -28,6 +28,12 @@ from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.user.domain.models.user import UserDao
 
+# Default RRF fusion weights [vector, keyword] when the caller supplies none.
+# KnowledgeRetrieverTool.rrf_weights is typed List[float]; pydantic v2 rejects an
+# explicitly-passed None, so agent-node / assistant callers (which omit weights)
+# must be normalized to this list, mirroring RagUtils' 0.5/0.5 default.
+_DEFAULT_RRF_WEIGHTS = [0.5, 0.5]
+
 
 async def abuild_scoped_login_user(user_id: int | None, tenant_id: int | None) -> UserPayload | None:
     """Build a ``UserPayload`` for ``user_id`` scoped to ``tenant_id`` WITHOUT
@@ -137,7 +143,7 @@ async def _aretrieve_one_space(
             vector_retriever=milvus_vector.as_retriever(search_kwargs=milvus_kwargs),
             elastic_retriever=es_vector.as_retriever(search_kwargs=es_kwargs),
             max_content=max_content,
-            rrf_weights=rrf_weights,
+            rrf_weights=rrf_weights or _DEFAULT_RRF_WEIGHTS,
             rrf_remove_zero_score=True,
             rerank=rerank,
             sort_by_source_and_index=sort_by_source_and_index,
@@ -323,7 +329,9 @@ def build_space_knowledge_tool(
         identity_user_id=identity_user_id,
         space_tenant_id=tenant_id,
         max_content=max_content,
-        rrf_weights=rrf_weights,
+        # KnowledgeRetrieverTool.rrf_weights is List[float]; pydantic v2 rejects an
+        # explicit None, so normalize here (agent-node / assistant omit weights).
+        rrf_weights=rrf_weights or _DEFAULT_RRF_WEIGHTS,
         rerank=rerank,
         access_scope=access_scope,
     )

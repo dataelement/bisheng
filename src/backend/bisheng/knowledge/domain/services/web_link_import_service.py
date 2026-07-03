@@ -16,6 +16,27 @@ from bisheng.common.errcode.knowledge import KnowledgeWebLinkImportError
 
 logger = logging.getLogger(__name__)
 
+WEB_LINK_LOGIN_ENTRY_MARKDOWN = (
+    "该网页可能是登录、注册或权限入口页面，未能提取到适合入库的正文内容。"
+)
+WEB_LINK_NAVIGATION_PORTAL_MARKDOWN = (
+    "该网页主要是以导航或门户入口页面，正文信息不足，不建议作为知识库网页正文导入。"
+)
+WEB_LINK_DYNAMIC_RENDER_MARKDOWN = "该网页可能为动态渲染页面，未能提取到静态正文内容。"
+
+# Fixed low-value import bodies must not collide on content-hash dedup across URLs.
+WEB_LINK_NON_DEDUP_MARKDOWN_BODIES = frozenset(
+    {
+        WEB_LINK_LOGIN_ENTRY_MARKDOWN,
+        WEB_LINK_NAVIGATION_PORTAL_MARKDOWN,
+        WEB_LINK_DYNAMIC_RENDER_MARKDOWN,
+    }
+)
+
+
+def is_web_link_non_dedup_markdown(markdown: str) -> bool:
+    return (markdown or "").strip() in WEB_LINK_NON_DEDUP_MARKDOWN_BODIES
+
 
 @dataclass
 class WebLinkImportResult:
@@ -434,7 +455,7 @@ class KnowledgeWebLinkImportService:
         elif low_value_reason:
             body = low_value_reason
         if not body:
-            body = "该网页可能为动态渲染页面，未能提取到静态正文内容。"
+            body = WEB_LINK_DYNAMIC_RENDER_MARKDOWN
 
         markdown = body.strip() + "\n"
         return _MarkdownExtraction(
@@ -718,7 +739,7 @@ class KnowledgeWebLinkImportService:
 
         matched_markers = sum(1 for marker in cls.LOW_VALUE_PAGE_MARKERS if marker in normalized)
         if matched_markers >= 2:
-            return "该网页可能是登录、注册或权限入口页面，未能提取到适合入库的正文内容。"
+            return WEB_LINK_LOGIN_ENTRY_MARKDOWN
 
         words_for_navigation = (
             "首页",
@@ -736,7 +757,7 @@ class KnowledgeWebLinkImportService:
         meaningful = re.sub(r"!\[[^\]]*]\([^)]+\)|\[[^\]]+]\([^)]+\)", "", meaningful)
         meaningful = re.sub(r"[#*_`>\-\s|:：,，.。/\\{}()[\]\"'=;；]+", "", meaningful)
         if nav_hits >= 4 and len(meaningful) < 220:
-            return "该网页主要是以导航或门户入口页面，正文信息不足，不建议作为知识库网页正文导入。"
+            return WEB_LINK_NAVIGATION_PORTAL_MARKDOWN
 
         return ""
 
