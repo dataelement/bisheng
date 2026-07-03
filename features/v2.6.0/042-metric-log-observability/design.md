@@ -155,6 +155,7 @@
 | 9 | 异步 engine 的池要从 `async_engine.sync_engine.pool` 取，不是 `async_engine.pool` | 直接取报错/拿错对象，池指标打空 | 采样处对 async 走 `sync_engine.pool`（`AsyncAdaptedQueuePool` 同样有 `checkedout/checkedin/size`） |
 | 10 | `pool.overflow()` 语义随版本可能为负、不直观；`max_overflow` 无公开方法 | 用 `overflow()` 反推容量会算错 | 只用稳定的 `checkedout()/checkedin()/size()`；`max_overflow` 从 `DatabasePoolConf` 读，不读私有 `pool._max_overflow` |
 | 11 | `db_query` 若打完整 SQL 文本 / bind 参数，会泄露密码等敏感值（C6）、PII，且大 `IN(...)` 参数序列化本身极慢（memory `dm-async-fake-blocks-loop-large-in`：3.6w 参数 11.9s） | 泄密 + 日志爆炸 + 埋点反而拖慢主流程 | 只从 SQL 前缀提取 `op`（首关键词）后立即丢弃 SQL 文本，永不记参数值 |
+| 12 | `forwarder.maybe_forward_external` 对**每条**站内信都调；`feature_disabled` / `not_in_whitelist` 分支几乎每条都命中 | 在这俩分支打 metric 会刷屏、淹没真实 E+ 事件 | 只 meter **过白名单后**的收件人解析 skip（低频，仅 forwardable 消息才到）；client 只 meter 真实调用（ok/error） |
 
 ---
 
@@ -173,7 +174,7 @@
 | `db_pool` | 每进程每 `db_agg_window_s` 秒周期采样（由查询事件驱动）+ 池等待超时时 | `engine`(sync/async) `checked_out`(使用中) `idle`(空闲) `size`(pool_size) `capacity`(size+max_overflow) `at_capacity`(0/1) `result`(可选=wait_timeout) |
 | `obj_storage` | 每次 put/get 完成 | `op`(put/get) `result`(ok/error/excluded) `http_status` `err_code` `elapsed_ms` |
 | `model_invoke` | 每次模型调用结束（finally） | `model_id` `status`(success/failed) `is_stream`(0/1) `ttft_ms`(首 token) `total_ms` |
-| `eplus_notify` | 每次 E+ 接口调用 / 被短路 | `result`(ok/error/skipped) `http_status` `biz_code` `elapsed_ms` `action` |
+| `eplus_notify` | client 每次真实调用（ok/error）；forwarder **过白名单后**的收件人解析 skip（skipped）。feature_disabled / not_in_whitelist **不打**（高频，坑 12） | `result`(ok/error/skipped) `http_status` `biz_code` `err_code` `elapsed_ms` `action` `reason`(skipped 时) |
 
 示例行：
 ```

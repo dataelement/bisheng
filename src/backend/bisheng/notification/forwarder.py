@@ -1,8 +1,10 @@
 """Synchronous hook: decide / resolve recipients / schedule HTTP task. Never blocks."""
+
 import asyncio
 import logging
 
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.notification.external._payload import FORWARDABLE_ACTION_CODES, build_textcard
 from bisheng.notification.external.cofco_eplus_client import CofcoEPlusClient
 from bisheng.user.domain.models.user import UserDao
@@ -46,12 +48,12 @@ def _resolve_action_code(message) -> str:
     code = getattr(message, "action_code", None)
     if isinstance(code, str) and code:
         return code
-    for block in (getattr(message, "content", None) or []):
+    for block in getattr(message, "content", None) or []:
         if block.get("type") == "system_text":
             c = block.get("content")
             if isinstance(c, str) and c:
                 return c
-    for block in (getattr(message, "content", None) or []):
+    for block in getattr(message, "content", None) or []:
         if block.get("type") == "agree_reject_button":
             meta = block.get("metadata") or {}
             c = meta.get("action_code") or meta.get("business_type")
@@ -75,7 +77,7 @@ def _extract_payload_fields(message) -> tuple[str, str, str, str]:
     reason = ""
     scenario_code = ""
     try:
-        for block in (message.content or []):
+        for block in message.content or []:
             btype = block.get("type")
             raw = block.get("content") or ""
             meta = block.get("metadata") or {}
@@ -90,7 +92,7 @@ def _extract_payload_fields(message) -> tuple[str, str, str, str]:
                 resource_name = raw
             elif btype == "tooltip_text" and not reason and isinstance(raw, str):
                 reason_prefix = f"原因{chr(0xFF1A)}"
-                reason = raw[len(reason_prefix):].strip() if raw.startswith(reason_prefix) else raw.strip()
+                reason = raw[len(reason_prefix) :].strip() if raw.startswith(reason_prefix) else raw.strip()
     except Exception as exc:
         logger.debug("_extract_payload_fields parse error: %s", exc, exc_info=True)
     return applicant_name, resource_name, reason, scenario_code
@@ -121,19 +123,26 @@ def maybe_forward_external(message) -> None:
     if action_code not in FORWARDABLE_ACTION_CODES:
         logger.info(
             "forward.skipped message_id=%s action_code=%s reason=not_in_whitelist",
-            message.id, action_code,
+            message.id,
+            action_code,
         )
         return
 
     # InboxMessage.receiver is List[int] — resolve each to an E+ employee ID
     resolved_eids: list[str] = []
-    for uid in (message.receiver or []):
+    for uid in message.receiver or []:
         eid, skip_reason = resolve_eplus_recipient(uid)
         if eid is None:
             logger.info(
                 "forward.skipped message_id=%s action_code=%s reason=%s target_user_id=%s",
-                message.id, action_code, skip_reason, uid,
+                message.id,
+                action_code,
+                skip_reason,
+                uid,
             )
+            # Only post-whitelist recipient skips are metered (feature_disabled /
+            # not_in_whitelist fire on nearly every message — see tasks 偏差记录).
+            emit_metric("eplus_notify", result="skipped", action=action_code, reason=skip_reason)
         else:
             resolved_eids.append(eid)
 

@@ -1,4 +1,5 @@
 """HTTP client for 中粮 E+ 消息中心 textcard interface."""
+
 import json
 import logging
 import time
@@ -6,6 +7,7 @@ import time
 import httpx
 
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.metric_log import emit_metric
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +38,7 @@ class CofcoEPlusClient:
         Silently returns (after DEBUG log) when touser is empty.
         """
         if not touser:
-            logger.debug(
-                "cofco_eplus send_textcard skipped: empty touser message_id=%s", message_id
-            )
+            logger.debug("cofco_eplus send_textcard skipped: empty touser message_id=%s", message_id)
             return
 
         conf = settings.get_cofco_forwarding_conf()
@@ -74,7 +74,10 @@ class CofcoEPlusClient:
         # ConfigMap `api_base` value when troubleshooting.
         logger.info(
             "forward.attempt message_id=%s action_code=%s recipient=%s url=%s",
-            message_id, action_code, "|".join(touser), url,
+            message_id,
+            action_code,
+            "|".join(touser),
+            url,
         )
 
         started = time.monotonic()
@@ -95,8 +98,20 @@ class CofcoEPlusClient:
                         "forward.result message_id=%s code=non_json_response "
                         "elapsed_ms=%s http_status=%s content_type=%s "
                         "body_snippet=%r parse_err=%s",
-                        message_id, elapsed_ms, http_status, content_type,
-                        body_snippet, parse_exc,
+                        message_id,
+                        elapsed_ms,
+                        http_status,
+                        content_type,
+                        body_snippet,
+                        parse_exc,
+                    )
+                    emit_metric(
+                        "eplus_notify",
+                        result="error",
+                        biz_code="non_json",
+                        http_status=http_status,
+                        elapsed_ms=elapsed_ms,
+                        action=action_code,
                     )
                     return
 
@@ -106,13 +121,34 @@ class CofcoEPlusClient:
                 if code == "0":
                     logger.info(
                         "forward.result message_id=%s code=0 elapsed_ms=%s msg=%s",
-                        message_id, elapsed_ms, msg,
+                        message_id,
+                        elapsed_ms,
+                        msg,
+                    )
+                    emit_metric(
+                        "eplus_notify",
+                        result="ok",
+                        biz_code=code,
+                        http_status=http_status,
+                        elapsed_ms=elapsed_ms,
+                        action=action_code,
                     )
                 else:
                     logger.warning(
-                        "forward.result message_id=%s code=%s elapsed_ms=%s "
-                        "http_status=%s msg=%s",
-                        message_id, code, elapsed_ms, http_status, msg,
+                        "forward.result message_id=%s code=%s elapsed_ms=%s http_status=%s msg=%s",
+                        message_id,
+                        code,
+                        elapsed_ms,
+                        http_status,
+                        msg,
+                    )
+                    emit_metric(
+                        "eplus_notify",
+                        result="error",
+                        biz_code=code,
+                        http_status=http_status,
+                        elapsed_ms=elapsed_ms,
+                        action=action_code,
                     )
         except Exception as exc:  # broad catch: fire-and-forget contract
             elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -121,7 +157,18 @@ class CofcoEPlusClient:
             #   ReadTimeout                  → server hung after accepting connection
             #   RemoteProtocolError          → server closed mid-response
             logger.warning(
-                "forward.result message_id=%s code=exception "
-                "elapsed_ms=%s exc_type=%s msg=%s",
-                message_id, elapsed_ms, type(exc).__name__, exc, exc_info=True,
+                "forward.result message_id=%s code=exception elapsed_ms=%s exc_type=%s msg=%s",
+                message_id,
+                elapsed_ms,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
+            emit_metric(
+                "eplus_notify",
+                result="error",
+                biz_code="exception",
+                err_code=type(exc).__name__,
+                elapsed_ms=elapsed_ms,
+                action=action_code,
             )
