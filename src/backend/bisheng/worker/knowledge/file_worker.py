@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from langchain_elasticsearch import ElasticsearchStore
@@ -283,6 +284,51 @@ def insert_es(li: List, target: ElasticsearchStore, index_name: str):
 
     target.client.indices.refresh(index=index_name)
     logger.info("copy_es_done pk_size={}", len(res_list))
+
+
+async def _refresh_file_similarity_candidates(file_id: int) -> int:
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+        KnowledgeFileSimilarityCandidateRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            service = KnowledgeVersionService(
+                request=None,
+                login_user=SimpleNamespace(user_id=0, user_name="system"),
+                doc_repo=KnowledgeDocumentRepositoryImpl(session),
+                version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
+                knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
+                similar_candidate_repo=KnowledgeFileSimilarityCandidateRepositoryImpl(session),
+            )
+            return await service.refresh_similar_candidates_for_file(file_id)
+
+
+@bisheng_celery.task(acks_late=True)
+def refresh_file_similarity_candidates_celery(file_id: int) -> int:
+    trace_id_var.set(f"refresh_file_similarity_candidates_{file_id}")
+    logger.info("refresh_file_similarity_candidates_celery start file_id={}", file_id)
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    count = run_async_task(lambda: _refresh_file_similarity_candidates(file_id))
+    logger.info(
+        "refresh_file_similarity_candidates_celery done file_id={} candidate_count={}",
+        file_id,
+        count,
+    )
+    return count
 
 
 @bisheng_celery.task(acks_late=True)

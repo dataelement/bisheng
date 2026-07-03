@@ -1,12 +1,14 @@
 """delete_version: remove a historical (non-primary) version."""
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock, AsyncMock, patch
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import KnowledgeFileSimilarityCandidate
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -15,6 +17,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_ve
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+    KnowledgeFileSimilarityCandidateRepositoryImpl,
 )
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
@@ -56,6 +61,7 @@ def _build_svc(session):
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
+        similar_candidate_repo=KnowledgeFileSimilarityCandidateRepositoryImpl(session),
     )
 
 
@@ -98,8 +104,42 @@ async def test_delete_history_removes_version_and_file(enable_switch, async_db_s
 
 
 @pytest.mark.asyncio
+async def test_delete_history_removes_similarity_candidate_cache(enable_switch, async_db_session, monkeypatch):
+    doc, v1, _ = await _seed_two_version_doc(async_db_session)
+    async_db_session.add(
+        KnowledgeFileSimilarityCandidate(
+            tenant_id=1,
+            knowledge_id=1,
+            source_file_id=101,
+            candidate_file_id=100,
+            candidate_document_id=doc.id,
+            similarity=0.9,
+            sort_order=0,
+        )
+    )
+    await async_db_session.commit()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
+        "KnowledgeAuditTelemetryService.audit_delete_file_version",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+        AsyncMock(return_value=MagicMock(id=1)),
+    )
+    monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_vector_files", MagicMock(return_value=True))
+    monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_minio_files", MagicMock(return_value=None))
+
+    svc = _build_svc(async_db_session)
+    await svc.delete_version(version_id=v1.id)
+
+    cached = await svc.similar_candidate_repo.find_by_source_file_id(101)
+    assert cached == []
+
+
+@pytest.mark.asyncio
 async def test_delete_primary_is_rejected(enable_switch, async_db_session, monkeypatch):
-    doc, v1, v2 = await _seed_two_version_doc(async_db_session)
+    _, _, v2 = await _seed_two_version_doc(async_db_session)
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_delete_file_version",
@@ -121,16 +161,18 @@ async def test_delete_404_when_version_not_found(enable_switch, async_db_session
 
 @pytest.mark.asyncio
 async def test_delete_rejected_when_switch_off(async_db_session, monkeypatch):
+    from bisheng.common.errcode.knowledge_space import VersionManagementDisabledError
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = False
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionManagementDisabledError) as ctx:
         await svc.delete_version(version_id=1)
-    assert ctx.value.status_code == 403
+    assert ctx.value.code == 18060
 
 
 # ---------------------------------------------------------------------------

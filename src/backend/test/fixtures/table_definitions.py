@@ -178,10 +178,12 @@ CREATE TABLE IF NOT EXISTS knowledge (
     index_name VARCHAR(255),
     state INTEGER DEFAULT 1,
     is_released INTEGER DEFAULT 0,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
     auth_type VARCHAR(32) DEFAULT 'public',
     is_shared INTEGER NOT NULL DEFAULT 0,
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
+    business_domain_codes JSON,
     metadata_fields JSON,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -341,6 +343,42 @@ CREATE TABLE IF NOT EXISTS knowledge_document_version (
     CONSTRAINT uk_kdv_document_version UNIQUE (document_id, version_no)
 )"""
 
+TABLE_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE = """\
+CREATE TABLE IF NOT EXISTS knowledge_file_similarity_candidate (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    knowledge_id INTEGER NOT NULL,
+    source_file_id INTEGER NOT NULL,
+    candidate_file_id INTEGER NOT NULL,
+    candidate_document_id INTEGER NOT NULL,
+    similarity FLOAT NOT NULL,
+    refined_similarity FLOAT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uk_kf_similarity_source_document UNIQUE (source_file_id, candidate_document_id)
+)"""
+
+INDEX_KNOWLEDGE_FILE_SIMILARITY_TENANT = """\
+CREATE INDEX IF NOT EXISTS ix_kf_similarity_tenant_id
+    ON knowledge_file_similarity_candidate (tenant_id)"""
+
+INDEX_KNOWLEDGE_FILE_SIMILARITY_KNOWLEDGE_SOURCE = """\
+CREATE INDEX IF NOT EXISTS ix_kf_similarity_knowledge_source
+    ON knowledge_file_similarity_candidate (knowledge_id, source_file_id)"""
+
+INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE = """\
+CREATE INDEX IF NOT EXISTS ix_kf_similarity_source_file_id
+    ON knowledge_file_similarity_candidate (source_file_id)"""
+
+INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE = """\
+CREATE INDEX IF NOT EXISTS ix_kf_similarity_candidate_file_id
+    ON knowledge_file_similarity_candidate (candidate_file_id)"""
+
+INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT = """\
+CREATE INDEX IF NOT EXISTS ix_kf_similarity_candidate_document_id
+    ON knowledge_file_similarity_candidate (candidate_document_id)"""
+
 TABLE_GPTS_TOOLS = """\
 CREATE TABLE IF NOT EXISTS t_gpts_tools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -496,6 +534,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "knowledgefile": TABLE_KNOWLEDGE_FILE,
     "knowledge_document": TABLE_KNOWLEDGE_DOCUMENT,
     "knowledge_document_version": TABLE_KNOWLEDGE_DOCUMENT_VERSION,
+    "knowledge_file_similarity_candidate": TABLE_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE,
     "t_gpts_tools": TABLE_GPTS_TOOLS,
     "channel": TABLE_CHANNEL,
     # F018: owner transfer targets the standalone assistant table.
@@ -508,6 +547,11 @@ TABLE_DEFINITIONS: dict[str, str] = {
 # Indexes emitted after CREATE TABLE via create_all_tables.
 INDEX_DEFINITIONS: list[str] = [
     INDEX_ORG_SYNC_LOG_CONFLICT,
+    INDEX_KNOWLEDGE_FILE_SIMILARITY_TENANT,
+    INDEX_KNOWLEDGE_FILE_SIMILARITY_KNOWLEDGE_SOURCE,
+    INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE,
+    INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE,
+    INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT,
 ]
 
 
@@ -531,3 +575,9 @@ def create_tables(engine: Engine, *table_names: str) -> None:
         # Also emit indexes whose underlying table was just created.
         if "org_sync_log" in table_names:
             conn.execute(text(INDEX_ORG_SYNC_LOG_CONFLICT))
+        if "knowledge_file_similarity_candidate" in table_names:
+            conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_TENANT))
+            conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_KNOWLEDGE_SOURCE))
+            conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE))
+            conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE))
+            conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT))

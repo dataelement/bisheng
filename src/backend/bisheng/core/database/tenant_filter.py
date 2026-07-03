@@ -75,6 +75,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.mark_task",
     "bisheng.user.domain.models.user_role",
     "bisheng.knowledge.domain.models.knowledge_file",
+    "bisheng.knowledge.domain.models.knowledge_file_similarity_candidate",
     "bisheng.tool.domain.models.gpts_tools",
     "bisheng.share_link.domain.models.share_link",
     "bisheng.message.domain.models.inbox_message",

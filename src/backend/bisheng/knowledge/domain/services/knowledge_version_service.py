@@ -23,6 +23,9 @@ from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
+    KnowledgeFileSimilarityCandidate,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -31,6 +34,9 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
     KnowledgeFileRepository,
+)
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
+    KnowledgeFileSimilarityCandidateRepository,
 )
 
 
@@ -44,12 +50,42 @@ class KnowledgeVersionService:
         doc_repo: KnowledgeDocumentRepository,
         version_repo: KnowledgeDocumentVersionRepository,
         knowledge_file_repo: KnowledgeFileRepository,
+        similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository | None = None,
     ):
         self.request = request
         self.login_user = login_user
         self.doc_repo = doc_repo
         self.version_repo = version_repo
         self.knowledge_file_repo = knowledge_file_repo
+        self.similar_candidate_repo = similar_candidate_repo
+
+    async def _delete_similarity_candidate_cache_by_file_ids(self, file_ids: list[int]) -> None:
+        if self.similar_candidate_repo is None or not file_ids:
+            return
+        deduped_ids = sorted({int(file_id) for file_id in file_ids if file_id is not None})
+        if not deduped_ids:
+            return
+        try:
+            await self.similar_candidate_repo.delete_by_file_ids(deduped_ids)
+        except Exception as exc:
+            logger.warning(
+                "similarity candidate cache cleanup failed file_ids={}: {}",
+                deduped_ids,
+                exc,
+            )
+
+    @staticmethod
+    def _similarity_source_signature(kf: KnowledgeFile | None) -> tuple | None:
+        if kf is None:
+            return None
+        return (
+            getattr(kf, "id", None),
+            getattr(kf, "knowledge_id", None),
+            getattr(kf, "file_type", None),
+            getattr(kf, "status", None),
+            getattr(kf, "simhash", None),
+            getattr(kf, "file_encoding", None),
+        )
 
     async def _require_version_management_enabled(self) -> None:
         """Raise the business-code error if the feature switch is off so the
@@ -274,6 +310,11 @@ class KnowledgeVersionService:
             current_kf.similar_status = 2
             await self.knowledge_file_repo.update(current_kf)
 
+        affected_file_ids = [current_kf.id]
+        if old_primary is not None:
+            affected_file_ids.append(old_primary.knowledge_file_id)
+        await self._delete_similarity_candidate_cache_by_file_ids(affected_file_ids)
+
         # Audit log
         KnowledgeAuditTelemetryService.audit_link_file_version(
             self.login_user,
@@ -372,6 +413,7 @@ class KnowledgeVersionService:
         await self.version_repo.delete(version_id)
         if kf is not None:
             await self.knowledge_file_repo.delete(kf.id)
+            await self._delete_similarity_candidate_cache_by_file_ids([kf.id])
 
         # Best-effort cleanup: failures are logged but must not affect DB consistency.
         if kf is not None:
@@ -409,52 +451,191 @@ class KnowledgeVersionService:
         *,
         threshold: float | None = None,
     ) -> int:
-        """Scan main-version files in the same space; if any candidate's similarity
-        is >= threshold, set this file's similar_status = 1.
+        """Refresh cached similarity candidates for one file.
 
-        Returns the number of candidates above threshold.
-        Does nothing if the file has no simhash yet (e.g., scan called before parse finishes).
+        Kept as a compatibility wrapper for existing callers and tests.
         """
+        return await self.refresh_similar_candidates_for_file(
+            knowledge_file_id,
+            threshold=threshold,
+        )
+
+    async def refresh_similar_candidates_for_file(
+        self,
+        knowledge_file_id: int,
+        *,
+        threshold: float | None = None,
+        limit: int = 3,
+    ) -> int:
+        """Compute similarity once, replace cached rows, and update pending status."""
+        rows: list[KnowledgeFileSimilarityCandidate] = []
+        kf: KnowledgeFile | None = None
+        for attempt in range(2):
+            source_before = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+            source_signature = self._similarity_source_signature(source_before)
+            rows = await self._calculate_similarity_candidate_rows(
+                knowledge_file_id,
+                threshold=threshold,
+                limit=limit,
+            )
+            kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+            if self._similarity_source_signature(kf) == source_signature:
+                break
+            logger.warning(
+                "similarity refresh source changed during calculation file_id={} attempt={}",
+                knowledge_file_id,
+                attempt + 1,
+            )
+        else:
+            if self.similar_candidate_repo is not None:
+                await self.similar_candidate_repo.delete_by_source_file_id(knowledge_file_id)
+            return 0
+
+        if self.similar_candidate_repo is not None:
+            await self.similar_candidate_repo.replace_for_source_file(knowledge_file_id, rows)
+
+        if kf is None:
+            return 0
+        next_status = 1 if rows else 0
+        if kf.similar_status != 2 and kf.similar_status != next_status:
+            kf.similar_status = next_status
+            await self.knowledge_file_repo.update(kf)
+        return len(rows)
+
+    async def _calculate_similarity_candidate_rows(
+        self,
+        knowledge_file_id: int,
+        *,
+        threshold: float | None = None,
+        limit: int = 3,
+    ) -> list[KnowledgeFileSimilarityCandidate]:
         from bisheng.common.utils.simhash_utils import similarity as _similarity
 
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
         if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
-            return 0
+            return []
         if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
-            return 0
+            return []
 
         if threshold is None:
             conf = await bisheng_settings.async_get_knowledge()
             vmc = getattr(conf, "version_management", None)
             threshold = vmc.simhash_similarity_threshold if vmc else 0.85
 
-        # Find all main-version files in the same space (excluding self)
         candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
             knowledge_id=kf.knowledge_id,
             exclude_file_id=knowledge_file_id,
         )
 
-        above_count = 0
+        scored: list[tuple[float, KnowledgeFile]] = []
         for c in candidates:
             if not self._has_valid_simhash(getattr(c, "simhash", None)):
                 continue
             if not self._shougang_encoding_matches(kf, c):
                 continue
-            if _similarity(kf.simhash, c.simhash) >= threshold:
-                above_count += 1
+            sim = _similarity(kf.simhash, c.simhash)
+            if sim < threshold:
+                continue
+            scored.append((sim, c))
+        scored.sort(key=lambda item: item[0], reverse=True)
 
-        if above_count > 0 and kf.similar_status != 1:
-            kf.similar_status = 1
-            await self.knowledge_file_repo.update(kf)
-        return above_count
+        refined = await self._refine_candidates_by_tfidf(kf, scored)
+
+        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
+        self_doc_id = self_v.document_id if self_v else None
+        rows: list[KnowledgeFileSimilarityCandidate] = []
+        for sim, refined_sim, candidate in refined:
+            if len(rows) >= limit:
+                break
+            version = await self.version_repo.find_by_knowledge_file_id(candidate.id)
+            if version is None:
+                continue
+            if self_doc_id is not None and version.document_id == self_doc_id:
+                continue
+            rows.append(
+                KnowledgeFileSimilarityCandidate(
+                    tenant_id=getattr(kf, "tenant_id", None) or 1,
+                    knowledge_id=int(kf.knowledge_id),
+                    source_file_id=int(kf.id),
+                    candidate_file_id=int(candidate.id),
+                    candidate_document_id=int(version.document_id),
+                    similarity=float(sim),
+                    refined_similarity=float(refined_sim) if refined_sim is not None else None,
+                    sort_order=len(rows),
+                )
+            )
+        return rows
+
+    async def _similar_candidate_entries_from_cache(
+        self,
+        knowledge_file_id: int,
+        cached_rows: list[KnowledgeFileSimilarityCandidate],
+        *,
+        limit: int,
+    ) -> list:
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
+
+        source = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+        if source is None:
+            return []
+        if source.file_type != FileType.FILE.value or source.status != KnowledgeFileStatus.SUCCESS.value:
+            return []
+        if source.similar_status == 2:
+            return []
+
+        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
+        self_doc_id = self_v.document_id if self_v else None
+
+        out: list[SimilarCandidateEntry] = []
+        for row in cached_rows:
+            if len(out) >= limit:
+                break
+            if int(row.knowledge_id) != int(source.knowledge_id):
+                continue
+            if self_doc_id is not None and int(row.candidate_document_id) == int(self_doc_id):
+                continue
+
+            doc = await self.doc_repo.find_by_id(int(row.candidate_document_id))
+            if doc is None or int(doc.knowledge_id) != int(source.knowledge_id):
+                continue
+            if doc.primary_version_id is None:
+                continue
+
+            version = await self.version_repo.find_by_id(int(doc.primary_version_id))
+            if version is None:
+                continue
+            if int(version.knowledge_file_id) != int(row.candidate_file_id):
+                continue
+            candidate = await self.knowledge_file_repo.find_by_id(int(version.knowledge_file_id))
+            if candidate is None:
+                continue
+            if candidate.file_type != FileType.FILE.value or candidate.status != KnowledgeFileStatus.SUCCESS.value:
+                continue
+
+            out.append(
+                SimilarCandidateEntry(
+                    target_document_id=int(doc.id),
+                    title=candidate.file_name,
+                    doc_code=getattr(candidate, "file_encoding", None),
+                    current_primary_version_no=version.version_no,
+                    similarity=float(row.similarity),
+                    refined_similarity=(float(row.refined_similarity) if row.refined_similarity is not None else None),
+                    primary_uploader_name=getattr(candidate, "user_name", None),
+                    primary_upload_time=getattr(candidate, "create_time", None),
+                )
+            )
+        return out
 
     async def list_pending_similar_files(self, knowledge_id: int) -> list:
         """List files in this space with similar_status=1 (pending user action).
 
-        For each, count how many candidates currently exceed threshold (fresh re-scan).
+        Candidate count comes from persisted candidate rows plus lightweight validity checks.
         """
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import PendingSimilarFileEntry
+
+        if self.similar_candidate_repo is None:
+            return []
 
         pending = await KnowledgeFileDao.aget_files_by_similar_status(
             knowledge_id=knowledge_id,
@@ -472,9 +653,13 @@ class KnowledgeVersionService:
                 chain = await self.version_repo.find_by_document_id(v.document_id)
                 if len(chain) >= 2:
                     continue
-            # Cap candidate_count at the same limit the right-panel uses (default 3)
-            # so the left-side count never exceeds what the user can actually act on.
-            candidates = await self.get_similar_candidates_for_file(kf.id)
+            cached = await self.similar_candidate_repo.find_by_source_file_id(kf.id)
+            if not cached:
+                # Historical rows may have similar_status=1 from the old synchronous
+                # scanner but no persisted candidate rows until the backfill runs.
+                # Do not clear similar_status from a read path in that case.
+                continue
+            candidates = await self._similar_candidate_entries_from_cache(kf.id, cached, limit=3)
             if not candidates:
                 kf.similar_status = 0
                 await self.knowledge_file_repo.update(kf)
@@ -1107,6 +1292,11 @@ class KnowledgeVersionService:
             source_kf.similar_status = 2
             await self.knowledge_file_repo.update(source_kf)
 
+        affected_file_ids = [source_kf.id]
+        if old_primary is not None:
+            affected_file_ids.append(old_primary.knowledge_file_id)
+        await self._delete_similarity_candidate_cache_by_file_ids(affected_file_ids)
+
         KnowledgeAuditTelemetryService.audit_link_file_version(
             self.login_user,
             self.request,
@@ -1123,70 +1313,17 @@ class KnowledgeVersionService:
         *,
         limit: int = 3,
     ) -> list:
-        """Top-N similar candidates above threshold, sorted by similarity desc.
-
-        Each result item is a SimilarCandidateEntry with the candidate's target document info.
-        Excludes the candidate's own document (1:1 file→version row); empty if no matches.
-        """
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
-
-        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+        """Read persisted Top-N similar candidates for the version-management dialog."""
+        if self.similar_candidate_repo is None:
             return []
-        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
-            return []
-
-        conf = await bisheng_settings.async_get_knowledge()
-        vmc = getattr(conf, "version_management", None)
-        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
-
-        # Exclude self-doc to avoid recommending the file's own logical document
-        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
-        self_doc_id = self_v.document_id if self_v else None
-
-        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id,
-            exclude_file_id=knowledge_file_id,
+        cached = await self.similar_candidate_repo.find_by_source_file_id(
+            knowledge_file_id,
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for c in candidates:
-            if not self._has_valid_simhash(getattr(c, "simhash", None)):
-                continue
-            if not self._shougang_encoding_matches(kf, c):
-                continue
-            sim = _similarity(kf.simhash, c.simhash)
-            if sim < threshold:
-                continue
-            scored.append((sim, c))
-
-        # TF-IDF refine: drop simhash false positives + re-rank by content cosine.
-        # Done on the full set (before limit) so filtered slots are backfilled.
-        refined = await self._refine_candidates_by_tfidf(kf, scored)
-
-        out: list[SimilarCandidateEntry] = []
-        for sim, refined_sim, c in refined:
-            if len(out) >= limit:
-                break
-            v = await self.version_repo.find_by_knowledge_file_id(c.id)
-            if v is None:
-                continue  # orphaned file — no version row
-            if self_doc_id is not None and v.document_id == self_doc_id:
-                continue  # exclude the requester's own document
-            out.append(
-                SimilarCandidateEntry(
-                    target_document_id=v.document_id,
-                    title=c.file_name,
-                    doc_code=getattr(c, "file_encoding", None),
-                    current_primary_version_no=v.version_no,
-                    similarity=sim,
-                    refined_similarity=refined_sim,
-                    primary_uploader_name=getattr(c, "user_name", None),
-                    primary_upload_time=getattr(c, "create_time", None),
-                )
-            )
-        return out
+        return await self._similar_candidate_entries_from_cache(
+            knowledge_file_id,
+            cached,
+            limit=limit,
+        )
 
     async def get_similar_candidates_for_file_in_space(
         self,

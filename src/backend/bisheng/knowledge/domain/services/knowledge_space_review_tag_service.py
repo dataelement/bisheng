@@ -25,6 +25,9 @@ from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
     KnowledgeSpaceAutoTagService,
 )
+from bisheng.knowledge.domain.services.tag_library_tag_service import (
+    TagLibraryTagService,
+)
 from bisheng.llm.domain import LLMService
 from bisheng.sensitive_word.domain.schemas import (
     SensitiveWordBusinessType,

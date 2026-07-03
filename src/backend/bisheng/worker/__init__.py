@@ -3,7 +3,7 @@ from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.knowledge.file_worker import file_copy_celery, parse_knowledge_file_celery, \
-    retry_knowledge_file_celery
+    refresh_file_similarity_candidates_celery, retry_knowledge_file_celery
 from bisheng.worker.knowledge.qa import insert_qa_celery, copy_qa_knowledge_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
 from bisheng.worker.knowledge.space_init_worker import (

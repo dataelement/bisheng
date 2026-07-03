@@ -35,7 +35,6 @@ from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFil
     KnowledgeEtl4lmTimeoutError, KnowledgeFileFailedError, KnowledgeExcelChunkMaxError, KnowledgeRecommendQuestionError
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
-from bisheng.common.services.config_service import settings
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
@@ -80,17 +79,6 @@ filetype_load_map = {
     "docx": UnstructuredWordDocumentLoader,
     "pptx": UnstructuredPowerPointLoader,
 }
-
-
-def _shougang_encoding_first_three_segments(file_encoding: str | None) -> tuple[str, str, str] | None:
-    parts = [part.strip() for part in (file_encoding or "").split("-")]
-    if len(parts) < 3 or not all(parts[:3]):
-        return None
-    return parts[0], parts[1], parts[2]
-
-
-def _has_valid_simhash(simhash: str | None) -> bool:
-    return bool(simhash) and simhash != "0" * 16
 
 
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
@@ -269,72 +257,6 @@ def addEmbedding(
             pipeline_result = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
-            # TODO[plan-3-async]: trigger SimHash similar-scan after successful parse.
-            # addEmbedding runs in a sync Celery worker; async scan is deferred to a
-            # dedicated async task or can be triggered via the Plan 3 Task 6 endpoints.
-            # Sync similar-scan: avoids event-loop conflicts when the Celery worker
-            # thread already participates in an asyncio context.
-            # Reads db_file.simhash from memory (freshly written by SimHashTransformer,
-            # not yet committed) and stages db_file.similar_status for the upstream
-            # KnowledgeFileDao.update(db_file) call to persist.
-            try:
-                from sqlmodel import select, col
-                from bisheng.core.database import get_sync_db_session
-                from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
-                from bisheng.knowledge.domain.models.knowledge_document_version import (
-                    KnowledgeDocumentVersion,
-                )
-                from bisheng.common.utils.simhash_utils import similarity as _simhash_similarity
-
-                knowledge_conf = settings.get_knowledge()
-                vmc = getattr(knowledge_conf, "version_management", None)
-                threshold = vmc.simhash_similarity_threshold if vmc else 0.85
-
-                source_encoding_key = _shougang_encoding_first_three_segments(db_file.file_encoding)
-                if _has_valid_simhash(db_file.simhash) and source_encoding_key is not None:
-                    with get_sync_db_session() as session:
-                        primary_kf_ids = session.exec(
-                            select(KnowledgeDocumentVersion.knowledge_file_id)
-                            .join(
-                                KnowledgeDocument,
-                                KnowledgeDocumentVersion.document_id == KnowledgeDocument.id,
-                            )
-                            .where(
-                                KnowledgeDocument.knowledge_id == db_file.knowledge_id,
-                                KnowledgeDocumentVersion.is_primary == True,  # noqa: E712
-                                KnowledgeDocumentVersion.knowledge_file_id != db_file.id,
-                            )
-                        ).all()
-                        above_count = 0
-                        if primary_kf_ids:
-                            candidates = session.exec(
-                                select(KnowledgeFile).where(
-                                    col(KnowledgeFile.id).in_(primary_kf_ids)
-                                )
-                            ).all()
-                            for cand in candidates:
-                                if (
-                                    _has_valid_simhash(cand.simhash)
-                                    and _shougang_encoding_first_three_segments(cand.file_encoding)
-                                    == source_encoding_key
-                                    and _simhash_similarity(db_file.simhash, cand.simhash) >= threshold
-                                ):
-                                    above_count += 1
-                    logger.info(
-                        f"similar_scan_sync file_id={db_file.id} "
-                        f"simhash={db_file.simhash} "
-                        f"candidates={len(primary_kf_ids)} above={above_count} "
-                        f"threshold={threshold}"
-                    )
-                    if above_count > 0:
-                        db_file.similar_status = 1
-                else:
-                    logger.warning(
-                        f"similar_scan_sync file_id={db_file.id} skipped: no simhash or file_encoding in memory"
-                    )
-            except Exception:
-                logger.warning("similar scan (sync) failed", exc_info=True)
-
             if enable_auto_tags:
                 KnowledgeSpaceAutoTagService.apply_after_upload_parse(
                     knowledge=knowledge_info,
@@ -388,6 +310,17 @@ def addEmbedding(
             KnowledgeFileDao.update(db_file)
             if db_file.status == KnowledgeFileStatus.SUCCESS.value:
                 KnowledgeSpaceContentStat.enqueue_file_stat_sync([db_file.id])
+                try:
+                    from bisheng.worker.knowledge.file_worker import (
+                        refresh_file_similarity_candidates_celery,
+                    )
+
+                    refresh_file_similarity_candidates_celery.apply_async(
+                        args=(db_file.id,),
+                        queue="knowledge_celery",
+                    )
+                except Exception:
+                    logger.exception("enqueue similarity candidate refresh failed file_id={}", db_file.id)
             telemetry_service.log_event_sync(user_id=db_file.user_id,
                                              event_type=BaseTelemetryTypeEnum.FILE_PARSE,
                                              trace_id=trace_id_var.get(),

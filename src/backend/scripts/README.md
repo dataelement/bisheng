@@ -4,6 +4,25 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Knowledge Space Scripts
 
+### `backfill_file_similarity_candidates.py`
+
+回填历史知识空间文件的相似候选缓存表 `knowledge_file_similarity_candidate`。默认 dry-run，只统计将刷新的文件；传入 `--apply` 后会逐个调用相似候选刷新逻辑，写入候选明细并同步更新 `knowledgefile.similar_status`。可通过 `--sleep-ms` 降低回填期间 CPU 压力。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_similarity_candidates.py
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_similarity_candidates.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_similarity_candidates.py --apply --knowledge-id 3516
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_similarity_candidates.py --apply --limit 200 --batch-size 20 --sleep-ms 100
+```
+
+Scope:
+
+- 仅处理知识空间 `Knowledge.type = SPACE`
+- 仅处理真实文件、解析成功、未处理完成的文件：`file_type = FILE`、`status = SUCCESS`、`similar_status != 2`
+- 跳过没有有效 `simhash` 或没有有效前三段 `file_encoding` 的文件
+
 ### `reparse_knowledge_space_files.py`
 
 重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。

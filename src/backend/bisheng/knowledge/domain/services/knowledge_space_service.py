@@ -6935,6 +6935,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(folder.file_level_path)
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
+        await self._delete_similarity_candidate_cache_by_file_ids(expanded_file_ids)
         await KnowledgeFileDao.adelete_batch(expanded_file_ids + floder_ids)
         if expanded_file_ids:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_file_ids)
@@ -8139,6 +8140,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return list(expanded)
 
+    async def _delete_similarity_candidate_cache_by_file_ids(self, file_ids: list[int]) -> None:
+        deduped_ids = sorted({int(file_id) for file_id in file_ids if file_id is not None})
+        if not deduped_ids:
+            return
+        try:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+                KnowledgeFileSimilarityCandidateRepositoryImpl,
+            )
+
+            async with get_async_db_session() as session:
+                repo = KnowledgeFileSimilarityCandidateRepositoryImpl(session)
+                await repo.delete_by_file_ids(deduped_ids)
+        except Exception as exc:
+            logger.warning(
+                "similarity candidate cache cleanup failed file_ids={}: {}",
+                deduped_ids,
+                exc,
+            )
+
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
@@ -8150,6 +8170,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(space, "delete_file")
 
         expanded_ids = await self._cascade_version_links_on_delete([file_id])
+        await self._delete_similarity_candidate_cache_by_file_ids(expanded_ids)
         await KnowledgeFileDao.adelete_batch(expanded_ids)
         if expanded_ids:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_ids)
@@ -8597,6 +8618,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 direct_files.append(file_record)
             direct_file_ids = [file.id for file in direct_files]
             expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
+            await self._delete_similarity_candidate_cache_by_file_ids(expanded_file_ids)
             await KnowledgeFileDao.adelete_batch(expanded_file_ids)
             if expanded_file_ids:
                 await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_file_ids)

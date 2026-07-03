@@ -11,8 +11,12 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_re
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
     KnowledgeDocumentVersionRepositoryImpl,
 )
-from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import \
-    KnowledgeFileRepositoryImpl
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+    KnowledgeFileSimilarityCandidateRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
@@ -21,6 +25,9 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
     KnowledgeDocumentVersionRepository,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
+    KnowledgeFileSimilarityCandidateRepository,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
@@ -31,8 +38,8 @@ from bisheng.message.api.dependencies import get_message_service as _get_message
 if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService
     from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
 
@@ -61,6 +68,12 @@ async def get_knowledge_document_version_repository(
         session: AsyncSession = Depends(get_db_session),
 ) -> KnowledgeDocumentVersionRepository:
     return KnowledgeDocumentVersionRepositoryImpl(session)
+
+
+async def get_knowledge_file_similarity_candidate_repository(
+        session: AsyncSession = Depends(get_db_session),
+) -> KnowledgeFileSimilarityCandidateRepository:
+    return KnowledgeFileSimilarityCandidateRepositoryImpl(session)
 
 
 async def get_knowledge_metadata_service(
@@ -141,6 +154,9 @@ async def get_knowledge_version_service(
         doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
         version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
         knowledge_file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+        similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository = Depends(
+            get_knowledge_file_similarity_candidate_repository
+        ),
 ) -> 'KnowledgeVersionService':
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
@@ -150,4 +166,5 @@ async def get_knowledge_version_service(
         doc_repo=doc_repo,
         version_repo=version_repo,
         knowledge_file_repo=knowledge_file_repo,
+        similar_candidate_repo=similar_candidate_repo,
     )

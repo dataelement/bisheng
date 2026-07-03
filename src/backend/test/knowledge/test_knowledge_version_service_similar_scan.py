@@ -4,11 +4,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
+    KnowledgeFileSimilarityCandidate,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -17,6 +21,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_ve
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+    KnowledgeFileSimilarityCandidateRepositoryImpl,
 )
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
@@ -29,6 +36,7 @@ def enable_switch(monkeypatch):
     conf = MagicMock()
     conf.version_management.enabled = True
     conf.version_management.simhash_similarity_threshold = 0.85
+    conf.version_management.enable_tfidf_refine = False
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
 
@@ -40,6 +48,7 @@ def _build_svc(session):
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
+        similar_candidate_repo=KnowledgeFileSimilarityCandidateRepositoryImpl(session),
     )
 
 
@@ -105,6 +114,8 @@ async def test_scan_marks_status_1_when_candidate_above_threshold(enable_switch,
     assert n >= 1
     kf = await svc.knowledge_file_repo.find_by_id(101)
     assert kf.similar_status == 1
+    cached = await svc.similar_candidate_repo.find_by_source_file_id(101)
+    assert len(cached) == n
 
 
 @pytest.mark.asyncio
@@ -146,6 +157,7 @@ async def test_get_similar_candidates_returns_top_n_sorted(enable_switch, async_
     )  # hd=64-something, very low
 
     svc = _build_svc(async_db_session)
+    await svc.scan_similar_for_file(knowledge_file_id=100)
     candidates = await svc.get_similar_candidates_for_file(knowledge_file_id=100, limit=3)
     # Should include 201 (perfect) and 200 (near), exclude 202 (below threshold)
     # Self (100) must be excluded
@@ -168,8 +180,175 @@ async def test_get_similar_candidates_respects_limit(enable_switch, async_db_ses
         )  # all identical
 
     svc = _build_svc(async_db_session)
+    await svc.scan_similar_for_file(knowledge_file_id=100)
     candidates = await svc.get_similar_candidates_for_file(knowledge_file_id=100, limit=3)
     assert len(candidates) <= 3
+
+
+@pytest.mark.asyncio
+async def test_get_similar_candidates_reads_cached_rows_without_recompute(
+    enable_switch,
+    async_db_session,
+    monkeypatch,
+):
+    """get_similar_candidates_for_file reads persisted rows instead of scanning candidates."""
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
+    target_doc = await _seed_file_with_doc(
+        async_db_session,
+        200,
+        simhash="ffffffffffffffff",
+        file_encoding="GF-ZD-SC-20260500000002",
+    )
+    await _seed_file_with_doc(
+        async_db_session,
+        100,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000001",
+    )
+    async_db_session.add(
+        KnowledgeFileSimilarityCandidate(
+            tenant_id=1,
+            knowledge_id=1,
+            source_file_id=100,
+            candidate_file_id=200,
+            candidate_document_id=target_doc.id,
+            similarity=0.91,
+            sort_order=0,
+        )
+    )
+    await async_db_session.commit()
+
+    svc = _build_svc(async_db_session)
+    monkeypatch.setattr(
+        svc.knowledge_file_repo,
+        "find_main_version_files_in_space",
+        AsyncMock(side_effect=AssertionError("must not scan candidate files")),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_refine_candidates_by_tfidf",
+        AsyncMock(side_effect=AssertionError("must not run TF-IDF refine")),
+    )
+
+    candidates = await svc.get_similar_candidates_for_file(knowledge_file_id=100, limit=3)
+
+    assert [one.target_document_id for one in candidates] == [target_doc.id]
+    assert candidates[0].similarity == 0.91
+
+
+@pytest.mark.asyncio
+async def test_get_similar_candidates_skips_cache_when_candidate_primary_changed(
+    enable_switch,
+    async_db_session,
+):
+    """A cached candidate is valid only while it still points to the document primary."""
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    await async_db_session.commit()
+    target_doc = await _seed_file_with_doc(
+        async_db_session,
+        200,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000002",
+    )
+    await _seed_file_with_doc(
+        async_db_session,
+        100,
+        simhash="aaaaaaaaaaaaaaaa",
+        similar_status=1,
+        file_encoding="GF-ZD-SC-20260500000001",
+    )
+    async_db_session.add(
+        KnowledgeFileSimilarityCandidate(
+            tenant_id=1,
+            knowledge_id=1,
+            source_file_id=100,
+            candidate_file_id=200,
+            candidate_document_id=target_doc.id,
+            similarity=0.99,
+            sort_order=0,
+        )
+    )
+    await async_db_session.commit()
+
+    old_primary = await KnowledgeDocumentVersionRepositoryImpl(async_db_session).find_by_id(
+        int(target_doc.primary_version_id)
+    )
+    old_primary.is_primary = False
+    async_db_session.add(
+        KnowledgeFile(
+            id=201,
+            knowledge_id=1,
+            file_name="new-primary.pdf",
+            file_type=1,
+            status=2,
+            simhash="ffffffffffffffff",
+            file_encoding="GF-ZD-SC-20260500000003",
+        )
+    )
+    await async_db_session.commit()
+    new_primary = KnowledgeDocumentVersion(
+        document_id=target_doc.id,
+        knowledge_file_id=201,
+        version_no=2,
+        is_primary=True,
+    )
+    async_db_session.add(new_primary)
+    await async_db_session.commit()
+    await async_db_session.refresh(new_primary)
+    target_doc.primary_version_id = new_primary.id
+    async_db_session.add(target_doc)
+    await async_db_session.commit()
+
+    svc = _build_svc(async_db_session)
+    candidates = await svc.get_similar_candidates_for_file(knowledge_file_id=100, limit=3)
+
+    assert candidates == []
+
+
+@pytest.mark.asyncio
+async def test_replace_similarity_candidates_retries_after_unique_conflict(
+    enable_switch,
+    async_db_session,
+    monkeypatch,
+):
+    async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
+    async_db_session.add(
+        KnowledgeFile(id=100, knowledge_id=1, file_name="source.pdf", file_type=1, status=2)
+    )
+    await async_db_session.commit()
+
+    repo = KnowledgeFileSimilarityCandidateRepositoryImpl(async_db_session)
+    real_commit = async_db_session.commit
+    attempts = {"count": 0}
+
+    async def flaky_commit():
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise IntegrityError("insert similarity candidate", {}, Exception("duplicate"))
+        await real_commit()
+
+    monkeypatch.setattr(async_db_session, "commit", flaky_commit)
+
+    await repo.replace_for_source_file(
+        100,
+        [
+            KnowledgeFileSimilarityCandidate(
+                tenant_id=1,
+                knowledge_id=1,
+                source_file_id=100,
+                candidate_file_id=200,
+                candidate_document_id=300,
+                similarity=0.9,
+                sort_order=0,
+            )
+        ],
+    )
+
+    cached = await repo.find_by_source_file_id(100)
+    assert attempts["count"] == 2
+    assert len(cached) == 1
+    assert cached[0].candidate_file_id == 200
 
 
 @pytest.mark.asyncio
