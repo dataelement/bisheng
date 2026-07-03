@@ -135,6 +135,45 @@ describe("DepartmentSettings payload", () => {
     expect(mockedGetDepartmentPathTreeApi).not.toHaveBeenCalled();
   });
 
+  // Regression: the EDITABLE parent picker (TreeDepartmentSelect) locates its
+  // current value via a path-tree fetch on mount. ``isVisibleRootDept`` starts
+  // false and is only known AFTER the root-layer fetch resolves, so a non-synced,
+  // non-archived visible-root dept would transiently satisfy ``canEditParent`` and
+  // mount the picker with value=parent_id — locating the OUT-OF-SCOPE parent
+  // (21009). The picker must not mount until the root check has resolved.
+  it("does not mount the editable parent picker before the visible-root check resolves", async () => {
+    let resolveChildren!: (v: unknown) => void;
+    mockedGetDepartmentChildrenApi.mockReturnValue(
+      new Promise((r) => {
+        resolveChildren = r;
+      }) as any,
+    );
+
+    render(<DepartmentSettings dept={dept} onChanged={vi.fn()} />);
+    await screen.findByDisplayValue("Engineering");
+
+    // Root layer still pending → editable picker must NOT be mounted yet.
+    expect(screen.queryByTestId("tree-select")).toBeNull();
+
+    // Resolves as a visible root → stays read-only, picker never mounts.
+    resolveChildren([{ ...dept }]);
+    await waitFor(() => expect(mockedGetDepartmentChildrenApi).toHaveBeenCalled());
+    expect(screen.queryByTestId("tree-select")).toBeNull();
+  });
+
+  // Guard the fix doesn't over-restrict: a genuinely NESTED (non-root) dept keeps
+  // an editable parent once the root check resolves (its parent IS in scope).
+  it("mounts the editable parent picker for a nested dept after the check resolves", async () => {
+    mockedGetDepartmentChildrenApi.mockResolvedValue([
+      { ...dept, id: 99, name: "Other", path: "/1/99/" },
+    ] as any);
+
+    render(<DepartmentSettings dept={dept} onChanged={vi.fn()} />);
+    await screen.findByDisplayValue("Engineering");
+
+    await waitFor(() => expect(screen.getByTestId("tree-select")).toBeInTheDocument());
+  });
+
   // A tenant-root dept is a top-level entity in the management UI: its parent is
   // the system root — out of scope for a tenant admin, and not a meaningful
   // "上级部门" for anyone (incl. a super admin whose visible root layer is the
