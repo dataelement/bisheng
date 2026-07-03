@@ -16,17 +16,15 @@ import {
   Button,
   TableRow,
   Skeleton,
-  OGDialog,
   Separator,
   TableCell,
   TableBody,
   TableHead,
   TableHeader,
   TooltipAnchor,
-  OGDialogTrigger,
 } from '~/components';
 import { useConversationsInfiniteQuery, useArchiveConvoMutation } from '~/hooks/queries/data-provider';
-import { DeleteConversationDialog } from '~/components/Conversations/ConvoOptions';
+import { useDeleteConversationConfirm } from '~/components/Conversations/ConvoOptions';
 import { useAuthContext, useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -34,6 +32,7 @@ export default function ArchivedChatsTable() {
   const localize = useLocalize();
   const { isAuthenticated } = useAuthContext();
   const isSmallScreen = usePrefersMobileLayout();
+  const deleteConversationConfirm = useDeleteConversationConfirm();
   const [isOpened, setIsOpened] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -208,29 +207,27 @@ export default function ArchivedChatsTable() {
                       }
                     />
 
-                    <OGDialog>
-                      <OGDialogTrigger asChild>
-                        <TooltipAnchor
-                          description={localize('com_ui_delete')}
-                          render={
-                            <Button
-                              type="button"
-                              aria-label="Delete archived conversation"
-                              variant="ghost"
-                              size="icon"
-                              className={cn('size-8', isSmallScreen && 'size-7')}
-                            >
-                              <TrashIcon className={cn('size-4', isSmallScreen && 'size-3.5')} />
-                            </Button>
+                    <TooltipAnchor
+                      description={localize('com_ui_delete')}
+                      render={
+                        <Button
+                          type="button"
+                          aria-label="Delete archived conversation"
+                          variant="ghost"
+                          size="icon"
+                          className={cn('size-8', isSmallScreen && 'size-7')}
+                          onClick={() =>
+                            deleteConversationConfirm({
+                              conversationId: conversation.conversationId ?? '',
+                              title: conversation.title ?? '',
+                              retainView: refetch,
+                            })
                           }
-                        />
-                      </OGDialogTrigger>
-                      <DeleteConversationDialog
-                        conversationId={conversation.conversationId ?? ''}
-                        retainView={refetch}
-                        title={conversation.title ?? ''}
-                      />
-                    </OGDialog>
+                        >
+                          <TrashIcon className={cn('size-4', isSmallScreen && 'size-3.5')} />
+                        </Button>
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -7,7 +7,7 @@ import { useParams } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
 
 import { useLocalize } from '~/hooks';
-import { useToastContext } from '~/Providers';
+import { useToastContext, useConfirm } from '~/Providers';
 import { cn } from '~/utils';
 import { useUpdateConversationMutation, useDeleteConversationMutation } from '~/hooks/queries/data-provider';
 import type { AppConversation } from '~/@types/app';
@@ -16,7 +16,6 @@ import { QueryKeys } from '~/types/chat';
 import { chatsState, runningState } from '~/pages/appChat/store/atoms';
 import { closeAppChatWebSocket } from '~/pages/appChat/useWebsocket';
 
-import { OGDialog, Label } from '~/components';
 import {
     DropdownMenu,
     DropdownMenuItem,
@@ -31,7 +30,6 @@ import {
     sidebarListMoreMenuItemClassName,
     sidebarListMoreMenuLabelClassName,
 } from '~/components/SidebarListMoreMenu';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import TodayItemIcon from '~/components/ui/icon/TodayItem';
 import LingsiIcon from '~/components/ui/icon/Lingsi';
 
@@ -52,7 +50,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
     const [isPopoverActive, setIsPopoverActive] = useState(false);
     const [renaming, setRenaming] = useState(false);
     const [titleInput, setTitleInput] = useState(conv.title);
-    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const confirm = useConfirm();
 
     const inputRef = useRef<HTMLInputElement>(null);
     const deleteButtonRef = useRef<HTMLButtonElement>(null);
@@ -148,7 +146,6 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                 return next;
             });
             onDeleteSuccess();
-            setShowDeleteDialog(false);
         },
     });
 
@@ -160,6 +157,19 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
         deleteConvoMutation.mutate({ conversationId: conv.id, thread_id, endpoint, source: 'button' });
     }, [conv.id, deleteConvoMutation, queryClient]);
 
+    const handleDeleteClick = useCallback(async () => {
+        const ok = await confirm({
+            variant: 'destructive',
+            title: localize('com_ui_delete_conversation'),
+            description: `${localize('com_ui_delete_confirm')} "${conv.title}"`,
+            confirmText: localize('com_ui_delete'),
+        });
+        if (!ok) {
+            return;
+        }
+        confirmDelete();
+    }, [confirm, localize, conv.title, confirmDelete]);
+
     return (
         <div
             className={cn(
@@ -170,7 +180,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
             onClick={(e) => {
                 if (renaming) return;
                 // prevent switching if we click dropdown
-                if (isPopoverActive || showDeleteDialog) return;
+                if (isPopoverActive) return;
                 onClick();
             }}
         >
@@ -258,7 +268,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                                     onSelect={(e) => {
                                         e.preventDefault();
                                         setIsPopoverActive(false);
-                                        setShowDeleteDialog(true);
+                                        handleDeleteClick();
                                     }}
                                 >
                                     <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
@@ -268,31 +278,6 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                                 </DropdownMenuItem>
                             </SidebarListMoreMenuContent>
                         </DropdownMenu>
-
-                        {/* Delete Confirmation Dialog */}
-                        {showDeleteDialog && (
-                            <OGDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog} triggerRef={deleteButtonRef}>
-                                <OGDialogTemplate
-                                    showCloseButton={false}
-                                    title={localize('com_ui_delete_conversation')}
-                                    className="max-w-[450px]"
-                                    main={
-                                        <div className="flex w-full flex-col items-center gap-2">
-                                            <div className="grid w-full items-center gap-2">
-                                                <Label className="text-left text-sm font-medium">
-                                                    {localize('com_ui_delete_confirm')} <strong>{conv.title}</strong>
-                                                </Label>
-                                            </div>
-                                        </div>
-                                    }
-                                    selection={{
-                                        selectHandler: confirmDelete,
-                                        selectClasses: 'bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white',
-                                        selectText: localize('com_ui_delete'),
-                                    }}
-                                />
-                            </OGDialog>
-                        )}
                     </>
                 )}
             </div>
