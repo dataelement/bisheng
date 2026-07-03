@@ -1585,6 +1585,27 @@ button {
   height: 0.5rem;
 }
 
+/* Code block: always-visible horizontal scrollbar (override the global 0.1em-thin
+   height so wide code always shows a clearly-visible, persistent scrollbar). */
+.code-block-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+.code-block-scroll::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+.code-block-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 9999px;
+}
+.dark .code-block-scroll {
+  scrollbar-color: hsla(0, 0%, 100%, 0.25) transparent;
+}
+.dark .code-block-scroll::-webkit-scrollbar-thumb {
+  background-color: hsla(0, 0%, 100%, 0.25);
+}
+
 .scrollbar-transparent::-webkit-scrollbar-thumb {
   background-color: transparent;
 }
