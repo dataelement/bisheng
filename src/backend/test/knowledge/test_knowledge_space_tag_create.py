@@ -87,16 +87,20 @@ async def test_get_space_tags_returns_only_bound_library_tags(service):
 
     with (
         patch.object(service, "_require_read_permission", new_callable=AsyncMock),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
             new_callable=AsyncMock,
             return_value=[2, 3],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.list_tags",
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids",
             new_callable=AsyncMock,
-            side_effect=[[library_tag_a], [library_tag_b]],
+            return_value={"2": [library_tag_a], "3": [library_tag_b]},
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService._repair_legacy_library_resource_types",
+            new_callable=AsyncMock,
+            side_effect=lambda tags: tags,
         ),
     ):
         result = await service.get_space_tags(137)
@@ -115,16 +119,20 @@ async def test_get_space_tags_dedupes_tags_across_libraries(service):
 
     with (
         patch.object(service, "_require_read_permission", new_callable=AsyncMock),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
             new_callable=AsyncMock,
             return_value=[2, 3],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.list_tags",
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids",
             new_callable=AsyncMock,
-            side_effect=[[library_tag], [library_tag]],
+            return_value={"2": [library_tag], "3": [library_tag]},
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService._repair_legacy_library_resource_types",
+            new_callable=AsyncMock,
+            side_effect=lambda tags: tags,
         ),
     ):
         result = await service.get_space_tags(137)
@@ -136,21 +144,20 @@ async def test_get_space_tags_dedupes_tags_across_libraries(service):
 async def test_get_space_tags_returns_empty_when_no_bound_libraries(service):
     with (
         patch.object(service, "_require_read_permission", new_callable=AsyncMock),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
             new_callable=AsyncMock,
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.list_tags",
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids",
             new_callable=AsyncMock,
-        ) as mock_list_tags,
+        ) as mock_get_tags,
     ):
         result = await service.get_space_tags(137)
 
     assert result == []
-    mock_list_tags.assert_not_awaited()
+    mock_get_tags.assert_not_awaited()
 
 
 @pytest.mark.asyncio

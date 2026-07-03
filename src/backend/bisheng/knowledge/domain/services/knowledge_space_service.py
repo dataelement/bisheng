@@ -8253,13 +8253,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_space_tags(self, space_id: int) -> list[Tag]:
         """Return tags from all tag libraries bound to the knowledge space."""
         await self._require_read_permission(space_id)
-        await self._require_permission_id("knowledge_space", space_id, "view_space")
 
         library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+        if not library_ids:
+            return []
+
+        tag_map = await TagDao.aget_tags_by_business_ids(
+            TagBusinessTypeEnum.TAG_LIBRARY,
+            [str(library_id) for library_id in library_ids],
+        )
+
         merged: list[Tag] = []
         seen_keys: set[str] = set()
         for library_id in library_ids:
-            library_tags = await TagLibraryTagService.list_tags(int(library_id))
+            library_tags = await TagLibraryTagService._repair_legacy_library_resource_types(
+                tag_map.get(str(library_id), []),
+            )
             for library_tag in library_tags:
                 name = (library_tag.name or "").strip()
                 if not name:
