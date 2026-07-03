@@ -28,8 +28,10 @@ def capture_metric_logs():
 
 
 def _line_for(messages: list[str], domain: str) -> str | None:
+    prefix = f"BS_METRIC domain={domain}"
     for m in messages:
-        if f"BS_METRIC domain={domain}" in m:
+        # exact domain-token boundary: avoid db_query matching db_query_agg
+        if m == prefix or m.startswith(prefix + " "):
             return m
     return None
 

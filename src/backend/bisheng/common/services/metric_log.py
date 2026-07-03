@@ -207,6 +207,10 @@ def maybe_emit_pool_gauge(now: float, pools, window_s: float) -> None:
         return
     overflow = _max_overflow()
     for name, pool in pools:
+        # StaticPool / SingletonThreadPool (SQLite dev/test) have no saturation
+        # semantics and lack checkedout(); skip silently rather than log noise.
+        if not hasattr(pool, "checkedout"):
+            continue
         try:
             checked_out = pool.checkedout()
             idle = pool.checkedin()
@@ -246,3 +250,38 @@ def sql_op(statement: str) -> str:
         if head.startswith(op):
             return op
     return "OTHER"
+
+
+def record_db_query(engine_name, pool, statement, elapsed_ms, now, status="ok"):
+    """Full DB-query metric pipeline, called from the cursor-event wiring (T005).
+
+    - ``status="error"`` → emit a ``db_query`` error line only (a failed query
+      must not pollute the latency histogram); returns early.
+    - success → emit a ``db_query`` detail line if ``elapsed_ms`` is at/above the
+      configured slow threshold, always feed the histogram, flush ``db_query_agg``
+      once the window elapsed, and sample the pool gauge.
+
+    ``now`` and the window come from the caller (design §5: no hidden clock). All
+    reads are gated by ``MetricLogConf`` so a disabled ``db`` domain is zero-work.
+    """
+    conf = _get_conf()
+    if conf is not None and not (getattr(conf, "enabled", True) and getattr(conf, "db", True)):
+        return
+
+    if status == "error":
+        emit_metric("db_query", op=sql_op(statement), elapsed_ms=elapsed_ms, status="error")
+        return
+
+    slow_ms = getattr(conf, "db_slow_query_ms", 200) if conf is not None else 200
+    window_s = getattr(conf, "db_agg_window_s", 10) if conf is not None else 10
+
+    if elapsed_ms >= slow_ms:
+        emit_metric("db_query", op=sql_op(statement), elapsed_ms=elapsed_ms, status="ok")
+
+    db_histogram.record(elapsed_ms, now)
+    agg = db_histogram.maybe_flush(now, window_s)
+    if agg:
+        emit_metric("db_query_agg", **agg)
+
+    if pool is not None:
+        maybe_emit_pool_gauge(now, [(engine_name, pool)], window_s)
