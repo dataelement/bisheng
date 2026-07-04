@@ -49,8 +49,12 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                 </div>
             )}
 
-            {/* output files card — dotted background matching ClarifyCard */}
-            {files.length > 0 && (
+            {/* output files card — dotted background matching ClarifyCard.
+                Only shown for MULTI-file runs: with a single deliverable the
+                report-link row above already surfaces it, so the card would just
+                repeat the same file name. Multi-file runs still get the card as the
+                full manifest (the link row stays the highlighted primary). */}
+            {files.length > 1 && (
                 <div
                     className="rounded-2xl border border-[#EEF2F6] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
                     style={{

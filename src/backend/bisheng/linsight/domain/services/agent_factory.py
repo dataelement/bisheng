@@ -124,7 +124,7 @@ __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/com
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
 
-4. 【收尾】用 2-3 句话告知用户产出了哪些文件（例如“已完成。见 output/report.md 与 output/report.docx”）。
+4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
 # 如何填写 ask_user（仅第 0 步触发时）
 
