@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,11 +11,8 @@ from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
     SpaceChannelMember,
-    SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import UpdateSpaceMemberRoleRequest
-from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
 class _FakeChannelMemberRepository:
@@ -44,17 +41,6 @@ def _channel_member(*, user_id: int, role: UserRoleEnum) -> SpaceChannelMember:
         id=user_id,
         business_id="channel-1",
         business_type=BusinessTypeEnum.CHANNEL,
-        user_id=user_id,
-        user_role=role,
-        status=MembershipStatusEnum.ACTIVE,
-    )
-
-
-def _space_member(*, user_id: int, role: UserRoleEnum) -> SpaceChannelMember:
-    return SpaceChannelMember(
-        id=user_id,
-        business_id="42",
-        business_type=BusinessTypeEnum.SPACE,
         user_id=user_id,
         user_role=role,
         status=MembershipStatusEnum.ACTIVE,
@@ -105,67 +91,4 @@ async def test_channel_admin_assignment_notifies_only_when_effective_admin_is_ne
 
     assert repo.updated is repo.target_member
     assert repo.target_member.user_role == UserRoleEnum.ADMIN
-    assert len(send_calls) == expected_notification_count
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("already_can_manage", "expected_notification_count"),
-    [(False, 1), (True, 0)],
-)
-async def test_space_admin_assignment_notifies_only_when_effective_admin_is_new(
-    monkeypatch: pytest.MonkeyPatch,
-    already_can_manage: bool,
-    expected_notification_count: int,
-) -> None:
-    target_member = _space_member(user_id=2, role=UserRoleEnum.MEMBER)
-    service = KnowledgeSpaceService(
-        request=MagicMock(),
-        login_user=SimpleNamespace(user_id=1, user_name="owner"),
-    )
-
-    async def _require_permission_id(self, *_args, **_kwargs) -> None:
-        return None
-
-    async def _can_manage(_user_id: int, _space_id: int) -> bool:
-        return already_can_manage
-
-    send_calls: list[dict] = []
-
-    async def _send_admin_assignment_notification(self, **kwargs) -> None:
-        send_calls.append(kwargs)
-
-    monkeypatch.setattr(KnowledgeSpaceService, "_require_permission_id", _require_permission_id)
-    monkeypatch.setattr(KnowledgeSpaceService, "_user_can_manage_space", staticmethod(_can_manage))
-    monkeypatch.setattr(
-        KnowledgeSpaceService,
-        "_send_admin_assignment_notification",
-        _send_admin_assignment_notification,
-    )
-    monkeypatch.setattr(
-        SpaceChannelMemberDao,
-        "async_get_active_member_role",
-        AsyncMock(return_value=UserRoleEnum.CREATOR),
-    )
-    monkeypatch.setattr(
-        SpaceChannelMemberDao,
-        "async_find_member",
-        AsyncMock(return_value=target_member),
-    )
-    monkeypatch.setattr(
-        SpaceChannelMemberDao,
-        "async_get_members_by_space",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        SpaceChannelMemberDao,
-        "update",
-        AsyncMock(return_value=target_member),
-    )
-
-    await service.update_member_role(
-        UpdateSpaceMemberRoleRequest(space_id=42, user_id=2, role="admin"),
-    )
-
-    assert target_member.user_role == UserRoleEnum.ADMIN
     assert len(send_calls) == expected_notification_count

@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SpaceRole } from "~/api/knowledge";
-import { KnowledgeSpaceMemberManagementPanel } from "~/components/KnowledgeSpaceMemberManagementPanel";
 import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
 import { PermissionListTab } from "~/components/permission/PermissionListTab";
 import {
@@ -10,21 +8,14 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    Input,
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
 } from "~/components/ui";
-import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
-import { copyText } from "~/utils";
 import { getGrantableRelationModels } from "~/api/permission";
 import type { RelationModel, ResourceType } from "~/api/permission";
-
-const SHARE_TAB = "share";
-const MEMBERS_TAB = "members";
-const PERMISSION_TAB = "permission";
 
 interface KnowledgeSpaceShareDialogProps {
     open: boolean;
@@ -32,10 +23,6 @@ interface KnowledgeSpaceShareDialogProps {
     resourceType?: ResourceType;
     resourceId: string;
     resourceName: string;
-    currentUserRole?: SpaceRole | null;
-    showShareTab: boolean;
-    showMembersTab?: boolean;
-    showPermissionTab: boolean;
     /**
      * F033: department knowledge spaces authorize only within the bound
      * department subtree and forbid the user-group dimension. When true, the
@@ -51,18 +38,10 @@ export function KnowledgeSpaceShareDialog({
     resourceType = "knowledge_space",
     resourceId,
     resourceName,
-    currentUserRole = null,
-    showShareTab,
-    showMembersTab = false,
-    showPermissionTab,
     isDepartmentSpace = false,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
-    const { showToast } = useToastContext();
-    const defaultTab = showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB;
-    const [activeTab, setActiveTab] = useState(defaultTab);
     const [refreshKey, setRefreshKey] = useState(0);
-    const [copied, setCopied] = useState(false);
     const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
     const [grantDialogOpen, setGrantDialogOpen] = useState(false);
     const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department" | "user_group">("user");
@@ -73,13 +52,11 @@ export function KnowledgeSpaceShareDialog({
 
     useEffect(() => {
         if (open) {
-            setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
-            setCopied(false);
             setCurrentSubjectType("user");
             setGrantSubjectType("user");
             setGrantIncludeChildren(true);
         }
-    }, [open, showMembersTab, showShareTab]);
+    }, [open]);
 
     useEffect(() => {
         if (grantSubjectType !== "department" && grantIncludeChildren !== true) {
@@ -104,67 +81,13 @@ export function KnowledgeSpaceShareDialog({
             });
     }, [open, resourceId, resourceType]);
 
-    const shareLink = useMemo(() => {
-        if (typeof window === "undefined") return "";
-        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-        return `${normalizedBase}/knowledge/share/${resourceId}`;
-    }, [resourceId]);
-
     const handleGrantSuccess = useCallback(() => {
         setRefreshKey((key) => key + 1);
         setCurrentSubjectType(grantSubjectType);
         setGrantDialogOpen(false);
-        setActiveTab(PERMISSION_TAB);
     }, [grantSubjectType]);
 
-    const handleCopyLink = useCallback(async () => {
-        try {
-            await copyText(shareLink);
-            setCopied(true);
-            showToast({
-                message: localize("com_knowledge.share_link_copied"),
-                status: "success",
-            });
-        } catch {
-            showToast({
-                message: localize("com_knowledge.copy_failed_retry"),
-                status: "error",
-            });
-        }
-    }, [localize, shareLink, showToast]);
-
-    // UI simplification: this dialog now only exposes 权限管理.
-    // The share/members tabs remain as props to keep caller logic untouched,
-    // but they are no longer surfaced as top-level tabs here.
     const dialogTitle = `${localize("com_permission.dialog_title")} - ${resourceName}`;
-
-    const sharePanel = (
-        <div className="space-y-3 pt-2">
-            <div className="rounded-lg border border-[#EBECF0] bg-[#F7F8FA] p-3">
-                <div className="mb-2 text-sm font-medium text-[#1D2129]">
-                    {localize("com_ui_copy_link")}
-                </div>
-                <div className="flex items-center gap-2">
-                    <Input
-                        readOnly
-                        value={shareLink}
-                        className="flex-1 border-[#EBECF0] bg-white"
-                    />
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="shrink-0"
-                        onClick={() => {
-                            void handleCopyLink();
-                        }}
-                    >
-                        {copied ? localize("com_ui_duplicated") : localize("com_ui_copy_link")}
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
 
     // F033: department spaces drop the user-group dimension. The list view and
     // the grant dialog share this array, so both lose the tab at once.
@@ -228,16 +151,6 @@ export function KnowledgeSpaceShareDialog({
                 />
             </TabsContent>
         </Tabs>
-    );
-
-    const memberPanel = (
-        <div className="flex min-h-0 flex-1 flex-col pt-2">
-            <KnowledgeSpaceMemberManagementPanel
-                spaceId={resourceId}
-                currentUserRole={currentUserRole}
-                active={open && activeTab === MEMBERS_TAB}
-            />
-        </div>
     );
 
     return (
