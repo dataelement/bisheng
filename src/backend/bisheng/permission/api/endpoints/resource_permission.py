@@ -16,6 +16,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
     PermissionInvalidResourceError,
+    PermissionLastOwnerError,
     PermissionRelationModelNameExistsError,
     PermissionTupleWriteError,
 )
@@ -1225,21 +1226,22 @@ async def _resolve_grant_subject_tenant_id(
     return int(tenant_id)
 
 
-def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
-    return (
-        getattr(revoke, "subject_type", None) == "user"
-        and int(getattr(revoke, "subject_id", 0) or 0) == int(login_user.user_id)
-        and getattr(revoke, "relation", None) == "owner"
-    )
-
-
-async def _can_remove_self_owner_relation(
+async def _can_remove_owner_relations(
     *,
     resource_type: str,
     resource_id: str,
     revokes: list,
+    grants: list | None = None,
 ) -> bool:
-    """Only allow self owner removal when another owner already exists."""
+    """Reject owner revokes that would leave the resource with no owner (INV-2).
+
+    Owner and creator are decoupled, so any owner (including the creator's) may be
+    revoked or downgraded as long as at least one owner survives. Owner grants in
+    the SAME request count toward the survivors, so a same-request ownership
+    transfer (revoke old owner + grant new owner) is allowed even when it targets
+    the only existing owner. Removing the last remaining owner is refused so the
+    resource is never orphaned.
+    """
     from bisheng.permission.domain.services.permission_service import PermissionService
 
     permissions = await PermissionService.get_resource_permissions(
@@ -1248,8 +1250,11 @@ async def _can_remove_self_owner_relation(
     )
     owner_signatures = {_tuple_signature(item) for item in permissions if getattr(item, "relation", None) == "owner"}
     revoke_signatures = {_tuple_signature(item) for item in revokes if getattr(item, "relation", None) == "owner"}
-    remaining_owner_count = len(owner_signatures - revoke_signatures)
-    return remaining_owner_count > 0
+    grant_owner_signatures = {
+        _tuple_signature(item) for item in (grants or []) if getattr(item, "relation", None) == "owner"
+    }
+    remaining_owners = (owner_signatures - revoke_signatures) | grant_owner_signatures
+    return len(remaining_owners) > 0
 
 
 async def _add_implicit_permission_entries(
@@ -1324,12 +1329,15 @@ async def _add_creator_owner_entry(
     permissions: list[ResourcePermissionItem],
     model_map: dict,
 ) -> list[ResourcePermissionItem]:
-    """Expose the DB creator as owner when the owner tuple is missing.
+    """Surface the DB creator as owner only when the resource has NO owner at all.
 
-    Resource creation writes an OpenFGA owner tuple, but older data or a delayed
-    tuple write can leave the permission dialog without the resource creator.
-    Permission checks already use the creator fallback; the list view should
-    show the same effective owner.
+    Owner and creator are decoupled: creation writes an OpenFGA owner tuple, but
+    older data or a delayed/failed tuple write can leave a resource with no owner
+    tuple. In that ownerless case the creator is shown (and treated by checks) as
+    the safety-net owner (INV-2). But once any owner tuple exists — the creator's
+    own, or another user's after ownership was moved — an explicit owner revoke on
+    the creator must stay effective, so we do NOT re-add the creator as owner.
+    Mirrors the check-side fallback in PermissionService._resource_has_active_owner.
     """
     from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -1338,11 +1346,8 @@ async def _add_creator_owner_entry(
         return permissions
 
     creator_id = int(creator_id)
-    has_creator_owner = any(
-        item.subject_type == "user" and int(item.subject_id) == creator_id and item.relation == "owner"
-        for item in permissions
-    )
-    if has_creator_owner:
+    has_any_owner = any(item.subject_type == "user" and item.relation == "owner" for item in permissions)
+    if has_any_owner:
         return permissions
 
     user_name = None
@@ -1469,14 +1474,19 @@ async def authorize_resource(
         and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
     ]
 
-    self_owner_revokes = [revoke for revoke in tuple_revokes if _is_self_owner_revoke(revoke, login_user)]
-    if self_owner_revokes:
-        if not await _can_remove_self_owner_relation(
+    # Owner and creator are decoupled: an owner may be revoked/downgraded as long
+    # as another owner survives, but removing the last owner would orphan the
+    # resource (INV-2). Applies to ALL owner revokes (self or someone else's), and
+    # same-request owner grants count as survivors (ownership transfer).
+    owner_revokes = [revoke for revoke in tuple_revokes if getattr(revoke, "relation", None) == "owner"]
+    if owner_revokes:
+        if not await _can_remove_owner_relations(
             resource_type=resource_type,
             resource_id=resource_id,
-            revokes=self_owner_revokes,
+            revokes=owner_revokes,
+            grants=tuple_grants,
         ):
-            return PermissionDeniedError.return_resp()
+            return PermissionLastOwnerError.return_resp()
 
     permission_notify_context = None
     if tuple_grants or tuple_revokes:

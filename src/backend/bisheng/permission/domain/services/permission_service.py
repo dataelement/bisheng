@@ -164,12 +164,16 @@ class PermissionService:
                     if allowed:
                         break
 
-            # L4: Owner fallback — if FGA says no, check DB creator field
+            # L4: Owner fallback — if FGA says no, check DB creator field. Owner
+            # and creator are decoupled, so an explicitly revoked creator-owner
+            # must not be resurrected: only fall back to creator ownership when no
+            # other owner tuple remains (FGA is reachable on this path).
             if not allowed:
                 implicit_level = await cls._get_implicit_permission_level_after_gate(
                     user_id,
                     object_type,
                     object_id,
+                    require_no_active_owner=True,
                 )
                 allowed = cls._permission_level_satisfies_relation(
                     implicit_level,
@@ -933,10 +937,13 @@ class PermissionService:
                     if allowed:
                         return level.value
 
+            # Owner/creator decoupled: creator counts as owner only when no other
+            # owner tuple remains (FGA reachable here). See check() L4 fallback.
             return await cls._get_implicit_permission_level_after_gate(
                 user_id,
                 object_type,
                 object_id,
+                require_no_active_owner=True,
             )
 
         except FGAConnectionError as e:
@@ -978,10 +985,14 @@ class PermissionService:
         if shortcut_level is not None:
             return shortcut_level
 
+        # Owner/creator decoupled: a revoked creator-owner is not resurrected as
+        # long as another owner tuple remains. FGA-outage callers fall back to the
+        # permissive path inside _resource_has_active_owner (returns "no owner").
         return await cls._get_implicit_permission_level_after_gate(
             user_id,
             object_type,
             object_id,
+            require_no_active_owner=True,
         )
 
     @classmethod
@@ -1030,11 +1041,26 @@ class PermissionService:
         user_id: int,
         object_type: str,
         object_id: str,
+        *,
+        require_no_active_owner: bool = False,
     ) -> str | None:
         try:
             creator_id = await cls._get_resource_creator(object_type, object_id)
             if creator_id is not None and creator_id == user_id:
-                return PermissionLevel.owner.value
+                # Owner and creator are decoupled: the DB creator field is only a
+                # SAFETY NET so a resource is never left ownerless (INV-2), not a
+                # permanent owner. On the reachable-FGA path callers pass
+                # require_no_active_owner=True, so the creator counts as owner
+                # only while no other owner tuple remains — an explicit owner
+                # revoke/downgrade on the creator then actually takes effect.
+                # FGA-outage callers keep require_no_active_owner=False so the
+                # creator can still reach their own resource while FGA is down.
+                if not require_no_active_owner or not await cls._resource_has_active_owner(
+                    object_type,
+                    object_id,
+                    exclude_user_id=user_id,
+                ):
+                    return PermissionLevel.owner.value
             department_space_level = await cls._implicit_department_space_member_level(
                 user_id,
                 object_type,
@@ -1051,6 +1077,38 @@ class PermissionService:
                 e,
             )
             return None
+
+    @classmethod
+    async def _resource_has_active_owner(
+        cls,
+        object_type: str,
+        object_id: str,
+        *,
+        exclude_user_id: int | None = None,
+    ) -> bool:
+        """Return True if the resource still has an owner tuple in OpenFGA.
+
+        Used to decouple the DB creator field from the owner role: the creator is
+        treated as owner only as a last-resort safety net (INV-2), so this reports
+        whether a *real* owner tuple survives. ``exclude_user_id`` skips the
+        caller's own tuple so a stale self-tuple can never mask a genuine
+        "someone else owns it" state.
+
+        FGA unavailable → returns False (cannot prove another owner exists), so
+        the caller keeps the permissive creator fallback while FGA is down.
+        """
+        try:
+            fga = await cls._aget_fga()
+            if fga is None:
+                return False
+            tuples = await fga.read_tuples(object=f"{object_type}:{object_id}", relation="owner")
+            for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
+                tuples.extend(await fga.read_tuples(object=f"{legacy_type}:{object_id}", relation="owner"))
+            exclude_user = f"user:{exclude_user_id}" if exclude_user_id is not None else None
+            return any(t.get("relation") == "owner" and t.get("user") != exclude_user for t in (tuples or []))
+        except Exception as e:
+            logger.debug("Could not read owner tuples for %s:%s: %s", object_type, object_id, e)
+            return False
 
     @classmethod
     def _permission_level_satisfies_relation(

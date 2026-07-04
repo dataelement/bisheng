@@ -387,7 +387,9 @@ class TestPermissionApiIntegration:
                 )
                 body = resp.json()
 
-        assert body["status_code"] == 19000
+        # Owner/creator decoupled: removing the last owner is now refused with the
+        # dedicated PermissionLastOwnerError (19007) instead of a generic denial.
+        assert body["status_code"] == 19007
         mock_authorize.assert_not_awaited()
 
     def test_authorize_api_allows_self_owner_revoke_when_another_owner_remains(self):
@@ -470,6 +472,210 @@ class TestPermissionApiIntegration:
 
         assert body["status_code"] == 200
         mock_authorize.assert_awaited_once()
+
+    def test_authorize_api_blocks_owner_revoke_of_another_user_when_it_is_the_last_owner(self):
+        """Owner/creator decoupled: the last-owner guard now covers ANY owner
+        revoke, not just self-revoke. Removing another user's owner while they are
+        the sole owner must be refused with PermissionLastOwnerError (19007)."""
+        app = _make_app(_ViewerUser)
+
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="owner",
+            ),
+            patch(
+                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                new_callable=AsyncMock,
+                return_value={
+                    "manage_app_owner",
+                    "manage_app_manager",
+                    "manage_app_viewer",
+                    "view_app",
+                    "use_app",
+                    "edit_app",
+                    "delete_app",
+                    "publish_app",
+                    "unpublish_app",
+                    "share_app",
+                },
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=9,
+                        subject_name="sole-owner",
+                        relation="owner",
+                    ),
+                ],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
+                    json={
+                        "grants": [],
+                        "revokes": [
+                            {
+                                "subject_type": "user",
+                                "subject_id": 9,
+                                "relation": "owner",
+                            }
+                        ],
+                    },
+                )
+                body = resp.json()
+
+        assert body["status_code"] == 19007
+        mock_authorize.assert_not_awaited()
+
+    def test_permissions_list_omits_creator_owner_when_another_owner_exists(self):
+        """Owner/creator decoupled: once ANY owner tuple exists, the DB creator is
+        NOT re-added as a synthetic owner — so a revoked creator-owner stays gone
+        in the member list instead of resurfacing."""
+        app = _make_app(_ViewerUser)
+
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=9,
+                        subject_name="co-owner",
+                        relation="owner",
+                    ),
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "id": "owner",
+                        "name": "所有者",
+                        "relation": "owner",
+                        "grant_tier": "owner",
+                        "permissions": [],
+                        "permissions_explicit": False,
+                        "is_system": True,
+                    }
+                ],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=7,
+            ),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/api/v1/permissions/resources/workflow/wf-1/permissions")
+                body = resp.json()
+
+        assert body["status_code"] == 200
+        subjects = {(e["subject_type"], e["subject_id"]) for e in body["data"]}
+        assert ("user", 9) in subjects
+        # Creator (user 7) has no owner tuple and another owner (9) exists, so the
+        # creator must NOT be synthesized back as owner.
+        assert ("user", 7) not in subjects
+
+    @pytest.mark.asyncio
+    async def test_can_remove_owner_relations_allows_when_another_owner_remains(self):
+        from bisheng.permission.api.endpoints.resource_permission import _can_remove_owner_relations
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(subject_type="user", subject_id=7, subject_name="a", relation="owner"),
+                ResourcePermissionItem(subject_type="user", subject_id=9, subject_name="b", relation="owner"),
+            ],
+        ):
+            allowed = await _can_remove_owner_relations(
+                resource_type="workflow",
+                resource_id="wf-1",
+                revokes=[
+                    AuthorizeRevokeItem(subject_type="user", subject_id=7, relation="owner", include_children=False)
+                ],
+            )
+        assert allowed is True
+
+    @pytest.mark.asyncio
+    async def test_can_remove_owner_relations_blocks_last_owner(self):
+        from bisheng.permission.api.endpoints.resource_permission import _can_remove_owner_relations
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(subject_type="user", subject_id=7, subject_name="a", relation="owner"),
+            ],
+        ):
+            allowed = await _can_remove_owner_relations(
+                resource_type="workflow",
+                resource_id="wf-1",
+                revokes=[
+                    AuthorizeRevokeItem(subject_type="user", subject_id=7, relation="owner", include_children=False)
+                ],
+            )
+        assert allowed is False
+
+    @pytest.mark.asyncio
+    async def test_can_remove_owner_relations_allows_same_request_ownership_transfer(self):
+        """Revoke the only owner + grant a new owner in the SAME request: the grant
+        counts as a surviving owner, so the transfer is allowed (never orphaned)."""
+        from bisheng.permission.api.endpoints.resource_permission import _can_remove_owner_relations
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
+
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(subject_type="user", subject_id=7, subject_name="a", relation="owner"),
+            ],
+        ):
+            allowed = await _can_remove_owner_relations(
+                resource_type="workflow",
+                resource_id="wf-1",
+                revokes=[
+                    AuthorizeRevokeItem(subject_type="user", subject_id=7, relation="owner", include_children=False)
+                ],
+                grants=[
+                    AuthorizeGrantItem(subject_type="user", subject_id=9, relation="owner", include_children=False)
+                ],
+            )
+        assert allowed is True
 
     def test_permissions_list_requires_can_edit_on_resource(self):
         app = _make_app(_ViewerUser)
