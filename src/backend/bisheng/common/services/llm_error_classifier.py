@@ -30,6 +30,7 @@ import enum
 from dataclasses import dataclass
 
 import openai
+from langgraph.errors import GraphRecursionError
 
 from bisheng.common.errcode.linsight import LinsightBishengLLMError
 
@@ -58,6 +59,7 @@ class ErrorType(str, enum.Enum):
     RATE_LIMIT = "rate_limit"
     SERVICE_UNAVAILABLE = "service_unavailable"
     NETWORK_TIMEOUT = "network_timeout"
+    TASK_ABORTED = "task_aborted"
     UNKNOWN = "unknown"
 
 
@@ -217,6 +219,17 @@ def _is_rate_limit(exc: BaseException) -> bool:
     return any(sig in text for sig in _RATE_LIMIT_SIGNATURES)
 
 
+def _is_task_aborted(exc: BaseException) -> bool:
+    """The task was aborted by a framework/loop guard, not a provider error.
+
+    Covers LangGraph's ``GraphRecursionError`` (step ceiling reached) and the
+    Linsight ``LinsightToolLoopError`` (same-tool consecutive-failure breaker).
+    The loop error is matched by class name to avoid a ``common -> linsight``
+    import (this module lives in ``common``).
+    """
+    return isinstance(exc, GraphRecursionError) or type(exc).__name__ == "LinsightToolLoopError"
+
+
 def _is_content_filter(exc: BaseException) -> bool:
     if isinstance(exc, openai.ContentFilterFinishReasonError):
         return True
@@ -308,6 +321,10 @@ def label_error(exc: BaseException) -> ErrorType:
     A miss falls through to ``UNKNOWN`` (still rendered as friendly localized
     copy by the frontend). Never raises; never affects fault tolerance.
     """
+    # Framework/loop aborts (recursion ceiling / tool-loop breaker) get their own
+    # friendly label instead of falling through to the generic UNKNOWN card.
+    if _is_task_aborted(exc):
+        return ErrorType.TASK_ABORTED
     # content_filter is independent of the behaviour bucket (it lives in DEGRADABLE).
     if _is_content_filter(exc):
         return ErrorType.CONTENT_FILTER

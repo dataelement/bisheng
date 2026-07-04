@@ -34,7 +34,7 @@ from collections.abc import Awaitable, Callable
 
 from langchain.agents.middleware._retry import calculate_delay
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 
 from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
@@ -56,6 +56,108 @@ _DEGRADE_MESSAGE = (
 )
 
 
+# Layer 2 (截断即时检测): a corrective nudge injected when a model call is cut off
+# by finish_reason=length WHILE emitting a tool call — the exact failure behind the
+# write_file "content: Field required" loop (a huge content arg gets truncated and
+# parse_partial_json drops the incomplete key). Injected as an ephemeral extra
+# message on the RETRY request only (not persisted to graph state), telling the
+# model to write in smaller parts. Bounded by ``truncation_retry_limit``; if still
+# truncating, the (truncated) response is returned and the L3 tool-loop breaker /
+# L4 recursion ceiling takes over.
+_TRUNCATION_NUDGE = (
+    "⚠️ 你上一次的输出因过长被截断（finish_reason=length），导致工具调用的参数不完整、无法执行。"
+    "请把要写入的内容拆成多个较小的部分：先用 write_file 写入第一部分（务必在同一次调用里放入该部分的完整 content），"
+    "再用 edit_file 逐段追加后续内容；或显著缩短单次写入的内容量。不要重复相同的超长调用。"
+)
+
+# finish/stop reasons that mean "output was cut off by the max-token limit",
+# across OpenAI-compatible ("length") and Anthropic ("max_tokens") vendors.
+_TRUNCATION_FINISH_REASONS = frozenset({"length", "max_tokens", "max_output_tokens"})
+
+
+def _response_ai_message(response: object) -> AIMessage | None:
+    """Extract the model's ``AIMessage`` from a handler result (ModelResponse | AIMessage)."""
+    if isinstance(response, AIMessage):
+        return response
+    result = getattr(response, "result", None)
+    if result:
+        for m in reversed(result):
+            if isinstance(m, AIMessage):
+                return m
+    return None
+
+
+def _is_truncated_tool_call(response: object) -> bool:
+    """True when the model was cut off by the token limit WHILE emitting a tool call.
+
+    Vendor-agnostic: keys purely off ``finish_reason``/``stop_reason`` + the presence
+    of a (possibly malformed) tool-call attempt on the message. A truncated tool call
+    is exactly what surfaces as ``content: Field required`` downstream.
+    """
+    ai = _response_ai_message(response)
+    if ai is None:
+        return False
+    meta = getattr(ai, "response_metadata", None) or {}
+    finish = meta.get("finish_reason") or meta.get("stop_reason")
+    if finish not in _TRUNCATION_FINISH_REASONS:
+        return False
+    return bool(getattr(ai, "tool_calls", None)) or bool(getattr(ai, "invalid_tool_calls", None))
+
+
+def _with_truncation_nudge(request: ModelRequest) -> ModelRequest:
+    """A new request with the corrective nudge appended (ephemeral — retry only)."""
+    return request.override(messages=[*request.messages, HumanMessage(content=_TRUNCATION_NUDGE)])
+
+
+def _summarize_tool_calls(ai: AIMessage) -> list[str]:
+    """Compact ``name(argkey1,argkey2)`` per tool call — argument KEYS only, never
+    VALUES, so a large ``write_file`` ``content`` is never dumped into the log. A
+    truncated/malformed call shows as a missing key (``write_file(file_path)`` — no
+    ``content``) or ``name(INVALID)``; that is exactly the diagnostic signal for the
+    write_file loop.
+    """
+    summary: list[str] = []
+    for tc in getattr(ai, "tool_calls", None) or []:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        args = (tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", None)) or {}
+        keys = ",".join(sorted(args.keys())) if isinstance(args, dict) else ""
+        summary.append(f"{name}({keys})")
+    for tc in getattr(ai, "invalid_tool_calls", None) or []:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        summary.append(f"{name}(INVALID)")
+    return summary
+
+
+def _log_call_diagnostics(response: object, *, is_subagent: bool) -> None:
+    """One structured, greppable line per model call — so the write_file truncation
+    loop can be diagnosed from stdout even though task-mode calls are not persisted
+    to ``llm_call_log`` (that audit is workflow-only, and lacks finish_reason / tool
+    args anyway). Captures finish_reason, token usage, and the tool-call arg KEYS
+    (never values). Best-effort: never raises, never affects the model call.
+    """
+    try:
+        ai = _response_ai_message(response)
+        if ai is None:
+            return
+        meta = getattr(ai, "response_metadata", None) or {}
+        finish = meta.get("finish_reason") or meta.get("stop_reason")
+        usage = getattr(ai, "usage_metadata", None) or {}
+        content = ai.content if isinstance(ai.content, str) else ""
+        logger.info(
+            "BS_LINSIGHT_LLM_CALL graph={} finish_reason={} in_tokens={} out_tokens={} "
+            "content_len={} tool_calls={} truncated={}",
+            "sub" if is_subagent else "main",
+            finish,
+            usage.get("input_tokens"),
+            usage.get("output_tokens"),
+            len(content),
+            _summarize_tool_calls(ai) or "-",
+            _is_truncated_tool_call(response),
+        )
+    except Exception as e:  # pragma: no cover - observability must never break the call
+        logger.debug(f"[linsight] call-diagnostics logging failed: {e}")
+
+
 class LinsightModelResilienceMiddleware(AgentMiddleware):
     """Retry transient model failures; degrade or fail cleanly on the rest."""
 
@@ -68,6 +170,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         backoff_factor: float = 2.0,
         jitter: bool = True,
         max_degrade: int = 3,
+        truncation_retry_limit: int = 2,
         is_subagent: bool = False,
     ) -> None:
         super().__init__()
@@ -78,6 +181,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         self.backoff_factor = max(0.0, backoff_factor)
         self.jitter = jitter
         self.max_degrade = max(0, max_degrade)
+        self.truncation_retry_limit = max(0, truncation_retry_limit)
         self.is_subagent = is_subagent
         self._degrade_count = 0
 
@@ -120,46 +224,74 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse | AIMessage:
-        for attempt in range(self.max_retries + 1):
+        # exc_attempts (transient failures) and trunc_attempts (L2 truncation) use
+        # SEPARATE budgets so a truncation retry never eats the exception-retry
+        # budget and vice-versa. ``current`` carries the (possibly nudged) request.
+        current = request
+        exc_attempts = 0
+        trunc_attempts = 0
+        while True:
             try:
-                return await handler(request)
+                response = await handler(current)
             except Exception as exc:
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
                     logger.warning(f"[linsight-resilience] fail-fast ({type(exc).__name__}): {exc}")
                     raise
-                if behavior is Behavior.RETRYABLE and attempt < self.max_retries:
-                    delay = self._delay(attempt)
+                if behavior is Behavior.RETRYABLE and exc_attempts < self.max_retries:
+                    delay = self._delay(exc_attempts)
                     logger.warning(
                         f"[linsight-resilience] retryable {type(exc).__name__} "
-                        f"(attempt {attempt + 1}/{self.max_retries + 1}); sleeping {delay:.1f}s"
+                        f"(attempt {exc_attempts + 1}/{self.max_retries + 1}); sleeping {delay:.1f}s"
                     )
+                    exc_attempts += 1
                     if delay > 0:
                         await asyncio.sleep(delay)
                     continue
                 # DEGRADABLE, or RETRYABLE with retries exhausted.
                 return self._degrade_or_raise(exc)
-        raise RuntimeError("linsight resilience retry loop exited without returning")
+            # One greppable diagnostic line per model call (finish_reason / tokens /
+            # tool-call arg keys) — the only observability for task-mode calls.
+            _log_call_diagnostics(response, is_subagent=self.is_subagent)
+            # L2 truncation guard: a length-truncated tool call → nudge + retry.
+            if trunc_attempts < self.truncation_retry_limit and _is_truncated_tool_call(response):
+                trunc_attempts += 1
+                logger.warning(
+                    f"[linsight-resilience] truncated tool call (finish_reason=length); "
+                    f"nudging to write in smaller parts (retry {trunc_attempts}/{self.truncation_retry_limit})"
+                )
+                current = _with_truncation_nudge(current)
+                continue
+            return response
 
     def wrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse | AIMessage:
-        for attempt in range(self.max_retries + 1):
+        current = request
+        exc_attempts = 0
+        trunc_attempts = 0
+        while True:
             try:
-                return handler(request)
+                response = handler(current)
             except Exception as exc:
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
                     raise
-                if behavior is Behavior.RETRYABLE and attempt < self.max_retries:
-                    delay = self._delay(attempt)
+                if behavior is Behavior.RETRYABLE and exc_attempts < self.max_retries:
+                    delay = self._delay(exc_attempts)
+                    exc_attempts += 1
                     if delay > 0:
                         time.sleep(delay)
                     continue
                 return self._degrade_or_raise(exc)
-        raise RuntimeError("linsight resilience retry loop exited without returning")
+            _log_call_diagnostics(response, is_subagent=self.is_subagent)
+            if trunc_attempts < self.truncation_retry_limit and _is_truncated_tool_call(response):
+                trunc_attempts += 1
+                current = _with_truncation_nudge(current)
+                continue
+            return response
 
 
 def build_resilience_middleware(linsight_conf, *, is_subagent: bool) -> LinsightModelResilienceMiddleware:
@@ -168,5 +300,6 @@ def build_resilience_middleware(linsight_conf, *, is_subagent: bool) -> Linsight
         max_retries=getattr(linsight_conf, "retry_num", 3),
         initial_delay=float(getattr(linsight_conf, "retry_sleep", 5)),
         max_degrade=getattr(linsight_conf, "max_degrade", 3),
+        truncation_retry_limit=getattr(linsight_conf, "truncation_retry_limit", 2),
         is_subagent=is_subagent,
     )

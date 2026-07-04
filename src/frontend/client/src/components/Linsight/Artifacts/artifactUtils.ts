@@ -65,6 +65,31 @@ export function getArtifactPreviewKind(file: ArtifactFile): PreviewKind {
 }
 
 /**
+ * Strip the workspace-zone folder prefix (`output/` / `scratch/`, with an optional
+ * leading slash) from file references in the run summary, keeping the bare
+ * filename.
+ *
+ * The model is told (system prompt step 4) not to echo workspace paths, but it
+ * still often mirrors a tool result like `Updated file /output/report.md` into its
+ * final answer. End users neither know nor care about the internal `output/` zone —
+ * the deliverable is already surfaced by the report-link row and the file card — so
+ * the path just reads as noise. The prompt is only a probabilistic guardrail; this
+ * is the deterministic net that guarantees the path never reaches the user.
+ *
+ * Targeted, not blanket: only a `output/` / `scratch/` segment that (a) sits at a
+ * non-alphanumeric boundary (so `myoutput/…` and mid-URL segments are left alone)
+ * and (b) directly precedes a `name.ext` token is removed, so prose like
+ * "输入/输出" or a bare "output 文件夹" mention is never mangled.
+ */
+export function stripWorkspacePaths(text: string): string {
+    if (!text) return text;
+    return text.replace(
+        /(?<![A-Za-z0-9])\/?(?:output|scratch)\/(?=[^\s`"')）」】]*\.[A-Za-z0-9]{1,8})/gi,
+        '',
+    );
+}
+
+/**
  * Map a session's uploaded-file entries (store `LinsightInfo.files`, enriched by
  * useLinsightManager with `file_name` + the backend entry fields) into drawer
  * artifacts. The previewable url is the parsed-markdown object (`markdown_file_path`);
