@@ -7,7 +7,7 @@ import { Outlined } from 'bisheng-icons';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
-import { type ArtifactFile } from './artifactUtils';
+import { type ArtifactFile, stripWorkspacePaths } from './artifactUtils';
 import { SaveAsButton } from './SaveAsButton';
 
 interface ResultSectionProps {
@@ -45,7 +45,9 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                 report-link row above (no card chrome), matching the delivery design. */}
             {answer && (
                 <div className="bs-mkdown text-sm leading-6 text-gray-800 [&_p:last-child]:mb-0">
-                    <Markdown content={answer} isLatestMessage={true} webContent={false} />
+                    {/* strip internal output/ · scratch/ paths the model may have
+                        echoed from a tool result — users don't need the workspace zone */}
+                    <Markdown content={stripWorkspacePaths(answer)} isLatestMessage={true} webContent={false} />
                 </div>
             )}
 
