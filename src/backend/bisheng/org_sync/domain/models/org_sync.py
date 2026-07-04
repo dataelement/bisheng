@@ -5,14 +5,12 @@ Part of F009-org-sync.
 
 import json
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
 
 from sqlalchemy import (
     BigInteger,
     Column,
     DateTime,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -26,12 +24,11 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.config.settings import decrypt_token, encrypt_token
 from bisheng.core.database import get_async_db_session
 
-
 # ---------------------------------------------------------------------------
 # Encryption helpers for auth_config (Fernet, AD-02)
 # ---------------------------------------------------------------------------
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 def encrypt_auth_config(config_dict: dict) -> str:
     """Encrypt auth_config dict to a Fernet-encrypted string for DB storage."""
@@ -58,195 +55,221 @@ def decrypt_auth_config(encrypted: str) -> dict:
 # ORM Models
 # ---------------------------------------------------------------------------
 
-class OrgSyncConfig(SQLModelSerializable, table=True):
-    __tablename__ = 'org_sync_config'
 
-    id: Optional[int] = Field(
+class OrgSyncConfig(SQLModelSerializable, table=True):
+    __tablename__ = "org_sync_config"
+
+    id: int | None = Field(
         default=None,
         sa_column=Column(Integer, primary_key=True, autoincrement=True),
     )
-    tenant_id: Optional[int] = Field(
+    tenant_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=False,
-            server_default=text('1'), index=True,
-            comment='Tenant ID',
+            Integer,
+            nullable=False,
+            server_default=text("1"),
+            index=True,
+            comment="Tenant ID",
         ),
     )
     provider: str = Field(
         sa_column=Column(
-            String(32), nullable=False,
-            comment='Provider: feishu/wecom/dingtalk/generic_api',
+            String(32),
+            nullable=False,
+            comment="Provider: feishu/wecom/dingtalk/generic_api",
         ),
     )
     config_name: str = Field(
         sa_column=Column(
-            String(128), nullable=False,
-            comment='User-given label, e.g. Feishu Production',
+            String(128),
+            nullable=False,
+            comment="User-given label, e.g. Feishu Production",
         ),
     )
     auth_type: str = Field(
         sa_column=Column(
-            String(16), nullable=False,
-            comment='Auth mode: api_key/password (oauth reserved)',
+            String(16),
+            nullable=False,
+            comment="Auth mode: api_key/password (oauth reserved)",
         ),
     )
     auth_config: str = Field(
         sa_column=Column(
-            Text, nullable=False,
-            comment='Fernet-encrypted JSON: credentials per auth_type',
+            Text,
+            nullable=False,
+            comment="Fernet-encrypted JSON: credentials per auth_type",
         ),
     )
-    sync_scope: Optional[dict] = Field(
+    sync_scope: dict | None = Field(
         default=None,
         sa_column=Column(
-            JSON, nullable=True,
+            JsonType,
+            nullable=True,
             comment='Sync scope: {"root_dept_ids": ["id1","id2"]} or null=all',
         ),
     )
     schedule_type: str = Field(
-        default='manual',
+        default="manual",
         sa_column=Column(
-            String(16), nullable=False,
+            String(16),
+            nullable=False,
             server_default=text("'manual'"),
-            comment='Execution mode: manual/cron',
+            comment="Execution mode: manual/cron",
         ),
     )
-    cron_expression: Optional[str] = Field(
+    cron_expression: str | None = Field(
         default=None,
         sa_column=Column(
-            String(64), nullable=True,
-            comment='Cron expression, e.g. 0 2 * * *',
+            String(64),
+            nullable=True,
+            comment="Cron expression, e.g. 0 2 * * *",
         ),
     )
     sync_status: str = Field(
-        default='idle',
+        default="idle",
         sa_column=Column(
-            String(16), nullable=False,
+            String(16),
+            nullable=False,
             server_default=text("'idle'"),
-            comment='Runtime mutex: idle/running',
+            comment="Runtime mutex: idle/running",
         ),
     )
-    last_sync_at: Optional[datetime] = Field(
+    last_sync_at: datetime | None = Field(
         default=None,
-        sa_column=Column(DateTime, nullable=True, comment='Last sync time'),
+        sa_column=Column(DateTime, nullable=True, comment="Last sync time"),
     )
-    last_sync_result: Optional[str] = Field(
+    last_sync_result: str | None = Field(
         default=None,
         sa_column=Column(
-            String(16), nullable=True,
-            comment='Last sync result: success/partial/failed',
+            String(16),
+            nullable=True,
+            comment="Last sync result: success/partial/failed",
         ),
     )
     status: str = Field(
-        default='active',
+        default="active",
         sa_column=Column(
-            String(16), nullable=False,
-            server_default=text("'active'"), index=True,
-            comment='Config status: active/disabled/deleted',
+            String(16),
+            nullable=False,
+            server_default=text("'active'"),
+            index=True,
+            comment="Config status: active/disabled/deleted",
         ),
     )
-    create_user: Optional[int] = Field(
+    create_user: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=True, comment='Creator user ID'),
+        sa_column=Column(Integer, nullable=True, comment="Creator user ID"),
     )
-    create_time: Optional[datetime] = Field(
+    create_time: datetime | None = Field(
         default=None,
         sa_column=Column(
-            DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP'),
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
         ),
     )
-    update_time: Optional[datetime] = Field(
+    update_time: datetime | None = Field(
         default=None,
         sa_column=Column(
-            DateTime, nullable=False,
+            DateTime,
+            nullable=False,
             server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 
     __table_args__ = (
         UniqueConstraint(
-            'tenant_id', 'provider', 'config_name',
-            name='uk_tenant_provider_name',
+            "tenant_id",
+            "provider",
+            "config_name",
+            name="uk_tenant_provider_name",
         ),
     )
 
 
 class OrgSyncLog(SQLModelSerializable, table=True):
-    __tablename__ = 'org_sync_log'
+    __tablename__ = "org_sync_log"
 
-    id: Optional[int] = Field(
+    id: int | None = Field(
         default=None,
         sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
     )
-    tenant_id: Optional[int] = Field(
+    tenant_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=False,
-            server_default=text('1'), index=True,
+            Integer,
+            nullable=False,
+            server_default=text("1"),
+            index=True,
         ),
     )
     config_id: int = Field(
         sa_column=Column(
-            Integer, nullable=False, index=True,
-            comment='FK to org_sync_config.id',
+            Integer,
+            nullable=False,
+            index=True,
+            comment="FK to org_sync_config.id",
         ),
     )
     trigger_type: str = Field(
         sa_column=Column(
-            String(16), nullable=False,
-            comment='Trigger: manual/scheduled',
+            String(16),
+            nullable=False,
+            comment="Trigger: manual/scheduled",
         ),
     )
-    trigger_user: Optional[int] = Field(
+    trigger_user: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=True,
-            comment='User who triggered (null for scheduled)',
+            Integer,
+            nullable=True,
+            comment="User who triggered (null for scheduled)",
         ),
     )
     status: str = Field(
-        default='running',
+        default="running",
         sa_column=Column(
-            String(16), nullable=False,
+            String(16),
+            nullable=False,
             server_default=text("'running'"),
-            comment='Status: running/success/partial/failed',
+            comment="Status: running/success/partial/failed",
         ),
     )
     dept_created: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
     dept_updated: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
     dept_archived: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
     member_created: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
     member_updated: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
     member_disabled: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
     member_reactivated: int = Field(
         default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
     )
-    error_details: Optional[list] = Field(
+    error_details: list | None = Field(
         default=None,
         sa_column=Column(
-            JSON, nullable=True,
-            comment='Error list: [{entity_type, external_id, error_msg}]',
+            JsonType,
+            nullable=True,
+            comment="Error list: [{entity_type, external_id, error_msg}]",
         ),
     )
     # F015: event-scoped columns. Legacy batch-summary rows (F009/F014) keep
@@ -254,48 +277,53 @@ class OrgSyncLog(SQLModelSerializable, table=True):
     # event_type to one of {ts_conflict, stale_ts, conflict_weekly_sent,
     # conflict_daily_escalation_sent}.
     event_type: str = Field(
-        default='',
+        default="",
         sa_column=Column(
-            String(32), nullable=False, server_default=text("''"),
-            comment=(
-                "F015 event type; empty for F009 batch-summary rows"
-            ),
+            String(32),
+            nullable=False,
+            server_default=text("''"),
+            comment=("F015 event type; empty for F009 batch-summary rows"),
         ),
     )
     level: str = Field(
-        default='info',
+        default="info",
         sa_column=Column(
-            String(16), nullable=False, server_default=text("'info'"),
-            comment='F015 log severity: info / warn / error',
+            String(16),
+            nullable=False,
+            server_default=text("'info'"),
+            comment="F015 log severity: info / warn / error",
         ),
     )
-    external_id: Optional[str] = Field(
+    external_id: str | None = Field(
         default=None,
         sa_column=Column(
-            String(128), nullable=True,
-            comment='F015: department external_id for event rows',
+            String(128),
+            nullable=True,
+            comment="F015: department external_id for event rows",
         ),
     )
-    source_ts: Optional[int] = Field(
+    source_ts: int | None = Field(
         default=None,
         sa_column=Column(
-            BigInteger, nullable=True,
-            comment='F015: incoming ts captured for INV-T12 audit',
+            BigInteger,
+            nullable=True,
+            comment="F015: incoming ts captured for INV-T12 audit",
         ),
     )
-    start_time: Optional[datetime] = Field(
+    start_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=True),
     )
-    end_time: Optional[datetime] = Field(
+    end_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=True),
     )
-    create_time: Optional[datetime] = Field(
+    create_time: datetime | None = Field(
         default=None,
         sa_column=Column(
-            DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP'),
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
         ),
     )
 
@@ -304,8 +332,8 @@ class OrgSyncLog(SQLModelSerializable, table=True):
 # DAO Classes
 # ---------------------------------------------------------------------------
 
-class OrgSyncConfigDao:
 
+class OrgSyncConfigDao:
     @classmethod
     async def acreate(cls, config: OrgSyncConfig) -> OrgSyncConfig:
         async with get_async_db_session() as session:
@@ -316,7 +344,7 @@ class OrgSyncConfigDao:
             return config
 
     @classmethod
-    async def aget_by_id(cls, config_id: int) -> Optional[OrgSyncConfig]:
+    async def aget_by_id(cls, config_id: int) -> OrgSyncConfig | None:
         async with get_async_db_session() as session:
             statement = select(OrgSyncConfig).where(
                 OrgSyncConfig.id == config_id,
@@ -326,13 +354,15 @@ class OrgSyncConfigDao:
 
     @classmethod
     async def aget_list(
-        cls, tenant_id: int, status: Optional[str] = None,
-    ) -> List[OrgSyncConfig]:
+        cls,
+        tenant_id: int,
+        status: str | None = None,
+    ) -> list[OrgSyncConfig]:
         """List configs for a tenant. Pass status to filter, or None for all non-deleted."""
         async with get_async_db_session() as session:
             statement = select(OrgSyncConfig).where(
                 OrgSyncConfig.tenant_id == tenant_id,
-                OrgSyncConfig.status != 'deleted',
+                OrgSyncConfig.status != "deleted",
             )
             if status is not None:
                 statement = statement.where(OrgSyncConfig.status == status)
@@ -350,7 +380,10 @@ class OrgSyncConfigDao:
 
     @classmethod
     async def aset_sync_status(
-        cls, config_id: int, old_status: str, new_status: str,
+        cls,
+        config_id: int,
+        old_status: str,
+        new_status: str,
     ) -> bool:
         """Atomic CAS update of sync_status. Returns True if row was updated."""
         async with get_async_db_session() as session:
@@ -367,18 +400,18 @@ class OrgSyncConfigDao:
             return result.rowcount > 0
 
     @classmethod
-    async def aget_active_cron_configs(cls) -> List[OrgSyncConfig]:
+    async def aget_active_cron_configs(cls) -> list[OrgSyncConfig]:
         """Get all configs with schedule_type='cron' and status='active'."""
         async with get_async_db_session() as session:
             statement = select(OrgSyncConfig).where(
-                OrgSyncConfig.schedule_type == 'cron',
-                OrgSyncConfig.status == 'active',
+                OrgSyncConfig.schedule_type == "cron",
+                OrgSyncConfig.status == "active",
             )
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    async def aget_all_active(cls) -> List[OrgSyncConfig]:
+    async def aget_all_active(cls) -> list[OrgSyncConfig]:
         """F015: return every active OrgSyncConfig regardless of schedule_type.
 
         The 6h forced reconcile beat (``reconcile_all_organizations``) uses
@@ -388,14 +421,13 @@ class OrgSyncConfigDao:
         """
         async with get_async_db_session() as session:
             statement = select(OrgSyncConfig).where(
-                OrgSyncConfig.status == 'active',
+                OrgSyncConfig.status == "active",
             )
             result = await session.exec(statement)
             return result.all()
 
 
 class OrgSyncLogDao:
-
     @classmethod
     async def acreate(cls, log: OrgSyncLog) -> OrgSyncLog:
         async with get_async_db_session() as session:
@@ -415,8 +447,11 @@ class OrgSyncLogDao:
 
     @classmethod
     async def aget_by_config(
-        cls, config_id: int, page: int = 1, limit: int = 20,
-    ) -> Tuple[List[OrgSyncLog], int]:
+        cls,
+        config_id: int,
+        page: int = 1,
+        limit: int = 20,
+    ) -> tuple[list[OrgSyncLog], int]:
         """Paginated query of logs for a given config, newest first."""
         async with get_async_db_session() as session:
             base = select(OrgSyncLog).where(
@@ -434,8 +469,10 @@ class OrgSyncLogDao:
 
     @classmethod
     async def aget_gateway_sso_logs(
-        cls, page: int = 1, limit: int = 20,
-    ) -> Tuple[List[OrgSyncLog], int]:
+        cls,
+        page: int = 1,
+        limit: int = 20,
+    ) -> tuple[list[OrgSyncLog], int]:
         """Paginated gateway push logs (F014 HMAC ``sso_realtime``), newest first.
 
         One row per gateway round-trip (``flush_log``). Excludes F015
@@ -443,7 +480,7 @@ class OrgSyncLogDao:
         """
         async with get_async_db_session() as session:
             base = select(OrgSyncLog).where(
-                OrgSyncLog.trigger_type == 'sso_realtime',
+                OrgSyncLog.trigger_type == "sso_realtime",
             )
             count_stmt = select(func.count()).select_from(base.subquery())
             total = await session.scalar(count_stmt) or 0
@@ -463,11 +500,11 @@ class OrgSyncLogDao:
         *,
         event_type: str,
         level: str,
-        external_id: Optional[str],
-        source_ts: Optional[int],
+        external_id: str | None,
+        source_ts: int | None,
         config_id: int,
         tenant_id: int = 1,
-        error_details: Optional[dict] = None,
+        error_details: dict | None = None,
     ) -> OrgSyncLog:
         """F015: persist an event-scoped log row.
 
@@ -484,8 +521,8 @@ class OrgSyncLogDao:
         log = OrgSyncLog(
             tenant_id=tenant_id,
             config_id=config_id,
-            trigger_type='event',
-            status='success',
+            trigger_type="event",
+            status="success",
             event_type=event_type,
             level=level,
             external_id=external_id,
@@ -496,7 +533,9 @@ class OrgSyncLogDao:
 
     @classmethod
     async def acount_recent_conflicts(
-        cls, external_id: str, days: int = 7,
+        cls,
+        external_id: str,
+        days: int = 7,
     ) -> int:
         """F015: count ts_conflict warn events for one external_id.
 
@@ -509,8 +548,8 @@ class OrgSyncLogDao:
                 select(func.count())
                 .select_from(OrgSyncLog)
                 .where(
-                    OrgSyncLog.level == 'warn',
-                    OrgSyncLog.event_type == 'ts_conflict',
+                    OrgSyncLog.level == "warn",
+                    OrgSyncLog.event_type == "ts_conflict",
                     OrgSyncLog.external_id == external_id,
                     OrgSyncLog.create_time > threshold,
                 )
@@ -522,9 +561,9 @@ class OrgSyncLogDao:
     async def aget_conflicts_since(
         cls,
         since: datetime,
-        event_type: str = 'ts_conflict',
-        level: str = 'warn',
-    ) -> List[OrgSyncLog]:
+        event_type: str = "ts_conflict",
+        level: str = "warn",
+    ) -> list[OrgSyncLog]:
         """F015: fetch event rows for the weekly aggregation window.
 
         ``since`` is interpreted inclusively so the caller can align with
@@ -545,8 +584,9 @@ class OrgSyncLogDao:
 
     @classmethod
     async def aget_latest_event(
-        cls, event_type: str,
-    ) -> Optional[OrgSyncLog]:
+        cls,
+        event_type: str,
+    ) -> OrgSyncLog | None:
         """F015: last event row of the given type (used by daily escalation).
 
         Returns ``None`` when no such row exists — callers treat this as
