@@ -391,6 +391,21 @@ class LinsightConf(BaseModel):
         default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
     max_steps: int = Field(default=200, description="Maximum number of steps per task to prevent infinite loops")
+    tool_failure_soft_limit: int = Field(
+        default=3,
+        description="L3 tool-loop breaker: after this many consecutive same-tool failures, append a "
+        "stronger corrective hint to the error message so a recoverable model can self-correct.",
+    )
+    tool_failure_hard_limit: int = Field(
+        default=8,
+        description="L3 tool-loop breaker: after this many consecutive same-tool failures, abort the task "
+        "gracefully and salvage the intermediate result (instead of spinning to recursion_limit).",
+    )
+    truncation_retry_limit: int = Field(
+        default=2,
+        description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "
+        "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
+    )
     retry_num: int = Field(
         default=3, description="Number of times the model call was retried during the execution of the Ideas task"
     )

@@ -34,6 +34,7 @@ from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
+from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
 from bisheng.llm.domain.services import LLMService
 
 # --- Subagent (researcher) tool blacklist (design #1 §4.3 / §5.1, decision 4) ---
@@ -637,7 +638,14 @@ async def create_linsight_agent(
     # synthetic message would only end the loop mid-reasoning). The subagent gets
     # its OWN instance (is_subagent=True) that DEGRADES instead — see below.
     linsight_conf = settings.get_linsight_conf()
-    middlewares: list = [build_resilience_middleware(linsight_conf, is_subagent=False)]
+    # Tool-loop breaker (L3): bound a same-tool consecutive-failure loop (e.g. a
+    # weak model that keeps calling write_file with a truncated/missing content
+    # arg) — soft nudge then graceful salvage-and-abort, instead of spinning to
+    # recursion_limit. One instance per graph, same as the resilience middleware.
+    middlewares: list = [
+        build_resilience_middleware(linsight_conf, is_subagent=False),
+        build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
+    ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
     # bundles were copied into the workspace /skills/ subtree before this call (see
@@ -701,6 +709,9 @@ async def create_linsight_agent(
     researcher = _build_researcher_subagent(tools)
     researcher["middleware"] = [
         build_resilience_middleware(linsight_conf, is_subagent=True),
+        # Same tool-loop breaker on the subagent's own graph (its tool calls run in
+        # a separate subgraph the main-graph middleware never wraps).
+        build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.

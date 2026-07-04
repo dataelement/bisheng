@@ -8,6 +8,7 @@ from contextvars import Token
 from datetime import datetime
 
 from langchain_core.language_models import BaseChatModel
+from langgraph.errors import GraphRecursionError
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
@@ -37,6 +38,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
     MessageEventType,
 )
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
+from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
@@ -62,6 +64,18 @@ class TaskAlreadyInProgressError(Exception):
     pass
 
 
+# Apology preamble prepended to a salvaged partial result (L3 tool-loop breaker /
+# L4 recursion ceiling). Followed by the model's intermediate analysis so the
+# user still gets meaningful output instead of a raw recursion error.
+_PARTIAL_RESULT_PREAMBLE = "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
+
+# Friendly failure copy when the abort left nothing salvageable (no analysis text
+# and no captured answer) — still a classified friendly card, never a raw dump.
+_PARTIAL_NO_SALVAGE_MESSAGE = (
+    "任务未能完成：模型多次未能正确调用工具，且没有可供返回的中间结果。建议简化任务范围，或更换能力更强的模型后重试。"
+)
+
+
 class LinsightWorkflowTask:
     """Workflow Task Executor - Responsible for managing the entire mission lifecycle"""
 
@@ -82,6 +96,14 @@ class LinsightWorkflowTask:
         # astream then halts with no TaskEnd, but this is NOT a direct-answer
         # completion — the task must stay parked, not push a FINAL_RESULT.
         self._waiting_for_input: bool = False
+        # Set when the run was aborted by the L3 tool-loop breaker or the L4
+        # recursion ceiling: instead of a raw failure, salvage the intermediate
+        # analysis + retrieved knowledge and render it as a normal (partial)
+        # result. ``_partial_salvage`` is the middleware-assembled body (empty for
+        # a bare GraphRecursionError, which falls back to _last_assistant_text).
+        self._partial_pending: bool = False
+        self._partial_salvage: str | None = None
+        self._partial_error: BaseException | None = None
         self.file_dir: str | None = None
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
@@ -301,19 +323,24 @@ class LinsightWorkflowTask:
             "configurable": {"thread_id": session_model.id},
             "recursion_limit": getattr(linsight_conf, "max_steps", 200),
         }
-        async for chunk in agent.astream(
-            Command(resume=user_input),
-            config=config,
-            stream_mode=["updates", "messages", "values"],
-            subgraphs=True,
-        ):
-            mode, raw, namespace = self._unpack_stream_chunk(chunk)
-            if mode == "values" and not namespace and isinstance(raw, dict):
-                text = self._extract_last_message_text(raw.get("messages"))
-                if text:
-                    self._last_assistant_text = text
-            for event in mapper.normalize(mode, raw, namespace=namespace):
-                await self._handle_event(agent, event, session_model)
+        try:
+            async for chunk in agent.astream(
+                Command(resume=user_input),
+                config=config,
+                stream_mode=["updates", "messages", "values"],
+                subgraphs=True,
+            ):
+                mode, raw, namespace = self._unpack_stream_chunk(chunk)
+                if mode == "values" and not namespace and isinstance(raw, dict):
+                    text = self._extract_last_message_text(raw.get("messages"))
+                    if text:
+                        self._last_assistant_text = text
+                for event in mapper.normalize(mode, raw, namespace=namespace):
+                    await self._handle_event(agent, event, session_model)
+        except (LinsightToolLoopError, GraphRecursionError) as e:
+            # L3/L4 on the resume path: stash the salvage; the caller's
+            # _handle_task_completion renders it as a partial result.
+            self._stash_partial_abort(e)
 
     # ==================== Continue (multi-turn conversation) ====================
 
@@ -394,19 +421,24 @@ class LinsightWorkflowTask:
         agent_input = {
             "messages": [{"role": "user", "content": f"{self._current_time_block()}\n# 用户问题\n{question}"}]
         }
-        async for chunk in agent.astream(
-            agent_input,
-            config=config,
-            stream_mode=["updates", "messages", "values"],
-            subgraphs=True,
-        ):
-            mode, raw, namespace = self._unpack_stream_chunk(chunk)
-            if mode == "values" and not namespace and isinstance(raw, dict):
-                text = self._extract_last_message_text(raw.get("messages"))
-                if text:
-                    self._last_assistant_text = text
-            for event in mapper.normalize(mode, raw, namespace=namespace):
-                await self._handle_event(agent, event, session_model)
+        try:
+            async for chunk in agent.astream(
+                agent_input,
+                config=config,
+                stream_mode=["updates", "messages", "values"],
+                subgraphs=True,
+            ):
+                mode, raw, namespace = self._unpack_stream_chunk(chunk)
+                if mode == "values" and not namespace and isinstance(raw, dict):
+                    text = self._extract_last_message_text(raw.get("messages"))
+                    if text:
+                        self._last_assistant_text = text
+                for event in mapper.normalize(mode, raw, namespace=namespace):
+                    await self._handle_event(agent, event, session_model)
+        except (LinsightToolLoopError, GraphRecursionError) as e:
+            # L3/L4 on the continue path: stash the salvage; the caller's
+            # _handle_task_completion renders it as a partial result.
+            self._stash_partial_abort(e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """Execute the core logic of the workflow"""
@@ -862,6 +894,14 @@ class LinsightWorkflowTask:
         except UserTerminationError:
             logger.info("Agent task terminated by user")
             return False
+        except (LinsightToolLoopError, GraphRecursionError) as e:
+            # L3/L4: a same-tool failure loop (LinsightToolLoopError, carries a
+            # salvaged partial_result) or the recursion ceiling (GraphRecursionError,
+            # bare) aborted the run. Do NOT surface a raw recursion error — stash the
+            # salvage and return True so _handle_task_completion renders the
+            # intermediate analysis as a normal (partial) result. See _handle_task_partial.
+            self._stash_partial_abort(e)
+            return True
         except Exception as e:
             logger.error(f"task_exec_error {traceback.format_exc()}")
             # ``from e`` preserves the original provider exception as __cause__ so
@@ -1230,6 +1270,12 @@ class LinsightWorkflowTask:
             logger.info("Task parked on user input; skipping completion handling")
             return
 
+        if self._partial_pending:
+            # L3/L4: aborted by the tool-loop breaker or recursion ceiling.
+            # Render the salvaged intermediate result instead of a raw failure.
+            await self._handle_task_partial(session_model)
+            return
+
         if not self._final_result:
             # No TaskEnd was emitted — the agent answered directly without
             # planning sub-tasks (e.g. a greeting). Don't leave the frontend
@@ -1309,6 +1355,62 @@ class LinsightWorkflowTask:
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
         logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
+
+    def _stash_partial_abort(self, e: BaseException) -> None:
+        """Record an L3/L4 abort so ``_handle_task_completion`` renders a salvaged
+        partial result instead of a raw failure. Shared by the fresh / resume /
+        continue drivers so a tool loop or recursion ceiling is handled uniformly.
+        """
+        logger.warning(f"task aborted, salvaging partial result: {type(e).__name__}: {e}")
+        self._partial_pending = True
+        self._partial_error = e
+        self._partial_salvage = getattr(e, "partial_result", None)
+
+    async def _handle_task_partial(self, session_model: LinsightSessionVersion):
+        """Render a salvaged partial result after an L3/L4 abort.
+
+        The L3 tool-loop breaker (``LinsightToolLoopError``) carries a
+        middleware-assembled ``partial_result`` (analysis conclusions + a trimmed
+        digest of retrieved knowledge). A bare L4 ``GraphRecursionError`` has no
+        such body, so we fall back to the last streamed assistant text. Either
+        way, surface it as a NORMAL (COMPLETED) result with an apology preamble —
+        the user gets meaningful output instead of a raw recursion error. Mirrors
+        ``_handle_direct_answer_completion``. If nothing is salvageable, degrade to
+        a friendly classified failure (never a raw dump).
+        """
+        body = (self._partial_salvage or "").strip() or (self._last_assistant_text or "").strip()
+        if not body:
+            await self._handle_task_failure(session_model, _PARTIAL_NO_SALVAGE_MESSAGE, exc=self._partial_error)
+            return
+
+        answer = f"{_PARTIAL_RESULT_PREAMBLE}\n\n{body}"
+        session_model.status = SessionVersionStatusEnum.COMPLETED
+        # Collect any output/ deliverable the model managed to write before looping;
+        # otherwise synthesize a report from the salvaged answer (same backstop as
+        # the success / direct-answer paths).
+        file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
+        final_files = await linsight_execute_utils.get_final_result_file(
+            session_model=session_model, file_details=file_details, answer=answer
+        )
+        if not final_files:
+            final_files = await linsight_execute_utils.build_fallback_report_file(
+                session_model=session_model, answer=answer, file_dir=self.file_dir
+            )
+        session_model.output_result = {
+            "answer": answer,
+            "final_files": final_files,
+            "all_from_session_files": [],
+            # Marker so the frontend/analytics can tell this was a degraded run
+            # even though it renders as a normal result (no frontend change required).
+            "partial": True,
+        }
+        await self._state_manager.set_session_version_info(session_model)
+        await self._complete_session_pseudo_task(session_model)
+        await linsight_execute_utils.persist_task_turn_message(session_model)
+        await self._state_manager.push_message(
+            MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
+        )
+        logger.info(f"Task completed via partial-result salvage ({len(final_files)} files)")
 
     async def _handle_task_success(self, session_model: LinsightSessionVersion):
         """Processing task successful"""
