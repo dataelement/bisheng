@@ -15,6 +15,8 @@ from bisheng.linsight.domain.services.resilience_middleware import (
     _TRUNCATION_NUDGE,
     LinsightModelResilienceMiddleware,
     _is_truncated_tool_call,
+    _log_call_diagnostics,
+    _summarize_tool_calls,
 )
 
 
@@ -122,3 +124,44 @@ async def test_truncation_retry_disabled_when_limit_zero():
     out = await mw.awrap_model_call(_req(), handler)
     assert calls["n"] == 1  # no retry when disabled
     assert _is_truncated_tool_call(out) is True
+
+
+# --------------------------------------------------------------------------- #1 diagnostics
+
+
+def test_summarize_tool_calls_flags_missing_content():
+    # A truncated write_file call has file_path but NO content — that absent key is
+    # the whole diagnostic signal for the loop.
+    truncated = AIMessage(
+        content="",
+        tool_calls=[{"name": "write_file", "args": {"file_path": "/o/r.md"}, "id": "t", "type": "tool_call"}],
+    )
+    assert _summarize_tool_calls(truncated) == ["write_file(file_path)"]
+    full = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "write_file", "args": {"file_path": "/o/r.md", "content": "x"}, "id": "t", "type": "tool_call"}
+        ],
+    )
+    assert _summarize_tool_calls(full) == ["write_file(content,file_path)"]
+
+
+def test_summarize_tool_calls_never_dumps_values():
+    # Safety: a huge content value must never reach the log — only KEY names.
+    huge = "A" * 100_000
+    ai = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "write_file", "args": {"file_path": "/o/r.md", "content": huge}, "id": "t", "type": "tool_call"}
+        ],
+    )
+    summary = _summarize_tool_calls(ai)
+    assert summary == ["write_file(content,file_path)"]
+    assert huge not in "".join(summary)
+
+
+def test_log_call_diagnostics_never_raises():
+    # Observability must never break the model call, whatever the response shape.
+    _log_call_diagnostics(None, is_subagent=False)
+    _log_call_diagnostics(_resp(_truncated_ai()), is_subagent=True)
+    _log_call_diagnostics(object(), is_subagent=False)

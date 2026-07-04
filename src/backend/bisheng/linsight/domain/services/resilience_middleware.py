@@ -109,6 +109,55 @@ def _with_truncation_nudge(request: ModelRequest) -> ModelRequest:
     return request.override(messages=[*request.messages, HumanMessage(content=_TRUNCATION_NUDGE)])
 
 
+def _summarize_tool_calls(ai: AIMessage) -> list[str]:
+    """Compact ``name(argkey1,argkey2)`` per tool call — argument KEYS only, never
+    VALUES, so a large ``write_file`` ``content`` is never dumped into the log. A
+    truncated/malformed call shows as a missing key (``write_file(file_path)`` — no
+    ``content``) or ``name(INVALID)``; that is exactly the diagnostic signal for the
+    write_file loop.
+    """
+    summary: list[str] = []
+    for tc in getattr(ai, "tool_calls", None) or []:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        args = (tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", None)) or {}
+        keys = ",".join(sorted(args.keys())) if isinstance(args, dict) else ""
+        summary.append(f"{name}({keys})")
+    for tc in getattr(ai, "invalid_tool_calls", None) or []:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        summary.append(f"{name}(INVALID)")
+    return summary
+
+
+def _log_call_diagnostics(response: object, *, is_subagent: bool) -> None:
+    """One structured, greppable line per model call — so the write_file truncation
+    loop can be diagnosed from stdout even though task-mode calls are not persisted
+    to ``llm_call_log`` (that audit is workflow-only, and lacks finish_reason / tool
+    args anyway). Captures finish_reason, token usage, and the tool-call arg KEYS
+    (never values). Best-effort: never raises, never affects the model call.
+    """
+    try:
+        ai = _response_ai_message(response)
+        if ai is None:
+            return
+        meta = getattr(ai, "response_metadata", None) or {}
+        finish = meta.get("finish_reason") or meta.get("stop_reason")
+        usage = getattr(ai, "usage_metadata", None) or {}
+        content = ai.content if isinstance(ai.content, str) else ""
+        logger.info(
+            "BS_LINSIGHT_LLM_CALL graph={} finish_reason={} in_tokens={} out_tokens={} "
+            "content_len={} tool_calls={} truncated={}",
+            "sub" if is_subagent else "main",
+            finish,
+            usage.get("input_tokens"),
+            usage.get("output_tokens"),
+            len(content),
+            _summarize_tool_calls(ai) or "-",
+            _is_truncated_tool_call(response),
+        )
+    except Exception as e:  # pragma: no cover - observability must never break the call
+        logger.debug(f"[linsight] call-diagnostics logging failed: {e}")
+
+
 class LinsightModelResilienceMiddleware(AgentMiddleware):
     """Retry transient model failures; degrade or fail cleanly on the rest."""
 
@@ -201,6 +250,9 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                     continue
                 # DEGRADABLE, or RETRYABLE with retries exhausted.
                 return self._degrade_or_raise(exc)
+            # One greppable diagnostic line per model call (finish_reason / tokens /
+            # tool-call arg keys) — the only observability for task-mode calls.
+            _log_call_diagnostics(response, is_subagent=self.is_subagent)
             # L2 truncation guard: a length-truncated tool call → nudge + retry.
             if trunc_attempts < self.truncation_retry_limit and _is_truncated_tool_call(response):
                 trunc_attempts += 1
@@ -234,6 +286,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                         time.sleep(delay)
                     continue
                 return self._degrade_or_raise(exc)
+            _log_call_diagnostics(response, is_subagent=self.is_subagent)
             if trunc_attempts < self.truncation_retry_limit and _is_truncated_tool_call(response):
                 trunc_attempts += 1
                 current = _with_truncation_nudge(current)
