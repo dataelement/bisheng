@@ -1329,15 +1329,18 @@ async def _add_creator_owner_entry(
     permissions: list[ResourcePermissionItem],
     model_map: dict,
 ) -> list[ResourcePermissionItem]:
-    """Surface the DB creator as owner only when the resource has NO owner at all.
+    """Surface the DB creator as owner, with two regimes by resource type.
 
-    Owner and creator are decoupled: creation writes an OpenFGA owner tuple, but
-    older data or a delayed/failed tuple write can leave a resource with no owner
-    tuple. In that ownerless case the creator is shown (and treated by checks) as
-    the safety-net owner (INV-2). But once any owner tuple exists — the creator's
-    own, or another user's after ownership was moved — an explicit owner revoke on
-    the creator must stay effective, so we do NOT re-add the creator as owner.
-    Mirrors the check-side fallback in PermissionService._resource_has_active_owner.
+    knowledge_space creators are PERMANENT, non-removable owners: ownership is
+    backed by the SpaceChannelMember CREATOR row + Knowledge.user_id (which the
+    "我创建的" list and file read/write/delete all honor), independent of any FGA
+    owner tuple. So the creator must ALWAYS appear as owner and carry is_creator so
+    the UI locks the row (mirrors the channel creator).
+
+    Other resource types have no such membership authority — there owner and
+    creator are decoupled, and the creator is only a last-resort ownerless safety
+    net (INV-2), surfaced only when no owner tuple exists at all. Mirrors the
+    check-side fallback in PermissionService._resource_has_active_owner.
     """
     from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -1346,8 +1349,28 @@ async def _add_creator_owner_entry(
         return permissions
 
     creator_id = int(creator_id)
+    creator_is_permanent = resource_type == "knowledge_space"
+
+    existing_creator_owner = next(
+        (
+            item
+            for item in permissions
+            if item.subject_type == "user" and int(item.subject_id) == creator_id and item.relation == "owner"
+        ),
+        None,
+    )
+    if existing_creator_owner is not None:
+        # Creator already listed via an owner tuple. Flag it for the permanent
+        # regime so the UI locks the row; otherwise leave the list unchanged.
+        if creator_is_permanent:
+            existing_creator_owner.is_creator = True
+        return permissions
+
+    # Creator has no owner tuple. Decoupled types only backfill when the resource
+    # would otherwise be ownerless; the permanent (knowledge_space) type always
+    # backfills so the creator stays visible as owner even alongside other owners.
     has_any_owner = any(item.subject_type == "user" and item.relation == "owner" for item in permissions)
-    if has_any_owner:
+    if has_any_owner and not creator_is_permanent:
         return permissions
 
     user_name = None
@@ -1364,6 +1387,7 @@ async def _add_creator_owner_entry(
         subject_id=creator_id,
         subject_name=user_name,
         relation="owner",
+        is_creator=creator_is_permanent,
     )
     _attach_default_model_metadata(item, model_map)
     return [*permissions, item]
@@ -1480,7 +1504,21 @@ async def authorize_resource(
     # same-request owner grants count as survivors (ownership transfer).
     owner_revokes = [revoke for revoke in tuple_revokes if getattr(revoke, "relation", None) == "owner"]
     if owner_revokes:
-        if not await _can_remove_owner_relations(
+        if resource_type == "knowledge_space":
+            # The knowledge_space creator is a permanent, non-removable owner:
+            # ownership is backed by the SpaceChannelMember CREATOR row +
+            # Knowledge.user_id (honored by "我创建的" and file read/write/delete)
+            # regardless of FGA tuples, so revoking/downgrading the creator's owner
+            # is refused. Any OTHER owner is always safe to remove — the creator
+            # backstops ownership, so the space can never be orphaned.
+            from bisheng.permission.domain.services.permission_service import PermissionService
+
+            creator_id = await PermissionService._get_resource_creator(resource_type, resource_id)
+            if creator_id is not None and any(
+                revoke.subject_type == "user" and int(revoke.subject_id) == int(creator_id) for revoke in owner_revokes
+            ):
+                return PermissionDeniedError.return_resp("知识空间创建者的所有者身份不可移除")
+        elif not await _can_remove_owner_relations(
             resource_type=resource_type,
             resource_id=resource_id,
             revokes=owner_revokes,

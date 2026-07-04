@@ -677,6 +677,145 @@ class TestPermissionApiIntegration:
             )
         assert allowed is True
 
+    @pytest.mark.asyncio
+    async def test_add_creator_owner_entry_flags_knowledge_space_creator(self):
+        """knowledge_space creator is a permanent owner: an existing creator owner
+        tuple is flagged is_creator so the UI locks the row; co-owners are not."""
+        from bisheng.permission.api.endpoints.resource_permission import _add_creator_owner_entry
+
+        model_map = {"owner": {"id": "owner", "name": "所有者"}}
+        perms = [
+            ResourcePermissionItem(subject_type="user", subject_id=7, subject_name="creator", relation="owner"),
+            ResourcePermissionItem(subject_type="user", subject_id=9, subject_name="co-owner", relation="owner"),
+        ]
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+            new_callable=AsyncMock,
+            return_value=7,
+        ):
+            out = await _add_creator_owner_entry(
+                resource_type="knowledge_space", resource_id="134", permissions=perms, model_map=model_map
+            )
+        by_id = {int(i.subject_id): i for i in out}
+        assert by_id[7].is_creator is True
+        assert by_id[9].is_creator is False
+
+    @pytest.mark.asyncio
+    async def test_add_creator_owner_entry_synthesizes_kspace_creator_even_with_other_owner(self):
+        """knowledge_space creator with no owner tuple is STILL surfaced as owner
+        (+is_creator) alongside another owner — creator ownership is permanent."""
+        from bisheng.permission.api.endpoints.resource_permission import _add_creator_owner_entry
+
+        model_map = {"owner": {"id": "owner", "name": "所有者"}}
+        perms = [
+            ResourcePermissionItem(subject_type="user", subject_id=9, subject_name="co-owner", relation="owner"),
+        ]
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+            new_callable=AsyncMock,
+            return_value=7,
+        ):
+            out = await _add_creator_owner_entry(
+                resource_type="knowledge_space", resource_id="134", permissions=perms, model_map=model_map
+            )
+        by_id = {int(i.subject_id): i for i in out}
+        assert 7 in by_id and by_id[7].relation == "owner" and by_id[7].is_creator is True
+        assert 9 in by_id
+
+    @pytest.mark.asyncio
+    async def test_add_creator_owner_entry_omits_non_kspace_creator_when_other_owner_exists(self):
+        """Decoupled types (e.g. workflow): a creator with no owner tuple is NOT
+        re-added once another owner exists — an owner revoke stays effective."""
+        from bisheng.permission.api.endpoints.resource_permission import _add_creator_owner_entry
+
+        model_map = {"owner": {"id": "owner", "name": "所有者"}}
+        perms = [
+            ResourcePermissionItem(subject_type="user", subject_id=9, subject_name="owner", relation="owner"),
+        ]
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+            new_callable=AsyncMock,
+            return_value=7,
+        ):
+            out = await _add_creator_owner_entry(
+                resource_type="workflow", resource_id="wf-1", permissions=perms, model_map=model_map
+            )
+        subject_ids = {int(i.subject_id) for i in out}
+        assert 7 not in subject_ids
+        assert subject_ids == {9}
+
+    def test_authorize_blocks_removing_knowledge_space_creator_owner(self):
+        """knowledge_space creator owner is permanent and non-removable: revoking it
+        is refused (defense-in-depth behind the is_creator-locked UI row)."""
+        app = _make_app(_AdminUser)
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._resolve_department_space_scope",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=7,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v1/permissions/resources/knowledge_space/134/authorize",
+                    json={"grants": [], "revokes": [{"subject_type": "user", "subject_id": 7, "relation": "owner"}]},
+                )
+                body = resp.json()
+        assert body["status_code"] == 19000
+        mock_authorize.assert_not_awaited()
+
+    def test_authorize_allows_removing_non_creator_owner_on_knowledge_space(self):
+        """A non-creator owner on a knowledge_space is removable even if it is the
+        only owner TUPLE — the creator permanently backstops ownership."""
+        app = _make_app(_AdminUser)
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._resolve_department_space_scope",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=7,
+            ),
+            patch(
+                "bisheng.permission.domain.services.resource_permission_notification_service.ResourcePermissionNotificationService.build_context",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+                new_callable=AsyncMock,
+            ) as mock_authorize,
+        ):
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v1/permissions/resources/knowledge_space/134/authorize",
+                    json={"grants": [], "revokes": [{"subject_type": "user", "subject_id": 9, "relation": "owner"}]},
+                )
+                body = resp.json()
+        assert body["status_code"] == 200
+        mock_authorize.assert_awaited_once()
+
     def test_permissions_list_requires_can_edit_on_resource(self):
         app = _make_app(_ViewerUser)
 
@@ -748,6 +887,9 @@ class TestPermissionApiIntegration:
                 "include_children": None,
                 "model_id": "owner",
                 "model_name": "所有者",
+                # workflow (decoupled type): the ownerless-safety-net creator is NOT
+                # flagged is_creator, so its owner remains removable.
+                "is_creator": False,
             }
         ]
 

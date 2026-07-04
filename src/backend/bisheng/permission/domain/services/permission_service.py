@@ -1047,18 +1047,25 @@ class PermissionService:
         try:
             creator_id = await cls._get_resource_creator(object_type, object_id)
             if creator_id is not None and creator_id == user_id:
-                # Owner and creator are decoupled: the DB creator field is only a
-                # SAFETY NET so a resource is never left ownerless (INV-2), not a
-                # permanent owner. On the reachable-FGA path callers pass
-                # require_no_active_owner=True, so the creator counts as owner
-                # only while no other owner tuple remains — an explicit owner
-                # revoke/downgrade on the creator then actually takes effect.
-                # FGA-outage callers keep require_no_active_owner=False so the
-                # creator can still reach their own resource while FGA is down.
-                if not require_no_active_owner or not await cls._resource_has_active_owner(
-                    object_type,
-                    object_id,
-                    exclude_user_id=user_id,
+                # knowledge_space creators are PERMANENT owners: ownership is backed
+                # by the SpaceChannelMember CREATOR row (honored by the list + file
+                # access regardless of FGA tuples), so the creator always resolves as
+                # owner here too. For every OTHER type owner and creator are decoupled
+                # — the DB creator field is only a SAFETY NET so a resource is never
+                # left ownerless (INV-2), not a permanent owner: on the reachable-FGA
+                # path (require_no_active_owner=True) the creator counts as owner only
+                # while no other owner tuple remains, so an explicit owner revoke /
+                # downgrade on the creator then actually takes effect. FGA-outage
+                # callers keep require_no_active_owner=False so the creator can still
+                # reach their own resource while FGA is down.
+                if (
+                    object_type == "knowledge_space"
+                    or not require_no_active_owner
+                    or not await cls._resource_has_active_owner(
+                        object_type,
+                        object_id,
+                        exclude_user_id=user_id,
+                    )
                 ):
                     return PermissionLevel.owner.value
             department_space_level = await cls._implicit_department_space_member_level(
