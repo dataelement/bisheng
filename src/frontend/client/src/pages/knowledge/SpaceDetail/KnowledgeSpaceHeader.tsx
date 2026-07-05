@@ -33,7 +33,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { AiDialogIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 
@@ -135,7 +135,6 @@ export function KnowledgeSpaceHeader({
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
-    const isH5 = usePrefersMobileLayout();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
     const toolbarMeasureRef = useRef<HTMLDivElement>(null);
     const [toolbarCompact, setToolbarCompact] = useState(false);
@@ -156,7 +155,7 @@ export function KnowledgeSpaceHeader({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
-    const selectedThreshold = isH5 ? 0 : 1;
+    const selectedThreshold = 0;
     const showAddMenu = !hideNativeAddMenu && (canCreateFolder || canUploadFile);
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
