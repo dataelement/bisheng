@@ -6928,7 +6928,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         data = await self._handle_file_folder_extra_info(
             visible_page_items,
-            include_folder_counts=False,
+            include_folder_counts=True,
         )
 
         next_cursor: str | None = None
