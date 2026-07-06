@@ -5,6 +5,8 @@ Tests roundtrip fidelity, cache-miss behavior, and graceful degradation when
 Redis is unavailable, using a minimal in-memory fake Redis client.
 """
 
+from datetime import datetime
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -24,10 +26,29 @@ class _FakeRedis:
 
 @pytest.mark.asyncio
 async def test_set_then_get_roundtrip_preserves_fields():
+    from bisheng.common.models.space_channel_member import UserRoleEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import (
+        KnowledgeSpaceLevelEnum,
+        KnowledgeSpaceOwnerTypeEnum,
+    )
     from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp
 
     fake = _FakeRedis()
-    space = KnowledgeSpaceInfoResp(id=3, name='n', user_id=88)
+    non_default_update_time = datetime(2026, 1, 2, 3, 4, 5)
+    space = KnowledgeSpaceInfoResp(
+        id=3,
+        name='n',
+        user_id=88,
+        user_role=UserRoleEnum.ADMIN,
+        space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+        update_time=non_default_update_time,
+    )
+    # Sanity-check the fixture itself isn't accidentally using schema defaults,
+    # so the round-trip assertions below actually exercise non-default values.
+    assert space.user_role != UserRoleEnum.MEMBER
+    assert space.space_level != KnowledgeSpaceLevelEnum.PERSONAL
+    assert space.owner_type != KnowledgeSpaceOwnerTypeEnum.USER
     with patch('bisheng.knowledge.domain.services.space_list_cache.get_redis_client',
                new_callable=AsyncMock, return_value=fake):
         await SpaceListCache.set(7, 'update_time', [space])
@@ -36,9 +57,10 @@ async def test_set_then_get_roundtrip_preserves_fields():
     assert [s.id for s in got] == [3]
     assert got[0].name == 'n'
     assert got[0].user_id == 88
-    assert got[0].space_level == space.space_level
-    assert got[0].user_role == space.user_role
-    assert got[0].owner_type == space.owner_type
+    assert got[0].space_level == KnowledgeSpaceLevelEnum.DEPARTMENT
+    assert got[0].user_role == UserRoleEnum.ADMIN
+    assert got[0].owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
+    assert got[0].update_time == non_default_update_time
 
 
 @pytest.mark.asyncio
