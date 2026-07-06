@@ -23,6 +23,10 @@ from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.services.favorite_notify import (
+    FAVORITE_SOURCE_VERSION_UPDATED,
+    notify_favorite_source_changed,
+)
 from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
     KnowledgeFileSimilarityCandidate,
 )
@@ -58,6 +62,8 @@ class KnowledgeVersionService:
         self.version_repo = version_repo
         self.knowledge_file_repo = knowledge_file_repo
         self.similar_candidate_repo = similar_candidate_repo
+        # 由依赖注入补齐（见 get_knowledge_version_service）；缺失时通知静默跳过。
+        self.message_service = None
 
     async def _delete_similarity_candidate_cache_by_file_ids(self, file_ids: list[int]) -> None:
         if self.similar_candidate_repo is None or not file_ids:
@@ -323,6 +329,22 @@ class KnowledgeVersionService:
             current_kf.file_name,
             next_no,
         )
+
+        # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
+        # 受影响文件：被关联为新版本的当前文件，以及被降级的旧 primary 文件。
+        # best-effort：notify 内部已吞异常，不影响版本关联主流程。
+        affected_files: list[tuple[int, str]] = [(int(current_kf.id), current_kf.file_name or "")]
+        if old_primary is not None and int(old_primary.knowledge_file_id) != int(current_kf.id):
+            affected_files.append((int(old_primary.knowledge_file_id), ""))
+        for affected_file_id, affected_file_name in affected_files:
+            await notify_favorite_source_changed(
+                self.message_service,
+                source_file_id=affected_file_id,
+                file_name=affected_file_name,
+                action_code=FAVORITE_SOURCE_VERSION_UPDATED,
+                actor_user_id=self.login_user.user_id,
+                actor_user_name=getattr(self.login_user, "user_name", None),
+            )
 
         return LinkResponse(document_id=target_document_id, new_version_no=next_no)
 

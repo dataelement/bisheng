@@ -73,6 +73,12 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     channel_dismissed: "com_notifications_action_channel_dismissed",
     knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
     qa_expert_invited: "com_notifications_action_qa_expert_invited",
+    // 收藏的源文件发生变更（名称/位置/标签/分类·业务域/版本）
+    favorite_source_renamed: "com_notifications_action_favorite_source_renamed",
+    favorite_source_moved: "com_notifications_action_favorite_source_moved",
+    favorite_source_tags_updated: "com_notifications_action_favorite_source_tags_updated",
+    favorite_source_classification_updated: "com_notifications_action_favorite_source_classification_updated",
+    favorite_source_version_updated: "com_notifications_action_favorite_source_version_updated",
 };
 
 const APPROVAL_CENTER_ACTION_CODES = new Set([
