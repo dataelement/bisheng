@@ -272,19 +272,14 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
         !!toolCall.error ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
-    // Collapsed by default; only errors auto-expand so failures stay visible
-    // without a click. (Knowledge KB-level failures count as errors too.)
-    const hasKnowledgeErrors =
-        variant === "knowledge" && knowledgeChips.some((kb) => kb.error);
-    const initialExpanded = !!toolCall.error || hasKnowledgeErrors;
-    const [expanded, setExpanded] = useState<boolean>(initialExpanded);
+    // All nodes start collapsed — including failed calls; the red rail icon
+    // and "失败" label already signal the error, the user expands for detail.
+    const [expanded, setExpanded] = useState<boolean>(false);
+    // Re-collapse when the call transitions (e.g. inflight → finished) so a
+    // row the user expanded mid-stream doesn't stay open for the final state.
     useEffect(() => {
-        if (toolCall.error || hasKnowledgeErrors) {
-            setExpanded(true);
-        } else {
-            setExpanded(false);
-        }
-    }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors]);
+        setExpanded(false);
+    }, [toolCall.inflight, toolCall.error, variant]);
 
     const railIcon = toolCall.inflight ? (
         <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />

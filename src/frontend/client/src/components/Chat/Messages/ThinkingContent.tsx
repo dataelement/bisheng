@@ -1,42 +1,36 @@
 /**
  * ThinkingContent — collapsible thinking block. Mirrors task-mode's
- * DeepStepGroup thinking node: the header reads "正在深度思考（已用 N 秒）..."
- * while reasoning is live (with a spinner icon + pulsing label), then settles
- * to "已深度思考（用时 N 秒）" once the segment closes. With no timing info
- * (legacy :::thinking::: rows) it falls back to a plain "已深度思考" label.
+ * DeepStepGroup thinking node: the header reads "正在深度思考..." while
+ * reasoning is live (with a spinner icon + pulsing label), then settles to
+ * "已深度思考" once the segment closes.
+ *
+ * Timing props (startedAt/endedAt/durationMs) are still accepted so callers
+ * stay unchanged, but the "（用时 N 秒）" clause is intentionally not rendered.
  *
  * Layout: a left icon column next to a body column (trigger + collapsible text).
  */
 import { Outlined } from "bisheng-icons";
-import { memo, useCallback, useEffect, useState, type FC, type MouseEvent } from "react";
-import { cn, formatSeconds } from "~/utils";
+import { memo, useCallback, useState, type FC, type MouseEvent } from "react";
+import { cn } from "~/utils";
 
 export interface ThinkingContentProps {
     reasoning: string;
     /** True while the reasoning is still streaming (no end frame yet). Drives
-     *  the spinner icon, pulsing label and live elapsed ticker. */
+     *  the spinner icon and pulsing label. */
     isStreaming?: boolean;
-    /** Epoch ms of the first thinking delta — anchors the elapsed clock. */
+    /** Accepted for caller compatibility; duration is no longer rendered. */
     startedAt?: number;
-    /** Epoch ms of the thinking end frame — freezes the elapsed clock. */
+    /** Accepted for caller compatibility; duration is no longer rendered. */
     endedAt?: number;
-    /** Fallback total duration when started/ended wall-clock isn't available. */
+    /** Accepted for caller compatibility; duration is no longer rendered. */
     durationMs?: number;
 }
 
 const ThinkingContent: FC<ThinkingContentProps> = memo(
-    ({ reasoning, isStreaming = false, startedAt, endedAt, durationMs }) => {
+    ({ reasoning, isStreaming = false }) => {
         // Always default collapsed — even while reasoning is still streaming —
         // so the answer body stays the focus; the user expands to read.
         const [isExpanded, setIsExpanded] = useState(false);
-
-        // Live-tick while streaming so the header counter advances every 100ms.
-        const [tick, setTick] = useState(0);
-        useEffect(() => {
-            if (!isStreaming) return;
-            const id = window.setInterval(() => setTick((t) => t + 1), 100);
-            return () => window.clearInterval(id);
-        }, [isStreaming]);
 
         const handleClick = useCallback((e: MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
@@ -45,25 +39,7 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(
 
         if (!reasoning) return null;
 
-        const elapsedMs = (() => {
-            if (startedAt == null) return durationMs ?? 0;
-            // Closed segment with no end frame: fall back to the recorded duration
-            // so the label doesn't creep against Date.now().
-            if (!isStreaming && endedAt == null) return durationMs ?? 0;
-            const stop = isStreaming ? Date.now() : endedAt!;
-            return Math.max(0, stop - startedAt);
-        })();
-        // Read `tick` so the elapsed value re-evaluates on every interval render.
-        void tick;
-        const showDuration = elapsedMs > 0;
-
-        const label = isStreaming
-            ? showDuration
-                ? `正在深度思考（已用 ${formatSeconds(elapsedMs)} 秒）...`
-                : `正在深度思考...`
-            : showDuration
-                ? `已深度思考（用时 ${formatSeconds(elapsedMs)} 秒）`
-                : `已深度思考`;
+        const label = isStreaming ? `正在深度思考...` : `已深度思考`;
 
         return (
             <div className="flex w-full min-w-0 gap-2 animate-thinking-appear">
