@@ -54,8 +54,9 @@ export function useInlineRename({
     onCancelCreate,
 }: UseInlineRenameOptions) {
     const localize = useLocalize();
+    const { base: initialBase, ext } = splitEditableFileName(fileName, isFolder);
     const [isRenaming, setIsRenaming] = useState(isCreating);
-    const [renameValue, setRenameValue] = useState(fileName);
+    const [renameValue, setRenameValue] = useState(initialBase);
     const inputRef = useRef<HTMLInputElement>(null);
     const { showToast } = useToastContext();
 
@@ -69,18 +70,12 @@ export function useInlineRename({
             
             // Text selection is delayed to ensure the browser doesn't clear it immediately after focus
             const timerId = setTimeout(() => {
-                // Select text before extension for files, or select all for folders
-                const dotIndex = fileName.lastIndexOf(".");
-                if (dotIndex > 0 && !isFolder) {
-                    input.setSelectionRange(0, dotIndex);
-                } else {
-                    input.select();
-                }
+                input.select();
             }, 10);
-            
+
             return () => clearTimeout(timerId);
         }
-    }, [isRenaming, isFolder, fileName]);
+    }, [isRenaming]);
 
     const handleRenameSubmit = useCallback(() => {
         const trimmed = renameValue.trim();
@@ -92,22 +87,23 @@ export function useInlineRename({
             return;
         }
 
-        // Non-creating: empty name → revert
+        // Non-creating: empty base → revert
         if (!isCreating && !trimmed) {
-            setRenameValue(fileName);
+            setRenameValue(initialBase);
             setIsRenaming(false);
             return;
         }
 
         // No change → close
-        if (trimmed === fileName && !isCreating) {
+        if (trimmed === initialBase && !isCreating) {
             setIsRenaming(false);
             return;
         }
 
-        // Validate
+        // Validate against the full (base + ext) name to keep parity with the backend.
+        const fullName = isCreating ? trimmed : joinEditableFileName(trimmed, ext);
         if (onValidateName) {
-            const err = onValidateName(trimmed);
+            const err = onValidateName(fullName);
             if (err) {
                 showToast({ message: err, status: "error", severity: "error" } as any);
                 inputRef.current?.focus();
@@ -115,9 +111,9 @@ export function useInlineRename({
             }
         }
 
-        onRename(trimmed);
+        onRename(fullName);
         setIsRenaming(false);
-    }, [renameValue, isCreating, fileName, onRename, onValidateName, showToast]);
+    }, [renameValue, isCreating, initialBase, ext, onRename, onValidateName, showToast, localize]);
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
@@ -127,25 +123,26 @@ export function useInlineRename({
                 if (isCreating) {
                     onCancelCreate?.();
                 } else {
-                    setRenameValue(fileName);
+                    setRenameValue(initialBase);
                     setIsRenaming(false);
                 }
             }
         },
-        [handleRenameSubmit, isCreating, fileName, onCancelCreate]
+        [handleRenameSubmit, isCreating, initialBase, onCancelCreate]
     );
 
     /** Programmatically enter rename mode (e.g. from dropdown menu) */
     const startRenaming = useCallback(() => {
-        setRenameValue(fileName);
+        setRenameValue(initialBase);
         setIsRenaming(true);
-    }, [fileName]);
+    }, [initialBase]);
 
     return {
         isRenaming,
         renameValue,
         setRenameValue,
         inputRef,
+        ext,
         handleRenameSubmit,
         handleKeyDown,
         startRenaming,

@@ -34,3 +34,12 @@ describe("joinEditableFileName", () => {
     expect(joinEditableFileName("readme", "")).toBe("readme");
   });
 });
+
+describe("rename submit composition", () => {
+  test("edited base recombines with preserved extension", () => {
+    const { base, ext } = splitEditableFileName("old-name.PDF", false);
+    expect(base).toBe("old-name");
+    expect(ext).toBe(".PDF");
+    expect(joinEditableFileName("new-name", ext)).toBe("new-name.PDF");
+  });
+});
