@@ -5587,6 +5587,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         order_by: str = "update_time",
     ) -> GroupedKnowledgeSpacesResp:
+        await self._ensure_personal_spaces()
         spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
         for space in spaces:
@@ -5598,6 +5599,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.team_spaces.append(space)
             else:
                 grouped.personal_spaces.append(space)
+        grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
     async def get_spaces_by_level(
@@ -5608,8 +5610,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_level = self._normalize_space_level(space_level)
         favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            favorite_space = await self._ensure_favorite_space()
-            favorite_space_id = int(favorite_space.id)
+            await self._ensure_personal_spaces()
+            favorite_space = await self._find_favorite_space()
+            favorite_space_id = int(favorite_space.id) if favorite_space else None
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
