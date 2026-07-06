@@ -34,6 +34,7 @@ class AssociableDocumentEntry(BaseModel):
     current_primary_version_no: int
     primary_uploader_name: str | None = None
     primary_upload_time: datetime | None = None
+    primary_knowledge_file_id: int  # primary version's knowledge_file_id, used for preview
 
 
 class ShougangFilePublishDocumentEntry(BaseModel):
@@ -86,6 +87,7 @@ class SimilarCandidateEntry(BaseModel):
     refined_similarity: float | None = None  # TF-IDF cosine over chunk text; None when refine skipped
     primary_uploader_name: str | None = None
     primary_upload_time: datetime | None = None
+    primary_knowledge_file_id: int  # primary version's knowledge_file_id, used for preview
 
 
 class PendingSimilarFileEntry(BaseModel):
