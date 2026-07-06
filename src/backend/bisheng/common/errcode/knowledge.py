@@ -207,3 +207,8 @@ class KnowledgeInvalidCursorError(BaseErrorCode):
 class SpacePersonalCreateForbiddenError(BaseErrorCode):
     Code: int = 18072
     Msg: str = '个人知识库不支持手动新建'
+
+
+class PersonalSpaceProtectedError(BaseErrorCode):
+    Code: int = 18073
+    Msg: str = '个人知识库不支持删除或授权'

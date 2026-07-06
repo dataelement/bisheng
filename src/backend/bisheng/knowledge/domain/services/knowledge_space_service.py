@@ -56,6 +56,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
     SpacePersonalCreateForbiddenError,
+    PersonalSpaceProtectedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -5266,6 +5267,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
