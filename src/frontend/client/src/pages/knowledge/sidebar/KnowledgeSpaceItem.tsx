@@ -1,7 +1,7 @@
 import { Building2, ChevronDown, ChevronRight, LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { KnowledgeSpace, SpaceLevel, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -261,11 +261,6 @@ export default function KnowledgeSpaceItem({
                     <KnowledgeFolderTree
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
-                        fileStatus={
-                            space.role === SpaceRole.MEMBER
-                                ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED
-                                : undefined
-                        }
                         onSelectFolder={handleSelectFolder}
                     />
                 </div>

@@ -3,7 +3,6 @@ import {
     FileStatus,
     KnowledgeFile,
     KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
     SpaceRole,
     SortDirection,
     SortType,
@@ -219,7 +218,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 const isMember = activeSpace.role === SpaceRole.MEMBER;
                 const fileStatusNums = statusFilter.length > 0
                     ? statusFilter.map(fileStatusToNumber)
-                    : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+                    : undefined;
 
                 // Search path: backend still page-numbered; compute next page.
                 const searchPageToFetch = isSearching
@@ -475,10 +474,9 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (currentFiles.length === 0) return;
 
         try {
-            const isMember = activeSpace.role === SpaceRole.MEMBER;
             const fileStatusNums = statusFilter.length > 0
                 ? statusFilter.map(fileStatusToNumber)
-                : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+                : undefined;
             // Cap the poll fetch at 100 to bound the request — pending files
             // (recent update_time) sit at the top under default sort anyway.
             const fetchSize = Math.min(currentFiles.length, 100);
