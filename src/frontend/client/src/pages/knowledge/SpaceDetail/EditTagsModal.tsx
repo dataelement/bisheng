@@ -150,7 +150,7 @@ function isApprovedRecommendedTag(item: KnowledgeSpaceTagLibraryTagItem, spaceTa
 }
 
 function spaceTagsToRecommendedItems(tags: SpaceTag[]): KnowledgeSpaceTagLibraryTagItem[] {
-    return mergeRecommendedTags(
+    const libraryItems = mergeRecommendedTags(
         tags
             .filter(isLibrarySpaceTag)
             .map((tag) => ({
@@ -158,6 +158,19 @@ function spaceTagsToRecommendedItems(tags: SpaceTag[]): KnowledgeSpaceTagLibrary
                 resource_type: tag.resource_type || "manual_tag",
             })),
     );
+    const libraryNames = new Set(libraryItems.map((item) => item.name.trim().toLowerCase()));
+    const pendingManualItems: KnowledgeSpaceTagLibraryTagItem[] = [];
+    for (const tag of tags) {
+        if (isLibrarySpaceTag(tag) || !isPendingReviewSpaceTag(tag)) continue;
+        const name = String(tag.name ?? "").trim();
+        if (!name || libraryNames.has(name.toLowerCase())) continue;
+        pendingManualItems.push({
+            name,
+            resource_type: tag.resource_type || "manual_tag",
+            review_status: 0,
+        });
+    }
+    return [...libraryItems, ...pendingManualItems];
 }
 
 function buildSavedFileTags(
@@ -604,6 +617,11 @@ export function EditTagsModal({
     const renderRecommendedTagItem = (item: KnowledgeSpaceTagLibraryTagItem) => {
         const isSelected = isRecommendedTagSelected(item);
         const isClickable = canSelectRecommendedTag(item);
+        const isPendingReview = item.review_status === 0;
+        const pendingClass = "bg-[#f2f3f5] text-[#c9cdd4] hover:bg-[#e5e6eb] cursor-pointer";
+        const normalClass = isClickable
+            ? "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
+            : "bg-[#f2f3f5] text-[#c9cdd4] cursor-not-allowed";
         return (
             <span
                 key={`${item.resource_type}:${item.name}`}
@@ -611,10 +629,12 @@ export function EditTagsModal({
                     void handleSelectRecommendedTag(item);
                 }}
                 className={`px-2 h-7 flex items-center justify-center gap-1 text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
-                    ? "text-[#165dff] cursor-default bg-primary/10"
-                    : isClickable
-                        ? "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
-                        : "bg-[#f2f3f5] text-[#c9cdd4] cursor-not-allowed"
+                    ? isPendingReview
+                        ? "text-[#86909c] cursor-default bg-[#f2f3f5]"
+                        : "text-[#165dff] cursor-default bg-primary/10"
+                    : isPendingReview
+                        ? pendingClass
+                        : normalClass
                     }`}
             >
                 {item.name}
@@ -666,7 +686,10 @@ export function EditTagsModal({
                         {selectedTags.map((tag) => (
                             <span
                                 key={tag.id}
-                                className="flex items-center justify-center bg-[#f2f3f5] text-[#4e5969] px-2 h-[22px] rounded-[4px] text-sm leading-[22px] whitespace-nowrap gap-1"
+                                className={`flex items-center justify-center px-2 h-[22px] rounded-[4px] text-sm leading-[22px] whitespace-nowrap gap-1 ${isPendingReviewSpaceTag(tag)
+                                    ? "bg-[#f2f3f5] text-[#c9cdd4]"
+                                    : "bg-[#f2f3f5] text-[#4e5969]"
+                                    }`}
                             >
                                 {tag.name}
                                 <button

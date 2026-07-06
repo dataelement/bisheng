@@ -171,19 +171,19 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
 )
-from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
-    KnowledgeAuditTelemetryService,
-)
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
-    KnowledgeSpaceTagLibraryService,
-)
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_CLASSIFICATION_UPDATED,
     FAVORITE_SOURCE_MOVED,
     FAVORITE_SOURCE_RENAMED,
     FAVORITE_SOURCE_TAGS_UPDATED,
     notify_favorite_source_changed,
+)
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
+    KnowledgeAuditTelemetryService,
+)
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
+    KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -6659,25 +6659,51 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def _load_file_tags_batch(self, file_ids: list[int]) -> dict[int, list[dict]]:
-        """Load approved file tags only (pending review tags are excluded)."""
+        """Load approved file tags and pending review tags for display."""
         if not file_ids:
             return {}
 
         resource_ids = [str(file_id) for file_id in file_ids]
+        tenant_id = int(self.login_user.tenant_id)
         tag_dict = await asyncio.to_thread(
             TagDao.get_tags_by_resource_batch,
             [ResourceTypeEnum.SPACE_FILE],
             resource_ids,
         )
+        review_tag_dict = await asyncio.to_thread(
+            ReviewTagDao.get_tags_by_resource_batch,
+            [ResourceTypeEnum.SPACE_FILE],
+            resource_ids,
+            tenant_id=tenant_id,
+        )
+
         file_tags: dict[int, list[dict]] = {}
-        for fid_str, tags in tag_dict.items():
-            try:
-                normalized_file_id = int(fid_str)
-            except (TypeError, ValueError):
-                continue
-            file_tags[normalized_file_id] = [
-                {"id": tag.id, "name": tag.name, "resource_type": tag.resource_type} for tag in tags
-            ]
+        for file_id in file_ids:
+            fid_str = str(file_id)
+            items: list[dict] = []
+            seen_names: set[str] = set()
+            for tag in tag_dict.get(fid_str, []):
+                name = (tag.name or "").strip()
+                if not name:
+                    continue
+                seen_names.add(name.lower())
+                items.append({"id": tag.id, "name": tag.name, "resource_type": tag.resource_type})
+            for review_tag in review_tag_dict.get(fid_str, []):
+                if review_tag.review_status != 0:
+                    continue
+                name = (review_tag.name or "").strip()
+                if not name or name.lower() in seen_names:
+                    continue
+                items.append(
+                    {
+                        "id": review_tag.id,
+                        "name": review_tag.name,
+                        "resource_type": review_tag.resource_type,
+                        "review_status": review_tag.review_status,
+                    }
+                )
+            if items:
+                file_tags[file_id] = items
         return file_tags
 
     async def _handle_file_folder_extra_info(
@@ -8636,27 +8662,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     # ──────────────────────────── Tags ───────────────────────────────────
-    async def get_space_tags(self, space_id: int) -> list[Tag]:
-        """Return tags from all tag libraries bound to the knowledge space."""
+    async def get_space_tags(self, space_id: int) -> list[Tag | ReviewTag]:
+        """Return bound library tags plus pending review tags for the knowledge space."""
         await self._require_read_permission(space_id)
 
-        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
-        if not library_ids:
-            return []
-
-        tag_map = await TagDao.aget_tags_by_business_ids(
-            TagBusinessTypeEnum.TAG_LIBRARY,
-            [str(library_id) for library_id in library_ids],
-        )
-
         merged: list[Tag] = []
-        for library_id in library_ids:
-            library_tags = await TagLibraryTagService._repair_legacy_library_resource_types(
-                tag_map.get(str(library_id), []),
+        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+        if library_ids:
+            tag_map = await TagDao.aget_tags_by_business_ids(
+                TagBusinessTypeEnum.TAG_LIBRARY,
+                [str(library_id) for library_id in library_ids],
             )
-            merged.extend(library_tags)
+            for library_id in library_ids:
+                library_tags = await TagLibraryTagService._repair_legacy_library_resource_types(
+                    tag_map.get(str(library_id), []),
+                )
+                merged.extend(library_tags)
+            merged = TagLibraryTagService.dedupe_library_tags_by_name(merged)
 
-        return TagLibraryTagService.dedupe_library_tags_by_name(merged)
+        library_names = {(tag.name or "").strip().lower() for tag in merged if (tag.name or "").strip()}
+
+        pending_review_tags = await ReviewTagDao.get_tags_by_business(
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+        )
+        result: list[Tag | ReviewTag] = list(merged)
+        for review_tag in pending_review_tags:
+            if review_tag.is_deleted or review_tag.review_status != 0:
+                continue
+            name = (review_tag.name or "").strip()
+            if not name or name.lower() in library_names:
+                continue
+            result.append(review_tag)
+        return result
 
     async def _find_tenant_library_tag_by_name(self, tag_name: str) -> Tag | None:
         return await TagLibraryTagService.find_library_tag_by_name(
