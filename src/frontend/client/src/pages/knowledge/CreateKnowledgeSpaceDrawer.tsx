@@ -247,7 +247,8 @@ export function CreateKnowledgeSpaceDrawer({
         {
             value: SpaceLevel.PERSONAL,
             label: localize("com_knowledge.personal_spaces"),
-            enabled: createOptions?.canCreatePersonal ?? true,
+            // Personal knowledge bases are system-managed; users cannot create them.
+            enabled: false,
         },
     ]), [createOptions, localize]);
     const enabledLevelOptions = useMemo(
