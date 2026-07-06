@@ -532,9 +532,15 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
-    it("renders pending manual tags in gray under manual recommended section", async () => {
+    it("does not render knowledge_space tags from space tag API in recommended section", async () => {
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
-            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
+            {
+                id: 2,
+                name: "待审核",
+                review_status: 0,
+                resource_type: "manual_tag",
+                business_type: "knowledge_space",
+            },
             { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
         ]);
 
@@ -549,11 +555,42 @@ describe("EditTagsModal recommended tags", () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText("待审核")).toBeInTheDocument();
+            expect(screen.getByText("人工C")).toBeInTheDocument();
             expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
         });
 
-        expect(screen.getByText("待审核").className).toContain("text-[#c9cdd4]");
+        expect(screen.queryByText("待审核")).not.toBeInTheDocument();
+    });
+
+    it("keeps file-attached pending tags in the input area without listing them as recommended tags", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            {
+                id: 2,
+                name: "待审核",
+                review_status: 0,
+                resource_type: "manual_tag",
+                business_type: "knowledge_space",
+            },
+            { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[2]}
+                initialTags={[
+                    { id: 2, name: "待审核", resource_type: "manual_tag", review_status: 0 },
+                ]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getAllByText("待审核").length).toBe(1);
+            expect(screen.getByText("人工C")).toBeInTheDocument();
+        });
     });
 
     it("shows duplicate hint when Enter repeats an already selected draft tag", async () => {
