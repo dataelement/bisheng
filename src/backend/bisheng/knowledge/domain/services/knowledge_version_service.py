@@ -733,6 +733,45 @@ class KnowledgeVersionService:
         )
         return DismissSimilarResponse(knowledge_file_id=kf.id, similar_status=2)
 
+    async def batch_dismiss_similar(self, knowledge_file_ids: list[int]):
+        """Batch variant of ``dismiss_similar``.
+
+        Applies the same 'don't link' transition (similar_status=2 + audit log) to
+        each file. Non-existent ids are skipped silently so a partially stale
+        selection from the client still succeeds for the valid files.
+        """
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
+            BatchDismissSimilarResponse,
+        )
+        from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
+            KnowledgeAuditTelemetryService,
+        )
+
+        await self._require_version_management_enabled()
+
+        dismissed_ids: list[int] = []
+        for knowledge_file_id in knowledge_file_ids:
+            kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+            if kf is None:
+                continue
+
+            if kf.similar_status != 2:
+                kf.similar_status = 2
+                await self.knowledge_file_repo.update(kf)
+
+            KnowledgeAuditTelemetryService.audit_dismiss_similar_file(
+                self.login_user,
+                self.request,
+                kf.knowledge_id,
+                kf.file_name,
+            )
+            dismissed_ids.append(kf.id)
+
+        return BatchDismissSimilarResponse(
+            dismissed_count=len(dismissed_ids),
+            knowledge_file_ids=dismissed_ids,
+        )
+
     async def get_version_recommendations(
         self,
         current_file_id: int,

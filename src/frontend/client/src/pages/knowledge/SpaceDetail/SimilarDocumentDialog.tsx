@@ -8,6 +8,7 @@ import {
     DialogTitle,
 } from "~/components/ui/Dialog";
 import { Button } from "~/components/ui/Button";
+import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
@@ -17,6 +18,7 @@ import { useConfirm } from "~/Providers";
 import {
     getPendingSimilarFilesApi,
     dismissSimilarApi,
+    batchDismissSimilarApi,
     getSimilarCandidatesApi,
     searchDocumentsApi,
     linkAsNewVersionApi,
@@ -42,10 +44,16 @@ interface PendingFileRowProps {
     entry: PendingSimilarFileEntry;
     isSelected: boolean;
     onClick: () => void;
+    /** When true the row shows a leading checkbox and click toggles selection. */
+    batchMode?: boolean;
+    /** Whether this row is checked in batch mode. */
+    checked?: boolean;
 }
 
-function PendingFileRow({ entry, isSelected, onClick }: PendingFileRowProps) {
+function PendingFileRow({ entry, isSelected, onClick, batchMode = false, checked = false }: PendingFileRowProps) {
     const localize = useLocalize();
+    // In batch mode "active" styling follows the checkbox; otherwise it follows single-selection.
+    const active = batchMode ? checked : isSelected;
     return (
         <button
             type="button"
@@ -53,17 +61,20 @@ function PendingFileRow({ entry, isSelected, onClick }: PendingFileRowProps) {
             className={[
                 "w-full text-left px-3 py-3 transition-colors rounded-[8px] flex items-start gap-2 mb-1",
                 "hover:bg-[#f2f3f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                isSelected ? "bg-[#F0F5FF]" : "bg-transparent",
+                active ? "bg-[#F0F5FF]" : "bg-transparent",
             ].join(" ")}
         >
-            <FileSearch className={["shrink-0 size-[14px] mt-0.5", isSelected ? "text-[#165dff]" : "text-[#4e5969]"].join(" ")} />
+            {batchMode && (
+                <Checkbox checked={checked} className="pointer-events-none mt-0.5 shrink-0" />
+            )}
+            <FileSearch className={["shrink-0 size-[14px] mt-0.5", active ? "text-[#165dff]" : "text-[#4e5969]"].join(" ")} />
             <div className="flex-1 min-w-0">
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <p
                             className={[
                                 "truncate text-[14px] font-medium leading-5",
-                                isSelected ? "text-[#165dff]" : "text-[#1d2129]",
+                                active ? "text-[#165dff]" : "text-[#1d2129]",
                             ].join(" ")}
                         >
                             {entry.file_name}
@@ -449,6 +460,9 @@ export function SimilarDocumentDialog({
     const queryClient = useQueryClient();
 
     const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
+    // Batch "不关联" mode: when on, the left list shows checkboxes for multi-select.
+    const [batchMode, setBatchMode] = useState(false);
+    const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
 
     // Fetch the list of pending similar files
     const { data: pending = [], isLoading, refetch: _refetch } = useQuery({
@@ -472,12 +486,27 @@ export function SimilarDocumentDialog({
         }
     }, [pending]);
 
-    // Reset selection when dialog closes
+    // Reset selection + batch state when dialog closes
     useEffect(() => {
         if (!open) {
             setSelectedFileId(null);
+            setBatchMode(false);
+            setCheckedIds(new Set());
         }
     }, [open]);
+
+    // Drop checked ids that no longer exist after a refetch (e.g. processed elsewhere)
+    useEffect(() => {
+        setCheckedIds((prev) => {
+            if (prev.size === 0) return prev;
+            const alive = new Set(pending.map((e) => e.knowledge_file_id));
+            const next = new Set<number>();
+            prev.forEach((id) => {
+                if (alive.has(id)) next.add(id);
+            });
+            return next.size === prev.size ? prev : next;
+        });
+    }, [pending]);
 
     // Dismiss mutation — marks the file as "don't link"
     const dismissMutation = useMutation({
@@ -504,6 +533,60 @@ export function SimilarDocumentDialog({
         queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceId] });
         onProcessed?.();
         setSelectedFileId(null); // refetch will re-auto-select next pending
+    };
+
+    // Batch dismiss mutation — marks every checked file as "don't link"
+    const batchDismissMutation = useMutation({
+        mutationFn: (fileIds: number[]) => batchDismissSimilarApi(fileIds),
+        onSuccess: (resp) => {
+            showToast({
+                message: localize("com_knowledge.version.toast_batch_dismiss_success", {
+                    count: resp.dismissed_count,
+                }),
+                status: "success",
+            });
+            queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceId] });
+            onProcessed?.();
+            setBatchMode(false);
+            setCheckedIds(new Set());
+            setSelectedFileId(null); // refetch will re-auto-select next pending
+        },
+        onError: () => {
+            showToast({
+                message: localize("com_knowledge.version.toast_link_failure"),
+                status: "error",
+            });
+        },
+    });
+
+    // Enter/exit batch mode
+    const handleEnterBatch = () => {
+        setBatchMode(true);
+        setCheckedIds(new Set());
+    };
+    const handleCancelBatch = () => {
+        setBatchMode(false);
+        setCheckedIds(new Set());
+    };
+
+    // Toggle a single file's checked state in batch mode
+    const handleToggleChecked = (fileId: number) => {
+        setCheckedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(fileId)) {
+                next.delete(fileId);
+            } else {
+                next.add(fileId);
+            }
+            return next;
+        });
+    };
+
+    // Select-all derived state
+    const allChecked = pending.length > 0 && checkedIds.size === pending.length;
+    const someChecked = checkedIds.size > 0 && checkedIds.size < pending.length;
+    const handleToggleAll = () => {
+        setCheckedIds(allChecked ? new Set() : new Set(pending.map((e) => e.knowledge_file_id)));
     };
 
     // Derive the currently selected entry
@@ -537,18 +620,75 @@ export function SimilarDocumentDialog({
                     <div className="flex min-h-0 flex-1 overflow-hidden">
                         {/* Left column — pending file list (~30%) */}
                         <div className="flex w-[260px] shrink-0 flex-col border-r border-[#e5e6eb] bg-[#FAFAFA]">
-                            <div className="px-5 py-4 text-[12px] text-[#86909c] border-b border-[#e5e6eb]">
-                                {localize("com_knowledge.version.similar_dialog_subtitle", { count: pending.length })}
+                            {/* Header row: count + batch actions */}
+                            <div className="flex items-center justify-between gap-2 px-5 py-3 border-b border-[#e5e6eb]">
+                                <span className="truncate text-[12px] text-[#86909c]">
+                                    {localize("com_knowledge.version.similar_dialog_subtitle", { count: pending.length })}
+                                </span>
+                                {batchMode ? (
+                                    <div className="flex shrink-0 items-center gap-1">
+                                        <Button
+                                            type="button"
+                                            variant="link"
+                                            size="sm"
+                                            disabled={checkedIds.size === 0 || batchDismissMutation.isPending}
+                                            onClick={() => batchDismissMutation.mutate(Array.from(checkedIds))}
+                                            className="h-7 px-1 text-[12px] font-normal text-[#165dff]"
+                                        >
+                                            {localize("com_knowledge.version.btn_dismiss")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="link"
+                                            size="sm"
+                                            disabled={batchDismissMutation.isPending}
+                                            onClick={handleCancelBatch}
+                                            className="h-7 px-1 text-[12px] font-normal text-[#4e5969]"
+                                        >
+                                            {localize("com_knowledge.version.btn_batch_cancel")}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="link"
+                                        size="sm"
+                                        onClick={handleEnterBatch}
+                                        className="h-7 shrink-0 px-1 text-[12px] font-normal text-[#165dff]"
+                                    >
+                                        {localize("com_knowledge.version.btn_batch_process")}
+                                    </Button>
+                                )}
                             </div>
+                            {/* Select-all row (batch mode only) */}
+                            {batchMode && (
+                                <button
+                                    type="button"
+                                    onClick={handleToggleAll}
+                                    className="flex items-center gap-2 px-5 py-2 text-left border-b border-[#e5e6eb] hover:bg-[#f2f3f5]"
+                                >
+                                    <Checkbox
+                                        checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                                        className="pointer-events-none"
+                                    />
+                                    <span className="text-[12px] text-[#4e5969]">
+                                        {localize("com_knowledge.version.batch_select_all")}
+                                    </span>
+                                </button>
+                            )}
                             {/* Scrollable file list */}
                             <div className="flex-1 overflow-y-auto scrollbar-on-scroll px-3 py-3">
                                 {pending.map((entry) => (
                                     <PendingFileRow
                                         key={entry.knowledge_file_id}
                                         entry={entry}
+                                        batchMode={batchMode}
+                                        checked={checkedIds.has(entry.knowledge_file_id)}
                                         isSelected={selectedFileId === entry.knowledge_file_id}
                                         onClick={() =>
-                                            setSelectedFileId(entry.knowledge_file_id)
+                                            batchMode
+                                                ? handleToggleChecked(entry.knowledge_file_id)
+                                                : setSelectedFileId(entry.knowledge_file_id)
                                         }
                                     />
                                 ))}
@@ -557,7 +697,12 @@ export function SimilarDocumentDialog({
 
                         {/* Right column — 4-section action panel (~70%) */}
                         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                            {selectedFileId === null || selectedFile === null ? (
+                            {batchMode ? (
+                                // Batch mode: single-file panel doesn't apply — show a hint
+                                <div className="flex flex-1 items-center justify-center px-8 text-center text-sm text-[#86909c]">
+                                    {localize("com_knowledge.version.batch_right_hint")}
+                                </div>
+                            ) : selectedFileId === null || selectedFile === null ? (
                                 // No selection placeholder
                                 <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">
                                     {localize("com_knowledge.version.similar_dialog_right_empty")}

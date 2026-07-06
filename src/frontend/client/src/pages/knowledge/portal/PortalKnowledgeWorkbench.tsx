@@ -265,6 +265,7 @@ export default function PortalKnowledgeWorkbench() {
     });
     const activeSpaceIdRef = useRef<string | undefined>();
     const currentFolderIdRef = useRef<string | undefined>();
+    const previousSpaceIdRef = useRef<string | undefined>(undefined);
     const lastPortalLocationKeyRef = useRef("");
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
@@ -791,6 +792,9 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace?.id, currentFolderId, loadFolderStats, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
+    const reloadFilesRef = useRef(reloadFiles);
+    reloadFilesRef.current = reloadFiles;
+
     const fileUpload = useFileUpload({
         activeSpace,
         currentFolderId,
@@ -1047,6 +1051,11 @@ export default function PortalKnowledgeWorkbench() {
     });
 
     useEffect(() => {
+        if (!activeSpace?.id) {
+            previousSpaceIdRef.current = undefined;
+            return;
+        }
+
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
@@ -1057,21 +1066,27 @@ export default function PortalKnowledgeWorkbench() {
         setSearchTagIds([]);
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
-        setTreeNodes([]);
-        setTreeRootPage(1);
-        setTreeRootTotal(0);
-        setTreeRootHasMore(false);
-        setCurrentFolderId(undefined);
-        setCanCreateFolder(false);
-        setCanUploadFile(false);
-        if (activeSpace?.id) {
+
+        const spaceChanged = String(activeSpace.id) !== previousSpaceIdRef.current;
+        if (spaceChanged) {
+            setTreeNodes([]);
+            setTreeRootPage(1);
+            setTreeRootTotal(0);
+            setTreeRootHasMore(false);
+            setCurrentFolderId(undefined);
+            setCanCreateFolder(false);
+            setCanUploadFile(false);
             void loadRootTreeRef.current(1, false, activeSpace.id);
+        } else {
+            // Sort/filter changed: keep the current folder and reload the same view
+            // with the new ordering/filter instead of jumping back to the root.
+            void reloadFilesRef.current();
         }
+        previousSpaceIdRef.current = String(activeSpace.id);
         // Reset + reload ONLY when the space or the sort/filter actually change.
-        // Intentionally NOT depending on loadRootTree's identity (see loadRootTreeRef
-        // above): it changes for unrelated reasons such as showToast being recreated
-        // after a toast, which previously triggered a spurious full reload + list
-        // refetch right after editing a file's tags.
+        // Intentionally NOT depending on loadRootTree/reloadFiles identity (see refs
+        // above): they change for unrelated reasons such as showToast being recreated
+        // after a toast, which previously triggered spurious full reloads.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeSpace?.id, sortBy, sortDirection, statusFilterNumbers]);
 
@@ -1544,7 +1559,8 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         setSelectedFile(null);
-        setCurrentFolderId(undefined);
+        // Keep currentFolderId so the filter applies under the already-open folder
+        // instead of restarting from the root.
     }, []);
 
     const handleSelectFile = useCallback(
