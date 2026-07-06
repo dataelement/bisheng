@@ -1,9 +1,10 @@
 /**
  * DeepThinkingGroup — outer collapsible wrapper around a contiguous run of
- * thinking + tool_call events. Header reads "已深度思考（用时 N 秒）" once
- * the run is closed by a following text block (or stream end), or
- * "正在深度思考（已用 N 秒）..." while still open. Collapsing the wrapper
- * hides everything inside, including any inner ThinkingContent state.
+ * thinking + tool_call events. Header reads "已深度思考" once the run is closed
+ * by a following text block (or stream end), or "正在深度思考..." while still
+ * open. (cofco: the "（用时 N 秒）" duration clause is intentionally not rendered.)
+ * Collapsing the wrapper hides everything inside, including any inner
+ * ThinkingContent state.
  */
 import { Outlined } from "bisheng-icons";
 import {
@@ -110,20 +111,8 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // `tick` is read here so the IIFE re-runs on every interval render.
         void tick;
 
-        const label = (() => {
-            // Hide the duration entirely when it's 0 — happens on legacy
-            // history rows (no started_at/ended_at/duration_ms) and the
-            // brief moment before any tick lands.
-            const showDuration = elapsedMs > 0;
-            if (isStreaming) {
-                return showDuration
-                    ? `正在深度思考（已用 ${formatSeconds(elapsedMs)} 秒）...`
-                    : `正在深度思考...`;
-            }
-            return showDuration
-                ? `已深度思考（用时 ${formatSeconds(elapsedMs)} 秒）`
-                : `已深度思考`;
-        })();
+        // cofco: never render the "（用时 N 秒）" clause — the label stays plain.
+        const label = isStreaming ? `正在深度思考...` : `已深度思考`;
 
         const handleClick = useCallback((e: MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
