@@ -1,4 +1,4 @@
-import { Download, FileText, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useEffect, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
@@ -260,7 +260,7 @@ export default function CitationDocumentPreviewDrawer({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {(!isNarrowLayout || isFullBleedMobile) && <FileText className="size-4 shrink-0 text-blue-500" />}
+          {(!isNarrowLayout || isFullBleedMobile) && <Outlined.File className="size-4 shrink-0 text-blue-500" />}
           <h2
             className={cn(
               'min-w-0 truncate font-semibold text-[#1D2129]',
@@ -283,7 +283,7 @@ export default function CitationDocumentPreviewDrawer({
               )}
               aria-label={localize("com_knowledge.download_file")}
             >
-              <Download className="size-4" />
+              <Outlined.Download className="size-4" />
             </button>
           )}
         </div>
@@ -298,7 +298,7 @@ export default function CitationDocumentPreviewDrawer({
           )}
           aria-label="关闭文档预览"
         >
-          <X className="size-4" strokeWidth={1.5} />
+          <Outlined.Close className="size-4" strokeWidth={1.5} />
         </button>
       </div>
 

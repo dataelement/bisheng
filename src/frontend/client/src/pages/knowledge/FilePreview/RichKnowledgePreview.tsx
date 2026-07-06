@@ -182,7 +182,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const activeContent = activeTab === "recognized" ? recognizedText : entryText;
 
     return (
-        <section className="flex min-h-[420px] flex-col overflow-hidden rounded-[8px] border border-[#e5e6eb] bg-white shadow-sm">
+        <section className="flex min-h-[320px] flex-col overflow-hidden rounded-[8px] border border-[#e5e6eb] bg-white shadow-sm">
             <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e6eb] bg-white px-4 py-3">
                 <button
                     type="button"
@@ -247,22 +247,30 @@ export function RichKnowledgePreview({
                         actions={actions}
                     />
                 )}
-                <div className="flex-1 overflow-auto p-5">
-                    <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
-                        <section className="rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="shrink-0 overflow-visible px-5 pb-0 pt-5">
+                        <section className="mx-auto w-full max-w-[980px] overflow-visible rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
                             <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
                             {isVideo ? (
                                 <video
-                                    className="max-h-[420px] w-full rounded-[6px] bg-black"
+                                    className="max-h-[320px] w-full rounded-[6px] bg-black"
                                     src={mediaPlaybackUrl}
                                     controls
                                 />
                             ) : (
-                                <audio className="w-full" src={mediaPlaybackUrl} controls />
+                                <div className="overflow-visible py-1">
+                                    <audio className="w-full" src={mediaPlaybackUrl} controls />
+                                </div>
                             )}
                         </section>
-                        {mediaTextUrl ? <MediaTranscriptTabs fileUrl={mediaTextUrl} /> : null}
                     </div>
+                    {mediaTextUrl ? (
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+                            <div className="mx-auto w-full max-w-[980px]">
+                                <MediaTranscriptTabs fileUrl={mediaTextUrl} />
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </div>
         );

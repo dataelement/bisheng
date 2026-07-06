@@ -143,35 +143,43 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
 
   if (isMedia) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden bg-gray-50 p-3">
-        <div className="rounded-md border bg-white p-3 shadow-sm">
-          <div className="mb-2 text-sm font-medium text-gray-800">{title}</div>
-          {isVideo ? (
-            <video className="max-h-[360px] w-full rounded bg-black" src={mediaUrl} controls />
-          ) : (
-            <audio className="w-full" src={mediaUrl} controls />
-          )}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50">
+        <div className="shrink-0 overflow-visible p-3 pb-0">
+          <section className="overflow-visible rounded-md border bg-white p-3 shadow-sm">
+            <div className="mb-2 text-sm font-medium text-gray-800">{title}</div>
+            {isVideo ? (
+              <video className="max-h-[280px] w-full rounded bg-black" src={mediaUrl} controls />
+            ) : (
+              <div className="overflow-visible py-1">
+                <audio className="w-full" src={mediaUrl} controls />
+              </div>
+            )}
+          </section>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-white shadow-sm">
-          <div className="flex shrink-0 gap-2 border-b px-3 py-2">
-            <button
-              type="button"
-              onClick={() => setMediaTab("recognized")}
-              className={`h-8 rounded-md px-3 text-sm ${mediaTab === "recognized" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
-            >
-              识别文本
-            </button>
-            <button
-              type="button"
-              onClick={() => setMediaTab("entry")}
-              className={`h-8 rounded-md px-3 text-sm ${mediaTab === "entry" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
-            >
-              入库文本
-            </button>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-3">
+          <div className="flex min-h-[320px] flex-col overflow-hidden rounded-md border bg-white shadow-sm">
+            <div className="flex shrink-0 gap-2 border-b px-3 py-2">
+              <button
+                type="button"
+                onClick={() => setMediaTab("recognized")}
+                className={`h-8 rounded-md px-3 text-sm ${mediaTab === "recognized" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
+              >
+                识别文本
+              </button>
+              <button
+                type="button"
+                onClick={() => setMediaTab("entry")}
+                className={`h-8 rounded-md px-3 text-sm ${mediaTab === "entry" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
+              >
+                入库文本
+              </button>
+            </div>
+            {mediaTextUrl ? (
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <TextFromUrl fileUrl={mediaTextUrl} section={mediaTab === "recognized" ? "识别文本" : "入库文本"} />
+              </div>
+            ) : null}
           </div>
-          {mediaTextUrl ? (
-            <TextFromUrl fileUrl={mediaTextUrl} section={mediaTab === "recognized" ? "识别文本" : "入库文本"} />
-          ) : null}
         </div>
       </div>
     );

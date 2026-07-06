@@ -23,91 +23,88 @@
     document.write('<script src="' + brandBaseUrl + '/assets/bisheng/config.js?v=<%= Date.now() %>"><\/script>');
     document.write('<script src="' + brandBaseUrl + '/assets/bisheng/brand-runtime.js?v=<%= Date.now() %>"><\/script>');
   </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, interactive-widget=resizes-content, maximum-scale=1, user-scalable=no" />
   <meta name="referrer" content="never">
   <style>
-    html,
+    /* iOS WKWebView / WeCom embedded WebView bottom-strip fix.
+       This WebView renders a canvas at the LARGE-viewport height (100vh, e.g.
+       718px) but reports the DYNAMIC viewport (100dvh / innerHeight, e.g.
+       684px when the host toolbar is shown). Anything sized to the dynamic
+       height — 100dvh, 100%, position:fixed;bottom:0, even a JS-polled
+       innerHeight — stops at 684 and leaves the 684→718 strip showing the
+       native WebView background (black in dark mode, host watermark bleeds
+       through). Confirmed empirically: only an element with an explicit
+       `height: 100vh` reaches 718.
+         - html: 100vh (718) → paints/covers the full canvas, no exposed strip.
+         - body: 100dvh (684) → the real UI is clipped to exactly the visible
+           area, so nothing important lands in the 684→718 region.
+         - overflow:hidden on both → html's 718 vs the 684 visible area does
+           NOT become a scrollable overflow (prevents the "page nudged up,
+           top cut off under the header" WebKit quirk).
+       Colors are theme-synced by the script below so the html strip never
+       seams against a dark-themed page. */
+    html {
+      margin: 0;
+      padding: 0;
+      /* !important: the app's style.css injects `html { height: 100% }` at
+         runtime (later in <head> than this inline block), which otherwise
+         wins by source order and pulls html back to the 684 dynamic height,
+         re-exposing the bottom strip. */
+      height: 100vh !important;
+      overflow: hidden;
+      overscroll-behavior: none;
+      /* Static white backdrop for the 34px strip. The app UI is always light,
+         so white matches it seamlessly — no theme-following needed. (The strip
+         only ever showed the native WebView background before this.) */
+      background-color: #ffffff;
+    }
+
     body {
       margin: 0;
       padding: 0;
-      height: 100%;
+      height: 100dvh !important;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background-color: #ffffff;
     }
   </style>
   <script>
-    const theme = localStorage.getItem('color-theme');
-    const loadingContainerStyle = document.createElement('style');
-    let backgroundColor;
-
-    if (theme === 'dark') {
-      backgroundColor = '#0d0d0d';
-    } else if (theme === 'light') {
-      backgroundColor = '#ffffff';
-    } else if (theme === 'system') {
-      const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      backgroundColor = prefersDarkScheme ? '#0d0d0d' : '#ffffff';
-    } else {
-      backgroundColor = '#ffffff';
-    }
-
-    loadingContainerStyle.innerHTML = `
-        #loading-container {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          background-color: ${backgroundColor};
-        }
-
-        #loading-container img {
-          width: 80px;
-          height: 80px;
-          object-fit: contain;
-        }
-
-        #loading-container img:not([src]) {
-          display: none;
-        }
-      `;
-    document.head.appendChild(loadingContainerStyle);
+    // iOS keyboard focus-scroll reset. On input focus iOS force-scrolls the
+    // ROOT element to reveal the field (overflow:hidden can't block this
+    // programmatic scroll); when the keyboard closes the scrollTop is left
+    // non-zero, pushing content up under the host header. After every blur
+    // of an editable, snap the root back to 0. Inner overflow containers
+    // (which scroll themselves) are unaffected.
+    (function () {
+      // Touch-only: PC has no soft keyboard, so no focus-scroll to undo.
+      var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      if (!isTouch) return;
+      function isEditable(el) {
+        return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      }
+      function resetRootScroll() {
+        try {
+          document.documentElement.scrollTop = 0;
+          document.body.scrollTop = 0;
+          if (window.scrollY) window.scrollTo(0, 0);
+        } catch (e) { /* ignore */ }
+      }
+      document.addEventListener('focusout', function (e) {
+        if (!isEditable(e.target)) return;
+        // Delay past the keyboard-dismiss animation, and only reset once
+        // focus has actually left all editable fields.
+        setTimeout(function () {
+          if (!isEditable(document.activeElement)) resetRootScroll();
+        }, 300);
+      });
+    })();
   </script>
   <script defer type="module" src="/src/brandEntry.jsx"></script>
 </head>
 
 <body>
-  <div id="root">
-    <div id="loading-container">
-      <img id="loading-icon" alt="" />
-    </div>
-  </div>
-  <script>
-    (function () {
-      var config = window.BRAND_CONFIG || {};
-      var loadingIcon =
-        config.URLLoadingIcon ||
-        config.loadingIcon ||
-        (config.loading && config.loading.icon && config.loading.icon.url) ||
-        "";
-      var iconElement = document.getElementById("loading-icon");
-
-      if (!loadingIcon || !iconElement) return;
-
-      var absoluteUrlPattern = /^(https?:|data:|blob:|\/\/)/i;
-      var resolvedIcon = loadingIcon;
-
-      if (!absoluteUrlPattern.test(loadingIcon)) {
-        var baseUrl = (brandBaseUrl || "").replace(/\/$/, "");
-        // brand-runtime.js may have already prefixed the icon with baseUrl.
-        // Re-prefixing here produces /workspace/workspace/... (404). Stay
-        // idempotent: only prepend baseUrl when it is not already present.
-        var alreadyPrefixed = baseUrl && (loadingIcon === baseUrl || loadingIcon.indexOf(baseUrl + "/") === 0);
-        if (!alreadyPrefixed) {
-          resolvedIcon = baseUrl + (loadingIcon.charAt(0) === "/" ? loadingIcon : "/" + loadingIcon);
-        }
-      }
-
-      iconElement.setAttribute("src", resolvedIcon);
-    })();
-  </script>
+  <div id="root"></div>
 </body>
 
 </html>

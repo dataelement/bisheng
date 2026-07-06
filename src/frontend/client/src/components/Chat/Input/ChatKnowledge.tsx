@@ -585,7 +585,7 @@ export const ChatKnowledge = ({
                   className={cn(
                     // `group` lets the chevron pick up the Radix-emitted
                     // `data-state` to mirror the Tools-select rotation.
-                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -656,7 +656,13 @@ export const ChatKnowledge = ({
           // Mobile width override only applies to the knowledge variant — the
           // "+" menu shows short action items and matches the desktop 160px
           // width on phones too. (knowledge needs more room for search + list)
-          isMobile && variant === 'knowledge' && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
+          // Mobile: any "tall" panel (knowledge, or the "+" menu drilled into
+          // skill / org lists) needs the wider width; 160px is fine only for
+          // the compact root of the "+" menu (short action items).
+          isMobile && mobileTallPanel && 'touch-mobile:w-[min(calc(100vw-24px),320px)]',
+          // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
+          // the scroll list's own `pb-2` handles the last-item spacing.
+          isMobile && variant === 'knowledge' && 'touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
@@ -686,9 +692,14 @@ export const ChatKnowledge = ({
           </DropdownMenuItem>
         )}
 
-        {/* Knowledge pill (mobile): show the SPACES list directly — no drill. */}
+        {/* Knowledge pill (mobile): show the SPACES list directly — no drill.
+            Matches the desktop layout (title + list) so both surfaces feel the
+            same; only the outer width / position adapt to the smaller screen. */}
         {variant === 'knowledge' && isMobile && (
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+          <div className="flex min-h-0 w-full flex-1 flex-col">
+            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+              {localize('com_ui_knowledge_space')}
+            </p>
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}

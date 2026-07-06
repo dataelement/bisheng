@@ -19,7 +19,9 @@ Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil
 - **Path Aliases**: `~/` (or `@/`) → `src/`.
 - **HTTP Requests**: must use `~/api/request.ts`; never import `axios` directly.
 - **State Management**: Recoil (`~/store/`). Context or other solutions prohibited for new state.
-- **UI Components**: `~/components/ui/` (shadcn / Radix-based). Icons from `lucide-react`. No new UI libraries.
+- **UI Components**: `~/components/ui/` (shadcn / Radix-based). No new UI libraries.
+- **Icons**: prefer `bisheng-icons` — `import { Outlined } from 'bisheng-icons'` → `<Outlined.Delete />` (variants `Outlined` / `Filled` / `Colored`). Use `lucide-react` ONLY as a fallback when `bisheng-icons` has no matching-semantic icon.
+  - **⚠️ After upgrading `bisheng-icons`**, clear the Vite pre-bundle cache or new icons crash the page (`Element type is invalid`): `npm run dev -- --force` (or `rm -rf node_modules/.vite && npm run dev`). Its git-source `exports` field defeats Vite's dep-change detection, so the stale pre-bundled snapshot is served unless forced.
 - **Code Comments**: English.
 - **Component Size**: < 600 lines; extract sub-components or hooks when exceeded.
 - **Toast**: `const { showToast } = useToastContext(); showToast?.({ message, severity: 'error' | 'success' })`.

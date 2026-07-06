@@ -630,6 +630,33 @@ class DatabasePoolConf(BaseModel):
         return self.model_dump()
 
 
+class MetricLogConf(BaseModel):
+    """Structured metric-log emission switches + thresholds (F042).
+
+    Emits ``BS_METRIC domain=...`` log lines that the external monitoring layer
+    parses into metrics (DB query P95/QPS, object-storage success-rate/latency,
+    model TTFT, E+ notify events). See
+    ``features/v2.6.0/042-metric-log-observability/design.md`` §6.1 for the
+    contract. Emission is best-effort and never affects the business flow; it can
+    be disabled globally or per-domain. Defaults keep every domain ON so a fresh
+    deploy emits metrics unless explicitly turned off.
+    """
+
+    enabled: bool = Field(default=True, description="Global switch for all BS_METRIC emission")
+    db: bool = Field(default=True, description="Emit db_query / db_query_agg / db_pool")
+    obj_storage: bool = Field(default=True, description="Emit obj_storage put/get metrics")
+    model_invoke: bool = Field(default=True, description="Emit model_invoke TTFT/status metrics")
+    eplus: bool = Field(default=True, description="Emit eplus_notify call-event metrics")
+    db_slow_query_ms: int = Field(
+        default=200,
+        description="Emit a db_query detail line only for queries at/above this latency (ms)",
+    )
+    db_agg_window_s: int = Field(
+        default=10,
+        description="Window (seconds) for db_query_agg histogram flush + db_pool gauge sampling",
+    )
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -694,6 +721,7 @@ class Settings(BaseModel):
     llm: LLMConf = LLMConf()
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
+    metric_log: MetricLogConf = MetricLogConf()
 
     @field_validator("database_url")
     @classmethod
