@@ -367,7 +367,7 @@ async def test_update_knowledge_llm_calls_validator_with_all_model_ids():
 
     payload = KnowledgeLLMConfig(
         embedding_model_id=4, source_model_id=7,
-        extract_title_model_id=7, qa_similar_model_id=7,
+        extract_title_model_id=7, qa_similar_model_id=7, asr_model_id=9,
     )
     with patch(
         'bisheng.llm.domain.services.llm.avalidate_system_model_refs',
@@ -380,7 +380,7 @@ async def test_update_knowledge_llm_calls_validator_with_all_model_ids():
 
     args, kwargs = mock_validate.call_args
     passed_ids = list(args[0])
-    assert set(passed_ids) == {4, 7}
+    assert set(passed_ids) == {4, 7, 9}
     assert (kwargs.get('target_tenant_id') if 'target_tenant_id' in kwargs else args[1]) == 1
 
 

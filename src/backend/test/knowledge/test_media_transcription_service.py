@@ -1,12 +1,17 @@
 import subprocess
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
 from bisheng.common.errcode.knowledge import KnowledgeMediaNoRecognizableAudioError
+from bisheng.common.errcode.server import NoAsrModelConfigError
 from bisheng.knowledge.domain.services.media_transcription_service import (
     KnowledgeMediaTranscriptionService,
     TranscriptSegment,
 )
+from bisheng.llm.domain.const import LLMModelType, LLMServerType
+from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 
 
 def test_normalize_segments_keeps_aliyun_millisecond_timestamps_consistent() -> None:
@@ -111,6 +116,45 @@ def test_convert_to_wav_reports_missing_audio_stream(monkeypatch, tmp_path) -> N
 
     with pytest.raises(KnowledgeMediaNoRecognizableAudioError):
         KnowledgeMediaTranscriptionService._convert_to_wav(str(media_path))
+
+
+def test_resolve_asr_model_reads_knowledge_config(monkeypatch) -> None:
+    model_info = SimpleNamespace(
+        id=42,
+        model_name="paraformer-realtime-v2",
+        model_type=LLMModelType.ASR.value,
+        server_id=7,
+        online=True,
+        config={},
+    )
+    server_info = SimpleNamespace(name="Aliyun", type=LLMServerType.QWEN.value, config={"api_key": "sk-test"})
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.media_transcription_service.LLMService.get_knowledge_llm",
+        lambda tenant_id=None: KnowledgeLLMConfig(asr_model_id=42),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.media_transcription_service.LLMDao.get_model_by_id",
+        lambda model_id: model_info if model_id == 42 else None,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.media_transcription_service.LLMDao.get_server_by_id",
+        lambda server_id: server_info if server_id == 7 else None,
+    )
+
+    resolved_model, resolved_server = KnowledgeMediaTranscriptionService._resolve_asr_model(tenant_id=1)
+
+    assert resolved_model is model_info
+    assert resolved_server is server_info
+
+
+def test_resolve_asr_model_requires_knowledge_config() -> None:
+    with patch(
+        "bisheng.knowledge.domain.services.media_transcription_service.LLMService.get_knowledge_llm",
+        return_value=KnowledgeLLMConfig(asr_model_id=None),
+    ):
+        with pytest.raises(NoAsrModelConfigError):
+            KnowledgeMediaTranscriptionService._resolve_asr_model(tenant_id=1)
 
 
 def test_empty_asr_text_reports_missing_recognizable_audio(monkeypatch, tmp_path) -> None:

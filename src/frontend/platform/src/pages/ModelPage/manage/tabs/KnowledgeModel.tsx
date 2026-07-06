@@ -119,7 +119,7 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
     </Dialog>
 }
 
-export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
+export default function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }) {
     const { t } = useTranslation('model')
 
     const [form, setForm] = useState({
@@ -127,6 +127,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         sourceModelId: null,
         extractModelId: null,
         qaSimilarModelId: null,
+        asrModelId: null,
         abstractEnabled: true,
         autoTagEnabled: true,
         abstractPrompt: '',
@@ -144,6 +145,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             embedding_model_id,
             extract_title_model_id,
             qa_similar_model_id,
+            asr_model_id,
             source_model_id,
             abstract_enabled,
             auto_tag_enabled,
@@ -155,6 +157,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             sourceModelId: source_model_id,
             extractModelId: extract_title_model_id,
             qaSimilarModelId: qa_similar_model_id,
+            asrModelId: asr_model_id ?? null,
             abstractEnabled: abstract_enabled ?? true,
             autoTagEnabled: auto_tag_enabled ?? true,
             abstractPrompt: abstract_prompt ?? defalutPrompt,
@@ -182,6 +185,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             embeddingModelId,
             extractModelId,
             qaSimilarModelId,
+            asrModelId,
             sourceModelId,
             abstractEnabled,
             autoTagEnabled,
@@ -204,6 +208,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             embedding_model_id: embeddingModelId,
             extract_title_model_id: extractModelId,
             qa_similar_model_id: qaSimilarModelId,
+            asr_model_id: asrModelId || null,
             source_model_id: sourceModelId,
             abstract_enabled: abstractEnabled,
             auto_tag_enabled: autoTagEnabled,
@@ -321,6 +326,14 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 value={form.qaSimilarModelId}
                 options={llmOptions}
                 onChange={(val) => setFormAndClearInherited({ ...form, qaSimilarModelId: val })}
+            />
+            <ModelSelect
+                close
+                label={t('model.asrModel')}
+                tooltipText={t('model.knowledgeAsrModelTooltip')}
+                value={form.asrModelId}
+                options={asrModel}
+                onChange={(val) => setFormAndClearInherited({ ...form, asrModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
                 <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>

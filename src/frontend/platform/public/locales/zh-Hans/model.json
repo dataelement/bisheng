@@ -15,6 +15,7 @@
     "sessionTitleGenerationModel": "应用会话标题生成模型",
     "asrModel": "语音转文字（ASR）模型",
     "asrModelTooltip": "用于工作台语音转文字场景",
+    "knowledgeAsrModelTooltip": "用于音视频解析中语音转文字场景",
     "ttsModel": "文字转语音（TTS）模型",
     "ttsModelTooltip": "用于工作台文字转语音场景",
     "saveFailed": "保存失败，请重试！",

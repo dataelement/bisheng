@@ -1291,11 +1291,6 @@ export function KnowledgeSpaceContent({
                 onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
-                supportedFormatsLabel={localize(
-                    enableEtl4lm
-                        ? "com_knowledge.supported_formats_with_etl4lm"
-                        : "com_knowledge.supported_formats_basic"
-                )}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
