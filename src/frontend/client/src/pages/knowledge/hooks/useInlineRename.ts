@@ -2,6 +2,28 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 
+/**
+ * Split a file name into its editable base and read-only extension.
+ * Extension is recognized only for files (not folders) and only when the last
+ * dot is not the first character — matching the rename input's selection logic
+ * and the backend's suffix guard (`SpaceFileExtensionError`).
+ */
+export function splitEditableFileName(
+    fileName: string,
+    isFolder: boolean,
+): { base: string; ext: string } {
+    const dotIndex = fileName.lastIndexOf(".");
+    if (isFolder || dotIndex <= 0) {
+        return { base: fileName, ext: "" };
+    }
+    return { base: fileName.slice(0, dotIndex), ext: fileName.slice(dotIndex) };
+}
+
+/** Re-join an edited base name with its preserved extension. */
+export function joinEditableFileName(base: string, ext: string): string {
+    return `${base.trim()}${ext}`;
+}
+
 interface UseInlineRenameOptions {
     /** Initial file/folder name */
     fileName: string;
