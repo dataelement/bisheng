@@ -156,7 +156,9 @@ class KnowledgeSpaceTagLibraryService:
                 )
                 ai.append(normalized_name)
         elif review_resource_type == TagResourceTypeEnum.MANUAL_TAG.value:
-            if normalized_name not in manual:
+            if normalized_name in system:
+                pass
+            elif normalized_name not in manual:
                 await self._ensure_global_tag_names_available(
                     tenant_id=library.tenant_id,
                     tag_names=[normalized_name],

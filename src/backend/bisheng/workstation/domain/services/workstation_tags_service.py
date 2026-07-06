@@ -152,13 +152,16 @@ class WorkStationTagsService(BaseService):
                     result_list.append(tag_obj)
         return result_list
 
-    async def list_review_tag_by_page(self, page: int, page_size: int, tenant_id: int):
+    async def list_review_tag_by_page(self, page: int, page_size: int, tenant_id: int, keyword: str = ""):
         if not page or page < 1:
             raise TagPageParamsIsError.http_exception()
         if not page_size or page_size < 1:
             raise TagPageSizeParamsIsError.http_exception()
 
-        group_tag_list = await self.review_tags_repository.get_review_tag_group_list_by_page(page, page_size, tenant_id)
+        normalized_keyword = (keyword or "").strip()
+        group_tag_list = await self.review_tags_repository.get_review_tag_group_list_by_page(
+            page, page_size, tenant_id, normalized_keyword
+        )
         result_list = []
         if group_tag_list and len(group_tag_list) > 0:
             for group_tag in group_tag_list:
@@ -167,7 +170,9 @@ class WorkStationTagsService(BaseService):
                 )
                 if tag_obj:
                     result_list.append(tag_obj)
-        total_count = await self.review_tags_repository.get_review_tag_group_count_by_page(tenant_id)
+        total_count = await self.review_tags_repository.get_review_tag_group_count_by_page(
+            tenant_id, normalized_keyword
+        )
         return {"data": result_list or [], "total": total_count or 0}
 
     async def list_all_tags_library_by_page(self, keyword: str, page: int, page_size: int, tenant_id: int):

@@ -238,13 +238,15 @@ class ReviewTagsRepositoryImpl:
             Tag.tenant_id == tenant_id,
         )
 
-    async def get_review_tag_group_list_by_page(self, page: int, page_size: int, tenant_id: int):
-        where_clause = (
+    async def get_review_tag_group_list_by_page(self, page: int, page_size: int, tenant_id: int, keyword: str = ""):
+        where_clause = [
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
             ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
-        )
+        ]
+        if keyword:
+            where_clause.append(ReviewTag.name.like(f"%{keyword}%"))
 
         # 分页数据
         stmt = (
@@ -259,13 +261,15 @@ class ReviewTagsRepositoryImpl:
         rows = result.all()
         return [{"name": row.name, "resource_type": row.resource_type} for row in rows]
 
-    async def get_review_tag_group_count_by_page(self, tenant_id: int):
-        where_clause = (
+    async def get_review_tag_group_count_by_page(self, tenant_id: int, keyword: str = ""):
+        where_clause = [
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
             ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
-        )
+        ]
+        if keyword:
+            where_clause.append(ReviewTag.name.like(f"%{keyword}%"))
         subq = select(1).select_from(ReviewTag).where(*where_clause).group_by(ReviewTag.name, ReviewTag.resource_type)
         stmt = select(func.count()).select_from(subq.subquery())
         result = await self.session.exec(stmt)

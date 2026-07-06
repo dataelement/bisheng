@@ -45,18 +45,26 @@ interface EditTagsModalProps {
     initialTags?: FileTag[];
 }
 
+function resourceTypePriority(resourceType: string | undefined): number {
+    const normalized = (resourceType ?? "").trim().toLowerCase();
+    if (normalized === "system_tag") return 3;
+    if (normalized === "ai_auto_tag") return 2;
+    if (normalized === "manual_tag") return 1;
+    return 0;
+}
+
 function mergeRecommendedTags(items: KnowledgeSpaceTagLibraryTagItem[]): KnowledgeSpaceTagLibraryTagItem[] {
-    const seen = new Set<string>();
-    const merged: KnowledgeSpaceTagLibraryTagItem[] = [];
+    const bestByName = new Map<string, KnowledgeSpaceTagLibraryTagItem>();
     for (const item of items) {
         const name = String(item.name ?? "").trim();
         if (!name) continue;
-        const key = `${item.resource_type}:${name}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push({ ...item, name });
+        const key = name.toLowerCase();
+        const existing = bestByName.get(key);
+        if (!existing || resourceTypePriority(item.resource_type) > resourceTypePriority(existing.resource_type)) {
+            bestByName.set(key, { ...item, name });
+        }
     }
-    return merged;
+    return Array.from(bestByName.values());
 }
 
 function findSpaceTagByName(tags: SpaceTag[], name: string): SpaceTag | undefined {

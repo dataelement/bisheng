@@ -25,9 +25,47 @@ from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
 
 
 class TagLibraryTagService:
+    _RESOURCE_TYPE_DISPLAY_PRIORITY: dict[str, int] = {
+        TagResourceTypeEnum.SYSTEM_TAG.value: 3,
+        TagResourceTypeEnum.AI_AUTO_TAG.value: 2,
+        TagResourceTypeEnum.MANUAL_TAG.value: 1,
+    }
+
     @staticmethod
     def _business_id(library_id: int) -> str:
         return str(library_id)
+
+    @classmethod
+    def _resource_type_priority(cls, resource_type: str | None) -> int:
+        return cls._RESOURCE_TYPE_DISPLAY_PRIORITY.get((resource_type or "").strip().lower(), 0)
+
+    @classmethod
+    def dedupe_non_ai_tag_name_lists(
+        cls,
+        system_tags: Iterable[str] | None,
+        manual_tags: Iterable[str] | None,
+    ) -> tuple[list[str], list[str]]:
+        """System names win; drop manual entries that duplicate a system name."""
+        system = cls._normalize_names(system_tags or [])
+        system_set = set(system)
+        manual = [name for name in cls._normalize_names(manual_tags or []) if name not in system_set]
+        return system, manual
+
+    @classmethod
+    def dedupe_library_tags_by_name(cls, tags: list[Tag]) -> list[Tag]:
+        """Keep one tag row per name; system_tag > ai_auto_tag > manual_tag."""
+        best_by_name: dict[str, Tag] = {}
+        for tag in tags:
+            name = (tag.name or "").strip()
+            if not name:
+                continue
+            key = name.lower()
+            existing = best_by_name.get(key)
+            if existing is None or cls._resource_type_priority(tag.resource_type) > cls._resource_type_priority(
+                existing.resource_type
+            ):
+                best_by_name[key] = tag
+        return list(best_by_name.values())
 
     @classmethod
     async def list_tags(cls, library_id: int) -> list[Tag]:
@@ -49,7 +87,7 @@ class TagLibraryTagService:
         if not tags:
             return tags
         if any(tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value for tag in tags):
-            return tags
+            return cls.dedupe_library_tags_by_name(tags)
 
         legacy_manual = [
             tag for tag in tags if tag.resource_type == TagResourceTypeEnum.MANUAL_TAG.value and tag.id is not None
@@ -65,14 +103,14 @@ class TagLibraryTagService:
 
         for tag in legacy_manual:
             tag.resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
-        return tags
+        return cls.dedupe_library_tags_by_name(tags)
 
     @classmethod
     def _repair_legacy_library_resource_types_sync(cls, tags: list[Tag]) -> list[Tag]:
         if not tags:
             return tags
         if any(tag.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value for tag in tags):
-            return tags
+            return cls.dedupe_library_tags_by_name(tags)
 
         legacy_manual = [
             tag for tag in tags if tag.resource_type == TagResourceTypeEnum.MANUAL_TAG.value and tag.id is not None
@@ -88,7 +126,7 @@ class TagLibraryTagService:
 
         for tag in legacy_manual:
             tag.resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
-        return tags
+        return cls.dedupe_library_tags_by_name(tags)
 
     @staticmethod
     def _file_resource_types(library_resource_type: str) -> list[str]:
@@ -569,6 +607,7 @@ class TagLibraryTagService:
         system = cls._normalize_names(system_tags or [])
         manual = cls._normalize_names(manual_tags or [])
         ai = cls._normalize_names(ai_tags or [])
+        system, manual = cls.dedupe_non_ai_tag_name_lists(system, manual)
         async with get_async_db_session() as session:
             existing = (
                 await session.exec(

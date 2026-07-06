@@ -141,6 +141,44 @@ async def test_get_space_tags_dedupes_tags_across_libraries(service):
 
 
 @pytest.mark.asyncio
+async def test_get_space_tags_dedupes_same_name_across_resource_types(service):
+    system_tag = SimpleNamespace(
+        id=100,
+        name="安全生产",
+        business_type="tag_library",
+        resource_type="system_tag",
+    )
+    manual_tag = SimpleNamespace(
+        id=101,
+        name="安全生产",
+        business_type="tag_library",
+        resource_type="manual_tag",
+    )
+
+    with (
+        patch.object(service, "_require_read_permission", new_callable=AsyncMock),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+            new_callable=AsyncMock,
+            return_value=[2],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids",
+            new_callable=AsyncMock,
+            return_value={"2": [system_tag, manual_tag]},
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService._repair_legacy_library_resource_types",
+            new_callable=AsyncMock,
+            side_effect=lambda tags: tags,
+        ),
+    ):
+        result = await service.get_space_tags(137)
+
+    assert result == [system_tag]
+
+
+@pytest.mark.asyncio
 async def test_get_space_tags_returns_empty_when_no_bound_libraries(service):
     with (
         patch.object(service, "_require_read_permission", new_callable=AsyncMock),

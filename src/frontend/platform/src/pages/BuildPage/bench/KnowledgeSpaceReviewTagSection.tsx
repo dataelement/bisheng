@@ -1,5 +1,6 @@
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { SearchInput } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import {
     Select,
@@ -19,7 +20,7 @@ import {
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Check, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 5;
@@ -176,25 +177,23 @@ export default function KnowledgeSpaceReviewTagSection({
     const loadData = useCallback(async (targetPage: number) => {
         setLoading(true);
         const res = await captureAndAlertRequestErrorHoc(
-            getKnowledgeSpaceReviewTagListApi({ page: targetPage, page_size: PAGE_SIZE }),
+            getKnowledgeSpaceReviewTagListApi({
+                page: targetPage,
+                page_size: PAGE_SIZE,
+                keyword: keyword.trim() || undefined,
+            }),
         );
         if (res) {
             setRows(res.data || []);
             setTotal(res.total || 0);
         }
         setLoading(false);
-    }, []);
+    }, [keyword]);
 
     useEffect(() => {
         setPage(1);
         loadData(1);
     }, [loadData]);
-
-    const filteredRows = useMemo(() => {
-        const trimmed = (keyword || "").trim().toLowerCase();
-        if (!trimmed) return rows;
-        return rows.filter((row) => (row.tag_name || "").toLowerCase().includes(trimmed));
-    }, [rows, keyword]);
 
     const handlePageChange = (newPage: number) => {
         setPage(newPage);
@@ -263,6 +262,14 @@ export default function KnowledgeSpaceReviewTagSection({
                 </div>
 
                 <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                        <div className="mb-3 flex items-center gap-2">
+                            <SearchInput
+                                className="w-[280px]"
+                                placeholder={t("build.searchReviewTag", "搜索待审核标签")}
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                            />
+                        </div>
                         <div className="max-h-[240px] overflow-y-auto rounded-md border bg-background">
                             <table className="w-full table-fixed border-collapse">
                                 <thead className="sticky top-0 z-10 bg-background">
@@ -291,14 +298,14 @@ export default function KnowledgeSpaceReviewTagSection({
                                                 {t("loading")}
                                             </td>
                                         </tr>
-                                    ) : filteredRows.length === 0 ? (
+                                    ) : rows.length === 0 ? (
                                         <tr>
                                             <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
                                                 {t("build.tagEmpty", "暂无待审核标签")}
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredRows.map((group) => {
+                                        rows.map((group) => {
                                             if (!group.resource_files || group.resource_files.length === 0) {
                                                 return (
                                                     <tr key={group.tag_name} className="border-t text-sm">
@@ -351,7 +358,7 @@ export default function KnowledgeSpaceReviewTagSection({
                                 </tbody>
                             </table>
                         </div>
-                        {filteredRows.length > 0 && (
+                        {rows.length > 0 && (
                             <div className="mt-2 flex items-center justify-end gap-2">
                                 <Button
                                     variant="outline"

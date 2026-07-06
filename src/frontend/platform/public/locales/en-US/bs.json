@@ -1074,6 +1074,7 @@
     "tagLibraryLimit": "A tag library can contain up to 200 tags",
     "autoTagGenerationTitle": "Tags Pending Review",
     "autoTagGenerationDesc": "Review AI-suggested tag names not yet in the vocabulary. Once approved, they are added to a tag library and linked to the corresponding knowledge space.",
+    "searchReviewTag": "Search pending review tags",
     "reviewTagName": "Suggested Tag",
     "reviewTagSource": "Tag Source",
     "fileResource": "File Source",
