@@ -55,6 +55,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNameSensitiveWordError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
+    SpacePersonalCreateForbiddenError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -2195,6 +2196,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_ids: list[int] | None = None,
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
+        system_managed: bool = False,
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
@@ -2214,6 +2216,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf_last = now
 
         name = self._normalize_space_name(name)
+        if not system_managed and self._normalize_space_level(space_level) == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpacePersonalCreateForbiddenError()
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
                 self.login_user.user_id,
@@ -2485,6 +2489,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             description="系统默认收藏知识库",
             space_level=KnowledgeSpaceLevelEnum.PERSONAL,
             skip_user_limit=True,
+            system_managed=True,
         )
         space.is_favorite = True
         try:
