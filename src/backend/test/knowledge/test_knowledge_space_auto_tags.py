@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -103,3 +104,42 @@ def test_auto_tag_should_skip_manual_upload_tags():
 
     with patch(_LINK_DAO_PATCH, return_value=[]):
         assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+
+
+def test_auto_tag_llm_uses_zero_temperature():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=True,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        user_id=7,
+        tenant_id=1,
+        abstract="政策制度内容",
+    )
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service"
+
+    with (
+        patch.object(KnowledgeSpaceAutoTagService, "_should_run", return_value=True),
+        patch.object(KnowledgeSpaceAutoTagService, "_resolve_library_ids", return_value=[10]),
+        patch.object(KnowledgeSpaceAutoTagService, "_collect_library_tags", return_value=(["政策"], [])),
+        patch(
+            f"{module_path}.LLMService.get_knowledge_llm",
+            return_value=SimpleNamespace(auto_tag_enabled=True, extract_title_model_id=123, auto_tag_prompt=""),
+        ),
+        patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()) as get_llm,
+        patch.object(KnowledgeSpaceAutoTagService, "_invoke_llm", return_value=["政策"]),
+        patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags") as append_file_tags,
+    ):
+        KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
+
+    assert get_llm.call_args.kwargs["temperature"] == 0
+    append_file_tags.assert_called_once()

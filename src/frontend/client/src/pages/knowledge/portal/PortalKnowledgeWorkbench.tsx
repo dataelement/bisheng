@@ -1960,14 +1960,28 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [selectedFile?.fileEncoding, showToast]);
 
-    const handleUpdateSelectedFileEncoding = useCallback(async (newEncoding: string) => {
+    const handleUpdateSelectedFileEncoding = useCallback(async (newEncoding: string, fileSubcategoryCode?: string | null) => {
         if (!activeSpace || !selectedFile || !canEditSelectedFileEncoding) return;
 
         try {
-            await updateFileEncoding(String(selectedFile.spaceId || activeSpace.id), selectedFile.id, newEncoding);
+            if (fileSubcategoryCode !== undefined) {
+                await updateFileEncoding(
+                    String(selectedFile.spaceId || activeSpace.id),
+                    selectedFile.id,
+                    newEncoding,
+                    fileSubcategoryCode,
+                );
+            } else {
+                await updateFileEncoding(
+                    String(selectedFile.spaceId || activeSpace.id),
+                    selectedFile.id,
+                    newEncoding,
+                );
+            }
             patchFileById(selectedFile.id, (file) => ({
                 ...file,
                 fileEncoding: newEncoding,
+                ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
             }));
             showToast({ message: "编码更新成功", severity: NotificationSeverity.SUCCESS });
         } catch (error) {
@@ -2174,6 +2188,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideFilePermissionActions={isActiveSpacePersonal}
                                                     enableEncodingClassification
                                                     fileCategoryOptions={fileCategoryOptions}
+                                                    fileCategoryGroups={fileCategoryGroups}
                                                     businessDomainOptions={activeSpaceBusinessDomainOptions}
                                                     encodingPrefix={fileEncodingPrefix}
                                                     markPendingDeletion={markPendingDeletion}
@@ -2241,9 +2256,9 @@ export default function PortalKnowledgeWorkbench() {
                     onCopyEncoding={() => void handleCopyFileEncoding()}
                     onCopyShareLink={() => void copyShareLink()}
                     onDownload={() => void handleDownloadSelected()}
-                    fileCategoryOptions={fileCategoryOptions}
+                    fileCategoryGroups={fileCategoryGroups}
                     encodingPrefix={fileEncodingPrefix}
-                    onUpdateEncoding={(newEncoding) => handleUpdateSelectedFileEncoding(newEncoding)}
+                    onUpdateEncoding={(newEncoding, fileSubcategoryCode) => handleUpdateSelectedFileEncoding(newEncoding, fileSubcategoryCode)}
                     businessDomainOptions={activeSpaceBusinessDomainOptions}
                     onOpenPermission={() => {
                         if (!canManageSelectedFilePermission) return;
@@ -2365,7 +2380,7 @@ export default function PortalKnowledgeWorkbench() {
                 onOpenChange={setUploadedFilesOpen}
                 onRecordsChanged={() => reloadFiles()}
                 showToast={showToast}
-                fileCategoryOptions={fileCategoryOptions}
+                fileCategoryGroups={fileCategoryGroups}
                 businessDomainOptions={businessDomainOptions}
                 encodingPrefix={fileEncodingPrefix}
             />

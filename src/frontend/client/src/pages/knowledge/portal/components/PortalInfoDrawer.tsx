@@ -2,17 +2,20 @@ import { useEffect, useState } from "react";
 import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import { SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
-import type { PanelKey, PortalFileCategoryOption } from "../types";
+import type { PanelKey, PortalFileCategoryGroupOption } from "../types";
 import {
     type BusinessDomainOptionItem,
     type EncodingDraft,
     composeFileEncoding,
     fileEncodingBusinessDomainLabel,
-    fileEncodingCategoryLabel,
     normalizeEncodingCode,
     parseFileEncoding,
 } from "../uploadMetadata";
 import { formatFileSize } from "../utils";
+import {
+    getPortalFileCategoryDisplayText,
+    PortalFileCategoryDropdown,
+} from "./PortalFileCategoryDropdown";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 const DETAIL_TABS: Array<{ key: Exclude<PanelKey, "share">; label: string }> = [
@@ -98,12 +101,12 @@ interface PortalInfoDrawerProps {
     selectedFile: KnowledgeFile | null;
     documentPath: string;
     canEditEncoding?: boolean;
-    fileCategoryOptions: PortalFileCategoryOption[];
+    fileCategoryGroups: PortalFileCategoryGroupOption[];
     businessDomainOptions: BusinessDomainOptionItem[];
     encodingPrefix: string;
     onClose: () => void;
     onCopyShareLink: () => void;
-    onUpdateEncoding?: (newEncoding: string) => void | Promise<void>;
+    onUpdateEncoding?: (newEncoding: string, fileSubcategoryCode?: string | null) => void | Promise<void>;
     onPanelChange: (panel: Exclude<PanelKey, "share">) => void;
 }
 
@@ -112,7 +115,7 @@ export function PortalInfoDrawer({
     activeSpace,
     selectedFile,
     canEditEncoding = false,
-    fileCategoryOptions,
+    fileCategoryGroups,
     businessDomainOptions,
     encodingPrefix,
     onClose,
@@ -126,7 +129,7 @@ export function PortalInfoDrawer({
 
     useEffect(() => {
         setEncodingDraft({});
-    }, [selectedFile?.id, selectedFile?.fileEncoding]);
+    }, [selectedFile?.id, selectedFile?.fileEncoding, selectedFile?.fileSubcategoryCode]);
 
     useEffect(() => {
         if (activePanel !== "usage" || !selectedFile || !activeSpace) return;
@@ -167,13 +170,12 @@ export function PortalInfoDrawer({
     const selectedBusinessDomainCode = normalizeEncodingCode(
         encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
     );
-    const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
     const hasCurrentBusinessDomainOption = businessDomainOptions.some((option) => option.code === selectedBusinessDomainCode);
     const displayFileEncoding = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(selectedFile?.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
         : selectedFile?.fileEncoding;
 
-    const handleEncodingPartChange = async (nextDraft: EncodingDraft) => {
+    const handleEncodingPartChange = async (nextDraft: EncodingDraft, fileSubcategoryCode?: string | null) => {
         if (!selectedFile || !canEditEncoding) return;
         const fileCategoryCode = normalizeEncodingCode(
             nextDraft.fileCategoryCode ?? encodingDraft.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
@@ -181,8 +183,12 @@ export function PortalInfoDrawer({
         const businessDomainCode = normalizeEncodingCode(
             nextDraft.businessDomainCode ?? encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
         );
+        const normalizedSubcategoryCode = fileSubcategoryCode === undefined
+            ? encodingDraft.fileSubcategoryCode
+            : normalizeEncodingCode(fileSubcategoryCode);
         setEncodingDraft({
             fileCategoryCode,
+            fileSubcategoryCode: normalizedSubcategoryCode,
             businessDomainCode,
         });
         if (!fileCategoryCode || !businessDomainCode) return;
@@ -193,11 +199,13 @@ export function PortalInfoDrawer({
             businessDomainCode,
             encodingPrefix,
         );
-        if (newEncoding === selectedFile.fileEncoding?.trim()) return;
+        const subcategoryChanged = normalizedSubcategoryCode !== undefined &&
+            normalizedSubcategoryCode !== normalizeEncodingCode(selectedFile.fileSubcategoryCode);
+        if (newEncoding === selectedFile.fileEncoding?.trim() && !subcategoryChanged) return;
 
         setSavingEncoding(true);
         try {
-            await onUpdateEncoding?.(newEncoding);
+            await onUpdateEncoding?.(newEncoding, normalizedSubcategoryCode);
         } finally {
             setSavingEncoding(false);
         }
@@ -207,28 +215,22 @@ export function PortalInfoDrawer({
         <div className={s.detailItem}>
             <span className={s.detailLabel}>文件类型</span>
             {selectedFile && canEditEncoding ? (
-                <select
-                    className={s.detailSelect}
-                    aria-label={`修改${selectedFile.name}文件类型 当前类型：${selectedFileCategoryCode || "未识别"}`}
-                    value={selectedFileCategoryCode}
+                <PortalFileCategoryDropdown
+                    groups={fileCategoryGroups}
+                    value={encodingDraft.fileSubcategoryCode ?? selectedFile.fileSubcategoryCode}
+                    fallbackParentCode={selectedFileCategoryCode}
                     disabled={savingEncoding}
-                    onChange={(event) => void handleEncodingPartChange({ fileCategoryCode: event.currentTarget.value })}
-                >
-                    <option value="">未识别</option>
-                    {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
-                        <option value={selectedFileCategoryCode}>
-                            {fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
-                        </option>
-                    ) : null}
-                    {fileCategoryOptions.map((option) => (
-                        <option key={option.code} value={option.code}>
-                            {option.code} / {option.label}
-                        </option>
-                    ))}
-                </select>
+                    ariaLabel={`修改${selectedFile.name}文件类型`}
+                    onChange={(option) => {
+                        if (!option) return;
+                        void handleEncodingPartChange({ fileCategoryCode: option.parentCode }, option.code);
+                    }}
+                />
             ) : (
                 <span className={s.detailValue}>
-                    {selectedFile ? fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions) : "-"}
+                    {selectedFile
+                        ? getPortalFileCategoryDisplayText(fileCategoryGroups, selectedFile.fileSubcategoryCode, selectedFileCategoryCode, "-")
+                        : "-"}
                 </span>
             )}
         </div>

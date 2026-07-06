@@ -678,7 +678,11 @@ async def update_file_encoding(
     req: FileEncodingUpdateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    file_record = await svc.update_file_encoding(file_id, req.encoding)
+    file_record = await svc.update_file_encoding(
+        file_id,
+        req.encoding,
+        file_subcategory_code=req.file_subcategory_code,
+    )
     return resp_200(file_record)
 
 

@@ -75,6 +75,7 @@ class KnowledgeSpaceAutoTagService:
                 app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
                 user_id=db_file.user_id,
+                temperature=0,
             )
             system_prompt = (llm_config.auto_tag_prompt or "").strip() or DEFAULT_AUTO_TAG_SYSTEM_PROMPT
 

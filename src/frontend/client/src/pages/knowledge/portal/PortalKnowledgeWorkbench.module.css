@@ -1746,8 +1746,8 @@
 }
 
 .uploadDialogContent {
-  width: min(760px, calc(100vw - 48px));
-  max-width: 760px;
+  width: min(920px, calc(100vw - 64px)) !important;
+  max-width: min(920px, calc(100vw - 64px)) !important;
   max-height: calc(100dvh - 80px);
 }
 
@@ -1816,7 +1816,7 @@
 .uploadRecordsRow {
   min-width: 1240px;
   display: grid;
-  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(130px, .9fr) minmax(120px, .8fr) minmax(110px, .8fr) minmax(180px, 1.1fr);
+  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(170px, 1fr) minmax(120px, .8fr) minmax(110px, .8fr) minmax(180px, 1.1fr);
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
@@ -1844,6 +1844,41 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.uploadRecordsRow > .uploadRecordCategoryCell {
+  position: relative;
+  overflow: visible;
+  z-index: auto;
+}
+
+.uploadRecordsRow > .uploadRecordCategoryCell:focus-within {
+  z-index: 20;
+}
+
+.uploadRecordCategoryCell .uploadCategoryDropdown {
+  min-width: 0;
+}
+
+.uploadRecordCategoryCell .uploadCategoryTrigger {
+  height: 34px;
+  border-color: #d8e1ee;
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.uploadRecordCategoryCell .uploadCategoryMenu {
+  width: max(100%, 240px);
+  max-width: min(320px, calc(100vw - 96px));
+  max-height: 260px;
+  z-index: 80;
+}
+
+.uploadRecordCategoryCell .uploadCategoryGroupButton,
+.uploadRecordCategoryCell .uploadCategoryChildButton {
+  min-height: 30px;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .uploadRecordStatusBadge {
@@ -2155,6 +2190,7 @@
 }
 
 .uploadField {
+  min-width: 0;
   display: grid;
   gap: 8px;
 }
@@ -2170,6 +2206,8 @@
 }
 
 .uploadSelect {
+  width: 100%;
+  min-width: 0;
   height: 36px;
   border: 1px solid #dfe5ee;
   border-radius: 5px;
@@ -2185,11 +2223,14 @@
 }
 
 .uploadCategoryDropdown {
+  min-width: 0;
   position: relative;
 }
 
 .uploadCategoryTrigger {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   height: 36px;
   display: flex;
   align-items: center;
@@ -2312,7 +2353,7 @@
 
 .uploadMetadataGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
 
