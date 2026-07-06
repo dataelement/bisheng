@@ -438,7 +438,7 @@ class ShougangPortalQaFileSearchResp(BaseModel):
 class ShougangPortalHomeSectionReq(BaseModel):
     tag: str
     recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
-    page_size: int = Field(default=6, ge=1, le=100)
+    page_size: int = Field(default=0, ge=1, le=100)
 
 
 class ShougangPortalHomeReq(BaseModel):

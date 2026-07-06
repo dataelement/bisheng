@@ -28,6 +28,9 @@ from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
     KnowledgeSpaceSubscribeScenarioHandler,
 )
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
@@ -3133,10 +3136,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         sections: dict[str, list[dict]] = {section.tag: [] for section in req.sections}
         hot_read_item_cache: dict[int, list[ShougangPortalFileItemResp]] = {}
+        section_page_size = 6
+        if section.page_size < 1:
+            config = await ShougangPortalConfigService.get_config()
+            if config:
+                section_page_size = config.portal.display.home.section_page_size or 6
+        else:
+            section_page_size = section.page_size
         for section in req.sections:
             if not self._is_shougang_portal_latest_selected_home_section(section):
                 continue
-            page_size = min(max(int(section.page_size or 6), 1), 100)
+            page_size = min(max(section_page_size, 1), 100)
             if page_size not in hot_read_item_cache:
                 hot_read_item_cache[page_size] = await self._get_shougang_portal_hot_read_file_items(
                     spaces=spaces,
