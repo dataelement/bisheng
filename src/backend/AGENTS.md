@@ -103,8 +103,8 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 
 **Migration vs. script — keep them separate:**
 
-- **Schema changes** (DDL: create/alter/drop table, columns, indexes, constraints) → Alembic revision under `bisheng/core/database/alembic/versions/`. These are versioned and replayed on every environment via `alembic upgrade head`.
-- **One-off data migration or cleanup** (backfill/transform rows, purge stale data, fix-up jobs run once) → a standalone script under `scripts/`, **not** Alembic. Don't bury data-only operations in schema revisions.
+- **Schema DDL only** (create/alter/drop table, columns, indexes, constraints) → Alembic revision under `bisheng/core/database/alembic/versions/`, replayed on every environment via `alembic upgrade head`. The **only** data effect allowed is a `server_default` fill on an added column (the engine backfills existing rows as part of the DDL).
+- **Any data migration / maintenance** — backfill, transform, dedup, purge, seed, or *any* read-then-write on existing rows (`SELECT`→`UPDATE`/`INSERT`, `INSERT…SELECT`) — is a **separate operational procedure** (`scripts/` or a DBA runbook) run out-of-band, **never** in a revision. Even cleanup required before a schema change (e.g. dedup before a unique constraint) is an ops prerequisite run before deploy; the migration only issues the DDL and fails loudly if the data wasn't prepared. Migration authoring rules → `bisheng/core/database/alembic/AGENTS.md`.
 
 ---
 
