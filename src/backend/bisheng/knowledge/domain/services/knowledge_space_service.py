@@ -3143,8 +3143,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     limit=page_size,
                 )
             sections[section.tag] = [
-                item.model_dump(mode="json")
-                for item in hot_read_item_cache[page_size][:page_size]
+                item.model_dump(mode="json") for item in hot_read_item_cache[page_size][:page_size]
             ]
 
         tag_section_tags = [
@@ -3633,9 +3632,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             detect_has_more=True,
         )
         next_cursor = (
-            encode_cursor((next_offset,), context=cursor_context)
-            if has_more and next_offset is not None
-            else None
+            encode_cursor((next_offset,), context=cursor_context) if has_more and next_offset is not None else None
         )
         return self._build_shougang_portal_cursor_response(page_items, has_more, next_cursor)
 
@@ -3708,9 +3705,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
                 visible_file_map = {int(file.id): file for file in visible_files}
                 ordered_files = [
-                    visible_file_map[file_id]
-                    for file_id in bucket_file_ids
-                    if file_id in visible_file_map
+                    visible_file_map[file_id] for file_id in bucket_file_ids if file_id in visible_file_map
                 ]
                 page_items = await self._map_shougang_portal_files_to_items(
                     files=ordered_files,
@@ -4756,8 +4751,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @staticmethod
     def _is_shougang_portal_latest_selected_home_section(section: Any) -> bool:
         return (
-            str(getattr(section, "recommendation", "") or "").strip()
-            == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
+            str(getattr(section, "recommendation", "") or "").strip() == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
         )
 
     @staticmethod
@@ -8714,36 +8708,90 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     return library_tag
         return None
 
-    async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
-        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+    async def _find_tenant_pending_review_tag_by_name(
+        self,
+        tag_name: str,
+        *,
+        space_id: int | None = None,
+    ) -> ReviewTag | None:
+        """Match workstation pending-review list: tenant-wide by name, prefer current space."""
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            return None
+        tenant_id = int(self.login_user.tenant_id)
+        library_name_subq = select(Tag.name).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.tenant_id == tenant_id,
+        )
+        base_where = [
+            ReviewTag.tenant_id == tenant_id,
+            ReviewTag.name == normalized,
+            ReviewTag.is_deleted == False,
+            ReviewTag.review_status == 0,
+            ReviewTag.name.not_in(library_name_subq),
+        ]
+        async with get_async_db_session() as session:
+            if space_id is not None:
+                same_space = (
+                    await session.exec(
+                        select(ReviewTag).where(*base_where, ReviewTag.business_id == str(space_id)).limit(1)
+                    )
+                ).first()
+                if same_space:
+                    return same_space
+            return (await session.exec(select(ReviewTag).where(*base_where).limit(1))).first()
+
+    async def _find_space_tag_by_name(self, space_id: int, tag_name: str) -> Tag | ReviewTag | None:
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            return None
 
         existing_tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-            name=tag_name,
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+            name=normalized,
         )
         for tag in existing_tags:
-            if tag.name == tag_name:
+            if (tag.name or "").strip() == normalized:
                 return tag
 
         existing_review_tags = await ReviewTagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-            name=tag_name,
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+            name=normalized,
         )
         for review_tag in existing_review_tags:
-            if review_tag.name == tag_name:
+            if (review_tag.name or "").strip() == normalized and review_tag.review_status == 0:
                 return review_tag
 
-        library_tag = await self._find_tenant_library_tag_by_name(tag_name)
-        if library_tag:
-            await self._require_review_tag_feature_enabled()
-            return library_tag
+        tenant_pending = await self._find_tenant_pending_review_tag_by_name(normalized, space_id=space_id)
+        if tenant_pending:
+            return tenant_pending
+
+        return await self._find_tenant_library_tag_by_name(normalized)
+
+    async def lookup_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag | None:
+        """Resolve an existing tag by name without creating a new review tag."""
+        await self._require_read_permission(space_id)
+        return await self._find_space_tag_by_name(space_id, tag_name)
+
+    async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
+        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            raise ValueError("tag_name is required")
+
+        existing = await self._find_space_tag_by_name(space_id, normalized)
+        if existing:
+            if getattr(existing, "business_type", None) == TagBusinessTypeEnum.TAG_LIBRARY.value:
+                await self._require_review_tag_feature_enabled()
+            return existing
 
         await self._require_review_tag_feature_enabled()
 
         new_tag = ReviewTag(
-            name=tag_name,
+            name=normalized,
             user_id=self.login_user.user_id,
             tenant_id=int(self.login_user.tenant_id),
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,

@@ -1738,6 +1738,22 @@ export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
 }
 
 /**
+ * Lookup an existing tag by name without creating a review tag.
+ * Backend: GET /api/v1/knowledge/space/{space_id}/tag/lookup
+ */
+export async function lookupSpaceTagApi(space_id: string, tag_name: string): Promise<SpaceTag | null> {
+    const res = await request.get<ApiResponse<SpaceTag | null>>(
+        `/api/v1/knowledge/space/${space_id}/tag/lookup`,
+        { params: { tag_name } },
+    );
+    const raw = res?.data;
+    if (!raw || raw.id === undefined || raw.id === null) {
+        return null;
+    }
+    return raw as SpaceTag;
+}
+
+/**
  * Add a new space tag.
  * Backend: POST /api/v1/knowledge/space/{space_id}/tag
  */

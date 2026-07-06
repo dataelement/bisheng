@@ -13,7 +13,9 @@ from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeS
 @pytest.fixture
 def service():
     login_user = SimpleNamespace(user_id=1, tenant_id=1, user_name="tester")
-    return KnowledgeSpaceService(MagicMock(), login_user)
+    svc = KnowledgeSpaceService(MagicMock(), login_user)
+    svc._find_tenant_pending_review_tag_by_name = AsyncMock(return_value=None)
+    return svc
 
 
 @pytest.mark.asyncio
@@ -68,6 +70,81 @@ async def test_add_space_tag_returns_existing_review_tag(service):
 
     assert result is existing
     mock_insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_lookup_space_tag_returns_existing_review_tag_without_create(service):
+    existing = SimpleNamespace(id=20, name="待审核", review_status=0)
+
+    with (
+        patch.object(service, "_require_read_permission", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_find_space_tag_by_name",
+            new_callable=AsyncMock,
+            return_value=existing,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.ainsert_review_tag",
+            new_callable=AsyncMock,
+        ) as mock_insert,
+    ):
+        result = await service.lookup_space_tag(137, "待审核")
+
+    assert result is existing
+    mock_insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_lookup_space_tag_returns_none_when_not_found(service):
+    with (
+        patch.object(service, "_require_read_permission", new_callable=AsyncMock),
+        patch.object(service, "_find_space_tag_by_name", new_callable=AsyncMock, return_value=None),
+    ):
+        result = await service.lookup_space_tag(137, "全新标签")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_find_space_tag_by_name_falls_back_to_tenant_pending_review_tag(service):
+    pending = SimpleNamespace(
+        id=31,
+        name="11",
+        review_status=0,
+        business_type="knowledge_space",
+        business_id="121",
+        resource_type="manual_tag",
+    )
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.get_tags_by_business",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            service,
+            "_find_tenant_pending_review_tag_by_name",
+            new_callable=AsyncMock,
+            return_value=pending,
+        ) as mock_tenant_pending,
+        patch.object(
+            service,
+            "_find_tenant_library_tag_by_name",
+            new_callable=AsyncMock,
+        ) as mock_library,
+    ):
+        result = await service._find_space_tag_by_name(121, "11")
+
+    assert result is pending
+    mock_tenant_pending.assert_awaited_once_with("11", space_id=121)
+    mock_library.assert_not_awaited()
 
 
 @pytest.mark.asyncio
