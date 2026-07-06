@@ -60,16 +60,22 @@ def _load_space_migrate_worker() -> ModuleType:
 m = _load_space_migrate_worker()
 
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState  # noqa: E402
+from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
+    FileType,
+    KnowledgeFileStatus,
+)
 
 
-def _kfile(id, md5, status=2):
-    return SimpleNamespace(id=id, md5=md5, status=status)
+def _kfile(id, md5, status=2, file_type=FileType.FILE.value):
+    return SimpleNamespace(id=id, md5=md5, status=status, file_type=file_type)
 
 
 def test_migrate_skips_duplicate_md5_and_copies_rest(monkeypatch):
     source = SimpleNamespace(id=1, state=1, update_time=None, model="e")
     target = SimpleNamespace(id=2, state=1, update_time=None, model="e")
-    pages = [[_kfile(10, "a"), _kfile(11, "b")], []]
+    a_dir = SimpleNamespace(id=12, md5="z", status=KnowledgeFileStatus.SUCCESS.value,
+                            file_type=FileType.DIR.value)
+    pages = [[_kfile(10, "a"), _kfile(11, "b"), a_dir], []]
 
     monkeypatch.setattr(
         m.KnowledgeDao,
@@ -86,9 +92,11 @@ def test_migrate_skips_duplicate_md5_and_copies_rest(monkeypatch):
     monkeypatch.setattr(
         m.KnowledgeFileDao,
         "get_file_by_filters",
-        staticmethod(lambda kid, page, page_size: pages[page - 1]),
+        staticmethod(lambda kid, status=None, page=1, page_size=20: pages[page - 1]),
     )
-    copy_normal = MagicMock()
+    copy_normal = MagicMock(
+        return_value=SimpleNamespace(status=KnowledgeFileStatus.SUCCESS.value),
+    )
     monkeypatch.setattr(m, "copy_normal", copy_normal)
     del_src = AsyncMock()
     monkeypatch.setattr(m, "_delete_source_space", del_src)
@@ -96,7 +104,7 @@ def test_migrate_skips_duplicate_md5_and_copies_rest(monkeypatch):
     result = m.space_migrate_celery({"source_id": 1, "target_id": 2, "op_user_id": 5})
 
     copied_ids = [c.args[0].id for c in copy_normal.call_args_list]
-    assert copied_ids == [11]          # md5 "a" 已存在于目标，跳过 id=10
+    assert copied_ids == [11]          # md5 "a" 已存在于目标，跳过 id=10；目录 id=12 被跳过
     del_src.assert_called_once()        # 成功后删源库
     assert result == "space migrate done"
     update_state.assert_not_called()    # 成功路径不应触发回滚
@@ -131,6 +139,49 @@ def test_migrate_failure_rolls_back_state_and_keeps_source(monkeypatch):
     del_src.assert_not_called()         # 失败不删源库
     assert result == "space migrate failed"
     # 最后一次 update_state 把源库恢复为 PUBLISHED（回滚迁移中）
+    last = update_state.call_args_list[-1]
+    assert last.kwargs.get("state") == KnowledgeState.PUBLISHED or (
+        last.args[1:] and last.args[1] == KnowledgeState.PUBLISHED
+    )
+
+
+def test_migrate_aborts_and_keeps_source_when_copy_fails(monkeypatch):
+    """copy_normal 对某个源文件复制失败（返回 None 或 status==FAILED）时，
+    迁移必须整体中止：不删源库、状态回滚为 PUBLISHED、返回失败文案。
+    这防止「复制失败仍删源库」导致的丢文件（Imp-1）。
+    """
+    source = SimpleNamespace(id=1, state=1, update_time=None, model="e")
+    target = SimpleNamespace(id=2, state=1, update_time=None, model="e")
+    pages = [[_kfile(10, "a"), _kfile(11, "b")], []]
+
+    monkeypatch.setattr(
+        m.KnowledgeDao,
+        "query_by_id",
+        staticmethod(lambda i: source if i == 1 else target),
+    )
+    update_state = MagicMock()
+    monkeypatch.setattr(m.KnowledgeDao, "update_state", update_state)
+    monkeypatch.setattr(
+        m.KnowledgeFileDao,
+        "get_file_by_condition",
+        staticmethod(lambda kid: []),
+    )
+    monkeypatch.setattr(
+        m.KnowledgeFileDao,
+        "get_file_by_filters",
+        staticmethod(lambda kid, status=None, page=1, page_size=20: pages[page - 1]),
+    )
+    copy_normal = MagicMock(
+        return_value=SimpleNamespace(status=KnowledgeFileStatus.FAILED.value),
+    )
+    monkeypatch.setattr(m, "copy_normal", copy_normal)
+    del_src = AsyncMock()
+    monkeypatch.setattr(m, "_delete_source_space", del_src)
+
+    result = m.space_migrate_celery({"source_id": 1, "target_id": 2, "op_user_id": 5})
+
+    del_src.assert_not_called()         # 复制失败必须保留源库，绝不能删
+    assert result == "space migrate failed"
     last = update_state.call_args_list[-1]
     assert last.kwargs.get("state") == KnowledgeState.PUBLISHED or (
         last.args[1:] and last.args[1] == KnowledgeState.PUBLISHED

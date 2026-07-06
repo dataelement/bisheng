@@ -5240,11 +5240,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await KnowledgeDao.async_update_state(
                     knowledge_id=space_id, state=KnowledgeState.COPYING,
                 )
-                space_migrate_celery.delay({
-                    "source_id": space_id,
-                    "target_id": decision.target_space_id,
-                    "op_user_id": self.login_user.user_id,
-                })
+                try:
+                    space_migrate_celery.delay({
+                        "source_id": space_id,
+                        "target_id": decision.target_space_id,
+                        "op_user_id": self.login_user.user_id,
+                    })
+                except Exception:
+                    await KnowledgeDao.async_update_state(
+                        knowledge_id=space_id, state=KnowledgeState.PUBLISHED,
+                    )
+                    raise
                 return
             # decision.action == "normal_delete" → 继续原清理逻辑
         child_resources = await self._list_space_child_resources(space_id)

@@ -38,6 +38,28 @@ async def test_migrate_branch_enqueues_and_returns_without_delete():
 
 
 @pytest.mark.asyncio
+async def test_migrate_branch_rolls_back_copying_when_enqueue_fails():
+    """入队失败(space_migrate_celery.delay 抛异常)时，之前置为 COPYING 的源库状态
+    必须回滚为 PUBLISHED，且异常要真正抛出（不能吞成静默成功），否则源库会
+    永久卡在 COPYING、既无法删除也无法正常使用（Imp-2）。
+    """
+    svc = _svc()
+    with patch(f"{MOD}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=_space())), \
+         patch(f"{MOD}.FreeSpaceMigrationService.pre_delete_guard",
+               new=AsyncMock(return_value=MigrationDecision("migrate", target_space_id=900))), \
+         patch(f"{MOD}.KnowledgeDao.async_update_state", new=AsyncMock()) as upd, \
+         patch(f"{MOD}.space_migrate_celery") as task, \
+         patch(f"{MOD}.KnowledgeService.delete_knowledge_file_in_vector") as del_vec:
+        task.delay.side_effect = RuntimeError("broker down")
+        with pytest.raises(RuntimeError):
+            await svc.delete_space(1)
+        assert upd.call_count == 2
+        last = upd.call_args_list[-1]
+        assert last.kwargs.get("state") == KnowledgeState.PUBLISHED
+        del_vec.assert_not_called()         # 真正的清理流程未被触发
+
+
+@pytest.mark.asyncio
 async def test_block_branch_raises():
     from bisheng.common.errcode.knowledge_space import DepartmentSpaceDeleteForbiddenError
     svc = _svc()

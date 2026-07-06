@@ -4,7 +4,7 @@ from fastapi import Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus, FileType
 from bisheng.worker.knowledge.file_worker import copy_normal
 from bisheng.worker.main import bisheng_celery
 
@@ -31,13 +31,20 @@ def _do_migrate(source_id: int, target_id: int, op_user_id: int) -> None:
 
     page = 1
     while True:
-        files = KnowledgeFileDao.get_file_by_filters(source_id, page=page, page_size=_PAGE_SIZE)
+        files = KnowledgeFileDao.get_file_by_filters(
+            source_id, status=[KnowledgeFileStatus.SUCCESS.value],
+            page=page, page_size=_PAGE_SIZE,
+        )
         if not files:
             break
         for one in files:
+            if one.file_type == FileType.DIR.value:
+                continue
             if one.md5 and one.md5 in target_md5:
                 continue
-            copy_normal(one, source, target, op_user_id)
+            copied = copy_normal(one, source, target, op_user_id)
+            if copied is None or copied.status == KnowledgeFileStatus.FAILED.value:
+                raise RuntimeError(f"copy_normal failed for source file id={getattr(one, 'id', None)}")
             if one.md5:
                 target_md5.add(one.md5)
         if len(files) < _PAGE_SIZE:
