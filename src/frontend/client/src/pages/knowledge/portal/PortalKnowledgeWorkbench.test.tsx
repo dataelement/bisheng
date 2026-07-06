@@ -3321,13 +3321,21 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const dialog = await screen.findByTestId("portal-upload-dialog");
         expect(within(dialog).getByText("上传文件")).toBeInTheDocument();
+        const categoryTrigger = within(dialog).getByRole("button", { name: "文件分类 当前选择：AI 自动生成" });
+        expect(categoryTrigger).toHaveTextContent("AI 自动生成");
+        expect(within(dialog).queryByRole("tree", { name: "文件分类" })).not.toBeInTheDocument();
+        fireEvent.click(categoryTrigger);
         const categoryTree = within(dialog).getByRole("tree", { name: "文件分类" });
-        expect(within(categoryTree).getByRole("button", { name: "AI 自动生成" })).toBeInTheDocument();
         const reportCategoryButton = within(categoryTree).getByRole("button", { name: "RPT / 报告" });
         expect(reportCategoryButton).toHaveAttribute("aria-expanded", "false");
         fireEvent.click(reportCategoryButton);
         expect(reportCategoryButton).toHaveAttribute("aria-expanded", "true");
         expect(within(categoryTree).getAllByRole("button", { name: "RPT / 报告" })).toHaveLength(2);
+        fireEvent.click(within(categoryTree).getAllByRole("button", { name: "RPT / 报告" })[1]);
+        expect(within(dialog).queryByRole("tree", { name: "文件分类" })).not.toBeInTheDocument();
+        expect(within(dialog).getByRole("button", { name: "文件分类 当前选择：报告 / 报告" })).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole("button", { name: "清空文件分类选择" }));
+        expect(within(dialog).getByRole("button", { name: "文件分类 当前选择：AI 自动生成" })).toBeInTheDocument();
         expect(within(dialog).queryByText("*")).not.toBeInTheDocument();
         expect(within(dialog).getByLabelText("业务域")).toHaveDisplayValue("AI 自动生成");
         expect(within(dialog).getByRole("option", { name: "PP / 生产" })).toHaveValue("PP");
@@ -3950,8 +3958,10 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
             target: { files: [rootFile] },
         });
-        fireEvent.click(within(dialog).getByRole("button", { name: "RPT / 报告" }));
-        fireEvent.click(within(dialog).getAllByRole("button", { name: "RPT / 报告" })[1]);
+        fireEvent.click(within(dialog).getByRole("button", { name: "文件分类 当前选择：AI 自动生成" }));
+        const categoryTree = within(dialog).getByRole("tree", { name: "文件分类" });
+        fireEvent.click(within(categoryTree).getByRole("button", { name: "RPT / 报告" }));
+        fireEvent.click(within(categoryTree).getAllByRole("button", { name: "RPT / 报告" })[1]);
         fireEvent.click(within(dialog).getByRole("button", { name: "上传" }));
 
         await waitFor(() => {
@@ -4001,8 +4011,10 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
             target: { files: [rootFile] },
         });
-        fireEvent.click(within(dialog).getByRole("button", { name: "RPT / 报告" }));
-        fireEvent.click(within(dialog).getAllByRole("button", { name: "RPT / 报告" })[1]);
+        fireEvent.click(within(dialog).getByRole("button", { name: "文件分类 当前选择：AI 自动生成" }));
+        const categoryTree = within(dialog).getByRole("tree", { name: "文件分类" });
+        fireEvent.click(within(categoryTree).getByRole("button", { name: "RPT / 报告" }));
+        fireEvent.click(within(categoryTree).getAllByRole("button", { name: "RPT / 报告" })[1]);
         fireEvent.click(within(dialog).getByRole("button", { name: "上传" }));
 
         await waitFor(() => {
