@@ -385,6 +385,12 @@ export interface FileTag {
     id: number;
     name: string;
     resource_type?: string;
+    /** 0 = pending review; 1 = approved */
+    review_status?: number;
+}
+
+export function isPendingReviewTagStatus(reviewStatus?: number | null): boolean {
+    return reviewStatus === 0;
 }
 
 export interface SensitiveWordHit {
@@ -532,6 +538,8 @@ export interface KnowledgeSpaceTagLibraryTagItem {
     resource_count?: number;
     create_time?: string | null;
     creator_name?: string | null;
+    /** 0 = pending review */
+    review_status?: number;
 }
 
 /** Tag-library manual_tag entries are displayed as system tags (matches Platform). */
@@ -923,8 +931,12 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
                     t?.resource_type !== undefined && t?.resource_type !== null
                         ? String(t.resource_type)
                         : undefined;
+                const review_status =
+                    t?.review_status !== undefined && t?.review_status !== null
+                        ? Number(t.review_status)
+                        : undefined;
                 if (!name) return null;
-                return { id, name, resource_type };
+                return { id, name, resource_type, review_status };
             })
             .filter((v: FileTag | null): v is FileTag => v !== null)
         : [];

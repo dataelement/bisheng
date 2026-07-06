@@ -569,3 +569,12 @@ describe("resolveSpaceTagAddHint", () => {
     ).toBeNull();
   });
 });
+
+describe("isPendingReviewTagStatus", () => {
+  it("detects pending review tags", async () => {
+    const { isPendingReviewTagStatus } = await import("./knowledge");
+    expect(isPendingReviewTagStatus(0)).toBe(true);
+    expect(isPendingReviewTagStatus(1)).toBe(false);
+    expect(isPendingReviewTagStatus(undefined)).toBe(false);
+  });
+});

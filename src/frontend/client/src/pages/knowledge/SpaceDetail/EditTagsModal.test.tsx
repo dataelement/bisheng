@@ -515,4 +515,28 @@ describe("EditTagsModal recommended tags", () => {
             });
         });
     });
+
+    it("renders pending manual tags in gray under manual recommended section", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
+            { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("待审核")).toBeInTheDocument();
+            expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
+        });
+
+        expect(screen.getByText("待审核").className).toContain("text-[#c9cdd4]");
+    });
 });
