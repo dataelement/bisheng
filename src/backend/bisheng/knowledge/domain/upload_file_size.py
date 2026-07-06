@@ -4,7 +4,7 @@ from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.common.services.config_service import settings
 
 DEFAULT_UPLOADED_FILES_MAXIMUM_SIZE_MB = 50
-DEFAULT_UPLOADED_MEDIA_MAXIMUM_SIZE_MB = 1
+DEFAULT_UPLOADED_MEDIA_MAXIMUM_SIZE_MB = 1024
 
 _AUDIO_FILE_EXTENSIONS = frozenset({'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'})
 _VIDEO_FILE_EXTENSIONS = frozenset({'mp4', 'mov', 'avi', 'mkv', 'webm'})

@@ -23,6 +23,29 @@ type WebTab = "html" | "text";
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
 
+export type RichPreviewData = PreviewData;
+
+export function isMediaUploadSuffix(suffix?: string) {
+  if (!suffix) return false;
+  const ext = suffix.toLowerCase();
+  return AUDIO_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+}
+
+export function buildMediaUploadPreviewData(
+  originalUrl: string,
+  transcriptUrl: string,
+  suffix: string,
+): PreviewData {
+  const ext = suffix.toLowerCase();
+  const isVideo = VIDEO_EXTENSIONS.has(ext);
+  return {
+    original_url: originalUrl,
+    preview_url: transcriptUrl,
+    file_source: isVideo ? "video_transcript" : "audio_transcript",
+    media_kind: isVideo ? "video" : "audio",
+  };
+}
+
 function normalizeUrl(url?: string) {
   if (!url) return "";
   return url.replace(/https?:\/\/[^/]+/, __APP_ENV__.BASE_URL);
