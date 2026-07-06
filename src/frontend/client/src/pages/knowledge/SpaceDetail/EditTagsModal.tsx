@@ -21,6 +21,7 @@ import {
     updateFileTagsApi,
     batchUpdateTagsApi,
     getKnowledgeSpaceReviewTagVisibilityApi,
+    resolveSpaceTagAddHint,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
@@ -383,6 +384,17 @@ export function EditTagsModal({
         return err?.status_message || localize("com_knowledge.create_tag_failed");
     };
 
+    const notifyTagAddHint = (tag: SpaceTag) => {
+        const hint = resolveSpaceTagAddHint(tag, recommendedTags);
+        if (hint === "under_review") {
+            showToast({ message: localize("com_knowledge.tag_under_review"), status: "warning" });
+            return;
+        }
+        if (hint === "exists_in_other_library") {
+            showToast({ message: localize("com_knowledge.tag_exists_in_other_library"), status: "warning" });
+        }
+    };
+
     const selectOrCreateSpaceTag = async (
         tagName: string,
         resourceType?: string,
@@ -393,6 +405,7 @@ export function EditTagsModal({
 
         const existing = findSpaceTagByName(spaceTags, trimmed);
         if (existing) {
+            notifyTagAddHint(existing);
             if (selectionMode === "add") {
                 addTagToSelection(existing);
             } else {
@@ -432,6 +445,7 @@ export function EditTagsModal({
                 if (findSpaceTagByName(prev, trimmed)) return prev;
                 return [...prev, enrichedTag];
             });
+            notifyTagAddHint(enrichedTag);
             addTagToSelection(enrichedTag);
             queryClient.invalidateQueries({ queryKey: ["spaceTags", spaceId] });
         } catch (err: any) {
@@ -441,6 +455,7 @@ export function EditTagsModal({
                     setSpaceTags(refreshed);
                     const refetched = findSpaceTagByName(refreshed, trimmed);
                     if (refetched) {
+                        notifyTagAddHint(refetched);
                         addTagToSelection(refetched);
                         return;
                     }
@@ -485,6 +500,7 @@ export function EditTagsModal({
         // Check if the tag already exists in the space
         const existing = findSpaceTagByName(spaceTags, trimmed);
         if (existing) {
+            notifyTagAddHint(existing);
             addTagToSelection(existing);
             setInputValue("");
             return;

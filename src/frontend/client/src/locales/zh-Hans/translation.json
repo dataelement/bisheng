@@ -1398,6 +1398,8 @@
     "tag_type_ai": "AI标签",
     "tag_type_manual": "人工标签",
     "manual_tag_review_hint": "手动新增加的标签，需要后台管理员审核通过之后才能生效。",
+    "tag_under_review": "标签正在审核",
+    "tag_exists_in_other_library": "标签已存在",
     "review_tag_feature_disabled": "待审核标签功能已关闭，无法提交 AI 标签或人工标签",
     "review_tag_input_disabled_placeholder": "待审核标签已关闭，仅可选择已生效标签",
     "exit": "退出",

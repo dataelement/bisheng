@@ -280,6 +280,25 @@ export function isBoundLibraryTagName(
     return recommendedTags.some((item) => item.name.trim().toLowerCase() === normalized);
 }
 
+export type SpaceTagAddHint = "under_review" | "exists_in_other_library";
+
+/** Hint when user adds a tag that is pending review or exists in an unbound library. */
+export function resolveSpaceTagAddHint(
+    tag: SpaceTag,
+    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+): SpaceTagAddHint | null {
+    if (tag.review_status === 0) {
+        return "under_review";
+    }
+    if (isLibrarySpaceTag(tag) && !isBoundLibraryTagName(tag.name, recommendedTags)) {
+        return "exists_in_other_library";
+    }
+    if (!isLibrarySpaceTag(tag) && (tag.review_status === undefined || tag.review_status === null)) {
+        return "under_review";
+    }
+    return null;
+}
+
 function parseBooleanConfigFlag(value: unknown): boolean | null {
     if (value === true || value === 1) return true;
     if (value === false || value === 0) return false;

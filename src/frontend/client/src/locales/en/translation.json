@@ -1470,6 +1470,8 @@
     "tag_type_ai": "AI tags",
     "tag_type_manual": "Manual tags",
     "manual_tag_review_hint": "Newly added manual tags take effect only after an administrator approves them.",
+    "tag_under_review": "This tag is under review",
+    "tag_exists_in_other_library": "Tag already exists",
     "review_tag_feature_disabled": "Pending review tags are disabled; AI and manual tags cannot be submitted",
     "review_tag_input_disabled_placeholder": "Pending review is off — only approved tags can be selected",
     "exit": "Exit",

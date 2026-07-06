@@ -449,4 +449,70 @@ describe("EditTagsModal recommended tags", () => {
             expect(addSpaceTagApi).not.toHaveBeenCalled();
         });
     });
+
+    it("shows under-review hint when adding a pending tag", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "待审核");
+        await user.keyboard("{Enter}");
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith({
+                message: "com_knowledge.tag_under_review",
+                status: "warning",
+            });
+        });
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
+    });
+
+    it("shows exists hint when add API returns an unbound library tag", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 10, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
+        ]);
+        jest.mocked(addSpaceTagApi).mockResolvedValue({
+            id: 99,
+            name: "其他库标签",
+            business_type: "tag_library",
+            resource_type: "manual_tag",
+        });
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "其他库标签");
+        await user.keyboard("{Enter}");
+
+        await waitFor(() => {
+            expect(addSpaceTagApi).toHaveBeenCalledWith("100", "其他库标签");
+            expect(mockShowToast).toHaveBeenCalledWith({
+                message: "com_knowledge.tag_exists_in_other_library",
+                status: "warning",
+            });
+        });
+    });
 });

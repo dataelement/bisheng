@@ -542,3 +542,30 @@ describe("getKnowledgeSpaceReviewTagVisibilityApi", () => {
     expect(mockGet).toHaveBeenNthCalledWith(2, "/api/v1/workstation/config/knowledge_space");
   });
 });
+
+describe("resolveSpaceTagAddHint", () => {
+  it("returns under_review for pending review tags", async () => {
+    const { resolveSpaceTagAddHint } = await import("./knowledge");
+    expect(resolveSpaceTagAddHint({ id: 1, name: "待审核", review_status: 0 })).toBe("under_review");
+  });
+
+  it("returns exists_in_other_library for unbound library tags", async () => {
+    const { resolveSpaceTagAddHint } = await import("./knowledge");
+    expect(
+      resolveSpaceTagAddHint(
+        { id: 2, name: "全局标签", business_type: "tag_library", resource_type: "system_tag" },
+        [{ name: "系统A" }],
+      ),
+    ).toBe("exists_in_other_library");
+  });
+
+  it("returns null for bound library tags", async () => {
+    const { resolveSpaceTagAddHint } = await import("./knowledge");
+    expect(
+      resolveSpaceTagAddHint(
+        { id: 3, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
+        [{ name: "系统A" }],
+      ),
+    ).toBeNull();
+  });
+});
