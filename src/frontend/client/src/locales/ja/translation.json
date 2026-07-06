@@ -1665,6 +1665,11 @@
       "search_button": "検索",
       "section_dismiss": "関連付けをスキップ",
       "section_dismiss_subtitle": "現在のファイルを独立ドキュメントとして保持し、バージョンチェーンに追加しません。",
+      "btn_batch_process": "一括処理",
+      "btn_batch_cancel": "キャンセル",
+      "batch_select_all": "すべて選択",
+      "batch_right_hint": "左側のファイルにチェックを入れ、「関連付けない」をクリックして一括処理します。",
+      "toast_batch_dismiss_success": "{{count}} 件のファイルを処理しました",
       "btn_close": "閉じる"
     },
     "move": "移動",

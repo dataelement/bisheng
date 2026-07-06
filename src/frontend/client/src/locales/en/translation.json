@@ -1746,6 +1746,11 @@
       "search_button": "Search",
       "section_dismiss": "Skip linking",
       "section_dismiss_subtitle": "Keep the current file as a standalone document; do not add it to a version chain.",
+      "btn_batch_process": "Batch process",
+      "btn_batch_cancel": "Cancel",
+      "batch_select_all": "Select all",
+      "batch_right_hint": "Select files on the left, then click Don't link to process them in batch.",
+      "toast_batch_dismiss_success": "Processed {{count}} files",
       "btn_close": "Close"
     },
     "move": "Move",

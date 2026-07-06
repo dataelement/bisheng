@@ -1674,6 +1674,11 @@
       "search_button": "搜索",
       "section_dismiss": "不关联推荐文档",
       "section_dismiss_subtitle": "当前文件保持现有状态,不写入推荐的版本链。",
+      "btn_batch_process": "批量处理",
+      "btn_batch_cancel": "取消",
+      "batch_select_all": "全选",
+      "batch_right_hint": "勾选左侧文件后,点击「不关联」批量处理。",
+      "toast_batch_dismiss_success": "已批量处理 {{count}} 个文件",
       "btn_close": "关闭"
     },
     "move": "移动",

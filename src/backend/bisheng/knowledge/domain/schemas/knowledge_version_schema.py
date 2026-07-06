@@ -100,3 +100,12 @@ class PendingSimilarFileEntry(BaseModel):
 class DismissSimilarResponse(BaseModel):
     knowledge_file_id: int
     similar_status: int  # always 2 after dismiss
+
+
+class BatchDismissSimilarRequest(BaseModel):
+    knowledge_file_ids: list[int]
+
+
+class BatchDismissSimilarResponse(BaseModel):
+    dismissed_count: int  # how many files were transitioned to similar_status=2
+    knowledge_file_ids: list[int]  # ids that were actually dismissed (existing ones)
