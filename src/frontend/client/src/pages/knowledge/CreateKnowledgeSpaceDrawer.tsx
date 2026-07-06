@@ -277,6 +277,15 @@ export function CreateKnowledgeSpaceDrawer({
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
 
+    const handleAutoTagLibraryIdsChange = (values: string[]) => {
+        const normalized = [...new Set(
+            values
+                .map((value) => normalizeTagLibraryId(value))
+                .filter((id): id is number => id !== null),
+        )];
+        setAutoTagLibraryIds(normalized);
+    };
+
     const resetForm = () => {
         setName("");
         setDescription("");
@@ -700,9 +709,10 @@ export function CreateKnowledgeSpaceDrawer({
                                     {localize("com_knowledge.auto_tag_library")}
                                 </Label>
                                 <MultiSelect
-                                    key={`${editingSpace?.id ?? "create"}-${autoTagLibraryIds.join(",")}-${tagLibrarySelectOptions.length}`}
+                                    key={`tag-library-select-${editingSpace?.id ?? "create"}`}
                                     multiple
                                     className="w-full"
+                                    scroll
                                     value={autoTagLibraryIds.map(String)}
                                     options={tagLibrarySelectOptions}
                                     placeholder={
@@ -710,8 +720,9 @@ export function CreateKnowledgeSpaceDrawer({
                                             ? localize("com_knowledge.loading")
                                             : localize("com_knowledge.select_auto_tag_library")
                                     }
+                                    searchPlaceholder={localize("com_knowledge.search_auto_tag_library")}
                                     disabled={tagLibrariesLoading}
-                                    onChange={(values) => setAutoTagLibraryIds(values.map(Number))}
+                                    onChange={handleAutoTagLibraryIdsChange}
                                 />
                                 {tagLibraries.length === 0 && !tagLibrariesLoading && (
                                     <p className="text-[12px] text-[#F53F3F]">

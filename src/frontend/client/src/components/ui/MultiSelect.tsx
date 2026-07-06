@@ -33,14 +33,30 @@ export function useDebounce(func: any, wait: number, immediate: boolean, callbac
 }
 
 const MultiItem: React.FC<
-    { active: boolean; children: React.ReactNode; value: string; onClick: (value: string, label: string) => void }
-> = ({ active, children, value, onClick }) => {
+    {
+        active: boolean;
+        children: React.ReactNode;
+        value: string;
+        multiple?: boolean;
+        onClick: (value: string, label: string) => void;
+    }
+> = ({ active, children, value, multiple = false, onClick }) => {
 
     return <div
         key={value}
         className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] dark:hover:bg-gray-700 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all 
     ${active && 'bg-[#EBF0FF] dark:bg-gray-700'}`}
-        onClick={() => { onClick(value, children as string) }}
+        onPointerDown={(event) => {
+            if (multiple) {
+                event.preventDefault();
+            }
+        }}
+        onClick={(event) => {
+            if (multiple) {
+                event.stopPropagation();
+            }
+            onClick(value, children as string);
+        }}
     >
         <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
             {active && <Check className="h-4 w-4"></Check>}
@@ -120,6 +136,7 @@ const MultiSelect = ({
     const [values, setValues] = React.useState(defaultValue)
     const [optionFilter, setOptionFilter] = React.useState(options)
     const [created, creatInput] = useState(false)
+    const [open, setOpen] = useState(false)
     const inputRef = useRef(null)
 
     useEffect(() => {
@@ -227,10 +244,13 @@ const MultiSelect = ({
 
     return <Select
         {...props}
-        required
-        onOpenChange={(e) => {
-            creatInput(e);
-            if (e) {
+        open={multiple ? open : undefined}
+        onOpenChange={(nextOpen) => {
+            if (multiple) {
+                setOpen(nextOpen);
+            }
+            creatInput(nextOpen);
+            if (nextOpen) {
                 onLoad?.();
                 setOptionFilter(options);
             }
@@ -289,6 +309,7 @@ const MultiSelect = ({
                         <MultiItem
                             active={values.some(val => val === item.value || val.value === item.value)}
                             value={item.value}
+                            multiple={multiple}
                             onClick={handleSwitch}
                         >{item.label}</MultiItem>
                     ))
