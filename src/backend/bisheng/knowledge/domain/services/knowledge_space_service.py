@@ -6831,7 +6831,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
-        return [item for item, allowed in zip(items, visibility) if allowed]
+        visible = [item for item, allowed in zip(items, visibility) if allowed]
+        if not permission_context.get("can_view_all_statuses", False):
+            visible = self._hide_restricted_status_items(
+                visible, owner_user_id=self.login_user.user_id,
+            )
+        return visible
 
     @staticmethod
     def _paginate_items(items: list[KnowledgeFile], page: int, page_size: int) -> list[KnowledgeFile]:

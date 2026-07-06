@@ -7958,3 +7958,39 @@ async def test_space_user_can_view_all_statuses_false_for_member(service):
         return_value={'view_space', 'upload_file'},
     ):
         assert await service._space_user_can_view_all_statuses(1) is False
+
+
+@pytest.mark.asyncio
+async def test_filter_visible_child_items_hides_restricted_for_member(service):
+    items = [
+        _make_file(file_id=1, user_id=7, status=KnowledgeFileStatus.SUCCESS.value),
+        _make_file(file_id=2, user_id=7, status=KnowledgeFileStatus.VIOLATION.value),    # 本人违规 -> 保留
+        _make_file(file_id=3, user_id=99, status=KnowledgeFileStatus.SUCCESS.value),
+        _make_file(file_id=4, user_id=99, status=KnowledgeFileStatus.VIOLATION.value),   # 他人违规 -> 去除
+        _make_file(file_id=5, user_id=99, status=KnowledgeFileStatus.FAILED.value),      # 他人失败 -> 去除
+    ]
+    # login_user.user_id == 7（见 _make_login_user 默认）
+    with patch.object(
+        service, '_get_child_item_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_file', 'view_folder'},
+    ):
+        kept = await service._filter_visible_child_items(
+            items, space_id=1, context={"can_view_all_statuses": False},
+        )
+    assert {f.id for f in kept} == {1, 2, 3}
+
+
+@pytest.mark.asyncio
+async def test_filter_visible_child_items_manager_sees_all(service):
+    items = [
+        _make_file(file_id=4, user_id=99, status=KnowledgeFileStatus.VIOLATION.value),
+        _make_file(file_id=5, user_id=99, status=KnowledgeFileStatus.FAILED.value),
+    ]
+    with patch.object(
+        service, '_get_child_item_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_file', 'view_folder'},
+    ):
+        kept = await service._filter_visible_child_items(
+            items, space_id=1, context={"can_view_all_statuses": True},
+        )
+    assert {f.id for f in kept} == {4, 5}
