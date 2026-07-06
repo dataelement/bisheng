@@ -35,7 +35,7 @@ import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permi
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
-const AUTO_TAG_PREVIEW_LIMIT = 10;
+const AUTO_TAG_PREVIEW_LIMIT = 1000;
 
 function normalizeTagLibraryId(value: unknown): number | null {
     const id = Number(value);
