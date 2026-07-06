@@ -1070,6 +1070,7 @@ function FileRow({
         renameValue,
         setRenameValue,
         inputRef,
+        ext,
         handleRenameSubmit,
         handleKeyDown,
         startRenaming,
@@ -1299,16 +1300,26 @@ function FileRow({
                         <FileIconRenderer file={file} isFolder={isFolder} className="size-[18px]" showThumbnail={false} />
                     </div>
                     {isRenaming ? (
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onBlur={handleRenameSubmit}
-                            onKeyDown={handleKeyDown}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex-1 h-7 px-2 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal text-[#1d2129]"
-                        />
+                        <div className="flex flex-1 items-center gap-1 min-w-0">
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onBlur={handleRenameSubmit}
+                                onKeyDown={handleKeyDown}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex-1 min-w-0 h-7 px-2 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal text-[#1d2129]"
+                            />
+                            {ext && (
+                                <span
+                                    data-testid="rename-ext-suffix"
+                                    className="shrink-0 text-sm text-[#86909c] select-none"
+                                >
+                                    {ext}
+                                </span>
+                            )}
+                        </div>
                     ) : (
                         <>
                             {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
