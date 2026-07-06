@@ -140,3 +140,50 @@ async def test_portal_home_event_counts(monkeypatch):
         "favorite_count": 3,
         "qa_count": 5,
     }
+
+
+@pytest.mark.asyncio
+async def test_portal_document_read_counts_by_space_ids(monkeypatch):
+    class FakeEsClient:
+        async def search(self, **kwargs):
+            assert kwargs["index"] == "base_telemetry_events"
+            body = kwargs["body"]
+            filters = body["query"]["bool"]["filter"]
+            assert {"term": {"event_type": "portal_document_read"}} in filters
+            assert {"term": {"event_data.portal_document_read_source_app": "shougang_portal"}} in filters
+            assert {"terms": {"event_data.portal_document_read_space_id": [12, 13]}} in filters
+            terms = body["aggs"]["by_file"]["terms"]
+            assert terms["field"] == "event_data.portal_document_read_file_id"
+            assert terms["order"] == [{"_count": "desc"}, {"_key": "asc"}]
+            assert body["aggs"]["by_file"]["aggs"]["bucket_page"]["bucket_sort"] == {
+                "from": 2,
+                "size": 3,
+            }
+            return {
+                "aggregations": {
+                    "by_file": {
+                        "buckets": [
+                            {"key": "101", "doc_count": 9},
+                            {"key": 102, "doc_count": 7},
+                            {"key": "invalid", "doc_count": 5},
+                        ]
+                    }
+                }
+            }
+
+    async def fake_get_statistics_es_connection():
+        return FakeEsClient()
+
+    monkeypatch.setattr(
+        "bisheng.common.telemetry.portal_event_service.get_statistics_es_connection",
+        fake_get_statistics_es_connection,
+    )
+
+    assert await PortalTelemetryEventService.list_document_read_counts_by_space_ids(
+        [12, 13, 12],
+        offset=2,
+        limit=3,
+    ) == [
+        {"file_id": 101, "read_count": 9},
+        {"file_id": 102, "read_count": 7},
+    ]

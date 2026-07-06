@@ -2719,7 +2719,7 @@ async def test_shougang_portal_source_folder_paths_resolves_breadcrumb(service):
 
 
 @pytest.mark.asyncio
-async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
+async def test_shougang_portal_home_uses_recommendation_for_latest_selected(service):
     spaces = [
         _make_space(space_id=12, user_id=7),
         _make_space(space_id=18, user_id=7),
@@ -2730,6 +2730,24 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
         _make_file(file_id=1580, knowledge_id=12, file_name='热轧1580产线精轧机振动纹治理实践.pdf'),
         _make_file(file_id=1801, knowledge_id=18, file_name='冷轧板面缺陷处理.pdf'),
     ]
+
+    async def fake_get_files_by_space_filters(**kwargs):
+        file_ids = kwargs.get('file_ids') or []
+        id_set = {int(file_id) for file_id in file_ids}
+        return [file for file in files if int(file.id) in id_set]
+
+    async def fake_handle_file_folder_extra_info(items):
+        tag_by_file_id = {
+            1580: [{'id': 101, 'name': '最新精选'}],
+            1801: [{'id': 102, 'name': '典型案例'}],
+        }
+        return [
+            {
+                **file.model_dump(),
+                'tags': tag_by_file_id.get(int(file.id), []),
+            }
+            for file in items
+        ]
 
     with patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
@@ -2743,16 +2761,23 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
             '18': [SimpleNamespace(id=102, name='典型案例')],
         },
     ) as mock_batch_tags, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_names',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(id=102, name='典型案例')],
+    ), patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_resources_by_tags',
         new_callable=AsyncMock,
         return_value=[
-            SimpleNamespace(tag_id=101, resource_id='1580'),
             SimpleNamespace(tag_id=102, resource_id='1801'),
         ],
-    ), patch(
+    ) as mock_tag_resources, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PortalTelemetryEventService.list_document_read_counts_by_space_ids',
+        new_callable=AsyncMock,
+        return_value=[{'file_id': 1580, 'read_count': 12}],
+    ) as mock_read_counts, patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
         new_callable=AsyncMock,
-        return_value=files,
+        side_effect=fake_get_files_by_space_filters,
     ) as mock_batch_files, patch.object(
         service,
         '_filter_visible_child_items',
@@ -2762,16 +2787,7 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
         service,
         '_handle_file_folder_extra_info',
         new_callable=AsyncMock,
-        return_value=[
-            {
-                **files[0].model_dump(),
-                'tags': [{'id': 101, 'name': '最新精选'}],
-            },
-            {
-                **files[1].model_dump(),
-                'tags': [{'id': 102, 'name': '典型案例'}],
-            },
-        ],
+        side_effect=fake_handle_file_folder_extra_info,
     ), patch.object(
         service,
         'search_space_children',
@@ -2782,7 +2798,7 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
             ShougangPortalHomeReq(
                 space_ids=[12, 18],
                 sections=[
-                    {'tag': '最新精选', 'page_size': 4},
+                    {'tag': '最新精选', 'recommendation': 'latest_selected', 'page_size': 4},
                     {'tag': '典型案例', 'page_size': 4},
                 ],
                 hot_tags_limit=8,
@@ -2790,9 +2806,11 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
         )
 
     mock_batch_tags.assert_awaited_once()
-    mock_batch_files.assert_awaited_once()
-    assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
-    assert mock_batch_files.await_args.kwargs['file_ids'] == [1580, 1801]
+    mock_read_counts.assert_awaited_once()
+    assert mock_tag_resources.await_args.args[0] == [102]
+    file_id_calls = [call.kwargs['file_ids'] for call in mock_batch_files.await_args_list]
+    assert [1580] in file_id_calls
+    assert [1801] in file_id_calls
     assert result['sections']['最新精选'][0]['space_id'] == 12
     assert result['sections']['最新精选'][0]['tags'] == ['最新精选']
     assert result['sections']['最新精选'][0]['tag_infos'] == [{'tag_name': '最新精选', 'resource_type': ''}]

@@ -30,10 +30,12 @@ from bisheng.approval.domain.schemas.shougang_approval_schema import (
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.shougang_approval_handler import (
+    FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE,
     FILE_PUBLISH_SCENARIO,
     KNOWLEDGE_SPACE_CREATE_SCENARIO,
     KnowledgeSpaceCreateApprovalHandler,
     KnowledgeSpaceFilePublishApprovalHandler,
+    ensure_file_publish_business_domain_matches,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
@@ -620,6 +622,12 @@ class ShougangApprovalService:
             source_level=source_level,
             space_service=space_service,
         )
+        try:
+            ensure_file_publish_business_domain_matches(source_file, target_space)
+        except ValueError as exc:
+            if str(exc) == FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE:
+                raise HTTPException(status_code=400, detail=FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE) from exc
+            raise
         target_level = await self._space_level_for_payload(target_space)
         target_folder = await self._ensure_publish_target_folder(
             req.target_space_id,

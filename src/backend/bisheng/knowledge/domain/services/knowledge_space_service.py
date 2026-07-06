@@ -280,12 +280,14 @@ PORTAL_SEARCH_VECTOR_RECALL_LIMIT = 24
 PORTAL_SEARCH_FINAL_LIMIT = 50
 PORTAL_SEARCH_PERMISSION_BATCH_SIZE = 50
 PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE = 100
+PORTAL_HOT_READ_CURSOR_SCAN_BATCH_SIZE = 100
 PORTAL_SEARCH_OVERSAMPLE_FACTOR = 3
 PORTAL_SEARCH_RRF_K = 60
 PORTAL_SEARCH_ES_WEIGHT = 1.0
 PORTAL_SEARCH_VECTOR_WEIGHT = 1.0
 PORTAL_SEARCH_RERANK_MODEL_ID = ""
 PORTAL_SEARCH_RERANK_MODEL_ID_ENV = "BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID"
+SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED = "latest_selected"
 PORTAL_SEARCH_TITLE_MATCH_STOPWORDS = (
     "如何",
     "怎么",
@@ -3120,7 +3122,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return {"sections": empty_sections, "tags": []}
 
         space_ids = [int(space.id) for space in spaces]
-        space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
         tag_map = await TagDao.aget_tags_by_business_ids(
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
             business_ids=[str(space_id) for space_id in space_ids],
@@ -3130,22 +3131,48 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not section_tags:
             return {"sections": empty_sections, "tags": hot_tags}
 
+        sections: dict[str, list[dict]] = {section.tag: [] for section in req.sections}
+        hot_read_item_cache: dict[int, list[ShougangPortalFileItemResp]] = {}
+        for section in req.sections:
+            if not self._is_shougang_portal_latest_selected_home_section(section):
+                continue
+            page_size = min(max(int(section.page_size or 6), 1), 100)
+            if page_size not in hot_read_item_cache:
+                hot_read_item_cache[page_size] = await self._get_shougang_portal_hot_read_file_items(
+                    spaces=spaces,
+                    limit=page_size,
+                )
+            sections[section.tag] = [
+                item.model_dump(mode="json")
+                for item in hot_read_item_cache[page_size][:page_size]
+            ]
+
+        tag_section_tags = [
+            section.tag
+            for section in req.sections
+            if section.tag and not self._is_shougang_portal_latest_selected_home_section(section)
+        ]
+        tag_section_tags = list(dict.fromkeys(tag_section_tags))
+        if not tag_section_tags:
+            return {"sections": sections, "tags": hot_tags}
+
+        space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
         # Look up section tags directly by name so that file-level tags (not attached to spaces)
         # are also found. Merge with space-level tags to avoid duplicate IDs.
-        file_level_tags = await TagDao.aget_tags_by_names(section_tags)
+        file_level_tags = await TagDao.aget_tags_by_names(tag_section_tags)
         merged_tag_pool = {int(t.id): t for t in all_space_tags + file_level_tags if t.id is not None and t.name}
         all_tags = list(merged_tag_pool.values())
 
         section_tag_ids_by_name: dict[str, list[int]] = {
             tag_name: [int(tag.id) for tag in all_tags if tag.name == tag_name and tag.id is not None]
-            for tag_name in section_tags
+            for tag_name in tag_section_tags
         }
         section_tag_ids = [tag_id for tag_ids in section_tag_ids_by_name.values() for tag_id in tag_ids]
         if not section_tag_ids:
-            return {"sections": empty_sections, "tags": hot_tags}
+            return {"sections": sections, "tags": hot_tags}
 
         links = await TagDao.aget_resources_by_tags(section_tag_ids, ResourceTypeEnum.SPACE_FILE)
-        file_ids_by_section: dict[str, list[int]] = {tag_name: [] for tag_name in section_tags}
+        file_ids_by_section: dict[str, list[int]] = {tag_name: [] for tag_name in tag_section_tags}
         tag_name_by_id = {
             tag_id: tag_name for tag_name, tag_ids in section_tag_ids_by_name.items() for tag_id in tag_ids
         }
@@ -3161,7 +3188,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         unique_file_ids = list(dict.fromkeys(all_file_ids))
         if not unique_file_ids:
-            return {"sections": empty_sections, "tags": hot_tags}
+            return {"sections": sections, "tags": hot_tags}
 
         files = await KnowledgeFileDao.aget_file_by_space_filters(
             knowledge_ids=space_ids,
@@ -3180,8 +3207,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 mapped = self._map_shougang_portal_file_item(space_id, item)
                 item_map[mapped.id] = mapped
 
-        sections: dict[str, list[dict]] = {}
         for section in req.sections:
+            if self._is_shougang_portal_latest_selected_home_section(section):
+                continue
             ids = list(dict.fromkeys(file_ids_by_section.get(section.tag, [])))
             items = [item_map[file_id] for file_id in ids if file_id in item_map]
             items = self._sort_shougang_portal_file_items(items, "updated_at", None)
@@ -3548,6 +3576,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return self._build_shougang_portal_search_response([])
 
+        if self._is_shougang_portal_latest_selected_recommendation(req.recommendation):
+            _set_portal_search_stage("list_hot_read_files")
+            return await self._list_shougang_portal_hot_read_files(req=req, spaces=spaces)
+
         _set_portal_search_stage("resolve_tag")
         space_ids = [int(space.id) for space in spaces]
         tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
@@ -3568,6 +3600,170 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces=spaces,
             tag_file_ids=tag_file_ids,
         )
+
+    async def _list_shougang_portal_hot_read_files(
+        self,
+        *,
+        req: ShougangPortalFileSearchReq,
+        spaces: list[Knowledge],
+    ) -> dict:
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+
+        space_ids = [int(space.id) for space in spaces]
+        limit = min(max(int(req.limit or 20), 1), 100)
+        cursor_context = self._shougang_portal_hot_read_cursor_context(req, space_ids)
+        try:
+            batch_cursor = decode_cursor(
+                req.cursor,
+                expected_key_len=1,
+                expected_context=cursor_context,
+            )
+        except CursorDecodeError as exc:
+            raise KnowledgeInvalidCursorError(exception=exc)
+
+        start_offset = int(batch_cursor[0]) if batch_cursor else 0
+        page_items, has_more, next_offset = await self._collect_shougang_portal_hot_read_file_items(
+            spaces=spaces,
+            limit=limit,
+            start_offset=start_offset,
+            file_ext=req.file_ext,
+            document_type=req.document_type,
+            business_domain_code=req.business_domain_code,
+            include_source_paths=True,
+            detect_has_more=True,
+        )
+        next_cursor = (
+            encode_cursor((next_offset,), context=cursor_context)
+            if has_more and next_offset is not None
+            else None
+        )
+        return self._build_shougang_portal_cursor_response(page_items, has_more, next_cursor)
+
+    async def _get_shougang_portal_hot_read_file_items(
+        self,
+        *,
+        spaces: list[Knowledge],
+        limit: int,
+    ) -> list[ShougangPortalFileItemResp]:
+        items, _, _ = await self._collect_shougang_portal_hot_read_file_items(
+            spaces=spaces,
+            limit=limit,
+            start_offset=0,
+            file_ext=None,
+            document_type=None,
+            business_domain_code=None,
+            include_source_paths=False,
+            detect_has_more=False,
+        )
+        return items
+
+    async def _collect_shougang_portal_hot_read_file_items(
+        self,
+        *,
+        spaces: list[Knowledge],
+        limit: int,
+        start_offset: int,
+        file_ext: str | None,
+        document_type: str | None,
+        business_domain_code: str | None,
+        include_source_paths: bool,
+        detect_has_more: bool,
+    ) -> tuple[list[ShougangPortalFileItemResp], bool, int | None]:
+        space_ids = [int(space.id) for space in spaces]
+        safe_limit = min(max(int(limit or 20), 1), 100)
+        target_count = safe_limit + 1 if detect_has_more else safe_limit
+        current_offset = max(int(start_offset or 0), 0)
+        scan_limit = max(target_count, PORTAL_HOT_READ_CURSOR_SCAN_BATCH_SIZE)
+        visible_entries: list[tuple[ShougangPortalFileItemResp, int]] = []
+
+        while len(visible_entries) < target_count:
+            buckets = await PortalTelemetryEventService.list_document_read_counts_by_space_ids(
+                space_ids,
+                offset=current_offset,
+                limit=scan_limit,
+            )
+            if not buckets:
+                break
+
+            bucket_file_ids = [int(bucket["file_id"]) for bucket in buckets if int(bucket.get("file_id") or 0) > 0]
+            bucket_offset_map = {
+                int(bucket["file_id"]): current_offset + index
+                for index, bucket in enumerate(buckets)
+                if int(bucket.get("file_id") or 0) > 0
+            }
+            if not bucket_file_ids:
+                current_offset += len(buckets)
+                if len(buckets) < scan_limit:
+                    break
+                continue
+            raw_files = await KnowledgeFileDao.aget_file_by_space_filters(
+                knowledge_ids=space_ids,
+                status=[KnowledgeFileStatus.SUCCESS.value],
+                file_ids=bucket_file_ids,
+                file_ext=file_ext,
+            )
+            files = self._filter_shougang_portal_files_by_document_type(raw_files, document_type)
+            files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
+            if files:
+                visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+                visible_file_map = {int(file.id): file for file in visible_files}
+                ordered_files = [
+                    visible_file_map[file_id]
+                    for file_id in bucket_file_ids
+                    if file_id in visible_file_map
+                ]
+                page_items = await self._map_shougang_portal_files_to_items(
+                    files=ordered_files,
+                    spaces=spaces,
+                    file_ext=file_ext,
+                    document_type=document_type,
+                    include_source_paths=include_source_paths,
+                )
+                for item in page_items:
+                    item_offset = bucket_offset_map.get(item.id)
+                    if item_offset is None:
+                        continue
+                    visible_entries.append((item, item_offset))
+                    if len(visible_entries) >= target_count:
+                        break
+
+            current_offset += len(buckets)
+            if len(buckets) < scan_limit:
+                break
+
+        page_entries = visible_entries[:safe_limit]
+        has_more = detect_has_more and len(visible_entries) > safe_limit
+        next_offset = page_entries[-1][1] + 1 if has_more and page_entries else None
+        return [item for item, _offset in page_entries], has_more, next_offset
+
+    async def _map_shougang_portal_files_to_items(
+        self,
+        *,
+        files: list[KnowledgeFile],
+        spaces: list[Knowledge],
+        file_ext: str | None,
+        document_type: str | None,
+        include_source_paths: bool,
+    ) -> list[ShougangPortalFileItemResp]:
+        if not files:
+            return []
+        space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
+        enriched_items = await self._handle_file_folder_extra_info(files)
+        folder_path_map: dict[int, str] = {}
+        source_path_map: dict[int, str] = {}
+        if include_source_paths:
+            folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(enriched_items)
+
+        items: list[ShougangPortalFileItemResp] = []
+        for item in enriched_items:
+            space_id = int(item.get("knowledge_id") or 0)
+            item_id = int(item.get("id") or 0)
+            item["knowledge_name"] = space_name_map.get(space_id, str(space_id))
+            item["folder_path"] = folder_path_map.get(item_id, "")
+            item["source_path"] = source_path_map.get(item_id, "")
+            if self._is_shougang_portal_file_item(item, file_ext, document_type):
+                items.append(self._map_shougang_portal_file_item(space_id, item))
+        return items
 
     async def _list_shougang_portal_files_without_keyword(
         self,
@@ -4526,17 +4722,47 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "file_ext": str(req.file_ext or "").strip().lower().lstrip("."),
             "document_type": cls._normalize_shougang_document_type_code(req.document_type),
             "business_domain_code": cls._normalize_shougang_portal_business_domain_code(req.business_domain_code),
+            "recommendation": str(req.recommendation or "").strip(),
         }
         signature = hashlib.sha256(
             json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()[:16]
         return f"shougang_portal_files|{signature}"
 
+    @classmethod
+    def _shougang_portal_hot_read_cursor_context(
+        cls,
+        req: ShougangPortalFileSearchReq,
+        space_ids: list[int],
+    ) -> str:
+        payload = {
+            "recommendation": SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED,
+            "space_ids": sorted({int(space_id) for space_id in space_ids if int(space_id) > 0}),
+            "file_ext": str(req.file_ext or "").strip().lower().lstrip("."),
+            "document_type": cls._normalize_shougang_document_type_code(req.document_type),
+            "business_domain_code": cls._normalize_shougang_portal_business_domain_code(req.business_domain_code),
+        }
+        signature = hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()[:16]
+        return f"shougang_portal_hot_read_files|{signature}"
+
     @staticmethod
     def _encode_shougang_portal_file_cursor(file: KnowledgeFile, context: str) -> str:
         from bisheng.common.cursor import encode_cursor
 
         return encode_cursor((file.update_time, int(file.id)), context=context)
+
+    @staticmethod
+    def _is_shougang_portal_latest_selected_home_section(section: Any) -> bool:
+        return (
+            str(getattr(section, "recommendation", "") or "").strip()
+            == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
+        )
+
+    @staticmethod
+    def _is_shougang_portal_latest_selected_recommendation(recommendation: str | None) -> bool:
+        return str(recommendation or "").strip() == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
 
     async def _get_shougang_portal_visible_search_spaces(
         self,

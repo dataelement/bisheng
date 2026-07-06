@@ -67,6 +67,45 @@ def _patch_exception_repository(monkeypatch, instance_id: int = 501):
     return create_instance, create_exception
 
 
+def _patch_file_publish_submit_dependencies(
+    monkeypatch,
+    service,
+    *,
+    source_file=None,
+    target_space=None,
+    source_level=None,
+):
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    source_level = source_level or KnowledgeSpaceLevelEnum.TEAM
+    source_file = source_file or SimpleNamespace(
+        id=100,
+        knowledge_id=10,
+        file_name="制度.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        file_encoding="SGGF-STD-PP-001",
+    )
+    target_space = target_space or SimpleNamespace(
+        id=20,
+        name="公共空间",
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC.value,
+        business_domain_codes=[],
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(return_value=(SimpleNamespace(id=10, name="团队空间"), source_file, source_level)),
+    )
+    monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_ensure_publish_target_space", AsyncMock(return_value=target_space))
+    monkeypatch.setattr(service, "_ensure_publish_target_folder", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
+    return source_file, target_space
+
+
 @pytest.mark.asyncio
 async def test_regular_user_public_level_space_create_is_rejected_without_approval_record(monkeypatch):
     from bisheng.approval.domain.schemas.shougang_approval_schema import (
@@ -954,6 +993,114 @@ async def test_file_publish_target_space_requires_view_space_not_upload_file(mon
     )
 
     space_service._require_permission_id.assert_awaited_once_with("knowledge_space", 20, "view_space")
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_allows_unbound_target_business_domain(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
+    service = ShougangApprovalService(approval_gate=_pending_approval_gate(119))
+    _patch_file_publish_submit_dependencies(
+        monkeypatch,
+        service,
+        source_file=SimpleNamespace(
+            id=100,
+            knowledge_id=10,
+            file_name="制度.pdf",
+            status=KnowledgeFileStatus.SUCCESS.value,
+            file_encoding="",
+        ),
+        target_space=SimpleNamespace(id=20, name="公共空间", space_level="public", business_domain_codes=[]),
+    )
+
+    await service.submit_file_publish(
+        req=ShougangFilePublishSubmitReq(source_space_id=10, source_file_id=100, target_space_id=20),
+        login_user=_login_user(),
+    )
+
+    service.approval_gate.request_or_pass.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_allows_matching_target_business_domain(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+
+    service = ShougangApprovalService(approval_gate=_pending_approval_gate(120))
+    _patch_file_publish_submit_dependencies(
+        monkeypatch,
+        service,
+        target_space=SimpleNamespace(
+            id=20,
+            name="公共空间",
+            space_level="public",
+            business_domain_codes=["QM", "pp"],
+        ),
+    )
+
+    await service.submit_file_publish(
+        req=ShougangFilePublishSubmitReq(source_space_id=10, source_file_id=100, target_space_id=20),
+        login_user=_login_user(),
+    )
+
+    service.approval_gate.request_or_pass.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_rejects_mismatched_target_business_domain(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+
+    service = ShougangApprovalService(approval_gate=SimpleNamespace(request_or_pass=AsyncMock()))
+    _patch_file_publish_submit_dependencies(
+        monkeypatch,
+        service,
+        target_space=SimpleNamespace(id=20, name="公共空间", space_level="public", business_domain_codes=["QM"]),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(source_space_id=10, source_file_id=100, target_space_id=20),
+            login_user=_login_user(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "您发布的文档与目标库不符"
+    service.approval_gate.request_or_pass.assert_not_called()
+    service._ensure_publish_target_folder.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_rejects_missing_file_domain_when_target_bound(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
+    service = ShougangApprovalService(approval_gate=SimpleNamespace(request_or_pass=AsyncMock()))
+    _patch_file_publish_submit_dependencies(
+        monkeypatch,
+        service,
+        source_file=SimpleNamespace(
+            id=100,
+            knowledge_id=10,
+            file_name="制度.pdf",
+            status=KnowledgeFileStatus.SUCCESS.value,
+            file_encoding="",
+        ),
+        target_space=SimpleNamespace(id=20, name="公共空间", space_level="public", business_domain_codes=["QM"]),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(source_space_id=10, source_file_id=100, target_space_id=20),
+            login_user=_login_user(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "您发布的文档与目标库不符"
+    service.approval_gate.request_or_pass.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1925,6 +2072,70 @@ async def test_file_publish_handler_links_version_with_selected_folder_path(monk
         level=3,
     )
     assert result == {"file_id": 188, "target_space_id": 20, "version": {"document_id": 300}}
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_revalidates_business_domain_before_copy(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.aget_file_by_filters",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeDao.aquery_by_id",
+        AsyncMock(
+            side_effect=[
+                SimpleNamespace(id=10, type=KnowledgeTypeEnum.SPACE.value, name="团队空间"),
+                SimpleNamespace(
+                    id=20,
+                    type=KnowledgeTypeEnum.SPACE.value,
+                    name="公共空间",
+                    business_domain_codes=["QM"],
+                ),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.query_by_id",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                id=100,
+                knowledge_id=10,
+                status=KnowledgeFileStatus.SUCCESS.value,
+                file_encoding="SGGF-STD-PP-001",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeSpaceScopeDao.aget_by_space_id",
+        AsyncMock(
+            side_effect=[
+                SimpleNamespace(level=KnowledgeSpaceLevelEnum.TEAM),
+                SimpleNamespace(level=KnowledgeSpaceLevelEnum.PUBLIC),
+            ]
+        ),
+    )
+    monkeypatch.setattr(handler, "_copy_file", Mock())
+
+    with pytest.raises(ValueError, match="您发布的文档与目标库不符"):
+        await handler.on_approved(
+            102,
+            {
+                "tenant_id": 1,
+                "applicant_user_id": 11,
+                "applicant_user_name": "申请人",
+                "source_space_id": 10,
+                "source_file_id": 100,
+                "target_space_id": 20,
+            },
+        )
+
+    handler._copy_file.assert_not_called()
 
 
 @pytest.mark.asyncio

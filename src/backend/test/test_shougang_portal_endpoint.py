@@ -509,7 +509,7 @@ async def test_shougang_portal_home_accepts_section_batch_request(monkeypatch: p
         endpoint = _load_shougang_portal_endpoint(monkeypatch)
         req = endpoint.ShougangPortalHomeReq(
             space_ids=[12, 18],
-            sections=[{"tag": "最新精选", "page_size": 4}],
+            sections=[{"tag": "最新精选", "recommendation": "latest_selected", "page_size": 4}],
             hot_tags_limit=8,
         )
         response = await endpoint.get_shougang_portal_home(req, svc=_FakeKnowledgeSpaceService())

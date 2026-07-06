@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 PORTAL_BFF_TELEMETRY_SOURCE_HEADER = "X-Portal-Telemetry-Source"
 PORTAL_BFF_TELEMETRY_SOURCE = "shougang_portal_bff"
+PORTAL_TELEMETRY_SOURCE_SHOUGANG = "shougang_portal"
+PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE = 10000
 
 PORTAL_HOME_EVENT_TYPES = (
     BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
@@ -88,6 +90,70 @@ class PortalTelemetryEventService:
         except Exception:
             logger.exception("Failed to count file views for file_id=%s", file_id)
             return 0
+
+    @staticmethod
+    async def list_document_read_counts_by_space_ids(
+        space_ids: list[int],
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        source_app: str = PORTAL_TELEMETRY_SOURCE_SHOUGANG,
+    ) -> list[dict[str, int]]:
+        """Return file read-count buckets ordered by total portal document reads."""
+        unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in space_ids if int(space_id) > 0))
+        safe_offset = max(int(offset or 0), 0)
+        safe_limit = min(max(int(limit or 100), 1), 500)
+        if not unique_space_ids or safe_offset >= PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE:
+            return []
+
+        aggregation_size = min(safe_offset + safe_limit, PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE)
+        body = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value}},
+                        {"term": {"event_data.portal_document_read_source_app": source_app}},
+                        {"terms": {"event_data.portal_document_read_space_id": unique_space_ids}},
+                    ]
+                }
+            },
+            "aggs": {
+                "by_file": {
+                    "terms": {
+                        "field": "event_data.portal_document_read_file_id",
+                        "size": aggregation_size,
+                        "order": [{"_count": "desc"}, {"_key": "asc"}],
+                    },
+                    "aggs": {
+                        "bucket_page": {
+                            "bucket_sort": {
+                                "from": safe_offset,
+                                "size": safe_limit,
+                            }
+                        }
+                    },
+                }
+            },
+        }
+        try:
+            es_client = await get_statistics_es_connection()
+            response = await es_client.search(index=telemetry_service.index_name, body=body)
+        except Exception:
+            logger.exception("Failed to list portal document read counts for space_ids=%s", unique_space_ids)
+            return []
+
+        buckets = response.get("aggregations", {}).get("by_file", {}).get("buckets", [])
+        results: list[dict[str, int]] = []
+        for bucket in buckets:
+            try:
+                file_id = int(bucket.get("key"))
+            except (TypeError, ValueError):
+                continue
+            if file_id <= 0:
+                continue
+            results.append({"file_id": file_id, "read_count": int(bucket.get("doc_count") or 0)})
+        return results
 
     @staticmethod
     async def count_file_downloads(file_id: int) -> int:

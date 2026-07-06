@@ -9,6 +9,7 @@ from bisheng.approval.domain.services.approver_resolver import (
     resolve_department_admins_for_user_ids,
 )
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
@@ -20,6 +21,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 
 KNOWLEDGE_SPACE_CREATE_SCENARIO = 'knowledge_space_create_request'
 FILE_PUBLISH_SCENARIO = 'knowledge_space_file_publish_request'
+FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE = '您发布的文档与目标库不符'
 
 _FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
     KnowledgeSpaceLevelEnum.PERSONAL: {
@@ -68,6 +70,37 @@ def _file_publish_pair_allowed(source_level, target_level) -> bool:
         else KnowledgeSpaceLevelEnum(str(target_level))
     )
     return target_level in _FILE_PUBLISH_TARGET_LEVELS.get(source_level, set())
+
+
+def _normalize_file_publish_business_domain_codes(raw_codes: Any) -> list[str]:
+    normalized_codes: list[str] = []
+    seen: set[str] = set()
+    for raw_code in raw_codes or []:
+        code = normalize_business_domain_code(raw_code)
+        if not code or code in seen:
+            continue
+        normalized_codes.append(code)
+        seen.add(code)
+    return normalized_codes
+
+
+def _extract_file_publish_business_domain_code(source_file: Any) -> str:
+    file_encoding = str(getattr(source_file, 'file_encoding', '') or '').strip()
+    parts = [part.strip() for part in file_encoding.split('-')]
+    if len(parts) < 4:
+        return ''
+    return normalize_business_domain_code(parts[2]) or ''
+
+
+def ensure_file_publish_business_domain_matches(source_file: Any, target_space: Any) -> None:
+    allowed_codes = _normalize_file_publish_business_domain_codes(
+        getattr(target_space, 'business_domain_codes', None)
+    )
+    if not allowed_codes:
+        return
+    source_code = _extract_file_publish_business_domain_code(source_file)
+    if source_code not in allowed_codes:
+        raise ValueError(FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE)
 
 
 async def _resolve_approvers(node_config: dict, req) -> list[int]:
@@ -385,6 +418,7 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             raise ValueError('source and target space levels are not allowed for publish')
         if source_file.status != KnowledgeFileStatus.SUCCESS.value:
             raise ValueError('source file is not parsed successfully')
+        ensure_file_publish_business_domain_matches(source_file, target_space)
 
         target_parent_type = 'knowledge_space'
         target_parent_id = target_space_id
