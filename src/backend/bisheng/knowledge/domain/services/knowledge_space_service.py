@@ -19,7 +19,6 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
-    SpaceAdminLimitExceededError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
     SpaceFileNotFoundError,
@@ -82,11 +81,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
-    RemoveSpaceMemberRequest,
-    SpaceMemberPageResponse,
-    SpaceMemberResponse,
     SpaceSubscriptionStatusEnum,
-    UpdateSpaceMemberRoleRequest,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
@@ -128,9 +123,6 @@ if TYPE_CHECKING:
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
-# Maximum number of admins per Knowledge Space (mirrors channel's MAX_ADMIN_COUNT)
-MAX_SPACE_ADMIN_COUNT = 5
-SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
 SPACE_MADE_PRIVATE_MESSAGE = "knowledge_space_made_private"
@@ -2199,227 +2191,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "page_size": page_size,
             "data": result_list,
         }
-
-    # ──────────────────────────── Members ─────────────────────────────────────
-
-    async def get_space_members(
-        self, space_id: int, page: int, page_size: int, keyword: str | None = None
-    ) -> SpaceMemberPageResponse:
-        from bisheng.user.domain.services.user import UserService
-
-        """
-        Paginate through the list of space members.
-        - Verify if the current user has read permission
-        - Support fuzzy search by username
-        - Return user information and associated user groups
-        - Sorting: Creators and administrators at the top, regular members sorted by user_id
-        """
-        await self._require_permission_id("knowledge_space", space_id, "manage_space_relation")
-
-        search_user_ids = None
-        if keyword:
-            matched_users = await UserDao.afilter_users(user_ids=[], keyword=keyword)
-            search_user_ids = [u.user_id for u in matched_users]
-            if not search_user_ids:
-                return SpaceMemberPageResponse(data=[], total=0)
-
-        members = await SpaceChannelMemberDao.find_space_members_paginated(
-            space_id=space_id, user_ids=search_user_ids, page=page, page_size=page_size
-        )
-
-        total = await SpaceChannelMemberDao.count_space_members_with_keyword(
-            space_id=space_id, user_ids=search_user_ids
-        )
-
-        if not members:
-            return SpaceMemberPageResponse(data=[], total=total)
-
-        member_user_ids = [m.user_id for m in members]
-        users = await UserDao.aget_user_by_ids(member_user_ids)
-        user_map = {u.user_id: u for u in (users or [])}
-
-        result_list = []
-        for member in members:
-            user = user_map.get(member.user_id)
-            user_name = user.user_name if user else f"User {member.user_id}"
-
-            # Query user groups the user belongs to
-            user_groups = await self.login_user.get_user_groups(member.user_id)
-
-            result_list.append(
-                SpaceMemberResponse(
-                    user_id=member.user_id,
-                    user_name=user_name,
-                    user_avatar=await UserService.get_avatar_share_link(user.avatar) if user else None,
-                    user_role=member.user_role.value,
-                    user_groups=user_groups,
-                )
-            )
-
-        return SpaceMemberPageResponse(data=result_list, total=total)
-
-    async def update_member_role(self, req: UpdateSpaceMemberRoleRequest) -> bool:
-        """
-        Set member role (admin/regular member).
-        Permissions:
-        - Creators can set anyone as an admin or member
-        - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
-        - Modifying the creator's role is not allowed
-        """
-        # 1. Verify can_manage permission via ReBAC
-        await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
-
-        # Get current user's SCM role for business logic decisions
-        current_role = await SpaceChannelMemberDao.async_get_active_member_role(req.space_id, self.login_user.user_id)
-
-        # 2. Query target member
-        target_membership = await SpaceChannelMemberDao.async_find_member(space_id=req.space_id, user_id=req.user_id)
-        if not target_membership or not target_membership.is_active:
-            raise ValueError("The target user is not a member of this space")
-
-        # 3. Modifying the creator's role is not allowed
-        if target_membership.user_role == UserRoleEnum.CREATOR:
-            raise ValueError("Modifying the creator's role is not allowed")
-
-        # 4. Admin permission limits
-        if current_role == UserRoleEnum.ADMIN:
-            # Admins cannot set others as admins
-            if req.role == UserRoleEnum.ADMIN.value:
-                raise ValueError("Admins do not have permission to set others as admins")
-            # Admins cannot modify the roles of other admins
-            if target_membership.user_role == UserRoleEnum.ADMIN:
-                raise ValueError("Admins do not have permission to modify the roles of other admins")
-
-        # 5. Check maximum limit when setting as an admin. Mirrors the channel side
-        #    (ChannelAdminLimitExceededError / 19051): raise a structured business error
-        #    so the front-end can i18n it, instead of a bare ValueError surfaced as a 500.
-        if req.role == UserRoleEnum.ADMIN.value:
-            current_admins = await SpaceChannelMemberDao.async_get_members_by_space(
-                space_id=req.space_id, user_roles=[UserRoleEnum.ADMIN]
-            )
-            if len(current_admins) >= MAX_SPACE_ADMIN_COUNT:
-                raise SpaceAdminLimitExceededError()
-
-        should_notify_admin_assignment = (
-            target_membership.user_role == UserRoleEnum.MEMBER and req.role == UserRoleEnum.ADMIN.value
-        )
-        should_notify_admin_revoked = (
-            target_membership.user_role == UserRoleEnum.ADMIN and req.role == UserRoleEnum.MEMBER.value
-        )
-        had_manage_access = False
-        if should_notify_admin_assignment:
-            had_manage_access = await self._user_can_manage_space(
-                target_membership.user_id,
-                req.space_id,
-            )
-
-        # 6. Update role in SpaceChannelMember
-        target_membership.user_role = UserRoleEnum(req.role)
-        await SpaceChannelMemberDao.update(target_membership)
-
-        if should_notify_admin_assignment and not had_manage_access:
-            await self._send_admin_assignment_notification(
-                space_id=req.space_id,
-                target_user_id=target_membership.user_id,
-            )
-        if should_notify_admin_revoked:
-            if not await self._user_can_manage_space(target_membership.user_id, req.space_id):
-                await self._send_space_event_notification(
-                    action_code=SPACE_ADMIN_REVOKED_MESSAGE,
-                    receiver_user_ids=[target_membership.user_id],
-                    space_id=req.space_id,
-                    navigable=True,
-                )
-
-        return True
-
-    async def remove_member(self, req: RemoveSpaceMemberRequest) -> bool:
-        """
-        Remove a member (hard delete).
-        Permissions:
-        - Creators can remove anyone (except themselves)
-        - Admins can remove regular members
-        - Admins cannot remove other admins or creators
-        """
-        # 1. Verify can_manage permission via ReBAC
-        await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
-
-        # Get current user's SCM role for business logic decisions
-        current_role = await SpaceChannelMemberDao.async_get_active_member_role(req.space_id, self.login_user.user_id)
-
-        # 2. Cannot remove yourself
-        if req.user_id == self.login_user.user_id:
-            raise ValueError("Cannot remove yourself")
-
-        # 3. Query target member
-        target_membership = await SpaceChannelMemberDao.async_find_member(space_id=req.space_id, user_id=req.user_id)
-        if not target_membership or not target_membership.is_active:
-            raise ValueError("The target user is not a member of this space")
-
-        # 4. Removing the creator is not allowed
-        if target_membership.user_role == UserRoleEnum.CREATOR:
-            raise ValueError("Removing the creator is not allowed")
-
-        # 5. Admins cannot remove other admins
-        if current_role == UserRoleEnum.ADMIN:
-            if target_membership.user_role == UserRoleEnum.ADMIN:
-                raise ValueError("Admins do not have permission to remove other admins")
-
-        await self._revoke_direct_space_user_permissions(req.space_id, req.user_id)
-
-        # 6. Hard delete: remove from database
-        await SpaceChannelMemberDao.delete_space_member(space_id=req.space_id, user_id=req.user_id)
-        if not await self._user_can_read_space(req.user_id, req.space_id):
-            await self._send_space_event_notification(
-                action_code=SPACE_MEMBER_REMOVED_MESSAGE,
-                receiver_user_ids=[req.user_id],
-                space_id=req.space_id,
-                navigable=False,
-            )
-        return True
-
-    async def _send_admin_assignment_notification(
-        self,
-        space_id: int,
-        target_user_id: int,
-    ) -> None:
-        """Notify a space member after being promoted from member to admin."""
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-
-        user = await UserDao.aget_user(target_user_id)
-        target_user_name = user.user_name if user else f"User {target_user_id}"
-
-        content = [
-            {
-                "type": "user",
-                "content": f"@{target_user_name}",
-                "metadata": {"user_id": target_user_id},
-            },
-            {
-                "type": "system_text",
-                "content": SPACE_ADMIN_ASSIGNMENT_MESSAGE,
-            },
-            {
-                "type": "business_url",
-                "content": f"--{space.name}",
-                "metadata": {
-                    "business_type": "knowledge_space_id",
-                    "data": {"knowledge_space_id": str(space.id)},
-                },
-            },
-        ]
-
-        if not self.message_service:
-            return
-
-        await self.message_service.send_generic_notify(
-            sender=self.login_user.user_id,
-            receiver_user_ids=[target_user_id],
-            content_item_list=content,
-            action_code=SPACE_ADMIN_ASSIGNMENT_MESSAGE,
-        )
 
     async def _send_space_event_notification(
         self,

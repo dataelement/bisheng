@@ -19,6 +19,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.utils.think_tags import strip_think_block
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_file_to_folder
 from bisheng.core.logger import trace_id_var
@@ -652,6 +653,32 @@ class LinsightWorkbenchImpl:
             entry.setdefault("line_count", 0)
         entry["image_count"] = entry.get("image_count", 0)
 
+    # Chat titles live in message_session.name (VARCHAR(255)); a reasoning model
+    # can emit far more than a title (a whole <think> block), so clamp the length.
+    _TITLE_MAX_CHARS = 50
+    _FALLBACK_TITLE = "New Chat"
+
+    @classmethod
+    def _normalize_title(cls, content: Any, question: str) -> str:
+        """Turn a raw title-model response into a clean, storable title.
+
+        Reasoning models (e.g. qwen3.5) inline ``<think>...</think>`` into the
+        content — strip the block, keep the first line, clamp the length. If
+        nothing usable survives (empty content / pure reasoning), fall back to a
+        slice of the user's question so the session isn't stuck on "New Chat".
+        """
+        title = strip_think_block(str(content or ""))
+        title = title.splitlines()[0].strip() if title else ""
+        title = title[: cls._TITLE_MAX_CHARS]
+        return title or cls._fallback_title(question)
+
+    @classmethod
+    def _fallback_title(cls, question: str) -> str:
+        """A meaningful placeholder derived from the user's question."""
+        head = (question or "").strip()
+        head = head.splitlines()[0].strip() if head else ""
+        return head[: cls._TITLE_MAX_CHARS] or cls._FALLBACK_TITLE
+
     @classmethod
     async def task_title_generate(cls, question: str, chat_id: str, login_user: UserPayload) -> dict:
         """
@@ -674,17 +701,25 @@ class LinsightWorkbenchImpl:
             # Generate task title
             task_title = await llm.ainvoke(prompt)
 
-            if not task_title.content:
-                raise ValueError("Failed to generate task title, please check the model configuration or input")
+            # Clean reasoning-model <think> noise + clamp; falls back to the
+            # question when the model returns nothing usable (see _normalize_title).
+            title = cls._normalize_title(getattr(task_title, "content", None), question)
 
             # Update session title
-            await cls._update_session_title(chat_id, task_title.content)
+            await cls._update_session_title(chat_id, title)
 
-            return {"task_title": task_title.content, "chat_id": chat_id, "error_message": None}
+            return {"task_title": title, "chat_id": chat_id, "error_message": None}
 
         except Exception as e:
-            logger.error(f"Failed to generate task title: {e!s}")
-            return {"task_title": "New Chat", "chat_id": chat_id, "error_message": str(e)}
+            logger.exception("Failed to generate task title")
+            # Even on hard failure, seed a question-based title so the session
+            # isn't stuck on the "New Chat" placeholder (best-effort write).
+            fallback = cls._fallback_title(question)
+            try:
+                await cls._update_session_title(chat_id, fallback)
+            except Exception:
+                logger.exception("Failed to write fallback task title")
+            return {"task_title": fallback, "chat_id": chat_id, "error_message": str(e)}
 
     @classmethod
     async def _get_workbench_config(cls):

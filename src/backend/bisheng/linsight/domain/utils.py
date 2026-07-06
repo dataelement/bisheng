@@ -427,9 +427,12 @@ async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) 
     """F035 Track J (TJ-5): rebuild prior conversation context from ChatMessage.
 
     Reads the unified conversation stream (by ``chat_id``) and pairs each user
-    question with its following bot answer — both daily and task turns. A
-    trailing unanswered question (the current turn, already seeded into the agent
-    input) forms no pair and is excluded, so it is never duplicated.
+    question with its following NON-EMPTY bot answer — both daily and task turns.
+    The CURRENT task turn is excluded: at submit time its bot ChatMessage is
+    created as an EMPTY placeholder (filled with the result only after the task
+    finishes), and a turn whose bot answer is empty is skipped — so at task start
+    the current question never pairs with an empty "助手:" and is never duplicated
+    (it is also seeded directly into the agent input by ``_build_agent_input``).
 
     ``max_chars`` caps the injected context (design §3.8 — long histories must not
     blow the window). Retention is deterministic head+tail: the FIRST turn (the
@@ -445,7 +448,15 @@ async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) 
         if not msg.is_bot:
             pending_question = _extract_user_query(msg.message)
         elif pending_question is not None:
-            pairs.append(f"用户: {pending_question}\n助手: {msg.message or ''}")
+            # The bot message consumes the pending question regardless; only RECORD
+            # the pair when the bot actually answered. An empty bot message is the
+            # current task turn's placeholder (created at submit, filled with the
+            # result only after the task finishes) — pairing it would duplicate the
+            # current question with an empty "助手:". An empty answer is not a
+            # "completed prior Q/A".
+            answer = msg.message or ""
+            if answer.strip():
+                pairs.append(f"用户: {pending_question}\n助手: {answer}")
             pending_question = None
 
     if not pairs:
