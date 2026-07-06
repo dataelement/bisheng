@@ -694,48 +694,56 @@ export function CreateKnowledgeSpaceDrawer({
                                 </div>
                             </div>
 
-                            {/* 简介 */}
                             <div className="space-y-2">
-                                <Label className="text-sm text-[#1D2129] font-medium">
-                                    {localize("com_subscription.description")}
+                                <Label className="text-[14px] font-medium text-[#1D2129]">
+                                    {localize("com_knowledge.auto_tag_library")}
                                 </Label>
-                                <div>
-                                    <Textarea
-                                        value={description}
-                                        onCompositionStart={() => {
-                                            descComposingRef.current = true;
-                                        }}
-                                        onCompositionEnd={(e) => {
-                                            descComposingRef.current = false;
-                                            const v = e.currentTarget.value;
-                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
-                                                showToast({
-                                                    message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
-                                                    severity: NotificationSeverity.WARNING
-                                                });
-                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
-                                            }
-                                        }}
-                                        onChange={(e) => {
-                                            const v = e.target.value;
-                                            if (descComposingRef.current) {
-                                                setDescription(v);
-                                                return;
-                                            }
-                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
-                                                showToast({
-                                                    message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
-                                                    severity: NotificationSeverity.WARNING
-                                                });
-                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
-                                            } else {
-                                                setDescription(v);
-                                            }
-                                        }}
-                                        placeholder="请输入知识库简介"
-                                        className="min-h-[104px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
-                                    />
-                                </div>
+                                <MultiSelect
+                                    key={`${editingSpace?.id ?? "create"}-${autoTagLibraryIds.join(",")}-${tagLibrarySelectOptions.length}`}
+                                    multiple
+                                    className="w-full"
+                                    value={autoTagLibraryIds.map(String)}
+                                    options={tagLibrarySelectOptions}
+                                    placeholder={
+                                        tagLibrariesLoading
+                                            ? localize("com_knowledge.loading")
+                                            : localize("com_knowledge.select_auto_tag_library")
+                                    }
+                                    disabled={tagLibrariesLoading}
+                                    onChange={(values) => setAutoTagLibraryIds(values.map(Number))}
+                                />
+                                {tagLibraries.length === 0 && !tagLibrariesLoading && (
+                                    <p className="text-[12px] text-[#F53F3F]">
+                                        {localize("com_knowledge.no_auto_tag_library")}
+                                    </p>
+                                )}
+                                {autoTagLibraryIds.length > 0 && (
+                                    <div className="space-y-1.5 pt-1">
+                                        <div className="text-[12px] text-[#86909C]">
+                                            {localize("com_knowledge.auto_tag_library_preview")}
+                                        </div>
+                                        {autoTagLibraryTagsLoading ? (
+                                            <div className="text-[12px] text-[#86909C]">
+                                                {localize("com_knowledge.loading")}
+                                            </div>
+                                        ) : autoTagLibraryTags.length === 0 ? (
+                                            <div className="text-[12px] text-[#86909C]">
+                                                {localize("com_knowledge.auto_tag_library_preview_empty")}
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-wrap items-center">
+                                                {autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT).map((tag, idx) => (
+                                                    <span
+                                                        key={`${tag}-${idx}`}
+                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
+                                                    >
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {shouldShowApprovalReason && (
@@ -886,56 +894,50 @@ export function CreateKnowledgeSpaceDrawer({
                                 </RadioGroup.Root>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label className="text-[14px] font-medium text-[#1D2129]">
-                                    {localize("com_knowledge.auto_tag_library")}
+                           
+
+                             {/* 简介 */}
+                             <div className="space-y-2">
+                                <Label className="text-sm text-[#1D2129] font-medium">
+                                    {localize("com_subscription.description")}
                                 </Label>
-                                <MultiSelect
-                                    key={`${editingSpace?.id ?? "create"}-${autoTagLibraryIds.join(",")}-${tagLibrarySelectOptions.length}`}
-                                    multiple
-                                    className="w-full"
-                                    value={autoTagLibraryIds.map(String)}
-                                    options={tagLibrarySelectOptions}
-                                    placeholder={
-                                        tagLibrariesLoading
-                                            ? localize("com_knowledge.loading")
-                                            : localize("com_knowledge.select_auto_tag_library")
-                                    }
-                                    disabled={tagLibrariesLoading}
-                                    onChange={(values) => setAutoTagLibraryIds(values.map(Number))}
-                                />
-                                {tagLibraries.length === 0 && !tagLibrariesLoading && (
-                                    <p className="text-[12px] text-[#F53F3F]">
-                                        {localize("com_knowledge.no_auto_tag_library")}
-                                    </p>
-                                )}
-                                {autoTagLibraryIds.length > 0 && (
-                                    <div className="space-y-1.5 pt-1">
-                                        <div className="text-[12px] text-[#86909C]">
-                                            {localize("com_knowledge.auto_tag_library_preview")}
-                                        </div>
-                                        {autoTagLibraryTagsLoading ? (
-                                            <div className="text-[12px] text-[#86909C]">
-                                                {localize("com_knowledge.loading")}
-                                            </div>
-                                        ) : autoTagLibraryTags.length === 0 ? (
-                                            <div className="text-[12px] text-[#86909C]">
-                                                {localize("com_knowledge.auto_tag_library_preview_empty")}
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-wrap items-center">
-                                                {autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT).map((tag, idx) => (
-                                                    <span
-                                                        key={`${tag}-${idx}`}
-                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
-                                                    >
-                                                        {tag}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                <div>
+                                    <Textarea
+                                        value={description}
+                                        onCompositionStart={() => {
+                                            descComposingRef.current = true;
+                                        }}
+                                        onCompositionEnd={(e) => {
+                                            descComposingRef.current = false;
+                                            const v = e.currentTarget.value;
+                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
+                                                showToast({
+                                                    message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
+                                                    severity: NotificationSeverity.WARNING
+                                                });
+                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
+                                            }
+                                        }}
+                                        onChange={(e) => {
+                                            const v = e.target.value;
+                                            if (descComposingRef.current) {
+                                                setDescription(v);
+                                                return;
+                                            }
+                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
+                                                showToast({
+                                                    message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
+                                                    severity: NotificationSeverity.WARNING
+                                                });
+                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
+                                            } else {
+                                                setDescription(v);
+                                            }
+                                        }}
+                                        placeholder="请输入知识库简介"
+                                        className="min-h-[104px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>

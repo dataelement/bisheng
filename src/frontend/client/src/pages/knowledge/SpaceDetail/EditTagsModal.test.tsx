@@ -103,6 +103,31 @@ describe("EditTagsModal recommended tags", () => {
         expect(getSpaceTagsApi).toHaveBeenCalledWith("100");
     });
 
+    it("dedupes duplicate tag names across system and manual recommended tags", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 10, name: "安全生产", business_type: "tag_library", resource_type: "system_tag" },
+            { id: 11, name: "安全生产", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("安全生产")).toBeInTheDocument();
+            expect(screen.getByText("com_knowledge.tag_type_system")).toBeInTheDocument();
+        });
+
+        expect(screen.getAllByText("安全生产")).toHaveLength(1);
+        expect(screen.queryByText("com_knowledge.tag_type_manual")).not.toBeInTheDocument();
+    });
+
     it("selects an existing space tag when clicking a recommended tag", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([

@@ -183,6 +183,55 @@ async def test_append_review_tag_adds_manual_tag_to_bound_library():
 
 
 @pytest.mark.asyncio
+async def test_append_review_tag_skips_manual_when_name_already_in_system():
+    service = KnowledgeSpaceTagLibraryService(_login_user())
+    library = _library(tags=["合同", "安全生产"], ai_tags=[])
+
+    with (
+        patch.object(service, "validate_library_bound_to_knowledge", new=AsyncMock()),
+        patch.object(service, "_ensure_global_tag_names_available", new=AsyncMock()) as ensure_available,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=library),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.list_tag_names",
+            new=AsyncMock(return_value=(["合同", "安全生产"], [], [])),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.replace_tags",
+            new=AsyncMock(),
+        ) as replace_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aupdate",
+            new=AsyncMock(),
+        ) as update_library,
+    ):
+        await service.append_review_tag(
+            library_id=10,
+            knowledge_id=100,
+            tag_name="安全生产",
+            review_resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
+        )
+
+    ensure_available.assert_not_awaited()
+    replace_tags.assert_awaited_once_with(
+        library_id=10,
+        tenant_id=1,
+        user_id=1,
+        system_tags=["合同", "安全生产"],
+        manual_tags=[],
+        ai_tags=[],
+    )
+    update_library.assert_awaited_once_with(
+        10,
+        tags=["合同", "安全生产"],
+        ai_tags=[],
+        tag_count=2,
+    )
+
+
+@pytest.mark.asyncio
 async def test_append_review_tag_rejects_unbound_library():
     service = KnowledgeSpaceTagLibraryService(_login_user())
 

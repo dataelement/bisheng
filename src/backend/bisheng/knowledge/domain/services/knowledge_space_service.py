@@ -8376,23 +8376,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         merged: list[Tag] = []
-        seen_keys: set[str] = set()
         for library_id in library_ids:
             library_tags = await TagLibraryTagService._repair_legacy_library_resource_types(
                 tag_map.get(str(library_id), []),
             )
-            for library_tag in library_tags:
-                name = (library_tag.name or "").strip()
-                if not name:
-                    continue
-                resource_type = (library_tag.resource_type or "").strip().lower()
-                dedupe_key = f"{resource_type}:{name.lower()}"
-                if dedupe_key in seen_keys:
-                    continue
-                seen_keys.add(dedupe_key)
-                merged.append(library_tag)
+            merged.extend(library_tags)
 
-        return merged
+        return TagLibraryTagService.dedupe_library_tags_by_name(merged)
 
     async def _find_tenant_library_tag_by_name(self, tag_name: str) -> Tag | None:
         return await TagLibraryTagService.find_library_tag_by_name(
