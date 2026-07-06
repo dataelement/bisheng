@@ -192,6 +192,7 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
     KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.domain.services.space_list_cache import SpaceListCache
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
@@ -5635,6 +5636,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         order_by: str = "update_time",
     ) -> list[KnowledgeRead]:
+        cached = await SpaceListCache.get(self.login_user.user_id, order_by)
+        if cached is not None:
+            return cached
+
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members if str(member.business_id).isdigit()}
         created_ids, accessible_ids, public_space_ids = await asyncio.gather(
@@ -5658,12 +5663,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             space_ids.update(int(space_id) for space_id in accessible_ids if str(space_id).isdigit())
 
-        return await self._format_accessible_spaces(
+        formatted = await self._format_accessible_spaces(
             list(space_ids),
             order_by,
             memberships=members,
             required_permission_id="view_space",
         )
+        await SpaceListCache.set(self.login_user.user_id, order_by, formatted)
+        return formatted
 
     async def get_grouped_spaces(
         self,
