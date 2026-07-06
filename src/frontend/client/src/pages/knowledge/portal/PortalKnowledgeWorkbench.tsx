@@ -2132,7 +2132,12 @@ export default function PortalKnowledgeWorkbench() {
                                                     onDownloadFile={() => undefined}
                                                     onRenameFile={(fileId, newName) => void fileUpload.handleRenameFile(fileId, newName)}
                                                     onDeleteFile={(fileId) => void fileUpload.handleDeleteFile(fileId)}
-                                                    onMoveFile={(fileId, targetFolderId) => void fileUpload.handleMoveFile(fileId, targetFolderId)}
+                                                    onMoveFile={async (fileId, targetFolderId) => {
+                                                        await fileUpload.handleMoveFile(fileId, targetFolderId);
+                                                        // Refresh so the target folder's file-count stats update (move alone doesn't reload stats here).
+                                                        await reloadFiles();
+                                                    }}
+                                                    onMoveDialogFolderCreated={() => void reloadFiles()}
                                                     onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
                                                     onRetryFile={() => void reloadFiles()}
                                                     canRetryFile={canRetryPortalFailedFile}
