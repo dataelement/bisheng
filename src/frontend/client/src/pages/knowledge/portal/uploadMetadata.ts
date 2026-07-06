@@ -46,6 +46,7 @@ export interface PortalUploadTagOption {
 
 export type EncodingDraft = {
     fileCategoryCode?: string;
+    fileSubcategoryCode?: string | null;
     businessDomainCode?: string;
 };
 

@@ -15,7 +15,9 @@ import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle 
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import TagGroup from "../../SpaceDetail/TagGroup";
 import { isKnowledgeItemPending } from "../../knowledgeUtils";
-import type { PortalFileCategoryOption } from "../types";
+import type { PortalFileCategoryGroupOption } from "../types";
+import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../constants";
+import { PortalFileCategoryDropdown } from "./PortalFileCategoryDropdown";
 import {
     DEFAULT_ENCODING_PREFIX,
     type BusinessDomainOptionItem,
@@ -23,7 +25,6 @@ import {
     composeFileEncoding,
     filterBusinessDomainOptionsByCodes,
     fileEncodingBusinessDomainLabel,
-    fileEncodingCategoryLabel,
     normalizeEncodingCode,
     parseFileEncoding,
 } from "../uploadMetadata";
@@ -202,7 +203,7 @@ interface PortalUploadedFilesDrawerProps {
     onOpenChange: (open: boolean) => void;
     onRecordsChanged?: () => void | Promise<void>;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
-    fileCategoryOptions: PortalFileCategoryOption[];
+    fileCategoryGroups: PortalFileCategoryGroupOption[];
     businessDomainOptions: BusinessDomainOptionItem[];
     encodingPrefix?: string;
 }
@@ -213,7 +214,7 @@ export function PortalUploadedFilesDrawer({
     onOpenChange,
     onRecordsChanged,
     showToast,
-    fileCategoryOptions,
+    fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS,
     businessDomainOptions,
     encodingPrefix = DEFAULT_ENCODING_PREFIX,
 }: PortalUploadedFilesDrawerProps) {
@@ -368,6 +369,7 @@ export function PortalUploadedFilesDrawer({
     const handleEncodingPartChange = useCallback(async (
         record: UploadedFileRecord,
         nextDraft: EncodingDraft,
+        fileSubcategoryCode?: string | null,
     ) => {
         const parsed = parseFileEncoding(record.fileEncoding, encodingPrefix);
         const currentDraft = encodingDrafts[record.id] ?? {};
@@ -377,10 +379,14 @@ export function PortalUploadedFilesDrawer({
         const businessDomainCode = normalizeEncodingCode(
             nextDraft.businessDomainCode ?? currentDraft.businessDomainCode ?? parsed.businessDomainCode,
         );
+        const normalizedSubcategoryCode = fileSubcategoryCode === undefined
+            ? currentDraft.fileSubcategoryCode
+            : normalizeEncodingCode(fileSubcategoryCode);
         setEncodingDrafts((prev) => ({
             ...prev,
             [record.id]: {
                 fileCategoryCode,
+                fileSubcategoryCode: normalizedSubcategoryCode,
                 businessDomainCode,
             },
         }));
@@ -392,14 +398,20 @@ export function PortalUploadedFilesDrawer({
             businessDomainCode,
             encodingPrefix,
         );
-        if (newEncoding === record.fileEncoding?.trim()) return;
+        const subcategoryChanged = normalizedSubcategoryCode !== undefined &&
+            normalizedSubcategoryCode !== normalizeEncodingCode(record.fileSubcategoryCode);
+        if (newEncoding === record.fileEncoding?.trim() && !subcategoryChanged) return;
 
         setEditingFileId(null);
         setFolderTreeNodes([]);
         setEditingTagsRecord(null);
         setSavingEncodingFileId(record.id);
         try {
-            await updateFileEncoding(record.spaceId, record.id, newEncoding);
+            if (normalizedSubcategoryCode !== undefined) {
+                await updateFileEncoding(record.spaceId, record.id, newEncoding, normalizedSubcategoryCode);
+            } else {
+                await updateFileEncoding(record.spaceId, record.id, newEncoding);
+            }
             await loadRecords(page);
             await onRecordsChanged?.();
             setEncodingDrafts((prev) => {
@@ -483,13 +495,11 @@ export function PortalUploadedFilesDrawer({
                             const draft = encodingDrafts[record.id] ?? {};
                             const selectedFileCategoryCode = normalizeEncodingCode(draft.fileCategoryCode ?? parsedEncoding.fileCategoryCode);
                             const selectedBusinessDomainCode = normalizeEncodingCode(draft.businessDomainCode ?? parsedEncoding.businessDomainCode);
-                            const selectedFileCategoryText = selectedFileCategoryCode || EMPTY_FIELD_PLACEHOLDER;
                             const selectedBusinessDomainText = selectedBusinessDomainCode || EMPTY_FIELD_PLACEHOLDER;
                             const recordBusinessDomainOptions = filterBusinessDomainOptionsByCodes(
                                 businessDomainOptions,
                                 record.businessDomainCodes,
                             );
-                            const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
                             const tagText = uploadRecordTagText(record);
                             const recordTags = uploadRecordTags(record);
                             const editTagsButton = (
@@ -519,26 +529,22 @@ export function PortalUploadedFilesDrawer({
                                             {folderPathName}
                                         </button>
                                     </span>
-                                    <span>
-                                        <select
-                                            className={s.uploadRecordSelect}
-                                            aria-label={`修改${recordName}文件分类 当前分类：${selectedFileCategoryText}`}
-                                            value={selectedFileCategoryCode}
+                                    <span className={s.uploadRecordCategoryCell}>
+                                        <PortalFileCategoryDropdown
+                                            groups={fileCategoryGroups}
+                                            value={draft.fileSubcategoryCode ?? record.fileSubcategoryCode}
+                                            fallbackParentCode={selectedFileCategoryCode}
                                             disabled={savingEncodingFileId === record.id}
-                                            onChange={(event) => void handleEncodingPartChange(record, { fileCategoryCode: event.currentTarget.value })}
-                                        >
-                                            <option value="">{EMPTY_FIELD_PLACEHOLDER}</option>
-                                            {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
-                                                <option value={selectedFileCategoryCode}>
-                                                    {fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
-                                                </option>
-                                            ) : null}
-                                            {fileCategoryOptions.map((option) => (
-                                                <option key={option.code} value={option.code}>
-                                                    {option.code} / {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            ariaLabel={`修改${recordName}文件分类`}
+                                            onChange={(option) => {
+                                                if (!option) return;
+                                                void handleEncodingPartChange(
+                                                    record,
+                                                    { fileCategoryCode: option.parentCode },
+                                                    option.code,
+                                                );
+                                            }}
+                                        />
                                     </span>
                                     <span>
                                         <select

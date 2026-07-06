@@ -8641,8 +8641,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         file_id: int,
         encoding: str,
+        file_subcategory_code: str | None = None,
     ) -> KnowledgeFile:
-        """Update a file's file_encoding (shougang feature). Owner/admin only."""
+        """Update a file's file_encoding and optional second-level category (shougang feature)."""
         file_record = await self._get_file_for_action(file_id)
         # Reuse 'rename_file' permission action — that action is owner/admin-only,
         # matching the required privilege level for editing encoding.
@@ -8661,15 +8662,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             db_knowledge,
             self._extract_business_domain_code_from_encoding(cleaned),
         )
-        if await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
+        old_encoding = file_record.file_encoding
+        old_subcategory_code = self.normalize_file_category_code(
+            getattr(file_record, "file_subcategory_code", None),
+        )
+        encoding_changed = (old_encoding or "") != cleaned
+        if encoding_changed and await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
             raise SpaceFileEncodingDuplicateError()
 
-        old_encoding = file_record.file_encoding
         file_record.file_encoding = cleaned
+        normalized_file_subcategory_code = self.normalize_file_category_code(file_subcategory_code)
+        subcategory_changed = file_subcategory_code is not None and old_subcategory_code != normalized_file_subcategory_code
+        if file_subcategory_code is not None:
+            file_record.file_subcategory_code = normalized_file_subcategory_code
+            file_record.file_subcategory_source = "manual" if normalized_file_subcategory_code else None
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
         updated_file = await KnowledgeFileDao.async_update(file_record)
-        if (old_encoding or "") != cleaned:
+        if encoding_changed or subcategory_changed:
             await self._notify_favorite_source_changed(
                 source_file_id=file_id,
                 file_name=updated_file.file_name,

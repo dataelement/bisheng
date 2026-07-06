@@ -658,6 +658,11 @@ class FileEncodingUpdateReq(BaseModel):
         max_length=64,
         description="New file encoding (free text, 1-64 chars)",
     )
+    file_subcategory_code: str | None = Field(
+        default=None,
+        max_length=16,
+        description="Selected second-level file category code. Does not participate in file_encoding.",
+    )
 
 
 class BatchDeleteReq(BaseModel):

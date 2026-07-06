@@ -43,14 +43,18 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Badge } from "~/components/ui/Badge";
-import type { PortalFileCategoryOption } from "../portal/types";
+import type { PortalFileCategoryGroupOption, PortalFileCategoryOption } from "../portal/types";
+import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../portal/constants";
+import {
+    getPortalFileCategoryDisplayText,
+    PortalFileCategoryDropdown,
+} from "../portal/components/PortalFileCategoryDropdown";
 import {
     DEFAULT_ENCODING_PREFIX,
     type BusinessDomainOptionItem,
     type EncodingDraft,
     composeFileEncoding,
     fileEncodingBusinessDomainLabel,
-    fileEncodingCategoryLabel,
     normalizeEncodingCode,
     parseFileEncoding,
 } from "../portal/uploadMetadata";
@@ -695,14 +699,15 @@ interface FileTableProps {
     canManageMembers?: boolean;
     enableEncodingClassification?: boolean;
     fileCategoryOptions?: PortalFileCategoryOption[];
+    fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
     encodingPrefix?: string;
-    onFileEncodingUpdated?: (fileId: string, newEncoding: string) => void;
+    onFileEncodingUpdated?: (fileId: string, newEncoding: string, fileSubcategoryCode?: string | null) => void;
     canRetryFile?: (file: KnowledgeFile) => boolean;
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -787,6 +792,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const handleEncodingPartChange = useCallback(async (
         file: KnowledgeFile,
         nextDraft: EncodingDraft,
+        fileSubcategoryCode?: string | null,
     ) => {
         if (!showEncodingClassification || file.type === FileType.FOLDER) return;
         if (!canEditEncoding) return;
@@ -799,10 +805,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         const businessDomainCode = normalizeEncodingCode(
             nextDraft.businessDomainCode ?? currentDraft.businessDomainCode ?? parsed.businessDomainCode,
         );
+        const normalizedSubcategoryCode = fileSubcategoryCode === undefined
+            ? currentDraft.fileSubcategoryCode
+            : normalizeEncodingCode(fileSubcategoryCode);
         setEncodingDrafts((prev) => ({
             ...prev,
             [file.id]: {
                 fileCategoryCode,
+                fileSubcategoryCode: normalizedSubcategoryCode,
                 businessDomainCode,
             },
         }));
@@ -815,12 +825,22 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
             businessDomainCode,
             encodingPrefix,
         );
-        if (newEncoding === file.fileEncoding?.trim()) return;
+        const subcategoryChanged = normalizedSubcategoryCode !== undefined &&
+            normalizedSubcategoryCode !== normalizeEncodingCode(file.fileSubcategoryCode);
+        if (newEncoding === file.fileEncoding?.trim() && !subcategoryChanged) return;
 
         setSavingEncodingFileId(file.id);
         try {
-            await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding);
-            onFileEncodingUpdated?.(file.id, newEncoding);
+            if (normalizedSubcategoryCode !== undefined) {
+                await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding, normalizedSubcategoryCode);
+            } else {
+                await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding);
+            }
+            onFileEncodingUpdated?.(file.id, newEncoding, normalizedSubcategoryCode);
+            setEncodingDrafts((prev) => {
+                const { [file.id]: _, ...rest } = prev;
+                return rest;
+            });
             window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
                 detail: { spaceId: file.spaceId },
             }));
@@ -920,6 +940,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canEditEncoding={canEditEncoding}
                                 onEditEncoding={handleOpenEditEncoding}
                                 fileCategoryOptions={fileCategoryOptions}
+                                fileCategoryGroups={fileCategoryGroups}
                                 businessDomainOptions={businessDomainOptions}
                                 encodingPrefix={encodingPrefix}
                                 encodingDraft={encodingDrafts[file.id]}
@@ -1001,6 +1022,7 @@ function FileRow({
     canEditEncoding = false,
     onEditEncoding,
     fileCategoryOptions,
+    fileCategoryGroups,
     businessDomainOptions,
     encodingPrefix,
     encodingDraft,
@@ -1046,11 +1068,16 @@ function FileRow({
     canEditEncoding?: boolean;
     onEditEncoding?: (file: KnowledgeFile) => void;
     fileCategoryOptions: PortalFileCategoryOption[];
+    fileCategoryGroups: PortalFileCategoryGroupOption[];
     businessDomainOptions: BusinessDomainOptionItem[];
     encodingPrefix: string;
     encodingDraft?: EncodingDraft;
     savingEncoding?: boolean;
-    onEncodingPartChange?: (file: KnowledgeFile, nextDraft: EncodingDraft) => void | Promise<void>;
+    onEncodingPartChange?: (
+        file: KnowledgeFile,
+        nextDraft: EncodingDraft,
+        fileSubcategoryCode?: string | null,
+    ) => void | Promise<void>;
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
@@ -1104,7 +1131,6 @@ function FileRow({
     const selectedBusinessDomainCode = normalizeEncodingCode(
         encodingDraft?.businessDomainCode ?? parsedEncoding.businessDomainCode,
     );
-    const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
     const hasCurrentBusinessDomainOption = businessDomainOptions.some((option) => option.code === selectedBusinessDomainCode);
     const classificationEncodingText = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(file.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
@@ -1422,31 +1448,28 @@ function FileRow({
                         {isFolder ? (
                             <span className="truncate block">{EMPTY_FIELD_PLACEHOLDER}</span>
                         ) : canEditEncoding ? (
-                            <select
-                                className={encodingSelectClassName}
-                                aria-label={`修改${file.name}文件分类 当前分类：${selectedFileCategoryCode || "未识别"}`}
-                                value={selectedFileCategoryCode}
+                            <PortalFileCategoryDropdown
+                                groups={fileCategoryGroups}
+                                value={encodingDraft?.fileSubcategoryCode ?? file.fileSubcategoryCode}
+                                fallbackParentCode={selectedFileCategoryCode}
                                 disabled={savingEncoding}
+                                ariaLabel={`修改${file.name}文件分类`}
                                 onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => void onEncodingPartChange?.(file, { fileCategoryCode: event.currentTarget.value })}
-                            >
-                                {!selectedFileCategoryCode ? (
-                                    <option value="" disabled>{EMPTY_FIELD_PLACEHOLDER}</option>
-                                ) : null}
-                                {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
-                                    <option value={selectedFileCategoryCode}>
-                                        {fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
-                                    </option>
-                                ) : null}
-                                {fileCategoryOptions.map((option) => (
-                                    <option key={option.code} value={option.code}>
-                                        {option.code} / {option.label}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(option) => {
+                                    if (!option) return;
+                                    void onEncodingPartChange?.(
+                                        file,
+                                        { fileCategoryCode: option.parentCode },
+                                        option.code,
+                                    );
+                                }}
+                            />
                         ) : (
-                            <span className="truncate block" title={selectedFileCategoryCode ? fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions) : EMPTY_FIELD_PLACEHOLDER}>
-                                {selectedFileCategoryCode ? fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions) : EMPTY_FIELD_PLACEHOLDER}
+                            <span
+                                className="truncate block"
+                                title={getPortalFileCategoryDisplayText(fileCategoryGroups, file.fileSubcategoryCode, selectedFileCategoryCode, EMPTY_FIELD_PLACEHOLDER)}
+                            >
+                                {getPortalFileCategoryDisplayText(fileCategoryGroups, file.fileSubcategoryCode, selectedFileCategoryCode, EMPTY_FIELD_PLACEHOLDER)}
                             </span>
                         )}
                     </TableCell>

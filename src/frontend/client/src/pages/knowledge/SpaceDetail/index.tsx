@@ -53,7 +53,7 @@ import {
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
-import type { PortalFileCategoryOption } from "../portal/types";
+import type { PortalFileCategoryGroupOption, PortalFileCategoryOption } from "../portal/types";
 import type { BusinessDomainOptionItem } from "../portal/uploadMetadata";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
@@ -106,6 +106,7 @@ interface KnowledgeSpaceContentProps {
     hideFilePermissionActions?: boolean;
     enableEncodingClassification?: boolean;
     fileCategoryOptions?: PortalFileCategoryOption[];
+    fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
     encodingPrefix?: string;
     markPendingDeletion: (ids: Array<string | number>) => void;
@@ -157,6 +158,7 @@ export function KnowledgeSpaceContent({
     hideFilePermissionActions = false,
     enableEncodingClassification = false,
     fileCategoryOptions = [],
+    fileCategoryGroups,
     businessDomainOptions = [],
     encodingPrefix,
     markPendingDeletion,
@@ -1430,11 +1432,16 @@ export function KnowledgeSpaceContent({
                                     retryActionLabel={retryActionLabel}
                                     enableEncodingClassification={enableEncodingClassification}
                                     fileCategoryOptions={fileCategoryOptions}
+                                    fileCategoryGroups={fileCategoryGroups}
                                     businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
-                                    onFileEncodingUpdated={(fileId, newEncoding) => {
+                                    onFileEncodingUpdated={(fileId, newEncoding, fileSubcategoryCode) => {
                                         setFiles((prev) => prev.map((file) => (
-                                            file.id === fileId ? { ...file, fileEncoding: newEncoding } : file
+                                            file.id === fileId ? {
+                                                ...file,
+                                                fileEncoding: newEncoding,
+                                                ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
+                                            } : file
                                         )));
                                     }}
                                 />
