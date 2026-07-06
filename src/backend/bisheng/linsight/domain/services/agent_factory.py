@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import Annotated
 
 from json_repair import json_repair
+from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import InjectedState
@@ -33,6 +34,7 @@ from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
+from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
 from bisheng.llm.domain.services import LLMService
 
 # --- Subagent (researcher) tool blacklist (design #1 §4.3 / §5.1, decision 4) ---
@@ -122,7 +124,7 @@ __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/com
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
 
-4. 【收尾】用 2-3 句话告知用户产出了哪些文件（例如“已完成。见 output/report.md 与 output/report.docx”）。
+4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
 # 如何填写 ask_user（仅第 0 步触发时）
 
@@ -165,6 +167,64 @@ __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工�
 # user's knowledge selection (init_linsight_tools drops it when the whitelist is
 # empty). The prompt advertisement must track it — see _build_*_prompt below.
 _KB_TOOL_NAME = "search_knowledge_base"
+
+# Static Chinese language directive, appended to the ABSOLUTE TAIL of the system
+# message by _LanguageTailMiddleware (below).
+#
+# Why a middleware and not a HarnessProfile suffix: deepagents builds the STATIC
+# base as USER -> BASE -> (profile SUFFIX), but its framework middleware
+# (TodoList / Filesystem / SubAgent, all English) then APPEND ~5000 chars to the
+# system message via wrap_model_call AFTER that base. So a profile suffix is NOT
+# actually last — it is buried mid-prompt, and the trailing English still drifts
+# the model's reasoning to English (observed: 中文输入仍出现英文 thinking). The
+# ONLY way to reach the true tail (after every framework prompt) is a middleware
+# placed LAST in the stack — it appends after Filesystem/SubAgent, so the
+# directive is the final text the model reads. Static content -> the assembled
+# system message stays byte-identical across calls -> still prefix-cacheable.
+_LINSIGHT_LANGUAGE_DIRECTIVE_ZH = """# 语言要求（仅约束输出语言，不改变上文其它任何要求）
+
+请全程使用与用户输入一致的语言：用户用中文输入，则你的**思考与推理过程（thinking / reasoning）、任务规划、工具调用前后的旁白、写入文件的中间笔记、向用户的提问、最终回复与交付物正文**全部使用简体中文；用户用英文则全程使用英文。**尤其是思考与推理过程必须与回复语言一致**，绝不允许“先用英文思考、再用中文回复”。本要求只关于语言，其优先级高于上文与语言有关的说明（含框架内置的英文说明）；上文关于工作流程、工具使用、委派预算与交付的要求一律照常严格遵守，不受本要求影响。"""
+
+
+class _LanguageTailMiddleware(AgentMiddleware):
+    """Append a fixed language directive to the ABSOLUTE TAIL of the system message.
+
+    deepagents' framework middleware (TodoList / Filesystem / SubAgent) inject
+    their English system prompts via ``wrap_model_call`` ->
+    ``append_to_system_message`` in middleware-list order (first = outermost =
+    appends first; last = appends last). A HarnessProfile ``system_prompt_suffix``
+    lands in the STATIC base (USER+BASE+SUFFIX), which is BEFORE those middleware
+    appends — so it is not actually last. Placed as the LAST middleware in the
+    stack, this appends AFTER every framework prompt, so the directive is the
+    final text the model reads — the strongest position to override the preceding
+    English and keep reasoning in the user's language.
+
+    Stateless + static text -> deterministic and cache-safe: ``override`` is
+    immutable (langchain rebuilds a fresh ModelRequest from the static base each
+    model turn), so there is no cross-call accumulation. ``tools = []`` registers
+    no extra tools. Both sync/async hooks are implemented (base raises for the
+    unimplemented path; the linsight worker runs async).
+    """
+
+    def __init__(self, directive: str) -> None:
+        super().__init__()
+        self.tools = []
+        self._directive = directive
+
+    @property
+    def name(self) -> str:
+        return "LinsightLanguageTail"
+
+    def _append(self, request):
+        from deepagents.middleware._utils import append_to_system_message
+
+        return request.override(system_message=append_to_system_message(request.system_message, self._directive))
+
+    def wrap_model_call(self, request, handler):
+        return handler(self._append(request))
+
+    async def awrap_model_call(self, request, handler):
+        return await handler(self._append(request))
 
 
 def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
@@ -578,7 +638,14 @@ async def create_linsight_agent(
     # synthetic message would only end the loop mid-reasoning). The subagent gets
     # its OWN instance (is_subagent=True) that DEGRADES instead — see below.
     linsight_conf = settings.get_linsight_conf()
-    middlewares: list = [build_resilience_middleware(linsight_conf, is_subagent=False)]
+    # Tool-loop breaker (L3): bound a same-tool consecutive-failure loop (e.g. a
+    # weak model that keeps calling write_file with a truncated/missing content
+    # arg) — soft nudge then graceful salvage-and-abort, instead of spinning to
+    # recursion_limit. One instance per graph, same as the resilience middleware.
+    middlewares: list = [
+        build_resilience_middleware(linsight_conf, is_subagent=False),
+        build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
+    ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
     # bundles were copied into the workspace /skills/ subtree before this call (see
@@ -605,6 +672,12 @@ async def create_linsight_agent(
                 sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
             )
         )
+
+    # Language directive LAST in the stack so it appends AFTER every framework
+    # middleware prompt (write_todos / filesystem / task / skills) — the absolute
+    # tail of the system message, the strongest position to keep the model
+    # reasoning (thinking) in the user's language. See _LanguageTailMiddleware.
+    middlewares.append(_LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH))
 
     # No custom history-compression middleware: deepagents already ships a
     # built-in summarization middleware (deepagents.middleware.summarization),
@@ -634,7 +707,16 @@ async def create_linsight_agent(
     # exhausted-transient step to a synthetic reply — letting the parent task
     # continue with the remaining steps (Layer B partial-result win).
     researcher = _build_researcher_subagent(tools)
-    researcher["middleware"] = [build_resilience_middleware(linsight_conf, is_subagent=True)]
+    researcher["middleware"] = [
+        build_resilience_middleware(linsight_conf, is_subagent=True),
+        # Same tool-loop breaker on the subagent's own graph (its tool calls run in
+        # a separate subgraph the main-graph middleware never wraps).
+        build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
+        # Same tail language directive on the subagent's own stack (last -> after
+        # its TodoList/Filesystem framework prompts), so the researcher also
+        # reasons in the user's language.
+        _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH),
+    ]
     # Advertise search_knowledge_base in the system prompt IFF it is actually in
     # `tools` (init_linsight_tools injects it only when the user selected a KB /
     # knowledge space). Keeps the prompt and the bound tool list in lockstep so the

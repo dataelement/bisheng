@@ -197,9 +197,6 @@ export function KnowledgeAiBottomDock({
 
     const handleExpandNew = async () => {
         setShowHistory(false);
-        // Reuse the current view if it's already an empty new chat; otherwise spin up a
-        // fresh session so expanding never resurfaces the conversation last viewed.
-        if (messages.length > 0) await createSession();
         setOpen(true);
     };
 

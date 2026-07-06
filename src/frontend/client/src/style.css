@@ -88,7 +88,9 @@ html {
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 3.9%;
-  --primary: 222 100% 54%; /* #165DFF — design brand blue */
+  /* #165DFF — design brand blue. Fractional HSL so hsl(var(--primary)) rounds to
+     exactly rgb(22,93,255) = --brand-500; integer 222 100% 54% drifted to (20,91,255). */
+  --primary: 221.51 100% 54.22%;
   --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 96.1%;
   --secondary-foreground: 0 0% 9%;
@@ -159,7 +161,10 @@ html {
   --illus-500: 25 180 118;   /* #19B476 */
 
   /* Brand-tinted surfaces driven by their own vars (not the blue palette). */
-  --primary: 154 67% 29%;
+  /* HSL of the brand green #187C54 — 156 68% 29% rounds to rgb(24,124,84), exactly
+     matching --brand-500. The old 154 67% 29% rounded to rgb(24,123,81), so
+     bg-primary (e.g. picker checkboxes) drifted ~3/255 off the brand green. */
+  --primary: 156 68% 29%;
   --surface-active-alt: rgb(228 241 236);
   --surface-primary-alt: #f4faf7;
   --search-input: hsla(152, 40%, 99%, 1);

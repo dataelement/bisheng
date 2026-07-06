@@ -1594,10 +1594,6 @@ export function KnowledgeSpaceContent({
                     resourceType={permTarget.type}
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
-                    currentUserRole={space.role}
-                    showShareTab={false}
-                    showMembersTab={false}
-                    showPermissionTab
                     isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}

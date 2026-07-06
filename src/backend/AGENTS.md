@@ -68,7 +68,7 @@ Applies to async (`asyncio.gather(..., return_exceptions=True)` results must be 
 
 ```bash
 # Dependencies (uv, lockfile = uv.lock, Python must be 3.11.x — pyproject requires-python >=3.11)
-uv sync --frozen --python uv run python
+uv sync --frozen
 
 # Tests
 uv run pytest test/                               # all
@@ -94,7 +94,7 @@ uv run celery -A bisheng.worker.main beat -l info
 # Linsight Worker (optional)
 uv run python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5
 
-# DB migration (alembic.ini in src/backend/)
+# DB migration (alembic.ini in src/backend/; revisions live in bisheng/core/database/alembic/versions/)
 uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only; review DM8 compat manually
 ```
@@ -103,34 +103,50 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 
 **Migration vs. script — keep them separate:**
 
-- **Schema changes** (DDL: create/alter/drop table, columns, indexes, constraints) → Alembic revision under `migrations/versions/`. These are versioned and replayed on every environment via `alembic upgrade head`.
+- **Schema changes** (DDL: create/alter/drop table, columns, indexes, constraints) → Alembic revision under `bisheng/core/database/alembic/versions/`. These are versioned and replayed on every environment via `alembic upgrade head`.
 - **One-off data migration or cleanup** (backfill/transform rows, purge stale data, fix-up jobs run once) → a standalone script under `scripts/`, **not** Alembic. Don't bury data-only operations in schema revisions.
 
 ---
 
 ## Quick Map (indexes — architecture detail in `docs/architecture/`)
 
-**Domain modules** (own top dir + `api/` + `domain/`): knowledge, workflow, permission, linsight, llm, chat_session, tool, channel, message, user, finetune, share_link, telemetry_search, workstation, open_endpoints, mcp_manage.
-**Non-standalone** (routes under `api/v1/`, no top dir): assistant, evaluation, audit, group, tag, mark, flows, skillcenter, variable, report, invite_code.
+**Domain modules** — convention: own top dir under `bisheng/` with `api/` + `domain/` (knowledge, linsight, permission, approval, tenant, evaluation, llm, chat_session, …). `ls bisheng/` is the authoritative list — do not maintain a full enumeration here, it rots. Structural exceptions: `workflow/` (engine layout: graph/nodes/edges, no api/domain) and `mcp_manage/` (clients/langchain only).
+**Non-standalone** (single-file routes under `api/v1/`, no top dir): assistant, audit, group, tag, mark, flows, skillcenter, variable, report, invite_code, plus legacy chat/dataset/endpoints.
 → responsibilities: `architecture/02-backend-modules.md`.
 
-**API routes**: v1 `/api/v1` (29 routes, frontend-facing); v2 RPC `/api/v2` (6 routes, in `open_endpoints/api/`).
+**API routes**: v1 `/api/v1` (frontend-facing) + v2 RPC `/api/v2` (in `open_endpoints/api/`) — authoritative registry: `bisheng/api/router.py`.
 
 **Subsystems** (quick entry points; architecture in the linked doc):
-- **Workflow engine** — LangGraph DAG. Key files `workflow/graph/{graph_engine,graph_state,workflow}.py`, `nodes/node_manage.py`. 14 node types. Add node = enum in `workflow/common/node.py` + node class under `workflow/nodes/<name>/` (inherit `BaseNode`) + register in `NODE_CLASS_MAP`. → `architecture/03`
+- **Workflow engine** — LangGraph DAG. Key files `workflow/graph/{graph_engine,graph_state,workflow}.py`, `nodes/node_manage.py`. Node types = `NodeType` enum in `workflow/common/node.py`. Add node = enum member + node class under `workflow/nodes/<name>/` (inherit `BaseNode`) + register in `NODE_CLASS_MAP` (`node_manage.py`). → `architecture/03`
 - **Knowledge/RAG** — Load → Transform → Ingest; Milvus (dense) + ES (sparse) dual write; async via `knowledge_celery`. Core: `knowledge/rag/pipeline/base.py`. → `architecture/04`
 - **Linsight agent** — independent Worker via Redis queue. `linsight/worker.py`, `linsight/domain/task_exec.py`. → `architecture/05`
 - **Permission** (ReBAC / OpenFGA) → `architecture/10` (+ constitution C4)
 - **Multi-tenant** → `architecture/12` (+ constitution C3)
 - **Gateway** (commercial) → `architecture/11`
+- **Approval center (F025)** — `approval/` (domain module) + `worker/approval/` (outbox exec) + `notification/` (in-app messages). Read the `approval-module` skill before touching it.
 
-**Key enums**: `FlowType` ASSISTANT=5, WORKFLOW=10, WORKSTATION=15, LINSIGHT=20, CHANNEL_ARTICLE=25, KNOWLEDGE_SPACE=30. File states: WAITING(5)→PROCESSING(1)→SUCCESS(2)/FAILED(3)/TIMEOUT(6). → models detail: `architecture/07-data-models.md` + `数据库表结构与关联说明.md`.
+**Cross-cutting dirs** (not domain modules; touched constantly):
+- `core/` — config loading, Alembic migrations (`core/database/alembic/versions/`), tenant ContextVar (`core/context/tenant.py`), OpenFGA client (`core/openfga/manager.py`)
+- `common/` — `resp_*`/pagination schemas (`common/schemas/api.py`), error codes (`common/errcode/`), auth deps (`common/dependencies/`)
+- `database/models/` — legacy ORM layer; many live models (e.g. `FlowType`) are here, not in domain modules
+- `worker/` — Celery task tree (knowledge, workflow, approval, telemetry, …); app entry `worker/main.py`
+
+**Key enums**: `FlowType` (`database/models/flow.py`) ASSISTANT=5, WORKFLOW=10, WORKSTATION=15, LINSIGHT=20, CHANNEL_ARTICLE=25, KNOLEDGE_SPACE=30 (member name is misspelled in code — no W; grep accordingly). File states: WAITING(5)→PROCESSING(1)→SUCCESS(2)/FAILED(3)/TIMEOUT(6). → models detail: `architecture/07-data-models.md` + `architecture/数据库表结构与关联说明.md`.
 
 **Celery queues**: `knowledge_celery` (20 threads, doc parse/embed/vector), `workflow_celery` (100, DAG exec), `celery` default (100, telemetry). Beat iterates all active tenants per task.
 
 **Storage (6 engines)**: MySQL, Redis, Milvus, Elasticsearch (dual: business + stats), MinIO, OpenFGA.
 
 **Config**: load priority `YAML → env (BS_*) → DB (initdb_config) → Redis (100s TTL)`. Detail → `architecture/08-deployment.md`.
+
+---
+
+## Known Pitfalls
+
+- **Tenant auto-filter only intercepts SELECT.** The `do_orm_execute` listener (`core/database/tenant_filter.py`) returns early for non-SELECT; `before_flush` auto-fills `tenant_id` on INSERT. Bulk `update()` / `delete()` statements and raw `text()` SQL get **no** tenant injection — hand-write the `tenant_id` condition (has leaked cross-tenant twice: LLM module, F035).
+- **The ruff PostToolUse hook deletes not-yet-used imports.** Every written `.py` gets `ruff check --fix`; an import added in one edit whose usage lands only in a later edit is removed as unused (F401) in between. Land import + usage in the same edit, or write the usage first.
+- **Celery Beat × multi-tenant.** A Beat schedule fires once; the task body iterates all active tenants — call `set_current_tenant_id()` per iteration, and wrap the cross-tenant enumeration query itself in `bypass_tenant_filter()` (`core/context/tenant.py`), otherwise queries fail on missing tenant context.
+- **DB config changes take up to 100s.** DB-layer config is cached in Redis with a 100s TTL — don't chase "config not applied" inside that window.
 
 ---
 

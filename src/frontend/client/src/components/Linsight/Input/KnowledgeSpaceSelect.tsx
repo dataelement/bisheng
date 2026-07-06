@@ -131,14 +131,28 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
                     type="button"
                     className={cn(
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
+                        // Active highlight uses brand-600 to match the checked-checkbox
+                        // color in the picker rows below (renderRow).
                         active ? 'text-blue-600' : 'text-[#4E5969]',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
-                    <img
-                        src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg`}
-                        className="size-4 shrink-0"
-                        alt=""
+                    {/* book-one.svg has a baked #999999 stroke, so an <img> can't
+                        follow the active color. Render it as a CSS mask instead so the
+                        icon turns brand-500 when active (mirrors ChatKnowledge). */}
+                    <span
+                        aria-hidden
+                        className={cn(
+                            'block size-4 shrink-0',
+                            active ? 'bg-blue-600' : 'bg-[#999999]',
+                        )}
+                        style={{
+                            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
+                            maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
+                            WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                            WebkitMaskPosition: 'center', maskPosition: 'center',
+                            WebkitMaskSize: 'contain', maskSize: 'contain',
+                        }}
                     />
                     <span className="truncate max-w-[min(30vw,120px)]">{localize('com_ui_knowledge_space')}</span>
                     <ChevronDown size={14} className="text-slate-400" />

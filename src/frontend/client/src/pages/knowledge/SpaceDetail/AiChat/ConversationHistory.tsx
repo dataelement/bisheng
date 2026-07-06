@@ -218,7 +218,7 @@ export function ConversationHistory({
             {/* Session list — min-h-0 lets it shrink and scroll when the panel hits
                 its max height in fit-content mode. */}
             <div className="min-h-0 flex-1 overflow-y-auto">
-                {sessions.length === 0 ? (
+                {!Array.isArray(sessions) || sessions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-2">
                         <MessageSquareIcon className="size-10 text-[#c9cdd4]" />
                         <p className="text-sm text-[#86909c]">

@@ -83,9 +83,40 @@ async def test_summary_pairs_prior_qa_and_excludes_current_turn(patch_messages):
     assert "当前问题" not in summary
 
 
+async def test_summary_excludes_current_turn_with_empty_bot_placeholder(patch_messages):
+    """Real current-turn shape: the task's OWN bot ChatMessage exists but is an
+    EMPTY placeholder (created at submit, filled only after the task finishes), so
+    the current question must NOT pair with it — otherwise it duplicates the
+    question and shows an empty '助手:'. A prior completed turn still appears."""
+    patch_messages.extend(
+        [
+            _q(1, "问题一"),
+            _a(2, "回答一"),
+            _q(3, "当前问题"),
+            _a(4, "", category="task"),  # current task's empty bot placeholder
+        ]
+    )
+
+    summary = await linsight_execute_utils.build_prior_conversation_summary("chat-1")
+
+    assert "问题一" in summary and "回答一" in summary
+    assert "当前问题" not in summary  # excluded: its bot answer is empty
+    assert "助手: \n" not in summary and not summary.rstrip().endswith("助手:")
+
+
 async def test_summary_empty_when_no_prior_pairs(patch_messages):
     """No prior history (only the current question) yields an empty summary."""
     patch_messages.append(_q(1, "当前问题"))
+
+    summary = await linsight_execute_utils.build_prior_conversation_summary("chat-1")
+
+    assert summary == ""
+
+
+async def test_summary_empty_for_single_turn_with_empty_bot_placeholder(patch_messages):
+    """First-turn task (just the current question + its empty bot placeholder)
+    yields an empty summary — no noisy '前情回顾' that merely echoes the question."""
+    patch_messages.extend([_q(1, "当前问题"), _a(2, "", category="task")])
 
     summary = await linsight_execute_utils.build_prior_conversation_summary("chat-1")
 

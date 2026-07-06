@@ -31,6 +31,7 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.common.utils.think_tags import strip_reasoning_tags
 from bisheng_langchain.linsight.event import (
     BaseEvent,
     ExecStep,
@@ -687,7 +688,14 @@ class StreamEventMapper:
         if isinstance(kwargs, dict) and kwargs.get("reasoning_content"):
             # Filter out a pseudo tool-call the model may have written into its
             # reasoning text (偶现) so it doesn't show as a raw blob in the thinking row.
-            return _strip_pseudo_tool_call(str(kwargs["reasoning_content"]))
+            reasoning = _strip_pseudo_tool_call(str(kwargs["reasoning_content"]))
+            # qwen3.5 & co. leave <think>/</think> boundary markers inside the
+            # reasoning stream (a reasoning-parser boundary artifact); strip the
+            # markers while keeping the reasoning, so they don't leak as bare
+            # tags into the narration. A marker-only chunk (e.g. a lone "<think>",
+            # or a stream-truncated "<think") reduces to whitespace -> emit nothing.
+            reasoning = strip_reasoning_tags(reasoning)
+            return reasoning if reasoning.strip() else None
         # Anthropic thinking blocks in content list
         content = getattr(message, "content", None)
         if isinstance(content, list):
@@ -698,7 +706,8 @@ class StreamEventMapper:
             ]
             chunks = [c for c in chunks if c]
             if chunks:
-                return "".join(chunks)
+                joined = strip_reasoning_tags("".join(chunks))
+                return joined if joined.strip() else None
         return None
 
     @staticmethod
