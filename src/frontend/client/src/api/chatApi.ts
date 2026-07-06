@@ -515,7 +515,7 @@ export async function getFileChatHistory(
     const res = await http.get(
         `/api/v1/knowledge/space/${spaceId}/chat/file/${fileId}/history`
     );
-    const items: StreamHistoryItem[] = res?.data ?? [];
+    const items: StreamHistoryItem[] = Array.isArray(res?.data) ? res.data : [];
     // Backend returns newest-first; reverse for chronological order
     return items.reverse().map(parseStreamHistoryItem);
 }
@@ -563,7 +563,10 @@ export async function getFolderSessions(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
         { params }
     );
-    return res?.data ?? [];
+    // The response interceptor returns (does not throw) on a status_code===500
+    // envelope, so res.data can be a non-array error object. Coerce to an array
+    // so consumers that render sessions.map() never crash.
+    return Array.isArray(res?.data) ? res.data : [];
 }
 
 /** Create a new folder/space chat session, returns session data (contains chat_id) */
@@ -624,7 +627,7 @@ export async function getFolderChatHistory(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/history`,
         { params: queryParams }
     );
-    const items: StreamHistoryItem[] = res?.data ?? [];
+    const items: StreamHistoryItem[] = Array.isArray(res?.data) ? res.data : [];
     // Backend returns newest-first; reverse for chronological order
     return items.reverse().map(parseStreamHistoryItem);
 }
