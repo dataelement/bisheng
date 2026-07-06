@@ -84,6 +84,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     owner_type: KnowledgeSpaceOwnerTypeEnum | None = Field(default=None, description="Scope owner type")
     owner_id: int | None = Field(default=None, description="Scope owner id")
     owner_name: str | None = Field(default=None, description="Scope owner display name")
+    auto_tag_library_ids: list[int] | None = Field(
+        default=None,
+        description="Bound knowledge-space tag library IDs (supports multiple libraries)",
+    )
     auto_tag_mode: Literal["library", "custom"] = Field(
         default="library",
         description="Discriminator: 'library' for an admin-managed tag library, 'custom' for a private library backed by user-entered tags.",
