@@ -909,7 +909,7 @@ class KnowledgeService(KnowledgeUtils):
         preview_exts = {
             "doc", "docx", "wps", "xls", "xlsx", "et", "ppt", "pptx", "dps", "ofd",
         } | MEDIA_FILE_EXTENSIONS
-        if file_ext in preview_exts:
+        if file_ext.lower() in preview_exts:
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = await minio_client.get_share_link(new_file_name, minio_client.tmp_bucket)

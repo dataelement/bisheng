@@ -41,3 +41,6 @@ class TestKnowledgeUploadFileSize:
 
     def test_media_transcript_preview_object_name(self):
         assert KnowledgeUtils.get_tmp_preview_file_object_name('/tmp/foo.m4a') == 'preview/foo_transcript.md'
+
+    def test_media_transcript_preview_object_name_uppercase_ext(self):
+        assert KnowledgeUtils.get_tmp_preview_file_object_name('/tmp/foo.MP3') == 'preview/foo_transcript.md'
