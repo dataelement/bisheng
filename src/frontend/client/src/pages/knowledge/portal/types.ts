@@ -47,6 +47,20 @@ export interface PortalFileCategoryOption {
     label: string;
 }
 
+export interface PortalFileSubcategoryOption {
+    code: string;
+    label: string;
+    parentCode: string;
+    parentLabel: string;
+    displayLabel: string;
+}
+
+export interface PortalFileCategoryGroupOption {
+    code: string;
+    label: string;
+    children: PortalFileSubcategoryOption[];
+}
+
 export interface PortalUploadFileItem {
     id: string;
     file: File;

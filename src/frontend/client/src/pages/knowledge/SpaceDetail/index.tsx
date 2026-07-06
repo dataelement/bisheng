@@ -84,6 +84,8 @@ interface KnowledgeSpaceContentProps {
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
+    /** Called after a folder is created inside the move dialog, so the host can refresh its list. */
+    onMoveDialogFolderCreated?: () => void;
     currentPath: Array<{ id?: string; name: string }>;
     currentFolderId?: string;
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
@@ -134,6 +136,7 @@ export function KnowledgeSpaceContent({
     onEditTags,
     onRetryFile,
     onMoveFile,
+    onMoveDialogFolderCreated,
     currentPath,
     currentFolderId,
     onDragStateChange,
@@ -1500,6 +1503,7 @@ export function KnowledgeSpaceContent({
                         setMovingFile(null);
                     }}
                     onCancel={() => setMovingFile(null)}
+                    onFolderCreated={onMoveDialogFolderCreated}
                 />
             )}
 

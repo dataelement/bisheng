@@ -94,6 +94,18 @@ class KnowledgeFileBase(SQLModelSerializable):
         description='File encoding for shougang deployment, e.g. "GF-STD-SC-20260500000001". '
                     'NULL when shougang is disabled or encoding generation has not run yet.',
     )
+    file_subcategory_code: Optional[str] = Field(
+        default=None,
+        max_length=16,
+        sa_column=Column(String(16), nullable=True, index=True),
+        description='Second-level file category code for portal filtering. Does not participate in file_encoding.',
+    )
+    file_subcategory_source: Optional[str] = Field(
+        default=None,
+        max_length=16,
+        sa_column=Column(String(16), nullable=True),
+        description='How file_subcategory_code was assigned: manual, ai, or fallback.',
+    )
     simhash: Optional[str] = Field(
         default=None,
         max_length=16,
@@ -591,6 +603,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def aget_file_by_space_filters(cls, knowledge_ids: List[int], file_name: str = None,
                                          status: List[int] = None, file_ids: List[int] = None,
                                          extra_file_ids: List[int] = None, file_ext: str = None,
+                                         file_subcategory_code: str = None,
                                          order_by: str = None, order_field: str = None,
                                          order_sort: str = "desc",
                                          match_file_encoding: bool = False) -> List[KnowledgeFile]:
@@ -615,6 +628,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
         normalized_ext = (file_ext or '').strip().lower().lstrip('.')
         if normalized_ext:
             statement = statement.where(func.lower(KnowledgeFile.file_name).like(f'%.{normalized_ext}'))
+        normalized_file_subcategory_code = (file_subcategory_code or '').strip().upper()
+        if normalized_file_subcategory_code:
+            statement = statement.where(KnowledgeFile.file_subcategory_code == normalized_file_subcategory_code)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -628,6 +644,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             extra_file_ids: List[int] = None,
             file_ext: str = None,
             document_type: str = None,
+            file_subcategory_code: str = None,
             business_domain_code: str = None,
             order_sort: str = "desc",
             cursor: Optional[List[Any]] = None,
@@ -654,6 +671,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
         normalized_ext = (file_ext or '').strip().lower().lstrip('.')
         if normalized_ext:
             statement = statement.where(func.lower(KnowledgeFile.file_name).like(f'%.{normalized_ext}'))
+
+        normalized_file_subcategory_code = (file_subcategory_code or '').strip().upper()
+        if normalized_file_subcategory_code:
+            statement = statement.where(KnowledgeFile.file_subcategory_code == normalized_file_subcategory_code)
 
         normalized_document_type = (document_type or '').strip().upper()
         if normalized_document_type:

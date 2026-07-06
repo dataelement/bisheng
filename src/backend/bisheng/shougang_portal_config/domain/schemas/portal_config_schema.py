@@ -212,9 +212,15 @@ class PortalSearchConfig(BaseModel):
     rerank_model_id: str = ''
 
 
+class PortalDocumentTypeChildConfig(BaseModel):
+    code: str = ''
+    label: str = ''
+
+
 class PortalDocumentTypeConfig(BaseModel):
     code: str = ''
     label: str = ''
+    children: list[PortalDocumentTypeChildConfig] = Field(default_factory=list)
 
 
 class PortalRecommendationConfig(BaseModel):

@@ -28,6 +28,9 @@ from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
     KnowledgeSpaceSubscribeScenarioHandler,
 )
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
@@ -353,6 +356,7 @@ class PortalSearchPerfContext:
     tag_enabled: bool = False
     file_ext: str = ""
     document_type: str = ""
+    file_subcategory_code: str = ""
     space_count: int = 0
     es_chunk_count: int = 0
     vector_chunk_count: int = 0
@@ -3182,10 +3186,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         sections: dict[str, list[dict]] = {section.tag: [] for section in req.sections}
         hot_read_item_cache: dict[int, list[ShougangPortalFileItemResp]] = {}
+        section_page_size = 6
+        if section.page_size < 1:
+            config = await ShougangPortalConfigService.get_config()
+            if config:
+                section_page_size = config.portal.display.home.section_page_size or 6
+        else:
+            section_page_size = section.page_size
         for section in req.sections:
             if not self._is_shougang_portal_latest_selected_home_section(section):
                 continue
-            page_size = min(max(int(section.page_size or 6), 1), 100)
+            page_size = min(max(section_page_size, 1), 100)
             if page_size not in hot_read_item_cache:
                 hot_read_item_cache[page_size] = await self._get_shougang_portal_hot_read_file_items(
                     spaces=spaces,
@@ -3530,6 +3541,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         perf.tag_enabled = bool(req.tag)
         perf.file_ext = str(req.file_ext or "")
         perf.document_type = self._normalize_shougang_document_type_code(req.document_type)
+        perf.file_subcategory_code = self._normalize_shougang_file_subcategory_code(req.file_subcategory_code)
         perf_token = _portal_search_perf_var.set(perf)
         fga_token = begin_fga_read_stats()
         try:
@@ -3548,6 +3560,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "tag_enabled": perf.tag_enabled,
                 "file_ext": perf.file_ext,
                 "document_type": perf.document_type,
+                "file_subcategory_code": perf.file_subcategory_code,
                 "space_count": perf.space_count,
                 "es_chunk_count": perf.es_chunk_count,
                 "vector_chunk_count": perf.vector_chunk_count,
@@ -3677,6 +3690,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_ext=req.file_ext,
             document_type=req.document_type,
             business_domain_code=req.business_domain_code,
+            file_subcategory_code=req.file_subcategory_code,
             include_source_paths=True,
             detect_has_more=True,
         )
@@ -3698,6 +3712,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_ext=None,
             document_type=None,
             business_domain_code=None,
+            file_subcategory_code=None,
             include_source_paths=False,
             detect_has_more=False,
         )
@@ -3712,6 +3727,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_ext: str | None,
         document_type: str | None,
         business_domain_code: str | None,
+        file_subcategory_code: str | None,
         include_source_paths: bool,
         detect_has_more: bool,
     ) -> tuple[list[ShougangPortalFileItemResp], bool, int | None]:
@@ -3747,8 +3763,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 status=[KnowledgeFileStatus.SUCCESS.value],
                 file_ids=bucket_file_ids,
                 file_ext=file_ext,
+                file_subcategory_code=file_subcategory_code,
             )
             files = self._filter_shougang_portal_files_by_document_type(raw_files, document_type)
+            files = self._filter_shougang_portal_files_by_subcategory_code(files, file_subcategory_code)
             files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
             if files:
                 visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
@@ -3761,6 +3779,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     spaces=spaces,
                     file_ext=file_ext,
                     document_type=document_type,
+                    file_subcategory_code=file_subcategory_code,
                     include_source_paths=include_source_paths,
                 )
                 for item in page_items:
@@ -3787,6 +3806,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         spaces: list[Knowledge],
         file_ext: str | None,
         document_type: str | None,
+        file_subcategory_code: str | None,
         include_source_paths: bool,
     ) -> list[ShougangPortalFileItemResp]:
         if not files:
@@ -3805,7 +3825,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item["knowledge_name"] = space_name_map.get(space_id, str(space_id))
             item["folder_path"] = folder_path_map.get(item_id, "")
             item["source_path"] = source_path_map.get(item_id, "")
-            if self._is_shougang_portal_file_item(item, file_ext, document_type):
+            if self._is_shougang_portal_file_item(item, file_ext, document_type, file_subcategory_code):
                 items.append(self._map_shougang_portal_file_item(space_id, item))
         return items
 
@@ -3842,6 +3862,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 extra_file_ids=None,
                 file_ext=req.file_ext,
                 document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
                 business_domain_code=req.business_domain_code,
                 order_sort=order_sort,
                 cursor=batch_cursor,
@@ -3851,6 +3872,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 break
 
             files = self._filter_shougang_portal_files_by_document_type(raw_files, req.document_type)
+            files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
             files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
             if files:
                 visible_batch = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
@@ -3885,7 +3907,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item_id = int(item.get("id") or 0)
             item["folder_path"] = folder_path_map.get(item_id, "")
             item["source_path"] = source_path_map.get(item_id, "")
-            if self._is_shougang_portal_file_item(item, req.file_ext, req.document_type):
+            if self._is_shougang_portal_file_item(
+                item,
+                req.file_ext,
+                req.document_type,
+                req.file_subcategory_code,
+            ):
                 page_items.append(self._map_shougang_portal_file_item(space_id, item))
 
         next_cursor = None
@@ -3908,6 +3935,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf.tag_enabled = bool(req.tag)
             perf.file_ext = str(req.file_ext or "")
             perf.document_type = self._normalize_shougang_document_type_code(req.document_type)
+            perf.file_subcategory_code = self._normalize_shougang_file_subcategory_code(req.file_subcategory_code)
         es_chunks, vector_chunks = await asyncio.gather(
             self._search_shougang_portal_es_chunks(
                 spaces=spaces,
@@ -3937,6 +3965,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             tag_file_ids=tag_file_ids,
             file_ext=req.file_ext,
             document_type=req.document_type,
+            file_subcategory_code=req.file_subcategory_code,
             business_domain_code=req.business_domain_code,
             sort=req.sort,
         )
@@ -3972,6 +4001,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces=spaces,
             file_ext=req.file_ext,
             document_type=req.document_type,
+            file_subcategory_code=req.file_subcategory_code,
             business_domain_code=req.business_domain_code,
         )
         return self._build_shougang_portal_search_response(items)
@@ -3984,6 +4014,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         file_ext: str | None,
         document_type: str | None,
+        file_subcategory_code: str | None,
         business_domain_code: str | None,
         sort: str,
     ) -> tuple[list[PortalFileCandidate], dict[int, KnowledgeFile]]:
@@ -3994,6 +4025,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tag_file_ids=tag_file_ids,
                 file_ext=file_ext,
                 document_type=document_type,
+                file_subcategory_code=file_subcategory_code,
                 business_domain_code=business_domain_code,
                 sort=sort,
             )
@@ -4011,12 +4043,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_ids=tag_file_ids,
                 extra_file_ids=batch_file_ids,
                 file_ext=file_ext,
+                file_subcategory_code=file_subcategory_code,
                 order_by="update_time",
                 order_sort=self._shougang_portal_order_sort(sort),
             )
             if not files:
                 continue
             files = self._filter_shougang_portal_files_by_document_type(files, document_type)
+            files = self._filter_shougang_portal_files_by_subcategory_code(files, file_subcategory_code)
             if not files:
                 continue
             files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
@@ -4042,6 +4076,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         file_ext: str | None,
         document_type: str | None,
+        file_subcategory_code: str | None,
         business_domain_code: str | None,
         sort: str,
     ) -> tuple[list[PortalFileCandidate], dict[int, KnowledgeFile]]:
@@ -4054,12 +4089,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_ids=tag_file_ids,
             extra_file_ids=candidate_file_ids,
             file_ext=file_ext,
+            file_subcategory_code=file_subcategory_code,
             order_by="update_time",
             order_sort=self._shougang_portal_order_sort(sort),
         )
         if not files:
             return [], {}
         files = self._filter_shougang_portal_files_by_document_type(files, document_type)
+        files = self._filter_shougang_portal_files_by_subcategory_code(files, file_subcategory_code)
         if not files:
             return [], {}
         files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
@@ -4688,9 +4725,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         spaces: list[Knowledge],
         file_ext: str | None,
         document_type: str | None,
+        file_subcategory_code: str | None,
         business_domain_code: str | None,
     ) -> list[ShougangPortalFileItemResp]:
         ordered_files = [file_map[candidate.file_id] for candidate in candidates if candidate.file_id in file_map]
+        if not ordered_files:
+            return []
+        ordered_files = self._filter_shougang_portal_files_by_subcategory_code(ordered_files, file_subcategory_code)
         if not ordered_files:
             return []
         ordered_files = self._filter_shougang_portal_files_by_business_domain_code(ordered_files, business_domain_code)
@@ -4707,7 +4748,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item_id = int(item.get("id") or 0)
             item["folder_path"] = folder_path_map.get(item_id, "")
             item["source_path"] = source_path_map.get(item_id, "")
-            if self._is_shougang_portal_file_item(item, file_ext, document_type):
+            if self._is_shougang_portal_file_item(item, file_ext, document_type, file_subcategory_code):
                 item_map[item_id] = self._map_shougang_portal_file_item(space_id, item)
         return [
             item_map[candidate.file_id]
@@ -4765,6 +4806,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "tag": str(req.tag or ""),
             "file_ext": str(req.file_ext or "").strip().lower().lstrip("."),
             "document_type": cls._normalize_shougang_document_type_code(req.document_type),
+            "file_subcategory_code": cls._normalize_shougang_file_subcategory_code(req.file_subcategory_code),
             "business_domain_code": cls._normalize_shougang_portal_business_domain_code(req.business_domain_code),
             "recommendation": str(req.recommendation or "").strip(),
         }
@@ -4784,6 +4826,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "space_ids": sorted({int(space_id) for space_id in space_ids if int(space_id) > 0}),
             "file_ext": str(req.file_ext or "").strip().lower().lstrip("."),
             "document_type": cls._normalize_shougang_document_type_code(req.document_type),
+            "file_subcategory_code": cls._normalize_shougang_file_subcategory_code(req.file_subcategory_code),
             "business_domain_code": cls._normalize_shougang_portal_business_domain_code(req.business_domain_code),
         }
         signature = hashlib.sha256(
@@ -5086,6 +5129,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         item: dict,
         file_ext: str | None,
         document_type: str | None = None,
+        file_subcategory_code: str | None = None,
     ) -> bool:
         if int(item.get("file_type", -1)) != FileType.FILE.value:
             return False
@@ -5094,6 +5138,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return False
         normalized_document_type = self._normalize_shougang_document_type_code(document_type)
         if normalized_document_type and self._get_shougang_document_type_code(item) != normalized_document_type:
+            return False
+        normalized_file_subcategory_code = self._normalize_shougang_file_subcategory_code(file_subcategory_code)
+        if normalized_file_subcategory_code and self._get_shougang_file_subcategory_code(item) != normalized_file_subcategory_code:
             return False
         return True
 
@@ -5125,6 +5172,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 or item.get("file_no")
                 or ""
             ),
+            file_subcategory_code=self._get_shougang_file_subcategory_code(item),
             folder_path=str(item.get("folder_path") or ""),
             source_path=str(item.get("source_path") or ""),
         )
@@ -5187,6 +5235,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def _normalize_shougang_document_type_code(value: Any) -> str:
         return str(value or "").strip().upper()
 
+    @staticmethod
+    def _normalize_shougang_file_subcategory_code(value: Any) -> str:
+        return str(value or "").strip().upper()
+
     @classmethod
     def _filter_shougang_portal_files_by_document_type(
         cls,
@@ -5197,6 +5249,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not normalized:
             return files
         return [file for file in files if cls._get_shougang_document_type_code(file) == normalized]
+
+    @classmethod
+    def _filter_shougang_portal_files_by_subcategory_code(
+        cls,
+        files: list[KnowledgeFile],
+        file_subcategory_code: str | None,
+    ) -> list[KnowledgeFile]:
+        normalized = cls._normalize_shougang_file_subcategory_code(file_subcategory_code)
+        if not normalized:
+            return files
+        return [file for file in files if cls._get_shougang_file_subcategory_code(file) == normalized]
 
     @classmethod
     def _filter_shougang_portal_files_by_business_domain_code(
@@ -5218,6 +5281,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def _get_shougang_document_type_code(cls, item: Any) -> str:
         document_type_code, _ = cls._parse_shougang_file_encoding_codes(item)
         return document_type_code
+
+    @classmethod
+    def _get_shougang_file_subcategory_code(cls, item: Any) -> str:
+        if isinstance(item, dict):
+            return cls._normalize_shougang_file_subcategory_code(
+                item.get("file_subcategory_code") or item.get("fileSubcategoryCode")
+            )
+        return cls._normalize_shougang_file_subcategory_code(getattr(item, "file_subcategory_code", None))
 
     @classmethod
     def _parse_shougang_file_encoding_codes(cls, item: Any) -> tuple[str, str]:
@@ -5255,16 +5326,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return str(tag.get("tag_name") or tag.get("name") or "")
         return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
-    async def delete_space(self, space_id: int) -> None:
+    async def delete_space(self, space_id: int, *, force: bool = False) -> None:
+        """Delete a knowledge space and all of its cascaded resources.
+
+        ``force=True`` is a system-maintenance bypass (used by the personal-space
+        cleanup script): it skips the 我的收藏/个人库 protection guards, skips the
+        caller permission check, and suppresses the per-owner "space deleted"
+        notification so a bulk cleanup does not spam users. It must never be
+        reachable from a user-facing API.
+        """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        if getattr(space, "is_favorite", False):
-            raise FavoriteSpaceProtectedError()
-        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
-        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
-            raise PersonalSpaceProtectedError()
-        await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        if not force:
+            if getattr(space, "is_favorite", False):
+                raise FavoriteSpaceProtectedError()
+            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+            if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+                raise PersonalSpaceProtectedError()
+            await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
@@ -5277,13 +5357,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
         await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
-        await self._send_space_event_notification(
-            action_code=SPACE_DELETED_MESSAGE,
-            receiver_user_ids=original_member_ids,
-            space_id=space_id,
-            space_name=space.name,
-            navigable=False,
-        )
+        if not force:
+            await self._send_space_event_notification(
+                action_code=SPACE_DELETED_MESSAGE,
+                receiver_user_ids=original_member_ids,
+                space_id=space_id,
+                space_name=space.name,
+                navigable=False,
+            )
 
         # Drop the private auto-tag library bound to this space (if any) so
         # we never leave orphan rows in knowledge_space_tag_library.
@@ -8270,6 +8351,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_path: list[str],
         parent_id: int | None = None,
         file_category_code: str | None = None,
+        file_subcategory_code: str | None = None,
         business_domain_code: str | None = None,
         manual_tag_ids: list[int] | None = None,
         manual_tag_names: list[str] | None = None,
@@ -8340,6 +8422,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_file_category_code = self.normalize_file_category_code(file_category_code)
         if normalized_file_category_code:
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code
+        normalized_file_subcategory_code = self.normalize_file_category_code(file_subcategory_code)
         normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
         if business_domain_code and not normalized_business_domain_code:
             raise SpaceBusinessDomainCodeInvalidError()
@@ -8382,6 +8465,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "level": level,
                         "file_level_path": file_level_path,
                         "file_source": file_source.value,
+                        "file_subcategory_code": normalized_file_subcategory_code,
+                        "file_subcategory_source": "manual" if normalized_file_subcategory_code else None,
                     },
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
@@ -9038,6 +9123,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_file_retry:
             return []
         file_category_code = self.normalize_file_category_code(req_data.get("file_category_code"))
+        file_subcategory_code = self.normalize_file_category_code(req_data.get("file_subcategory_code"))
         raw_business_domain_code = req_data.get("business_domain_code")
         business_domain_code = self.normalize_business_domain_code(raw_business_domain_code)
         if raw_business_domain_code and not business_domain_code:
@@ -9055,6 +9141,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     retry_file.get("split_rule"),
                     business_domain_code,
                 )
+        if file_subcategory_code:
+            for retry_file in db_file_retry:
+                retry_file["file_subcategory_code"] = file_subcategory_code
 
         id2input = {file.get("id"): file for file in db_file_retry}
         file_ids = list(id2input.keys())

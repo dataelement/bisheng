@@ -83,6 +83,7 @@ export interface PortalConfigOption {
   code: string;
   label?: string;
   name?: string;
+  children?: PortalConfigOption[];
 }
 
 export interface PortalMetadataConfig {

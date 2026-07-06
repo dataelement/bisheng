@@ -5,11 +5,17 @@ import {
     type KnowledgeFile,
 } from "~/api/knowledge";
 import {
+    DEFAULT_PORTAL_FILE_CATEGORY_GROUPS,
     DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
     LEGACY_FILE_ICON_TYPE_BY_EXTENSION,
     type LegacyFileIconType,
 } from "./constants";
-import type { PortalFileCategoryOption, PortalFileTreeNode, PortalUploadFolderNode } from "./types";
+import type {
+    PortalFileCategoryGroupOption,
+    PortalFileCategoryOption,
+    PortalFileTreeNode,
+    PortalUploadFolderNode,
+} from "./types";
 import { cleanEncodingText, normalizeEncodingCode } from "./uploadMetadata";
 
 export function isFolder(file: KnowledgeFile) {
@@ -21,19 +27,57 @@ export function normalizePortalFileCategoryOptions(rawOptions: unknown): PortalF
         return DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
     }
     const seenCodes = new Set<string>();
-    const options = rawOptions
-        .map((item) => {
-            if (!item || typeof item !== "object") return null;
-            const rawCode = (item as any).code;
-            const rawLabel = (item as any).label;
-            const code = normalizeEncodingCode(typeof rawCode === "string" ? rawCode : "");
-            const label = cleanEncodingText(typeof rawLabel === "string" ? rawLabel : "");
-            if (!code || !label || seenCodes.has(code)) return null;
-            seenCodes.add(code);
-            return { code, label };
-        })
-        .filter(Boolean) as PortalFileCategoryOption[];
+    const options: PortalFileCategoryOption[] = [];
+    rawOptions.forEach((item) => {
+        if (!item || typeof item !== "object") return;
+        const rawCode = (item as any).code;
+        const rawLabel = (item as any).label ?? (item as any).name;
+        const code = normalizeEncodingCode(typeof rawCode === "string" ? rawCode : "");
+        const label = cleanEncodingText(typeof rawLabel === "string" ? rawLabel : "");
+        if (!code || !label || seenCodes.has(code)) return;
+        seenCodes.add(code);
+        options.push({ code, label });
+    });
     return options.length ? options : DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
+}
+
+export function normalizePortalFileCategoryGroups(rawOptions: unknown): PortalFileCategoryGroupOption[] {
+    if (!Array.isArray(rawOptions)) {
+        return DEFAULT_PORTAL_FILE_CATEGORY_GROUPS;
+    }
+    const seenParentCodes = new Set<string>();
+    const groups: PortalFileCategoryGroupOption[] = [];
+    rawOptions.forEach((item) => {
+        if (!item || typeof item !== "object") return;
+        const rawCode = (item as any).code;
+        const rawLabel = (item as any).label ?? (item as any).name;
+        const parentCode = normalizeEncodingCode(typeof rawCode === "string" ? rawCode : "");
+        const parentLabel = cleanEncodingText(typeof rawLabel === "string" ? rawLabel : "");
+        if (!parentCode || !parentLabel || seenParentCodes.has(parentCode)) return;
+        const rawChildren = Array.isArray((item as any).children) && (item as any).children.length
+            ? (item as any).children
+            : [{ code: rawCode, label: rawLabel }];
+        const seenChildCodes = new Set<string>();
+        const children: PortalFileCategoryGroupOption["children"] = [];
+        rawChildren.forEach((child: unknown) => {
+            if (!child || typeof child !== "object") return;
+            const childCode = normalizeEncodingCode(typeof (child as any).code === "string" ? (child as any).code : "");
+            const childLabel = cleanEncodingText(typeof (child as any).label === "string" ? (child as any).label : "");
+            if (!childCode || !childLabel || seenChildCodes.has(childCode)) return;
+            seenChildCodes.add(childCode);
+            children.push({
+                code: childCode,
+                label: childLabel,
+                parentCode,
+                parentLabel,
+                displayLabel: parentLabel === childLabel ? childLabel : `${parentLabel} / ${childLabel}`,
+            });
+        });
+        if (!children.length) return;
+        seenParentCodes.add(parentCode);
+        groups.push({ code: parentCode, label: parentLabel, children });
+    });
+    return groups.length ? groups : DEFAULT_PORTAL_FILE_CATEGORY_GROUPS;
 }
 
 export function getPortalFileIconType(file: KnowledgeFile): LegacyFileIconType | "xlsx" {

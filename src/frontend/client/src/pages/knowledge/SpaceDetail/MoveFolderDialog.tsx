@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
-import { ChevronRight, Folder, Home, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ChevronRight, Folder, FolderPlus, Home, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { getSpaceChildrenApi, KnowledgeFile, FileType } from "~/api/knowledge";
+import { getSpaceChildrenApi, createFolderApi, KnowledgeFile, FileType } from "~/api/knowledge";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 
 interface BreadcrumbItem {
     id: string | null;
@@ -18,9 +19,15 @@ interface Props {
     movingItemType: "file" | "folder";
     onConfirm: (targetFolderId: number | null) => void;
     onCancel: () => void;
+    /**
+     * Called after a folder is created in the dialog. Lets the host refresh its
+     * own file list — needed on the portal, which manages the list itself and
+     * does not listen to the global files-refresh event.
+     */
+    onFolderCreated?: () => void;
 }
 
-export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, onConfirm, onCancel }: Props) {
+export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, onConfirm, onCancel, onFolderCreated }: Props) {
     const localize = useLocalize();
 
     // Currently browsed folder id (null = root)
@@ -32,6 +39,11 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
     const [loading, setLoading] = useState(false);
     // Selected target: undefined = not chosen; null = root; string = folder id
     const [selected, setSelected] = useState<string | null | undefined>(undefined);
+    // Inline "new folder" creation: null = not creating; string = the editable name
+    const [creatingName, setCreatingName] = useState<string | null>(null);
+    const [savingFolder, setSavingFolder] = useState(false);
+    // Guards against double-submit when Enter and blur both fire
+    const submittingRef = useRef(false);
 
     const loadFolders = useCallback(async (parentId: string | null) => {
         setLoading(true);
@@ -59,6 +71,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
             setCurrentFolderId(null);
             setBreadcrumb([{ id: null, name: localize("com_knowledge.root_directory") }]);
             setSelected(undefined);
+            setCreatingName(null);
             loadFolders(null);
         }
     }, [open]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -67,6 +80,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         setCurrentFolderId(folder.id);
         setBreadcrumb(prev => [...prev, { id: folder.id, name: folder.name || folder.id }]);
         setSelected(undefined);
+        setCreatingName(null);
         loadFolders(folder.id);
     };
 
@@ -74,7 +88,42 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         setCurrentFolderId(item.id);
         setBreadcrumb(prev => prev.slice(0, index + 1));
         setSelected(undefined);
+        setCreatingName(null);
         loadFolders(item.id);
+    };
+
+    // Default folder name mirrors the file-list logic (random suffix, no numeric dedup)
+    const genRandomStr = () =>
+        (Math.random().toString(36).substring(2, 8).toUpperCase() +
+            Math.random().toString(36).substring(2, 8).toUpperCase()).substring(0, 12);
+
+    const handleStartCreate = () => {
+        setSelected(undefined);
+        setCreatingName(localize("com_knowledge.unnamed_folder_random", { 0: genRandomStr() }));
+    };
+
+    const handleCancelCreate = () => setCreatingName(null);
+
+    const handleConfirmCreate = async () => {
+        if (submittingRef.current || creatingName === null) return;
+        const name = creatingName.trim();
+        if (!name) { setCreatingName(null); return; }
+        submittingRef.current = true;
+        setSavingFolder(true);
+        try {
+            await createFolderApi(spaceId, { name, parent_id: currentFolderId });
+            setCreatingName(null);
+            await loadFolders(currentFolderId);
+            // SpaceDetail page: refresh its file list + left folder tree via the global event.
+            dispatchKnowledgeSpaceFilesRefresh(spaceId);
+            // Portal (and any host that manages its own list): refresh through the callback.
+            onFolderCreated?.();
+        } catch {
+            // Error is surfaced by the response interceptor; keep the row for retry/cancel.
+        } finally {
+            submittingRef.current = false;
+            setSavingFolder(false);
+        }
     };
 
     const handleSelectRoot = () => {
@@ -97,29 +146,42 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                     <DialogTitle>{localize("com_knowledge.move_to")}</DialogTitle>
                 </DialogHeader>
 
-                {/* Breadcrumb */}
-                <div className="flex items-center gap-1 flex-wrap text-sm text-[#4e5969] px-1 min-h-[28px]">
-                    {breadcrumb.map((item, idx) => (
-                        <span key={idx} className="flex items-center gap-1">
-                            {idx > 0 && <ChevronRight className="size-3.5 text-[#c0c4cc]" />}
-                            <button
-                                type="button"
-                                onClick={() => handleBreadcrumbClick(item, idx)}
-                                className={cn(
-                                    "hover:text-[#165dff] transition-colors",
-                                    idx === breadcrumb.length - 1 ? "text-[#1d2129] font-medium" : "text-[#4e5969]"
-                                )}
-                            >
-                                {idx === 0 ? <Home className="size-3.5 inline mr-0.5" /> : null}
-                                {item.name}
-                            </button>
-                        </span>
-                    ))}
+                {/* Breadcrumb + new-folder action (space-between) */}
+                <div className="flex items-center justify-between gap-2 px-1 min-h-[28px]">
+                    <div className="flex items-center gap-1 flex-wrap text-sm text-[#4e5969]">
+                        {breadcrumb.map((item, idx) => (
+                            <span key={idx} className="flex items-center gap-1">
+                                {idx > 0 && <ChevronRight className="size-3.5 text-[#c0c4cc]" />}
+                                <button
+                                    type="button"
+                                    onClick={() => handleBreadcrumbClick(item, idx)}
+                                    className={cn(
+                                        "hover:text-[#165dff] transition-colors",
+                                        idx === breadcrumb.length - 1 ? "text-[#1d2129] font-medium" : "text-[#4e5969]"
+                                    )}
+                                >
+                                    {idx === 0 ? <Home className="size-3.5 inline mr-0.5" /> : null}
+                                    {item.name}
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={loading || savingFolder || creatingName !== null}
+                        onClick={handleStartCreate}
+                        className="h-7 shrink-0 px-2 text-[12px] text-[#4e5969]"
+                    >
+                        <FolderPlus className="mr-1.5 size-4" />
+                        {localize("com_knowledge.new_folder")}
+                    </Button>
                 </div>
 
                 {/* Folder list */}
                 <div className="border border-[#e5e6eb] rounded-lg overflow-hidden min-h-[200px] max-h-[320px] overflow-y-auto">
-                    {/* Root option (only shown at root level) */}
+                    {/* Root option (only shown at root level) — always first */}
                     {currentFolderId === null && (
                         <div
                             onClick={handleSelectRoot}
@@ -130,6 +192,32 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                         >
                             <Home className="size-4 shrink-0" />
                             <span>{localize("com_knowledge.root_directory")}</span>
+                        </div>
+                    )}
+
+                    {/* Inline new-folder row (below root option, above existing folders) */}
+                    {creatingName !== null && (
+                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e6eb] text-sm bg-[#f5f6fa]">
+                            <Folder className="size-4 shrink-0 text-[#f7ba1e]" />
+                            <input
+                                autoFocus
+                                value={creatingName}
+                                disabled={savingFolder}
+                                onChange={(e) => setCreatingName(e.target.value)}
+                                onFocus={(e) => e.target.select()}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleConfirmCreate();
+                                    } else if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        handleCancelCreate();
+                                    }
+                                }}
+                                onBlur={handleConfirmCreate}
+                                className="min-w-0 flex-1 rounded border border-[#165dff] bg-white px-2 py-1 text-sm outline-none"
+                            />
+                            {savingFolder && <Loader2 className="size-4 shrink-0 animate-spin text-[#86909c]" />}
                         </div>
                     )}
 
