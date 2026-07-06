@@ -25,3 +25,16 @@ async def test_delete_personal_space_is_rejected():
         sdao.aget_by_space_id = AsyncMock(return_value=scope)
         with pytest.raises(PersonalSpaceProtectedError):
             await svc.delete_space(300)
+
+
+@pytest.mark.asyncio
+async def test_manage_members_on_personal_space_is_rejected():
+    svc = _svc()
+    scope = SimpleNamespace(level=KnowledgeSpaceLevelEnum.PERSONAL)
+    req = SimpleNamespace(space_id=300, user_id=9)
+    with patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao") as sdao:
+        sdao.aget_by_space_id = AsyncMock(return_value=scope)
+        with pytest.raises(PersonalSpaceProtectedError):
+            await svc.update_member_role(req)
+        with pytest.raises(PersonalSpaceProtectedError):
+            await svc.remove_member(req)

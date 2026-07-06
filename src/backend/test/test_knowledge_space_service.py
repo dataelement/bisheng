@@ -814,6 +814,7 @@ async def test_create_space_keeps_auto_tag_binding_when_visibility_flag_is_false
             name='个人空间',
             auto_tag_enabled=True,
             auto_tag_library_id=9,
+            system_managed=True,
         )
 
     assert result.id == 11
@@ -4315,7 +4316,7 @@ class TestCreateSpace:
             new_callable=AsyncMock,
         ):
             with pytest.raises(Exception) as exc_info:
-                await service.create_knowledge_space(name='  重复空间  ')
+                await service.create_knowledge_space(name='  重复空间  ', system_managed=True)
 
         assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
         mock_get_personal.assert_awaited_once_with(
@@ -4388,7 +4389,7 @@ class TestCreateSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
         ):
-            result = await service.create_knowledge_space(name='重复空间')
+            result = await service.create_knowledge_space(name='重复空间', system_managed=True)
 
         assert result.id == 23
         mock_create_knowledge_base.assert_awaited_once()
@@ -4456,7 +4457,7 @@ class TestCreateSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
         ):
-            result = await service.create_knowledge_space(name='重复空间')
+            result = await service.create_knowledge_space(name='重复空间', system_managed=True)
 
         assert result.id == 23
         mock_create_knowledge_base.assert_awaited_once()
@@ -4671,7 +4672,7 @@ class TestCreateSpace:
             return_value=None,
         ):
             with pytest.raises(WorkbenchEmbeddingError):
-                await service.create_knowledge_space(name='Space')
+                await service.create_knowledge_space(name='Space', system_managed=True)
 
         mock_count.assert_awaited_once_with(
             service.login_user.user_id,
@@ -4924,6 +4925,10 @@ class TestSpaceListings:
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids',
             new_callable=AsyncMock,
             return_value=[SimpleNamespace(id=1, name='Root')],
+        ), patch.object(
+            service,
+            '_ensure_personal_spaces',
+            new_callable=AsyncMock,
         ):
             result = await service.get_grouped_spaces()
 
@@ -5252,6 +5257,10 @@ class TestManagePermissionBoundaries:
 
         with patch.object(
             service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(level=KnowledgeSpaceLevelEnum.TEAM),
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_active_member_role',
             new_callable=AsyncMock,

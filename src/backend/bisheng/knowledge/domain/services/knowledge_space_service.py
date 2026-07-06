@@ -5991,6 +5991,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
         - Modifying the creator's role is not allowed
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
@@ -6070,6 +6073,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins can remove regular members
         - Admins cannot remove other admins or creators
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
