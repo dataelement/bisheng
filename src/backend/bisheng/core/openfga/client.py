@@ -149,7 +149,7 @@ class FGAClient:
             results.get(str(i), {}).get('allowed', False)
             for i in range(len(checks))
         ]
-        logger.info(
+        logger.debug(
             '[openfga-debug] batch_check store_id=%s model_id=%s '
             'checks=%s raw_result=%s resolved=%s',
             self._store_id,

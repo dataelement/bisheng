@@ -975,6 +975,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_created: bool = False,
         required_permission_id: str | None = None,
     ) -> list[KnowledgeRead]:
+        t0 = time.perf_counter()
         if not space_ids:
             return []
 
@@ -991,16 +992,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         permission_id_space_ids = [space.id for space in spaces if space.user_id != self.login_user.user_id]
         permission_levels = {}
         permission_ids_map: dict[int, set[str]] = {}
+        levels_ms = 0.0
+        effective_ms = 0.0
         if permission_space_ids:
+            _t_levels = time.perf_counter()
             level_map = await PermissionService.get_permission_levels(
                 user_id=self.login_user.user_id,
                 object_type="knowledge_space",
                 object_ids=permission_space_ids,
                 login_user=self.login_user,
             )
+            levels_ms = (time.perf_counter() - _t_levels) * 1000
             permission_levels = {space_id: level_map.get(str(space_id)) for space_id in permission_space_ids}
         if required_permission_id and permission_id_space_ids:
             shared_tuple_cache: dict[str, list[dict]] = {}
+            _t_effective = time.perf_counter()
             permission_ids = await asyncio.gather(
                 *[
                     self._get_effective_permission_ids(
@@ -1012,6 +1018,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     for space_id in permission_id_space_ids
                 ]
             )
+            effective_ms = (time.perf_counter() - _t_effective) * 1000
             permission_ids_map = {space_id: ids for space_id, ids in zip(permission_id_space_ids, permission_ids)}
 
         pinned_spaces = []
@@ -1059,14 +1066,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 normal_spaces.append(result)
 
         ordered_spaces = pinned_spaces + normal_spaces
+        file_count_ms = 0.0
         if ordered_spaces:
+            _t_file_count = time.perf_counter()
             file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
                 [space.id for space in ordered_spaces]
             )
+            file_count_ms = (time.perf_counter() - _t_file_count) * 1000
             for space in ordered_spaces:
                 space.file_num = int(file_count_map.get(space.id, 0) or 0)
 
-        return await self._decorate_department_metadata(ordered_spaces)
+        _t_decorate = time.perf_counter()
+        result = await self._decorate_department_metadata(ordered_spaces)
+        decorate_ms = (time.perf_counter() - _t_decorate) * 1000
+
+        _logger.info(
+            "grouped_spaces_perf user_id=%s n_spaces=%s levels_ms=%.1f effective_ms=%.1f "
+            "file_count_ms=%.1f decorate_ms=%.1f total_ms=%.1f",
+            self.login_user.user_id, len(spaces),
+            levels_ms, effective_ms, file_count_ms, decorate_ms,
+            (time.perf_counter() - t0) * 1000,
+        )
+        return result
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -5638,8 +5659,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> list[KnowledgeRead]:
         cached = await SpaceListCache.get(self.login_user.user_id, order_by)
         if cached is not None:
+            _logger.info(
+                "list_accessible_spaces cache_hit=1 user_id=%s n=%s",
+                self.login_user.user_id, len(cached),
+            )
             return cached
 
+        _t = time.perf_counter()
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members if str(member.business_id).isdigit()}
         created_ids, accessible_ids, public_space_ids = await asyncio.gather(
@@ -5662,6 +5688,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_ids.update(all_space_ids)
         else:
             space_ids.update(int(space_id) for space_id in accessible_ids if str(space_id).isdigit())
+
+        collect_ms = (time.perf_counter() - _t) * 1000
+        _logger.info(
+            "list_accessible_spaces cache_hit=0 user_id=%s collect_ms=%.1f",
+            self.login_user.user_id, collect_ms,
+        )
 
         formatted = await self._format_accessible_spaces(
             list(space_ids),
