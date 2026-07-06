@@ -138,6 +138,7 @@ PREMOCK_MODULES: list[str] = [
     'bisheng.worker.main',
     'bisheng.worker.knowledge',
     'bisheng.worker.knowledge.file_worker',
+    'bisheng.worker.knowledge.space_migrate_worker',
     'bisheng.worker.approval',
     'bisheng.worker.approval.tasks',
 ]

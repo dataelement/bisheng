@@ -529,6 +529,11 @@ class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
     )
 
 
+class DepartmentBindingReq(BaseModel):
+    space_id: int = Field(..., description="Team-level knowledge space id to bind")
+    department_id: int = Field(..., description="Department id to bind the space to")
+
+
 class FolderCreateReq(BaseModel):
     name: str = Field(..., description="Folder Name")
     parent_id: int | None = Field(None, description="Parent Folder ID")

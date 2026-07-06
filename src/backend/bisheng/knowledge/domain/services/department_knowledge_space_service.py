@@ -8,7 +8,10 @@ from fastapi import Request
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.department import DepartmentNotFoundError
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceExistsError
+from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceExistsError,
+    SpaceNotFoundError,
+)
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -22,8 +25,11 @@ from bisheng.department.domain.services.department_service import DepartmentServ
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
-from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScopeDao,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
 )
@@ -423,3 +429,64 @@ class DepartmentKnowledgeSpaceService:
         results = [KnowledgeSpaceInfoResp(**space.model_dump()) for space in spaces]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
         return await svc._decorate_department_metadata(results)
+
+    @classmethod
+    async def bind_space_to_department(cls, login_user, *, space_id: int, department_id: int) -> dict:
+        cls._ensure_super_admin(login_user)
+        team_ids = set(await KnowledgeSpaceScopeDao.aget_space_ids_by_level(
+            KnowledgeSpaceLevelEnum.TEAM))
+        if int(space_id) not in team_ids:
+            raise SpaceNotFoundError(msg="只能绑定团队知识库")
+        if await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id) is not None:
+            raise DepartmentKnowledgeSpaceExistsError(msg="该知识库已绑定部门")
+        if await DepartmentKnowledgeSpaceDao.aget_by_department_id(department_id) is not None:
+            raise DepartmentKnowledgeSpaceExistsError(msg="该部门已绑定科室知识库")
+        dept = await DepartmentDao.aget_by_id(department_id)
+        if dept is None or getattr(dept, "status", "active") != "active":
+            raise DepartmentNotFoundError()
+        row = await DepartmentKnowledgeSpaceDao.acreate(
+            tenant_id=login_user.tenant_id, department_id=department_id,
+            space_id=space_id, created_by=login_user.user_id,
+        )
+        return {"space_id": row.space_id, "department_id": row.department_id}
+
+    @classmethod
+    async def unbind_space(cls, login_user, *, space_id: int) -> None:
+        cls._ensure_super_admin(login_user)
+        await DepartmentKnowledgeSpaceDao.adelete_by_space_id(space_id)
+
+    @classmethod
+    async def list_bindings(cls, login_user) -> list:
+        cls._ensure_super_admin(login_user)
+        rows = await DepartmentKnowledgeSpaceDao.aget_all()
+        if not rows:
+            return []
+        spaces = await KnowledgeDao.async_get_spaces_by_ids([r.space_id for r in rows])
+        name_map = {s.id: s.name for s in spaces}
+        dept_map = {d.id: d.name for d in await DepartmentDao.aget_by_ids([r.department_id for r in rows])}
+        return [{
+            "space_id": r.space_id, "space_name": name_map.get(r.space_id, ""),
+            "department_id": r.department_id, "department_name": dept_map.get(r.department_id, ""),
+            "created_by": r.created_by, "create_time": str(getattr(r, "create_time", "")),
+        } for r in rows]
+
+    @classmethod
+    async def list_bindable_team_spaces(cls, login_user, *, keyword: str | None = None) -> list:
+        cls._ensure_super_admin(login_user)
+        team_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.TEAM)
+        if not team_ids:
+            return []
+        bound = {r.space_id for r in await DepartmentKnowledgeSpaceDao.aget_by_space_ids(team_ids)}
+        free_ids = [i for i in team_ids if i not in bound]
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(free_ids) if free_ids else []
+        result = [{"space_id": s.id, "name": s.name} for s in spaces]
+        if keyword:
+            kw = keyword.strip().lower()
+            result = [x for x in result if kw in (x["name"] or "").lower()]
+        return result
+
+    @classmethod
+    async def list_departments(cls, login_user) -> list:
+        cls._ensure_super_admin(login_user)
+        rows = await DepartmentDao.aget_all_active()
+        return [{"id": d.id, "name": d.name} for d in rows]

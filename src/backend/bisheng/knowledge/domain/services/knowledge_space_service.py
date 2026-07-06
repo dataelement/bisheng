@@ -36,7 +36,11 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentSpaceDeleteForbiddenError,
     FavoriteSpaceProtectedError,
+    FreeSpaceMigrationEmbeddingMismatchError,
+    FreeSpaceMigrationTargetNotFoundError,
+    FreeSpaceMigratingError,
     SpaceBusinessDomainCodeInvalidError,
     SpaceCreateDepartmentDeniedError,
     SpaceCreatePublicDeniedError,
@@ -177,6 +181,9 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
 )
+from bisheng.knowledge.domain.services.free_space_migration_service import (
+    FreeSpaceMigrationService,
+)
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_CLASSIFICATION_UPDATED,
     FAVORITE_SOURCE_MOVED,
@@ -228,6 +235,7 @@ from bisheng.telemetry.domain.mid_table.knowledge_space_content import Knowledge
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.knowledge import file_worker
+from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
@@ -5326,14 +5334,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return str(tag.get("tag_name") or tag.get("name") or "")
         return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
-    async def delete_space(self, space_id: int, *, force: bool = False) -> None:
+    async def delete_space(
+        self, space_id: int, *, force: bool = False, migrate_free_space: bool = True
+    ) -> None:
         """Delete a knowledge space and all of its cascaded resources.
 
         ``force=True`` is a system-maintenance bypass (used by the personal-space
         cleanup script): it skips the 我的收藏/个人库 protection guards, skips the
-        caller permission check, and suppresses the per-owner "space deleted"
-        notification so a bulk cleanup does not spam users. It must never be
-        reachable from a user-facing API.
+        caller permission check, skips 自由库迁移, and suppresses the per-owner
+        "space deleted" notification so a bulk cleanup does not spam users. It
+        must never be reachable from a user-facing API.
+
+        ``migrate_free_space=False`` skips the free-space migration guard so the
+        migration worker can delete the source space after copying without
+        re-triggering the guard (avoids recursion).
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -5345,6 +5359,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
                 raise PersonalSpaceProtectedError()
             await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            if migrate_free_space:
+                decision = await FreeSpaceMigrationService.pre_delete_guard(space)
+                if decision.action == "block":
+                    raise {
+                        "department_space_forbidden": DepartmentSpaceDeleteForbiddenError,
+                        "target_not_found": FreeSpaceMigrationTargetNotFoundError,
+                        "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
+                        "migrating": FreeSpaceMigratingError,
+                    }.get(decision.reason, DepartmentSpaceDeleteForbiddenError)()
+                if decision.action == "migrate":
+                    await KnowledgeDao.async_update_state(
+                        knowledge_id=space_id, state=KnowledgeState.COPYING,
+                    )
+                    try:
+                        space_migrate_celery.delay({
+                            "source_id": space_id,
+                            "target_id": decision.target_space_id,
+                            "op_user_id": self.login_user.user_id,
+                        })
+                    except Exception:
+                        await KnowledgeDao.async_update_state(
+                            knowledge_id=space_id, state=KnowledgeState.PUBLISHED,
+                        )
+                        raise
+                    return
+                # decision.action == "normal_delete" → 继续原清理逻辑
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
