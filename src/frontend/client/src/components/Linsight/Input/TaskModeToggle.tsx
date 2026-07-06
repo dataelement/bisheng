@@ -9,6 +9,7 @@ import { X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import { cn } from '~/utils';
 
 interface TaskModeToggleProps {
@@ -20,7 +21,12 @@ interface TaskModeToggleProps {
 export function TaskModeToggle({ active, disabled = false, onClick }: TaskModeToggleProps) {
     const localize = useLocalize();
     const [hovered, setHovered] = useState(false);
-    const showExit = active && hovered;
+    // Matches the CSS `touch-mobile` variant (≤1023px), where the label is
+    // hidden and a persistent exit "x" is shown instead. In that layout the
+    // hover icon-swap must be disabled — otherwise it renders a SECOND x next to
+    // the persistent one. Wide screens keep the hover binoculars→x affordance.
+    const isTouchLayout = useMediaQuery('(max-width: 1023px)');
+    const showExit = active && hovered && !isTouchLayout;
 
     return (
         <button

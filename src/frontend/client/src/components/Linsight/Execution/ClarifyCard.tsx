@@ -289,9 +289,17 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                         if (!customSelected) handleSelect(q, CUSTOM_KEY);
                                     }}
                                     onKeyDown={(e) => {
-                                        // Enter confirms the custom answer and advances
-                                        // (single-select only; multi-select uses the footer button).
-                                        if (e.key === 'Enter' && !q.multiple && customText[q.id]?.trim()) {
+                                        // Enter confirms the typed custom answer and advances to
+                                        // the next question (both single- AND multi-select),
+                                        // matching the "下一题 ↵" hint — the input is focused, so
+                                        // the window-level Enter handler is bypassed and this is the
+                                        // only place that can advance. Guard the IME composition
+                                        // Enter so committing pinyin doesn't skip the question.
+                                        if (
+                                            e.key === 'Enter' &&
+                                            !e.nativeEvent.isComposing &&
+                                            customText[q.id]?.trim()
+                                        ) {
                                             e.preventDefault();
                                             handleConfirm();
                                         }
