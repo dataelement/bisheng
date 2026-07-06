@@ -204,3 +204,13 @@ class SpaceFileNameSensitiveWordError(BaseErrorCode):
 class SpaceFileContentSensitiveWordError(BaseErrorCode):
     Code: int = 18074
     Msg: str = "文件内容包含敏感词，请修改后重试"
+
+
+class SpacePersonalCreateForbiddenError(BaseErrorCode):
+    Code: int = 18075
+    Msg: str = "个人知识库不支持手动新建"
+
+
+class PersonalSpaceProtectedError(BaseErrorCode):
+    Code: int = 18076
+    Msg: str = "个人知识库不支持删除或授权"

@@ -55,6 +55,8 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNameSensitiveWordError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
+    SpacePersonalCreateForbiddenError,
+    PersonalSpaceProtectedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -2195,6 +2197,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_ids: list[int] | None = None,
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
+        system_managed: bool = False,
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
@@ -2214,6 +2217,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf_last = now
 
         name = self._normalize_space_name(name)
+        if not system_managed and self._normalize_space_level(space_level) == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpacePersonalCreateForbiddenError()
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
                 self.login_user.user_id,
@@ -2485,6 +2490,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             description="系统默认收藏知识库",
             space_level=KnowledgeSpaceLevelEnum.PERSONAL,
             skip_user_limit=True,
+            system_managed=True,
         )
         space.is_favorite = True
         try:
@@ -2517,6 +2523,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if adopted_again:
                 return adopted_again
             raise
+
+    def personal_default_space_name(self) -> str:
+        return f"{self.login_user.user_name}的知识库"
+
+    async def _find_personal_default_space(self) -> Knowledge | None:
+        return await KnowledgeDao.async_get_personal_space_by_owner_name(
+            owner_id=self.login_user.user_id,
+            name=self.personal_default_space_name(),
+        )
+
+    async def _ensure_personal_default_space(self) -> Knowledge:
+        """懒创建、按名幂等：已有同名个人默认库→返回；否则创建；并发/撞名兜底回查。"""
+        existing = await self._find_personal_default_space()
+        if existing:
+            return existing
+        try:
+            return await self.create_knowledge_space(
+                name=self.personal_default_space_name(),
+                description="个人默认知识库",
+                space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                skip_user_limit=True,
+                system_managed=True,
+            )
+        except Exception:
+            again = await self._find_personal_default_space()
+            if again:
+                return again
+            raise
+
+    async def _ensure_personal_spaces(self) -> None:
+        """首次访问个人分组时，确保 我的收藏 + {用户名}的知识库 均存在。"""
+        await self._ensure_favorite_space()
+        await self._ensure_personal_default_space()
 
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
@@ -5228,6 +5267,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
@@ -5549,6 +5591,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         order_by: str = "update_time",
     ) -> GroupedKnowledgeSpacesResp:
+        await self._ensure_personal_spaces()
         spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
         for space in spaces:
@@ -5560,6 +5603,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.team_spaces.append(space)
             else:
                 grouped.personal_spaces.append(space)
+        grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
     async def get_spaces_by_level(
@@ -5570,8 +5614,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_level = self._normalize_space_level(space_level)
         favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            favorite_space = await self._ensure_favorite_space()
-            favorite_space_id = int(favorite_space.id)
+            await self._ensure_personal_spaces()
+            favorite_space = await self._find_favorite_space()
+            favorite_space_id = int(favorite_space.id) if favorite_space else None
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
@@ -5946,6 +5991,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
         - Modifying the creator's role is not allowed
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
@@ -6025,6 +6073,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins can remove regular members
         - Admins cannot remove other admins or creators
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
