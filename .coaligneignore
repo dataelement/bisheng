@@ -1,0 +1,8 @@
+# 补充排除:配置与本地敏感文件(会话通道管不到,这里只保文件通道)
+config.yaml
+config.*.yaml
+*.local.yaml
+*.local.yml
+.env.local
+*.sqlite
+*.log
