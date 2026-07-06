@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import List, Literal, Optional
 
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScopeDao,
+)
 
 _logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MigrationDecision:
+    action: Literal["normal_delete", "migrate", "block"]
+    target_space_id: Optional[int] = None
+    reason: str = ""
 
 
 class FreeSpaceMigrationService:
@@ -49,3 +62,23 @@ class FreeSpaceMigrationService:
             if space_id is not None:
                 return int(space_id)
         return None
+
+    @classmethod
+    async def pre_delete_guard(cls, space) -> "MigrationDecision":
+        """删除前置判定：迁移中/科室库禁止删除/非 team 直接删/自由 team 库判迁移目标与向量模型。"""
+        if space.state == KnowledgeState.COPYING.value:
+            return MigrationDecision("block", reason="migrating")
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space.id)
+        if binding is not None:
+            return MigrationDecision("block", reason="department_space_forbidden")
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space.id)
+        level = getattr(scope, "level", None)
+        if level != KnowledgeSpaceLevelEnum.TEAM.value and level != KnowledgeSpaceLevelEnum.TEAM:
+            return MigrationDecision("normal_delete")
+        target_id = await cls.resolve_target_department_space(space.user_id)
+        if target_id is None:
+            return MigrationDecision("block", reason="target_not_found")
+        target = await KnowledgeDao.aquery_by_id(target_id)
+        if target is None or target.model != space.model:
+            return MigrationDecision("block", reason="embedding_mismatch")
+        return MigrationDecision("migrate", target_space_id=target_id)
