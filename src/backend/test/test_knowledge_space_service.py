@@ -4691,6 +4691,22 @@ class TestDeleteSpace:
             new_callable=AsyncMock,
             return_value=other_users_space,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.clean_space_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_space_delete_stat_async',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_send_space_event_notification', new_callable=AsyncMock,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._require_permission_id',
             new_callable=AsyncMock,
         ) as mock_require_permission_id, patch(
@@ -4727,6 +4743,16 @@ class TestDeleteSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_send_space_event_notification', new_callable=AsyncMock,
         ), patch.object(
             service, '_require_permission_id', new_callable=AsyncMock,
         ), patch.object(
