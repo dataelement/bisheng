@@ -40,7 +40,7 @@ class SpaceListCache:
             if redis is None:
                 return None
             raw = await redis.aget(_key(user_id, order_by))
-            if not raw:
+            if raw is None:
                 return None
             from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
                 KnowledgeSpaceInfoResp,

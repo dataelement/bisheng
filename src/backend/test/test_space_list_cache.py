@@ -50,6 +50,19 @@ async def test_get_miss_returns_none():
 
 
 @pytest.mark.asyncio
+async def test_cached_empty_list_is_a_hit_not_a_miss():
+    """A user with zero accessible spaces should still get a real cache hit
+    (an empty list), not be treated as a cache miss that forces a recompute.
+    """
+    fake = _FakeRedis()
+    with patch('bisheng.knowledge.domain.services.space_list_cache.get_redis_client',
+               new_callable=AsyncMock, return_value=fake):
+        await SpaceListCache.set(7, 'update_time', [])
+        got = await SpaceListCache.get(7, 'update_time')
+    assert got == []
+
+
+@pytest.mark.asyncio
 async def test_redis_unavailable_degrades_gracefully():
     with patch('bisheng.knowledge.domain.services.space_list_cache.get_redis_client',
                new_callable=AsyncMock, return_value=None):
