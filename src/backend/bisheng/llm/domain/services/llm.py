@@ -910,7 +910,13 @@ class LLMService:
         """Update default model configuration for knowledge base"""
         target = _resolve_tenant_id(tenant_id)
         await avalidate_system_model_refs(
-            [data.embedding_model_id, data.source_model_id, data.extract_title_model_id, data.qa_similar_model_id],
+            [
+                data.embedding_model_id,
+                data.source_model_id,
+                data.extract_title_model_id,
+                data.qa_similar_model_id,
+                data.asr_model_id,
+            ],
             target,
         )
         await cls._base_update_llm_config(

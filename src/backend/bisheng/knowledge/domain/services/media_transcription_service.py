@@ -91,11 +91,11 @@ class KnowledgeMediaTranscriptionService:
 
     @classmethod
     def _resolve_asr_model(cls, tenant_id: int | None) -> tuple[LLMModel, LLMServer]:
-        workbench_llm = LLMService.get_workbench_llm_sync(tenant_id=tenant_id)
-        if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
+        knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
+        if not knowledge_llm.asr_model_id:
             raise NoAsrModelConfigError()
 
-        model_info = LLMDao.get_model_by_id(int(workbench_llm.asr_model.id))
+        model_info = LLMDao.get_model_by_id(int(knowledge_llm.asr_model_id))
         if not model_info:
             raise AsrModelConfigDeletedError()
         if model_info.model_type != LLMModelType.ASR.value:

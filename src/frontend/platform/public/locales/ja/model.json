@@ -15,6 +15,7 @@
     "sessionTitleGenerationModel": "セッションタイトル生成モデル",
     "asrModel": "音声認識（ASR）モデル",
     "asrModelTooltip": "ワークベンチ音声認識シナリオに使用",
+    "knowledgeAsrModelTooltip": "音声・動画解析の音声認識シナリオに使用",
     "ttsModel": "テキスト読み上げ（TTS）モデル",
     "ttsModelTooltip": "ワークベンチテキスト読み上げシナリオに使用",
     "saveFailed": "保存に失敗しました。再試行してください！",

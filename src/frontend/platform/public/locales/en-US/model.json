@@ -17,6 +17,7 @@
     "sessionTitleGenerationModel": "Session Title Generation Model",
     "asrModel": "Speech-to-Text (ASR) Model",
     "asrModelTooltip": "Used for workbench speech-to-text scenarios",
+    "knowledgeAsrModelTooltip": "Used for speech-to-text in audio/video parsing",
     "ttsModel": "Text-to-Speech (TTS) Model",
     "ttsModelTooltip": "Used for workbench text-to-speech scenarios",
     "saveFailed": "Save failed, please try again!",
