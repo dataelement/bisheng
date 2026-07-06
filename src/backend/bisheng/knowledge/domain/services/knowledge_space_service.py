@@ -33,7 +33,11 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentSpaceDeleteForbiddenError,
     FavoriteSpaceProtectedError,
+    FreeSpaceMigrationEmbeddingMismatchError,
+    FreeSpaceMigrationTargetNotFoundError,
+    FreeSpaceMigratingError,
     SpaceBusinessDomainCodeInvalidError,
     SpaceCreateDepartmentDeniedError,
     SpaceCreatePublicDeniedError,
@@ -171,6 +175,9 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
 )
+from bisheng.knowledge.domain.services.free_space_migration_service import (
+    FreeSpaceMigrationService,
+)
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
 )
@@ -222,6 +229,7 @@ from bisheng.telemetry.domain.mid_table.knowledge_space_content import Knowledge
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.knowledge import file_worker
+from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
@@ -5212,13 +5220,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return str(tag.get("tag_name") or tag.get("name") or "")
         return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
-    async def delete_space(self, space_id: int) -> None:
+    async def delete_space(self, space_id: int, *, migrate_free_space: bool = True) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
         await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        if migrate_free_space:
+            decision = await FreeSpaceMigrationService.pre_delete_guard(space)
+            if decision.action == "block":
+                raise {
+                    "department_space_forbidden": DepartmentSpaceDeleteForbiddenError,
+                    "target_not_found": FreeSpaceMigrationTargetNotFoundError,
+                    "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
+                    "migrating": FreeSpaceMigratingError,
+                }.get(decision.reason, DepartmentSpaceDeleteForbiddenError)()
+            if decision.action == "migrate":
+                await KnowledgeDao.async_update_state(
+                    knowledge_id=space_id, state=KnowledgeState.COPYING,
+                )
+                space_migrate_celery.delay({
+                    "source_id": space_id,
+                    "target_id": decision.target_space_id,
+                    "op_user_id": self.login_user.user_id,
+                })
+                return
+            # decision.action == "normal_delete" → 继续原清理逻辑
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
