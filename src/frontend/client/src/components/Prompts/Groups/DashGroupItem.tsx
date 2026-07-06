@@ -7,6 +7,7 @@ import { Input, Label, Button, OGDialog, OGDialogTrigger } from '~/components/ui
 import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useAuthContext } from '~/hooks';
+import { useConfirm } from '~/Providers';
 import { TrashIcon } from '~/components/svg';
 import { cn } from '~/utils/';
 
@@ -66,6 +67,20 @@ function DashGroupItemComponent({ group, instanceProjectId }: DashGroupItemProps
   const triggerDelete = useCallback(() => {
     deleteGroup.mutate({ id: group._id ?? '' });
   }, [group._id, deleteGroup]);
+
+  const confirm = useConfirm();
+  const handleDeleteClick = useCallback(async () => {
+    const ok = await confirm({
+      variant: 'destructive',
+      title: localize('com_ui_delete_prompt'),
+      description: `${localize('com_ui_delete_confirm')} "${group.name}"`,
+      confirmText: localize('com_ui_delete'),
+    });
+    if (!ok) {
+      return;
+    }
+    triggerDelete();
+  }, [confirm, localize, group.name, triggerDelete]);
 
   const handleContainerClick = useCallback(() => {
     navigate(`/d/prompts/${group._id}`, { replace: true });
@@ -138,38 +153,17 @@ function DashGroupItemComponent({ group, instanceProjectId }: DashGroupItemProps
                 />
               </OGDialog>
 
-              <OGDialog>
-                <OGDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="h-8 w-8 p-0 hover:bg-surface-hover"
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label={localize('com_ui_delete_prompt') + ' ' + group.name}
-                  >
-                    <TrashIcon className="icon-sm text-text-primary" aria-hidden="true" />
-                  </Button>
-                </OGDialogTrigger>
-                <OGDialogTemplate
-                  showCloseButton={false}
-                  title={localize('com_ui_delete_prompt')}
-                  className="w-11/12 max-w-lg"
-                  main={
-                    <div className="flex w-full flex-col items-center gap-2">
-                      <div className="grid w-full items-center gap-2">
-                        <Label htmlFor="confirm-delete" className="text-left text-sm font-medium">
-                          {localize('com_ui_delete_confirm')} <strong>{group.name}</strong>
-                        </Label>
-                      </div>
-                    </div>
-                  }
-                  selection={{
-                    selectHandler: triggerDelete,
-                    selectClasses:
-                      'bg-red-600 dark:bg-red-600 hover:bg-red-700 dark:hover:bg-red-800 text-white',
-                    selectText: localize('com_ui_delete'),
-                  }}
-                />
-              </OGDialog>
+              <Button
+                variant="ghost"
+                className="h-8 w-8 p-0 hover:bg-surface-hover"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick();
+                }}
+                aria-label={localize('com_ui_delete_prompt') + ' ' + group.name}
+              >
+                <TrashIcon className="icon-sm text-text-primary" aria-hidden="true" />
+              </Button>
             </>
           )}
         </div>

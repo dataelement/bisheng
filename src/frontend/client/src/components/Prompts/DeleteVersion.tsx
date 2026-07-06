@@ -1,6 +1,7 @@
 import { Trash2 } from 'lucide-react';
-import { Button, OGDialog, OGDialogTrigger, Label } from '~/components/ui';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import type { MouseEvent } from 'react';
+import { Button } from '~/components/ui';
+import { useConfirm } from '~/Providers';
 import { useLocalize } from '~/hooks';
 
 const DeleteVersion = ({
@@ -13,49 +14,33 @@ const DeleteVersion = ({
   selectHandler: () => void;
 }) => {
   const localize = useLocalize();
+  const confirm = useConfirm();
+
+  const handleClick = async (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const ok = await confirm({
+      variant: 'destructive',
+      title: localize('com_ui_delete_prompt'),
+      description: localize('com_ui_delete_confirm_prompt_version_var', { 0: name }),
+      confirmText: localize('com_ui_delete'),
+    });
+    if (!ok) {
+      return;
+    }
+    selectHandler();
+  };
 
   return (
-    <OGDialog>
-      <OGDialogTrigger asChild>
-        <Button
-          variant="destructive"
-          size="sm"
-          aria-label="Delete version"
-          className="h-10 w-10 p-0.5"
-          disabled={disabled}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <Trash2 className="size-5 cursor-pointer text-white" />
-        </Button>
-      </OGDialogTrigger>
-      <OGDialogTemplate
-        showCloseButton={false}
-        title={localize('com_ui_delete_prompt')}
-        className="max-w-[450px]"
-        main={
-          <>
-            <div className="flex w-full flex-col items-center gap-2">
-              <div className="grid w-full items-center gap-2">
-                <Label
-                  htmlFor="dialog-delete-confirm-prompt"
-                  className="text-left text-sm font-medium"
-                >
-                  {localize('com_ui_delete_confirm_prompt_version_var', { 0: name })}
-                </Label>
-              </div>
-            </div>
-          </>
-        }
-        selection={{
-          selectHandler,
-          selectClasses:
-            'bg-surface-destructive hover:bg-surface-destructive-hover transition-colors duration-200 text-white',
-          selectText: localize('com_ui_delete'),
-        }}
-      />
-    </OGDialog>
+    <Button
+      variant="destructive"
+      size="sm"
+      aria-label="Delete version"
+      className="h-10 w-10 p-0.5"
+      disabled={disabled}
+      onClick={handleClick}
+    >
+      <Trash2 className="size-5 cursor-pointer text-white" />
+    </Button>
   );
 };
 

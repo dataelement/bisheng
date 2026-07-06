@@ -109,8 +109,8 @@ export function ConfirmDialogSection() {
       subtitle={
         <>
           删除/危险操作时的「确认 / 取消」小弹窗。两套体系：旧页面走{' '}
-          <code>OGDialogTemplate selection</code>（剩 16 文件），新页面走 <code>useConfirm()</code>
-          （21 文件，含已迁入的 5 处）。<b>收敛第一步已完成</b>：B 套壳与按钮已对齐 C 套，历史 9 种 selectClasses
+          <code>OGDialogTemplate selection</code>（剩 14 文件），新页面走 <code>useConfirm()</code>
+          （24 文件，含已迁入的 8 处）。<b>收敛第一步已完成</b>：B 套壳与按钮已对齐 C 套，历史 9 种 selectClasses
           被自动折叠为 danger / primary 两档 —— 下方旧写法卡片现在应呈现统一外观，逐个打开即是验收。
           （另有 9 个文件手拼 <code>AlertDialog</code> —— 属于普通弹窗，归 Modal 改造范围，本期不动。）
         </>
@@ -126,7 +126,7 @@ export function ConfirmDialogSection() {
               <>
                 <code>OGDialogTemplate</code> + <code>selection</code>
               </>,
-              '16（原 21，迁移中）',
+              '14（原 21，迁移中）',
               '旧页面（会话/书签/Agent/设置/Prompt…LibreChat 血统）',
               '差 · 确认按钮 9 种写法',
             ],
@@ -135,7 +135,7 @@ export function ConfirmDialogSection() {
               <>
                 <code>useConfirm()</code>（ConfirmContext + AlertDialog）
               </>,
-              '21（收敛目标，含已迁入 5 处）',
+              '24（收敛目标，含已迁入 8 处）',
               '新页面（知识空间 / 订阅频道 / 权限）',
               '好 · 样式集中在一个文件，destructive/default 两档',
             ],
@@ -157,8 +157,8 @@ export function ConfirmDialogSection() {
             [
               '2',
               <code key="c">bg-red-600 hover:bg-red-700 dark:hover:bg-red-800</code>,
-              '删除（Agent / Assistant / Prompt 组）',
-              '3',
+              '删除（Agent / Assistant）· Prompt 组已迁 C',
+              '2（原 3）',
             ],
             [
               '3',
@@ -175,8 +175,8 @@ export function ConfirmDialogSection() {
             [
               '5',
               <code key="c">bg-surface-destructive hover:bg-surface-destructive-hover</code>,
-              '删除版本 / 管理员确认',
-              '2',
+              '删除版本 / 管理员确认 —— ✅ 已全部迁 C 套',
+              '0（原 2）',
             ],
             [
               '6',
@@ -267,20 +267,12 @@ export function ConfirmDialogSection() {
           selectClasses="bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white"
         />
         <ConfirmDemo
-          label="② red-600 系（3 处）"
+          label="② red-600 系（2 处，原 3）"
           note="删除 Agent — SidePanel/Agents/DeleteButton.tsx"
           title="删除助手"
           body="确定要删除这个助手吗？此操作不可撤销。"
           selectText="删除"
           selectClasses="bg-red-600 hover:bg-red-700 dark:hover:bg-red-800 text-white"
-        />
-        <ConfirmDemo
-          label="⑤ surface-destructive 系（2 处）"
-          note="删除版本 — Prompts/DeleteVersion.tsx"
-          title="删除版本"
-          body="确定要删除该 Prompt 版本吗？"
-          selectText="删除"
-          selectClasses="bg-surface-destructive hover:bg-surface-destructive-hover transition-colors duration-200 text-white"
         />
         <ConfirmDemo
           label="⑥ 绿色确认（2 处）"
