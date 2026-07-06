@@ -6794,10 +6794,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     @staticmethod
     def _hide_restricted_status_items(
-        items: List[KnowledgeFile],
+        items: list[KnowledgeFile],
         *,
-        owner_user_id: Optional[int],
-    ) -> List[KnowledgeFile]:
+        owner_user_id: int | None,
+    ) -> list[KnowledgeFile]:
         """Drop files whose status is restricted (parse-failed / timeout / violation)
         unless the current user uploaded them. Folders are never dropped here.
         Callers gate this on the viewer NOT being a space manager."""
