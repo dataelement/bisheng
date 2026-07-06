@@ -897,6 +897,11 @@ class PermissionService:
             logger.error('Error getting permission level: %s', e)
             return None
 
+    # OpenFGA's batch_check endpoint defaults to maxChecksPerBatchCheck=50.
+    # Each pending object contributes len(PermissionLevel) (4) checks, so
+    # 12 objects * 4 = 48 checks per call stays safely under that cap.
+    _LEVEL_CHECK_BATCH_SPACES = 12
+
     @classmethod
     async def get_permission_levels(
         cls,
@@ -945,20 +950,23 @@ class PermissionService:
                 return results
 
             levels = list(PermissionLevel)
-            checks = [
-                {'user': f'user:{user_id}', 'relation': level.value, 'object': f'{object_type}:{oid}'}
-                for oid in pending
-                for level in levels
-            ]
-            flat = await fga.batch_check(checks)
             unresolved: list[str] = []
-            for i, oid in enumerate(pending):
-                row = flat[i * len(levels):(i + 1) * len(levels)]
-                chosen = next((level.value for level, allowed in zip(levels, row) if allowed), None)
-                if chosen is not None:
-                    results[oid] = chosen
-                else:
-                    unresolved.append(oid)
+            batch_size = cls._LEVEL_CHECK_BATCH_SPACES
+            for start in range(0, len(pending), batch_size):
+                chunk = pending[start:start + batch_size]
+                checks = [
+                    {'user': f'user:{user_id}', 'relation': level.value, 'object': f'{object_type}:{oid}'}
+                    for oid in chunk
+                    for level in levels
+                ]
+                flat = await fga.batch_check(checks)
+                for i, oid in enumerate(chunk):
+                    row = flat[i * len(levels):(i + 1) * len(levels)]
+                    chosen = next((level.value for level, allowed in zip(levels, row) if allowed), None)
+                    if chosen is not None:
+                        results[oid] = chosen
+                    else:
+                        unresolved.append(oid)
 
             # legacy alias fallback (per object, merged per object_type)
             still_unresolved: list[str] = []
@@ -986,7 +994,7 @@ class PermissionService:
             results.update(dict(zip(still_unresolved, implicit)))
             return results
         except Exception as e:
-            logger.error('Batched permission-level check failed, falling back to per-object: %s', e)
+            logger.warning('Batched permission-level check failed, falling back to per-object: %s', e)
             fallback = await asyncio.gather(*[
                 cls.get_permission_level(
                     user_id=user_id, object_type=object_type, object_id=oid, login_user=login_user)

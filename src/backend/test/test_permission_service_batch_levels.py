@@ -126,6 +126,61 @@ async def test_get_permission_levels_falls_back_to_single_calls_on_batch_excepti
 
 
 @pytest.mark.asyncio
+async def test_get_permission_levels_chunks_at_batch_boundary():
+    """25 objects must cross the _LEVEL_CHECK_BATCH_SPACES=12 chunk boundary.
+
+    Guards against sending an un-chunked batch_check that exceeds OpenFGA's
+    default maxChecksPerBatchCheck=50 (13+ objects * 4 relations > 50).
+    """
+    login_user = _fake_login_user()
+    object_ids = [str(i) for i in range(1, 26)]  # 25 objects -> 3 chunks of <=12
+
+    # Cycle through owner / can_manage / can_edit / can_read / unresolved (None)
+    # so every outcome (including "no level") is exercised across the chunks.
+    levels_cycle = [
+        None,
+        PermissionLevel.owner.value,
+        PermissionLevel.can_manage.value,
+        PermissionLevel.can_edit.value,
+        PermissionLevel.can_read.value,
+    ]
+    expected = {oid: levels_cycle[int(oid) % len(levels_cycle)] for oid in object_ids}
+
+    def _batch_check(checks):
+        out = []
+        for c in checks:
+            oid = c['object'].split(':', 1)[1]
+            out.append(expected[oid] == c['relation'])
+        return out
+
+    fga = AsyncMock()
+    fga.batch_check.side_effect = lambda checks: _batch_check(checks)
+
+    with patch.object(PermissionService, '_aget_fga', new_callable=AsyncMock, return_value=fga), \
+         patch.object(PermissionService, '_evaluate_tenant_gate', new_callable=AsyncMock, return_value=(False, None)), \
+         patch.object(PermissionService, '_legacy_alias_object_types', new_callable=AsyncMock, return_value=[]), \
+         patch.object(PermissionService, '_get_implicit_permission_level_after_gate', new_callable=AsyncMock, return_value=None):
+
+        singles = {}
+        for oid in object_ids:
+            singles[oid] = await PermissionService.get_permission_level(
+                user_id=login_user.user_id, object_type='knowledge_space', object_id=oid, login_user=login_user)
+
+        fga.batch_check.reset_mock()
+
+        batched = await PermissionService.get_permission_levels(
+            user_id=login_user.user_id, object_type='knowledge_space', object_ids=object_ids, login_user=login_user)
+
+    assert batched == singles
+    assert batched == expected
+    # Chunking must have happened: more than one call, none of them oversized.
+    assert fga.batch_check.await_count >= 2
+    for call in fga.batch_check.await_args_list:
+        checks_arg = call.args[0] if call.args else call.kwargs['checks']
+        assert len(checks_arg) <= 48
+
+
+@pytest.mark.asyncio
 async def test_get_permission_levels_fga_none_uses_implicit_fallback():
     login_user = _fake_login_user()
     object_ids = ['1', '2', '3']
