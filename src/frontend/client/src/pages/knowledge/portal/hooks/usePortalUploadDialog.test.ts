@@ -3,6 +3,7 @@ import {
     FileStatus,
     FileType,
     addFilesApi,
+    checkSensitiveWordsApi,
     createFolderApi,
     getSimilarCandidatesApi,
     getSpaceTagsApi,
@@ -24,6 +25,7 @@ jest.mock("~/api/knowledge", () => ({
         PDF: "pdf",
     },
     addFilesApi: jest.fn(),
+    checkSensitiveWordsApi: jest.fn(),
     createFolderApi: jest.fn(),
     getSimilarCandidatesApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
@@ -63,6 +65,7 @@ function renderUploadDialogHook(overrides: Record<string, any> = {}) {
         currentFolderNode: null,
         currentPath: [],
         statusFilterNumbers: [],
+        businessDomainOptions: [{ code: "PP", name: "生产" }],
         reloadFiles: jest.fn().mockResolvedValue(undefined),
         showToast: jest.fn(),
         ...overrides,
@@ -75,6 +78,10 @@ describe("usePortalUploadDialog", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
+        jest.mocked(checkSensitiveWordsApi).mockResolvedValue({
+            has_violation: false,
+            violated_texts: [],
+        } as any);
         jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
         jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
@@ -461,10 +468,45 @@ describe("usePortalUploadDialog", () => {
         await waitFor(() => {
             expect(getSpaceTagsApi).toHaveBeenCalledWith("space-1");
             expect(hook.result.current.uploadTagOptions).toEqual([
-                { label: "已有标签", value: "id:1" },
-                { label: "制度", value: "id:2" },
-                { label: "技术文档", value: "id:3" },
+                { label: "已有标签", value: "name:已有标签" },
+                { label: "制度", value: "name:制度" },
+                { label: "技术文档", value: "name:技术文档" },
             ]);
+        });
+    });
+
+    test("passes tag-library upload selections as manual tag names", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 1, name: "已有标签", business_type: "tag_library" },
+        ] as any);
+        jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
+        const { hook } = renderUploadDialogHook();
+
+        act(() => {
+            hook.result.current.handleOpenUploadDialog();
+        });
+
+        await waitFor(() => {
+            expect(hook.result.current.uploadTagOptions).toEqual([
+                { label: "已有标签", value: "name:已有标签" },
+            ]);
+        });
+
+        act(() => {
+            (hook.result.current as any).handleToggleUploadTag?.("name:已有标签");
+            hook.result.current.handleAddUploadFiles([
+                new File(["report"], "报告.pdf", { type: "application/pdf" }),
+            ]);
+        });
+
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(addFilesApi).toHaveBeenCalledWith("space-1", {
+            file_path: ["/tmp/uploaded.pdf"],
+            parent_id: null,
+            manual_tag_names: ["已有标签"],
         });
     });
 });

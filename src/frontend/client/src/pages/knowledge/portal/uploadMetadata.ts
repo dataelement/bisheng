@@ -217,7 +217,8 @@ export function buildUploadTagOptions(
         const id = Number(tag.id);
         if (!name || !Number.isInteger(id) || id <= 0 || seenNames.has(name)) return;
         seenNames.add(name);
-        options.push({ label: name, value: `id:${id}` });
+        const value = tag.business_type === "tag_library" ? `name:${name}` : `id:${id}`;
+        options.push({ label: name, value });
     });
 
     commonTagNames.forEach((tagName) => {

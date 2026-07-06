@@ -364,6 +364,7 @@ class ShougangPortalFileSearchReq(BaseModel):
     business_domain_code: str | None = Field(
         default=None, max_length=16, description="Business domain code from file_encoding segment 3"
     )
+    recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
     sort: str = Field(
         default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc"
     )
@@ -436,6 +437,7 @@ class ShougangPortalQaFileSearchResp(BaseModel):
 
 class ShougangPortalHomeSectionReq(BaseModel):
     tag: str
+    recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
     page_size: int = Field(default=6, ge=1, le=100)
 
 
