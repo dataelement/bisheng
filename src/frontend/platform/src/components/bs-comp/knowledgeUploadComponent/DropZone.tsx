@@ -56,7 +56,7 @@ export default function DropZone({ onDrop }) {
         }
     });
 
-    const mediaMaxSize = appConfig.uploadMediaMaxSize ?? 1;
+    const mediaMaxSize = appConfig.uploadMediaMaxSize ?? 1024;
     const formatText = appConfig.enableEtl4lm
         ? t('supportedFormatsWithImages', { maxSize: appConfig.uploadFileMaxSize, mediaMaxSize })
         : t('supportedFormatsWithoutImages', { maxSize: appConfig.uploadFileMaxSize, mediaMaxSize })

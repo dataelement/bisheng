@@ -9,6 +9,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.base import BaseService
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.upload_file_size import MEDIA_FILE_EXTENSIONS
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 from bisheng.utils import md5_hash
@@ -212,7 +213,8 @@ class KnowledgeUtils(BaseService):
             return f"preview/{file_name_no_ext}.xlsx"
         elif file_ext in ["ppt", "pptx", "dps", "ofd"]:
             return f"preview/{file_name_no_ext}.pdf"
-        # No preview required for other file types
+        if file_ext in MEDIA_FILE_EXTENSIONS:
+            return f"preview/{file_name_no_ext}_transcript.md"
         return None
 
     @classmethod

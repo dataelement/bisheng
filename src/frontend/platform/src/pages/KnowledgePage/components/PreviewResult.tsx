@@ -14,6 +14,7 @@ import { useParams } from "react-router-dom";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
+import { buildMediaUploadPreviewData, isMediaUploadSuffix, type RichPreviewData } from "./RichPreviewFile";
 
 interface IProps {
   rules: any;
@@ -40,6 +41,7 @@ export default function PreviewResult({
   const [selectId, setSelectId] = useState(''); // 当前选择文件id
   const [syncChunksSelectId, setSelectIdSyncChunks] = useState(''); // 当前选择文件id(与chunk更新保持同步)
   const [etl, setEtl] = useState<string>('')
+  const [mediaPreviewData, setMediaPreviewData] = useState<RichPreviewData | null>(null)
   useEffect(() => {
     const file = rules.fileList[0]
     setSelectId(file.id)
@@ -74,6 +76,7 @@ export default function PreviewResult({
     }, 0);
     setFileViewUrl({ load: true, url: '' });
     setChunks([]);
+    setMediaPreviewData(null);
 
     // 合并配置（与原逻辑一致）
     const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule, splitMode, hierarchyLevel, appendTitle, maxChunkSize } = rules;
@@ -135,12 +138,22 @@ export default function PreviewResult({
             })));
             setSelectIdSyncChunks(selectId);
             setFileViewUrl({ load: false, url: data.file_url });
+            if (currentFile?.suffix && isMediaUploadSuffix(currentFile.suffix)) {
+              setMediaPreviewData(buildMediaUploadPreviewData(
+                currentFile.filePath,
+                data.file_url,
+                currentFile.suffix,
+              ));
+            } else {
+              setMediaPreviewData(null);
+            }
             setPartitions(data.partitions);
             setLoading(false);
             break;
           case 'error':
             // 解析错误：处理错误（对应原 error 回调逻辑）
             handlePreviewResult(false);
+            setMediaPreviewData(null);
             setFileViewUrl({ load: false, url: '' });
             setLoading(false);
             // 原错误处理逻辑：支持的文件类型显示原文件预览
@@ -209,6 +222,7 @@ export default function PreviewResult({
       chunks={chunks}
       setChunks={setChunks}
       partitions={partitions}
+      previewData={mediaPreviewData ?? undefined}
     />}
     <div className={cn('relative', "w-full")}>
       {/* 下拉框 - 右上角 */}
