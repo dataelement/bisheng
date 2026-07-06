@@ -186,3 +186,18 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
     ) -> Dict[int, int]:
         rows = await cls.aget_by_space_ids(space_ids)
         return {row.space_id: row.department_id for row in rows}
+
+    @classmethod
+    async def adelete_by_space_id(cls, space_id: int) -> bool:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(DepartmentKnowledgeSpace).where(
+                    DepartmentKnowledgeSpace.space_id == space_id,
+                )
+            )
+            row = result.first()
+            if row is None:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
