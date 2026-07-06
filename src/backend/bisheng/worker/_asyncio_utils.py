@@ -34,9 +34,10 @@ import contextvars
 import logging
 import os
 import threading
-from typing import Awaitable, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 _loop: asyncio.AbstractEventLoop | None = None
@@ -58,6 +59,14 @@ def get_worker_loop() -> asyncio.AbstractEventLoop:
                 daemon=True,
             )
             _loop_thread.start()
+            # Route run_async_safe (utils.async_utils) onto THIS loop too, so the
+            # worker has a single sync->async bridge loop. Two separate loops let an
+            # async singleton (e.g. the OpenFGA httpx client) bind to one loop and
+            # then break when driven from the other ("Future attached to a different
+            # loop") — see set_preferred_bridge_loop.
+            from bisheng.utils.async_utils import set_preferred_bridge_loop
+
+            set_preferred_bridge_loop(_loop)
             logger.debug("Celery async event-loop thread started (tid=%d)", _loop_thread.ident)
     return _loop
 

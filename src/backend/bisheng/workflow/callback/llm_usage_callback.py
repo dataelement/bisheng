@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.callbacks.base import AsyncCallbackHandler
 from langchain_core.outputs import LLMResult
@@ -44,6 +44,7 @@ from loguru import logger
 from bisheng.common.errcode.tenant_sharing import TenantContextMissingError
 from bisheng.llm.domain.services.call_logger import ModelCallLogger
 from bisheng.llm.domain.services.token_tracker import LLMTokenTracker
+from bisheng.utils.async_utils import run_on_bridge_loop
 
 
 class LLMUsageCallbackHandler(AsyncCallbackHandler):
@@ -53,17 +54,17 @@ class LLMUsageCallbackHandler(AsyncCallbackHandler):
         self,
         user_id: int,
         *,
-        model_id: Optional[int] = None,
-        server_id: Optional[int] = None,
-        session_id: Optional[str] = None,
-        endpoint: Optional[str] = None,
+        model_id: int | None = None,
+        server_id: int | None = None,
+        session_id: str | None = None,
+        endpoint: str | None = None,
     ) -> None:
         self.user_id = user_id
         self.model_id = model_id
         self.server_id = server_id
         self.session_id = session_id
         self.endpoint = endpoint
-        self._start_ts: Optional[float] = None
+        self._start_ts: float | None = None
 
     async def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
         self._start_ts = time.time()
@@ -78,65 +79,88 @@ class LLMUsageCallbackHandler(AsyncCallbackHandler):
         usage = _extract_token_usage(response)
         if usage is not None:
             prompt_tokens, completion_tokens, total_tokens = usage
-            tasks.append(('token', LLMTokenTracker.record_usage(
-                user_id=self.user_id,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                model_id=self.model_id,
-                server_id=self.server_id,
-                session_id=self.session_id,
-            )))
-        tasks.append(('call', ModelCallLogger.log_success(
-            user_id=self.user_id,
-            model_id=self.model_id,
-            server_id=self.server_id,
-            endpoint=self.endpoint,
-            latency_ms=latency_ms,
-        )))
-
-        results = await asyncio.gather(
-            *(t[1] for t in tasks), return_exceptions=True,
+            tasks.append(
+                (
+                    "token",
+                    LLMTokenTracker.record_usage(
+                        user_id=self.user_id,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        model_id=self.model_id,
+                        server_id=self.server_id,
+                        session_id=self.session_id,
+                    ),
+                )
+            )
+        tasks.append(
+            (
+                "call",
+                ModelCallLogger.log_success(
+                    user_id=self.user_id,
+                    model_id=self.model_id,
+                    server_id=self.server_id,
+                    endpoint=self.endpoint,
+                    latency_ms=latency_ms,
+                ),
+            )
         )
+
+        # Hop the DB writes onto the shared worker bridge loop. This callback may
+        # run on a throwaway loop (LangChain drives async callbacks via a per-batch
+        # asyncio.Runner when the surrounding invoke is sync), and writing to the
+        # process-global async DB engine from a loop that then closes poisons the
+        # shared pool for later callers ("Future attached to a different loop").
+        async def _write_rows() -> list:
+            return await asyncio.gather(*(t[1] for t in tasks), return_exceptions=True)
+
+        results = await run_on_bridge_loop(_write_rows())
         for (label, _), result in zip(tasks, results):
             if isinstance(result, TenantContextMissingError):
                 logger.warning(
-                    '[F017] LLMUsageCallbackHandler: tenant context missing on_llm_end '
-                    '(user_id=%s model_id=%s) — %s row NOT written',
-                    self.user_id, self.model_id, label,
+                    "[F017] LLMUsageCallbackHandler: tenant context missing on_llm_end "
+                    "(user_id=%s model_id=%s) — %s row NOT written",
+                    self.user_id,
+                    self.model_id,
+                    label,
                 )
             elif isinstance(result, Exception):  # pragma: no cover
                 logger.warning(
-                    '[F017] on_llm_end %s write failed: %s', label, result,
+                    "[F017] on_llm_end %s write failed: %s",
+                    label,
+                    result,
                 )
 
     async def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         latency_ms = self._elapsed_ms()
         try:
-            await ModelCallLogger.log_error(
-                user_id=self.user_id,
-                error_msg=str(error),
-                model_id=self.model_id,
-                server_id=self.server_id,
-                endpoint=self.endpoint,
-                latency_ms=latency_ms,
+            await run_on_bridge_loop(
+                ModelCallLogger.log_error(
+                    user_id=self.user_id,
+                    error_msg=str(error),
+                    model_id=self.model_id,
+                    server_id=self.server_id,
+                    endpoint=self.endpoint,
+                    latency_ms=latency_ms,
+                )
             )
         except TenantContextMissingError:
             logger.warning(
-                '[F017] LLMUsageCallbackHandler: tenant context missing on_llm_error '
-                '(user_id=%s model_id=%s) — error row NOT written',
-                self.user_id, self.model_id,
+                "[F017] LLMUsageCallbackHandler: tenant context missing on_llm_error "
+                "(user_id=%s model_id=%s) — error row NOT written",
+                self.user_id,
+                self.model_id,
             )
         except Exception as e:  # pragma: no cover
-            logger.warning('[F017] ModelCallLogger.log_error failed: %s', e)
+            logger.warning("[F017] ModelCallLogger.log_error failed: %s", e)
 
-    def _elapsed_ms(self) -> Optional[int]:
+    def _elapsed_ms(self) -> int | None:
         if self._start_ts is None:
             return None
         return int((time.time() - self._start_ts) * 1000)
 
 
-def _extract_token_usage(response: LLMResult) -> Optional[tuple[int, int, int]]:
+def _extract_token_usage(response: LLMResult) -> tuple[int, int, int] | None:
     """Pull ``(prompt, completion, total)`` from a LangChain ``LLMResult``.
 
     Providers vary on field names and on where they stuff the usage dict;
@@ -145,16 +169,16 @@ def _extract_token_usage(response: LLMResult) -> Optional[tuple[int, int, int]]:
     rather than writing zeroes, because zero-token rows would distort
     F016's monthly quota sum.
     """
-    output = getattr(response, 'llm_output', None) or {}
-    usage = output.get('token_usage') if isinstance(output, dict) else None
+    output = getattr(response, "llm_output", None) or {}
+    usage = output.get("token_usage") if isinstance(output, dict) else None
     if not isinstance(usage, dict):
-        usage = output.get('usage') if isinstance(output, dict) else None
+        usage = output.get("usage") if isinstance(output, dict) else None
     if not isinstance(usage, dict):
         return None
 
-    prompt = usage.get('prompt_tokens') or usage.get('input_tokens') or 0
-    completion = usage.get('completion_tokens') or usage.get('output_tokens') or 0
-    total = usage.get('total_tokens')
+    prompt = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+    completion = usage.get("completion_tokens") or usage.get("output_tokens") or 0
+    total = usage.get("total_tokens")
     try:
         prompt_int = int(prompt)
         completion_int = int(completion)
