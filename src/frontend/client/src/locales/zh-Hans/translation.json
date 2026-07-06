@@ -1679,6 +1679,12 @@
       "batch_select_all": "全选",
       "batch_right_hint": "勾选左侧文件后,点击「不关联」批量处理。",
       "toast_batch_dismiss_success": "已批量处理 {{count}} 个文件",
+      "btn_view": "查看",
+      "compare_preview_title": "文件对比预览",
+      "compare_current_file": "当前文件",
+      "compare_associated_file": "关联文件",
+      "preview_load_failed": "预览加载失败",
+      "preview_unavailable": "该文件暂不支持预览",
       "btn_close": "关闭"
     },
     "move": "移动",

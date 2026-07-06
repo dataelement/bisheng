@@ -1751,6 +1751,12 @@
       "batch_select_all": "Select all",
       "batch_right_hint": "Select files on the left, then click Don't link to process them in batch.",
       "toast_batch_dismiss_success": "Processed {{count}} files",
+      "btn_view": "View",
+      "compare_preview_title": "Compare files",
+      "compare_current_file": "Current file",
+      "compare_associated_file": "Associated file",
+      "preview_load_failed": "Failed to load preview",
+      "preview_unavailable": "This file can't be previewed",
       "btn_close": "Close"
     },
     "move": "Move",

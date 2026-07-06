@@ -206,6 +206,7 @@ class KnowledgeVersionService:
                     current_primary_version_no=primary_v.version_no,
                     primary_uploader_name=kf.user_name,
                     primary_upload_time=kf.create_time,
+                    primary_knowledge_file_id=int(primary_v.knowledge_file_id),
                 )
             )
         return out
@@ -649,6 +650,7 @@ class KnowledgeVersionService:
                     refined_similarity=(float(row.refined_similarity) if row.refined_similarity is not None else None),
                     primary_uploader_name=getattr(candidate, "user_name", None),
                     primary_upload_time=getattr(candidate, "create_time", None),
+                    primary_knowledge_file_id=int(candidate.id),
                 )
             )
         return out
@@ -839,6 +841,7 @@ class KnowledgeVersionService:
                     current_primary_version_no=primary_v.version_no,
                     primary_uploader_name=kf.user_name,
                     primary_upload_time=kf.create_time,
+                    primary_knowledge_file_id=int(primary_v.knowledge_file_id),
                 )
             )
         return out
@@ -1403,6 +1406,7 @@ class KnowledgeVersionService:
                     similarity=sim,
                     primary_uploader_name=getattr(candidate, "user_name", None),
                     primary_upload_time=getattr(candidate, "create_time", None),
+                    primary_knowledge_file_id=int(candidate.id),
                 )
             )
         return out
@@ -1471,6 +1475,7 @@ class KnowledgeVersionService:
                     similarity=sim,
                     primary_uploader_name=getattr(candidate, "user_name", None),
                     primary_upload_time=getattr(candidate, "create_time", None),
+                    primary_knowledge_file_id=int(candidate.id),
                 )
             )
         return out

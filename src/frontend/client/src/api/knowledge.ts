@@ -2696,6 +2696,7 @@ export interface SearchableDocumentEntry {
     current_primary_version_no: number;
     primary_uploader_name?: string | null;
     primary_upload_time?: string | null;
+    primary_knowledge_file_id: number; // primary version's file id, used for preview
 }
 
 /**
@@ -2725,6 +2726,7 @@ export interface SimilarCandidateEntry {
     refined_similarity?: number; // TF-IDF cosine; preferred for display when present
     primary_uploader_name?: string;
     primary_upload_time?: string;
+    primary_knowledge_file_id: number; // primary version's file id, used for preview
 }
 
 /**

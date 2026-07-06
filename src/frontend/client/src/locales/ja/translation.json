@@ -1670,6 +1670,12 @@
       "batch_select_all": "すべて選択",
       "batch_right_hint": "左側のファイルにチェックを入れ、「関連付けない」をクリックして一括処理します。",
       "toast_batch_dismiss_success": "{{count}} 件のファイルを処理しました",
+      "btn_view": "プレビュー",
+      "compare_preview_title": "ファイル比較プレビュー",
+      "compare_current_file": "現在のファイル",
+      "compare_associated_file": "関連ファイル",
+      "preview_load_failed": "プレビューの読み込みに失敗しました",
+      "preview_unavailable": "このファイルはプレビューできません",
       "btn_close": "閉じる"
     },
     "move": "移動",
