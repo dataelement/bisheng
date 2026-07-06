@@ -158,6 +158,7 @@ async def get_knowledge_space_chat_service(
 
 async def get_knowledge_version_service(
     request: Request,
+    session: AsyncSession = Depends(get_db_session),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
@@ -169,7 +170,7 @@ async def get_knowledge_version_service(
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
-    return KnowledgeVersionService(
+    service = KnowledgeVersionService(
         request=request,
         login_user=login_user,
         doc_repo=doc_repo,
@@ -177,3 +178,6 @@ async def get_knowledge_version_service(
         knowledge_file_repo=knowledge_file_repo,
         similar_candidate_repo=similar_candidate_repo,
     )
+    # 版本关联变更时给收藏了受影响文件的用户发站内信，需要 message_service。
+    service.message_service = await _get_message_service(session)
+    return service

@@ -765,6 +765,44 @@ class KnowledgeFileDao(KnowledgeFileBase):
             rows = (await session.exec(statement)).all()
         return rows, int(total)
 
+    @staticmethod
+    def _match_favorite_referrer(row, source_file_id: int) -> bool:
+        """判断一条引用记录是否收藏了指定源文件。
+
+        引用记录的 user_metadata 形如 {"favorite_reference": {"source_space_id": .., "source_file_id": ..}}。
+        source_file_id 以 JSON 存储、可能为 str/int，这里统一转 int 比较。
+        """
+        meta = (getattr(row, "user_metadata", None) or {}).get("favorite_reference") or {}
+        try:
+            return int(meta.get("source_file_id") or 0) == int(source_file_id)
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
+    async def aget_favorite_referrers(cls, source_file_id: int) -> List[KnowledgeFile]:
+        """反查：找出所有『收藏了指定源文件』的引用记录（跨用户、跨收藏库）。
+
+        返回 file_source=='favorite_reference' 且
+        user_metadata.favorite_reference.source_file_id == source_file_id 的记录。
+        每条记录携带 user_id（收藏者）与 knowledge_id（该收藏者自己的收藏库 id），
+        供源文件变更时向收藏者发送站内信 + 跳转到其收藏库。
+
+        收藏引用量小，采用「SQL 过滤 file_source + Python 过滤 JSON」的跨方言稳妥实现，
+        避免依赖各数据库对 JSON 函数的差异（MySQL / 达梦）。
+        """
+        try:
+            fid = int(source_file_id)
+        except (TypeError, ValueError):
+            return []
+        if fid <= 0:
+            return []
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.file_source == 'favorite_reference'
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return [row for row in rows if cls._match_favorite_referrer(row, fid)]
+
     @classmethod
     async def acount_by_file_encoding(cls, file_encoding: str, exclude_id: Optional[int] = None) -> int:
         cleaned = (file_encoding or '').strip()

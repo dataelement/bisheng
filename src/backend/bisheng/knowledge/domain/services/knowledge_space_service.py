@@ -178,6 +178,13 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
+from bisheng.knowledge.domain.services.favorite_notify import (
+    FAVORITE_SOURCE_CLASSIFICATION_UPDATED,
+    FAVORITE_SOURCE_MOVED,
+    FAVORITE_SOURCE_RENAMED,
+    FAVORITE_SOURCE_TAGS_UPDATED,
+    notify_favorite_source_changed,
+)
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.domain.services.web_link_import_service import (
@@ -5898,6 +5905,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id,
             )
 
+    async def _notify_favorite_source_changed(
+        self,
+        *,
+        source_file_id: int,
+        file_name: str,
+        action_code: str,
+    ) -> None:
+        """源文件（被收藏的文件）发生变更时，给收藏了它的用户发站内信。
+
+        薄封装：编辑者=当前登录用户，具体反查/逐人发送/best-effort 交给共享 helper。
+        """
+        await notify_favorite_source_changed(
+            self.message_service,
+            source_file_id=source_file_id,
+            file_name=file_name,
+            action_code=action_code,
+            actor_user_id=self.login_user.user_id,
+            actor_user_name=getattr(self.login_user, "user_name", None),
+        )
+
     @staticmethod
     async def _user_can_manage_space(user_id: int, space_id: int) -> bool:
         return await PermissionService.check(
@@ -7473,6 +7500,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if next_file_level_path != old_file_level_path:
             await self.update_folder_update_time(next_file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        if next_file_level_path != old_file_level_path:
+            await self._notify_favorite_source_changed(
+                source_file_id=file_id,
+                file_name=updated_file.file_name,
+                action_code=FAVORITE_SOURCE_MOVED,
+            )
         return KnowledgeSpaceFileResponse(**updated_file.model_dump())
 
     async def move_folder(
@@ -8118,6 +8151,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_record.file_source == FileSource.WEB_LINK.value:
             new_name = self._normalize_web_link_file_name(new_name)
 
+        old_name = file_record.file_name
         old_suffix = file_record.file_name.rsplit(".", 1)[-1] if "." in file_record.file_name else ""
         new_suffix = new_name.rsplit(".", 1)[-1] if "." in new_name else ""
         if old_suffix != new_suffix:
@@ -8141,6 +8175,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+        if (old_name or "") != (updated_file.file_name or ""):
+            await self._notify_favorite_source_changed(
+                source_file_id=file_id,
+                file_name=updated_file.file_name,
+                action_code=FAVORITE_SOURCE_RENAMED,
+            )
         return updated_file
 
     async def update_file_encoding(
@@ -8170,10 +8210,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
             raise SpaceFileEncodingDuplicateError()
 
+        old_encoding = file_record.file_encoding
         file_record.file_encoding = cleaned
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
-        return await KnowledgeFileDao.async_update(file_record)
+        updated_file = await KnowledgeFileDao.async_update(file_record)
+        if (old_encoding or "") != cleaned:
+            await self._notify_favorite_source_changed(
+                source_file_id=file_id,
+                file_name=updated_file.file_name,
+                action_code=FAVORITE_SOURCE_CLASSIFICATION_UPDATED,
+            )
+        return updated_file
 
     async def _cascade_version_links_on_delete(self, file_ids: list[int]) -> list[int]:
         """Resolve version-chain cleanup before hard-deleting KnowledgeFile rows.
@@ -8509,7 +8557,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int], review_tag_ids: list[int]):
         """2：支持对单文件的标签管理: Overwrite tags for a single file."""
-        await self._get_file_for_action(file_id, space_id=space_id)
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=space_id)
 
         resource_id = str(file_id)
@@ -8532,6 +8580,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             tenant_id=tenant_id,
         )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        await self._notify_favorite_source_changed(
+            source_file_id=file_id,
+            file_name=file_record.file_name,
+            action_code=FAVORITE_SOURCE_TAGS_UPDATED,
+        )
 
     async def batch_add_file_tags(
         self, space_id: int, file_ids: list[int], tag_ids: list[int], review_tag_ids: list[int]
@@ -8568,6 +8621,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        for notified_file in files:
+            await self._notify_favorite_source_changed(
+                source_file_id=int(notified_file.id),
+                file_name=notified_file.file_name,
+                action_code=FAVORITE_SOURCE_TAGS_UPDATED,
+            )
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """

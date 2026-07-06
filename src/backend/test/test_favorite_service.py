@@ -262,3 +262,62 @@ async def test_list_marks_valid_when_source_exists():
                new=AsyncMock(return_value=src)):
         resp = await svc.list_shougang_portal_favorites(page=1, page_size=20)
         assert resp.data[0].status == "valid"
+
+
+# ── rename_file → 收藏变更站内信接线 ─────────────────────────────────────────
+
+def _svc_for_rename(user_id=7):
+    from types import SimpleNamespace
+    svc = KnowledgeSpaceService.__new__(KnowledgeSpaceService)
+    svc.login_user = SimpleNamespace(user_id=user_id, user_name="u", tenant_id=1)
+    svc.request = None
+    svc.message_service = object()
+    return svc
+
+
+async def _drive_rename(svc, old_name, new_name):
+    """驱动 rename_file，屏蔽其重型依赖，只关心是否触发收藏站内信。"""
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from bisheng.knowledge.domain.services import knowledge_space_service as kss
+
+    file_record = SimpleNamespace(
+        file_name=old_name, file_source="space_upload", knowledge_id=55,
+        file_level_path="", user_metadata=None, updater_id=None, updater_name=None,
+        status=None,
+    )
+    # rename_file 内部 `from bisheng.worker... import rebuild_knowledge_file_chunk`——用桩替掉避免副作用
+    fake_worker = MagicMock()
+    with patch.dict(sys.modules, {"bisheng.worker.knowledge.rebuild_knowledge_worker": fake_worker}), \
+         patch.object(KnowledgeSpaceService, "_get_file_for_action", new=AsyncMock(return_value=file_record)), \
+         patch.object(KnowledgeSpaceService, "_require_permission_id", new=AsyncMock()), \
+         patch.object(KnowledgeSpaceService, "_ensure_space_async_task_tenant_consistency", new=MagicMock()), \
+         patch.object(KnowledgeSpaceService, "_check_filename_sensitive_words", new=MagicMock()), \
+         patch.object(KnowledgeSpaceService, "update_folder_update_time", new=AsyncMock()), \
+         patch.object(KnowledgeSpaceService, "_notify_favorite_source_changed", new=AsyncMock()) as notify, \
+         patch.object(kss.KnowledgeDao, "aquery_by_id", new=AsyncMock(return_value=SimpleNamespace(id=55))), \
+         patch.object(kss.KnowledgeDao, "async_update_knowledge_update_time_by_id", new=AsyncMock()), \
+         patch.object(kss.SpaceFileDao, "count_file_by_name", new=AsyncMock(return_value=0)), \
+         patch.object(kss.KnowledgeFileDao, "async_update", new=AsyncMock(side_effect=lambda r: r)), \
+         patch.object(kss.KnowledgeSpaceContentStat, "enqueue_file_stat_async", new=AsyncMock()):
+        await svc.rename_file(file_id=321, new_name=new_name)
+        return notify
+
+
+@pytest.mark.asyncio
+async def test_rename_file_notifies_when_name_changed():
+    from bisheng.knowledge.domain.services.favorite_notify import FAVORITE_SOURCE_RENAMED
+    svc = _svc_for_rename()
+    notify = await _drive_rename(svc, "old.pdf", "new.pdf")
+    notify.assert_awaited_once()
+    assert notify.await_args.kwargs["action_code"] == FAVORITE_SOURCE_RENAMED
+    assert notify.await_args.kwargs["source_file_id"] == 321
+    assert notify.await_args.kwargs["file_name"] == "new.pdf"
+
+
+@pytest.mark.asyncio
+async def test_rename_file_no_notify_when_name_unchanged():
+    svc = _svc_for_rename()
+    notify = await _drive_rename(svc, "same.pdf", "same.pdf")
+    notify.assert_not_awaited()
