@@ -2523,6 +2523,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return adopted_again
             raise
 
+    def personal_default_space_name(self) -> str:
+        return f"{self.login_user.user_name}的知识库"
+
+    async def _find_personal_default_space(self) -> Optional[Knowledge]:
+        return await KnowledgeDao.async_get_personal_space_by_owner_name(
+            owner_id=self.login_user.user_id,
+            name=self.personal_default_space_name(),
+        )
+
+    async def _ensure_personal_default_space(self) -> Knowledge:
+        """懒创建、按名幂等：已有同名个人默认库→返回；否则创建；并发/撞名兜底回查。"""
+        existing = await self._find_personal_default_space()
+        if existing:
+            return existing
+        try:
+            return await self.create_knowledge_space(
+                name=self.personal_default_space_name(),
+                description="个人默认知识库",
+                space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                skip_user_limit=True,
+                system_managed=True,
+            )
+        except Exception:
+            again = await self._find_personal_default_space()
+            if again:
+                return again
+            raise
+
+    async def _ensure_personal_spaces(self) -> None:
+        """首次访问个人分组时，确保 我的收藏 + {用户名}的知识库 均存在。"""
+        await self._ensure_favorite_space()
+        await self._ensure_personal_default_space()
+
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
         return {"favorite_reference": {"source_space_id": int(source_space_id), "source_file_id": int(source_file_id)}}
