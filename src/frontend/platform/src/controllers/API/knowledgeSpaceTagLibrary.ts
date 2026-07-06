@@ -151,6 +151,7 @@ export interface ReviewTagPage {
 export async function getKnowledgeSpaceReviewTagListApi(params: {
   page: number
   page_size: number
+  keyword?: string
 }): Promise<ReviewTagPage> {
   return await axios.post("/api/v1/workstation/tags/list_review", params)
 }

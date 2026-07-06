@@ -1063,6 +1063,7 @@
     "tagLibraryLimit": "单个标签库最多 200 个标签",
     "autoTagGenerationTitle": "待审核标签",
     "autoTagGenerationDesc": "审核AI打标推荐、词表中尚不存在的标签名；采纳后写入词表并挂到对应知识。",
+    "searchReviewTag": "搜索待审核标签",
     "reviewTagName": "建议标签",
     "reviewTagSource": "标签来源",
     "fileResource": "文件来源",

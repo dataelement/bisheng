@@ -1057,6 +1057,7 @@
     "tagLibraryLimit": "タグライブラリには最大200個のタグを設定できます",
     "autoTagGenerationTitle": "審査待ちタグ",
     "autoTagGenerationDesc": "AI が推薦した、語彙にまだ存在しないタグ名を審査します。承認後、タグライブラリに追加され、対応するナレッジに紐づけられます。",
+    "searchReviewTag": "審査待ちタグを検索",
     "reviewTagName": "推奨タグ",
     "reviewTagSource": "タグソース",
     "fileResource": "ファイルソース",
