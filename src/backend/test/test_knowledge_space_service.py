@@ -7940,3 +7940,21 @@ def test_hide_restricted_status_items_member_view():
     kept_ids = {f.id for f in kept}
 
     assert kept_ids == {1, 2, 3, 7}
+
+
+@pytest.mark.asyncio
+async def test_space_user_can_view_all_statuses_true_for_manager(service):
+    with patch.object(
+        service, '_get_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_space', 'manage_space_relation'},
+    ):
+        assert await service._space_user_can_view_all_statuses(1) is True
+
+
+@pytest.mark.asyncio
+async def test_space_user_can_view_all_statuses_false_for_member(service):
+    with patch.object(
+        service, '_get_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_space', 'upload_file'},
+    ):
+        assert await service._space_user_can_view_all_statuses(1) is False

@@ -1843,6 +1843,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         return effective_permissions
 
+    async def _space_user_can_view_all_statuses(self, space_id: int) -> bool:
+        """Managers (owner / can_manage, incl. global admin & space creator) see
+        files in any status; regular members only see restricted-status files
+        (parse-failed / timeout / violation) they uploaded themselves."""
+        space_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
+        return "manage_space_relation" in space_permissions
+
     async def _build_child_permission_context(self, space_id: int) -> dict:
         user_subject_strings = await self._get_current_user_subject_strings()
         bindings = await self._get_relation_bindings()
@@ -1850,6 +1857,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         models = await self._get_relation_models_map()
         membership_permission_ids = await self._membership_permission_ids(space_id)
         public_space_permission_ids = await self._public_space_viewer_permission_ids([("knowledge_space", space_id)])
+        can_view_all_statuses = await self._space_user_can_view_all_statuses(space_id)
         return {
             "models": models,
             "bindings": bindings,
@@ -1857,6 +1865,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "user_subject_strings": user_subject_strings,
             "membership_permission_ids": membership_permission_ids,
             "public_space_permission_ids": public_space_permission_ids,
+            "can_view_all_statuses": can_view_all_statuses,
             "tuple_cache": {},
             "tuple_department_paths": {},
         }
