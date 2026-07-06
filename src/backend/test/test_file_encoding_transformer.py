@@ -1,4 +1,5 @@
 """Unit tests for FileEncodingTransformer pure logic."""
+
 import json
 from datetime import datetime
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ import pytest
 
 import bisheng.knowledge.rag.pipeline.transformer.file_encoding as _enc_mod
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import (
+    FileSubcategoryOption,
     FileEncodingTransformer,
     VALID_PATTERN,
     FALLBACK,
@@ -37,7 +39,9 @@ def test_fallback_value():
 
 def test_compose_encoding_pads_seq():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x.pdf",
+        id=1,
+        file_encoding=None,
+        file_name="x.pdf",
         abstract="some abstract",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15, 10, 0, 0),
@@ -50,8 +54,12 @@ def test_compose_encoding_pads_seq():
 
 def test_seq_capped_at_99999999():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x.pdf",
-        abstract="x", knowledge_id=10, create_time=datetime(2026, 4, 15),
+        id=1,
+        file_encoding=None,
+        file_name="x.pdf",
+        abstract="x",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     assert t._cap_seq(0) == 1
@@ -68,8 +76,12 @@ def test_seq_cap_can_be_overridden_by_config():
 
 def test_encoding_config_uses_defaults_when_missing():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x.pdf",
-        abstract="x", knowledge_id=10, create_time=datetime(2026, 4, 15),
+        id=1,
+        file_encoding=None,
+        file_name="x.pdf",
+        abstract="x",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
 
@@ -84,8 +96,12 @@ def test_encoding_config_uses_defaults_when_missing():
 
 def test_encoding_config_accepts_custom_prompt_template_pattern_fallback_and_seq_cap():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="视频处理.pdf",
-        abstract="任务服务设计", knowledge_id=10, create_time=datetime(2026, 4, 15),
+        id=1,
+        file_encoding=None,
+        file_name="视频处理.pdf",
+        abstract="任务服务设计",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     raw_config = SimpleNamespace(
@@ -113,8 +129,12 @@ def test_encoding_config_accepts_custom_prompt_template_pattern_fallback_and_seq
 
 def test_encoding_config_falls_back_per_invalid_field():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x.pdf",
-        abstract="x", knowledge_id=10, create_time=datetime(2026, 4, 15),
+        id=1,
+        file_encoding=None,
+        file_name="x.pdf",
+        abstract="x",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     raw_config = SimpleNamespace(
@@ -139,8 +159,12 @@ def test_encoding_config_falls_back_per_invalid_field():
 
 def test_encoding_config_restricts_business_domain_fallback_to_bound_codes():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x.pdf",
-        abstract="x", knowledge_id=10, create_time=datetime(2026, 4, 15),
+        id=1,
+        file_encoding=None,
+        file_name="x.pdf",
+        abstract="x",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
 
@@ -153,7 +177,10 @@ def test_encoding_config_restricts_business_domain_fallback_to_bound_codes():
 
 def test_month_window():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15, 10, 30, 0),
     )
@@ -165,7 +192,10 @@ def test_month_window():
 
 def test_month_window_december_rolls_over():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 12, 31, 23, 59, 59),
     )
@@ -176,18 +206,89 @@ def test_month_window_december_rolls_over():
 
 
 @pytest.mark.asyncio
+async def test_classify_with_llm_uses_zero_temperature():
+    kf = SimpleNamespace(
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
+        knowledge_id=10,
+        tenant_id=1,
+        create_time=datetime(2026, 4, 15),
+    )
+    t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
+    config = t._resolve_encoding_config(SimpleNamespace(file_encoding=None))
+    fake_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=SimpleNamespace(content="STD-PP")))
+    fake_llm_conf = SimpleNamespace(chat_title_llm=SimpleNamespace(id=123))
+
+    with (
+        patch(
+            "bisheng.llm.domain.services.llm.LLMService.get_workbench_llm",
+            new=AsyncMock(return_value=fake_llm_conf),
+        ),
+        patch(
+            "bisheng.llm.domain.services.llm.LLMService.get_bisheng_llm",
+            new=AsyncMock(return_value=fake_llm),
+        ) as get_llm,
+    ):
+        assert await t._classify_with_llm(config) == "STD-PP"
+
+    assert get_llm.await_args.kwargs["temperature"] == 0
+
+
+@pytest.mark.asyncio
+async def test_select_subcategory_with_llm_uses_zero_temperature():
+    kf = SimpleNamespace(
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
+        knowledge_id=10,
+        tenant_id=1,
+        create_time=datetime(2026, 4, 15),
+    )
+    t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
+    options = (
+        FileSubcategoryOption(code="STD_A", label="标准 A", parent_code="STD", parent_label="标准规范"),
+        FileSubcategoryOption(code="STD_B", label="标准 B", parent_code="STD", parent_label="标准规范"),
+    )
+    fake_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=SimpleNamespace(content="STD_B")))
+    fake_llm_conf = SimpleNamespace(chat_title_llm=SimpleNamespace(id=123))
+
+    with (
+        patch(
+            "bisheng.llm.domain.services.llm.LLMService.get_workbench_llm",
+            new=AsyncMock(return_value=fake_llm_conf),
+        ),
+        patch(
+            "bisheng.llm.domain.services.llm.LLMService.get_bisheng_llm",
+            new=AsyncMock(return_value=fake_llm),
+        ) as get_llm,
+    ):
+        selected = await t._select_subcategory_with_llm(options)
+
+    assert selected == options[1]
+    assert get_llm.await_args.kwargs["temperature"] == 0
+
+
+@pytest.mark.asyncio
 async def test_do_work_uses_default_company_code_when_prefix_missing():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     fake_conf = SimpleNamespace(enabled=False, prefix=None)
     fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
-    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
-            patch.object(t, '_classify_with_llm', AsyncMock(return_value="STD-PP")), \
-            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+    with (
+        patch.object(_enc_mod, "bisheng_settings", fake_settings),
+        patch.object(t, "_classify_with_llm", AsyncMock(return_value="STD-PP")),
+        patch.object(t, "_compute_seq", AsyncMock(return_value=7)),
+    ):
         await t._do_work()
     assert kf.file_encoding == "SGGF-STD-PP-20260400000007"
 
@@ -195,7 +296,10 @@ async def test_do_work_uses_default_company_code_when_prefix_missing():
 @pytest.mark.asyncio
 async def test_do_work_uses_llm_classification_when_file_category_missing():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15),
         split_rule=None,
@@ -204,9 +308,11 @@ async def test_do_work_uses_llm_classification_when_file_category_missing():
     fake_conf = SimpleNamespace(enabled=True, prefix="SGGF", file_encoding=None)
     fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
     classifier = AsyncMock(return_value="RPT-QM")
-    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
-            patch.object(t, '_classify_with_llm', classifier), \
-            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+    with (
+        patch.object(_enc_mod, "bisheng_settings", fake_settings),
+        patch.object(t, "_classify_with_llm", classifier),
+        patch.object(t, "_compute_seq", AsyncMock(return_value=7)),
+    ):
         await t._do_work()
     classifier.assert_awaited_once()
     assert kf.file_encoding == "SGGF-RPT-QM-20260400000007"
@@ -215,7 +321,10 @@ async def test_do_work_uses_llm_classification_when_file_category_missing():
 @pytest.mark.asyncio
 async def test_do_work_uses_selected_document_type_from_split_rule():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15),
         split_rule=json.dumps({"file_category_code": "RPT"}),
@@ -223,9 +332,11 @@ async def test_do_work_uses_selected_document_type_from_split_rule():
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     fake_conf = SimpleNamespace(enabled=True, prefix="SGGF", file_encoding=None)
     fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
-    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
-            patch.object(t, '_classify_with_llm', AsyncMock(return_value="STD-PP")), \
-            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+    with (
+        patch.object(_enc_mod, "bisheng_settings", fake_settings),
+        patch.object(t, "_classify_with_llm", AsyncMock(return_value="STD-PP")),
+        patch.object(t, "_compute_seq", AsyncMock(return_value=7)),
+    ):
         await t._do_work()
     assert kf.file_encoding == "SGGF-RPT-PP-20260400000007"
 
@@ -233,7 +344,10 @@ async def test_do_work_uses_selected_document_type_from_split_rule():
 @pytest.mark.asyncio
 async def test_do_work_uses_selected_business_domain_from_split_rule():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15),
         split_rule=json.dumps({"business_domain_code": "IT"}),
@@ -241,9 +355,11 @@ async def test_do_work_uses_selected_business_domain_from_split_rule():
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     fake_conf = SimpleNamespace(enabled=True, prefix="SGGF", file_encoding=None)
     fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
-    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
-            patch.object(t, '_classify_with_llm', AsyncMock(return_value="STD-PP")), \
-            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+    with (
+        patch.object(_enc_mod, "bisheng_settings", fake_settings),
+        patch.object(t, "_classify_with_llm", AsyncMock(return_value="STD-PP")),
+        patch.object(t, "_compute_seq", AsyncMock(return_value=7)),
+    ):
         await t._do_work()
     assert kf.file_encoding == "SGGF-STD-IT-20260400000007"
 
@@ -251,7 +367,10 @@ async def test_do_work_uses_selected_business_domain_from_split_rule():
 @pytest.mark.asyncio
 async def test_do_work_combines_selected_document_type_and_business_domain():
     kf = SimpleNamespace(
-        id=1, file_encoding=None, file_name="x", abstract="x",
+        id=1,
+        file_encoding=None,
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15),
         split_rule=json.dumps({"file_category_code": "RPT", "business_domain_code": "QM"}),
@@ -259,9 +378,11 @@ async def test_do_work_combines_selected_document_type_and_business_domain():
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     fake_conf = SimpleNamespace(enabled=True, prefix="SGGF", file_encoding=None)
     fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
-    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
-            patch.object(t, '_classify_with_llm', AsyncMock(return_value="STD-PP")), \
-            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+    with (
+        patch.object(_enc_mod, "bisheng_settings", fake_settings),
+        patch.object(t, "_classify_with_llm", AsyncMock(return_value="STD-PP")),
+        patch.object(t, "_compute_seq", AsyncMock(return_value=7)),
+    ):
         await t._do_work()
     assert kf.file_encoding == "SGGF-RPT-QM-20260400000007"
 
@@ -269,13 +390,16 @@ async def test_do_work_combines_selected_document_type_and_business_domain():
 @pytest.mark.asyncio
 async def test_do_work_skips_when_encoding_already_present():
     kf = SimpleNamespace(
-        id=1, file_encoding="GF-STD-SC-20260300000001", file_name="x", abstract="x",
+        id=1,
+        file_encoding="GF-STD-SC-20260300000001",
+        file_name="x",
+        abstract="x",
         knowledge_id=10,
         create_time=datetime(2026, 4, 15),
     )
     t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
     fake_conf = SimpleNamespace(enabled=True, prefix="GF")
     fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
-    with patch.object(_enc_mod, 'bisheng_settings', fake_settings):
+    with patch.object(_enc_mod, "bisheng_settings", fake_settings):
         await t._do_work()
     assert kf.file_encoding == "GF-STD-SC-20260300000001"

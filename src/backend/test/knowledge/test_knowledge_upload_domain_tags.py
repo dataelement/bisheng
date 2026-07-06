@@ -202,6 +202,73 @@ async def test_manual_upload_tags_resolve_create_link_and_mark_files(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_manual_upload_tag_library_ids_resolve_by_name(monkeypatch):
+    knowledge = Knowledge(
+        id=7,
+        tenant_id=3,
+        user_id=2,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+    )
+    login_user = SimpleNamespace(user_id=9, user_name="tester")
+    files = [KnowledgeFile(id=11, knowledge_id=7, file_name="a.txt", tenant_id=3)]
+    library_tag = Tag(
+        id=91,
+        name="典型案例",
+        business_type=TagBusinessTypeEnum.TAG_LIBRARY,
+        business_id="20",
+        tenant_id=3,
+    )
+    created_tag = Tag(
+        id=5,
+        name="典型案例",
+        business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+        business_id="7",
+    )
+    linked = []
+
+    async def fake_get_tags_by_ids(tag_ids):
+        assert tag_ids == [91]
+        return [library_tag]
+
+    async def fake_get_tags_by_business(**kwargs):
+        return []
+
+    async def fake_insert(tag):
+        assert tag.name == "典型案例"
+        assert tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE
+        assert tag.business_id == "7"
+        return created_tag
+
+    async def fake_add_tags(tag_ids, resource_id, resource_type, user_id):
+        linked.append((tag_ids, resource_id, resource_type, user_id))
+        return True
+
+    async def fake_update(file):
+        return file
+
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.aget_tags_by_ids", fake_get_tags_by_ids)
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.get_tags_by_business", fake_get_tags_by_business)
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.ainsert_tag", fake_insert)
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.add_tags", fake_add_tags)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.async_update",
+        fake_update,
+    )
+
+    applied_ids = await KnowledgeService.apply_manual_upload_tags(
+        login_user=login_user,
+        knowledge=knowledge,
+        files=files,
+        manual_tag_ids=[91],
+        manual_tag_names=[],
+    )
+
+    assert applied_ids == [5]
+    assert linked == [([5], "11", ResourceTypeEnum.SPACE_FILE, 9)]
+
+
+@pytest.mark.asyncio
 async def test_manual_upload_tags_enforce_file_tag_limit():
     knowledge = Knowledge(id=7, name="kb", type=KnowledgeTypeEnum.NORMAL.value)
     with pytest.raises(KnowledgeFileTagLimitError):

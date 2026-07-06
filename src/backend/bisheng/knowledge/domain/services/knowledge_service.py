@@ -232,16 +232,41 @@ class KnowledgeService(KnowledgeUtils):
         manual_tag_names: Optional[List[str]],
     ) -> List[int]:
         business_type, _ = cls._get_tag_scope(knowledge)
-        tag_ids = cls._deduplicate_tag_ids([int(tag_id) for tag_id in manual_tag_ids or []])
+        input_tag_ids = cls._deduplicate_tag_ids([int(tag_id) for tag_id in manual_tag_ids or []])
+        tag_ids: List[int] = []
         tag_names = cls._normalize_manual_tag_names(manual_tag_names)
-        if not tag_ids and not tag_names:
+        if not input_tag_ids and not tag_names:
             return []
+
+        if input_tag_ids:
+            input_tags = await TagDao.aget_tags_by_ids(input_tag_ids)
+            tags_by_id = {
+                int(tag.id): tag
+                for tag in input_tags
+                if tag.id is not None
+            }
+            if len(tags_by_id) != len(input_tag_ids):
+                raise KnowledgeTagNotExistError()
+
+            for tag_id in input_tag_ids:
+                tag = tags_by_id.get(tag_id)
+                if tag is None:
+                    raise KnowledgeTagNotExistError()
+                if tag.business_type == business_type and tag.business_id == str(knowledge.id):
+                    tag_ids.append(tag_id)
+                    continue
+                if tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY:
+                    tag_name = (tag.name or "").strip()
+                    if not tag_name:
+                        raise KnowledgeTagNotExistError()
+                    tag_names.append(tag_name)
+                    continue
+                raise KnowledgeTagNotExistError()
+
+            tag_names = cls._normalize_manual_tag_names(tag_names)
 
         if len(tag_ids) + len(tag_names) > MANUAL_UPLOAD_TAG_LIMIT:
             raise KnowledgeFileTagLimitError()
-
-        if tag_ids:
-            await cls._validate_knowledge_tag_ids(knowledge.id, tag_ids, knowledge)
 
         scope_tags = await TagDao.get_tags_by_business(
             business_type=business_type,
