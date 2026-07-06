@@ -2824,6 +2824,28 @@ export async function dismissSimilarApi(file_id: number): Promise<void> {
     );
 }
 
+/** Result of a batch dismiss-similar call. */
+export interface BatchDismissSimilarResponse {
+    dismissed_count: number;
+    knowledge_file_ids: number[];
+}
+
+/**
+ * Batch-dismiss the similar-file flag for multiple files (user chose not to link them).
+ * POST /api/v1/knowledge/space/file/batch-dismiss-similar
+ */
+export async function batchDismissSimilarApi(
+    file_ids: number[],
+): Promise<BatchDismissSimilarResponse> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/file/batch-dismiss-similar`,
+        { knowledge_file_ids: file_ids },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
+    ) as ApiResponse<BatchDismissSimilarResponse>;
+    return res.data;
+}
+
 /** 钢铁门户 - 我的收藏文件项 */
 export interface PortalFavoriteFile {
     favoriteFileId: string;

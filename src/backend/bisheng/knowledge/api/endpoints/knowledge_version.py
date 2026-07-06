@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.api.dependencies import get_knowledge_version_service
-from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkRequest, MergeRequest
+from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
+    BatchDismissSimilarRequest,
+    LinkRequest,
+    MergeRequest,
+)
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_version"])
@@ -90,6 +94,15 @@ async def dismiss_similar(
     svc: KnowledgeVersionService = Depends(get_knowledge_version_service),
 ) -> Any:
     data = await svc.dismiss_similar(knowledge_file_id)
+    return resp_200(data)
+
+
+@router.post("/file/batch-dismiss-similar")
+async def batch_dismiss_similar(
+    req: BatchDismissSimilarRequest,
+    svc: KnowledgeVersionService = Depends(get_knowledge_version_service),
+) -> Any:
+    data = await svc.batch_dismiss_similar(req.knowledge_file_ids)
     return resp_200(data)
 
 
