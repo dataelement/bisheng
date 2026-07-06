@@ -111,6 +111,7 @@ export function FileCard({
         renameValue,
         setRenameValue,
         inputRef,
+        ext,
         handleRenameSubmit,
         handleKeyDown,
         startRenaming,
@@ -211,16 +212,26 @@ export function FileCard({
         if (isRenaming) {
             return (
                 <div className="flex-1 min-w-0 pr-1">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={handleRenameSubmit}
-                        onKeyDown={handleKeyDown}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full h-6 px-1.5 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal"
-                    />
+                    <div className="flex items-center gap-1 min-w-0">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={handleRenameSubmit}
+                            onKeyDown={handleKeyDown}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 min-w-0 h-6 px-1.5 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal"
+                        />
+                        {ext && (
+                            <span
+                                data-testid="rename-ext-suffix"
+                                className="shrink-0 text-sm text-[#86909c] select-none"
+                            >
+                                {ext}
+                            </span>
+                        )}
+                    </div>
                 </div>
             );
         }
