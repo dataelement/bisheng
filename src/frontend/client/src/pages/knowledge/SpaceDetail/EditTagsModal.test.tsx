@@ -649,4 +649,68 @@ describe("EditTagsModal recommended tags", () => {
         });
         expect(screen.getByText("本地草稿")).toBeInTheDocument();
     });
+
+    it("preserves typed input when parent re-renders with a new initialTagIds array reference", async () => {
+        const user = userEvent.setup();
+        const tenTags = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            name: `标签${i + 1}`,
+            business_type: "tag_library" as const,
+            resource_type: "manual_tag" as const,
+        }));
+        jest.mocked(getSpaceTagsApi).mockResolvedValue(tenTags);
+
+        const createProps = () => ({
+            isOpen: true as const,
+            onClose: jest.fn(),
+            spaceId: "100",
+            fileId: "1",
+            initialTagIds: tenTags.map((t) => t.id),
+            initialTags: tenTags,
+        });
+
+        const { rerender } = render(<EditTagsModal {...createProps()} />);
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "新标签");
+        expect(input).toHaveValue("新标签");
+
+        rerender(<EditTagsModal {...createProps()} />);
+
+        expect(input).toHaveValue("新标签");
+    });
+
+    it("keeps input text when Enter is pressed at the 10-tag limit", async () => {
+        const user = userEvent.setup();
+        const tenTags = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            name: `标签${i + 1}`,
+            business_type: "tag_library" as const,
+            resource_type: "manual_tag" as const,
+        }));
+        jest.mocked(getSpaceTagsApi).mockResolvedValue(tenTags);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={tenTags.map((t) => t.id)}
+                initialTags={tenTags}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "第11个");
+        await user.keyboard("{Enter}");
+
+        expect(mockShowToast).toHaveBeenCalledWith({
+            message: "com_knowledge.tags_count_limit_exceeded",
+            status: "error",
+        });
+        expect(input).toHaveValue("第11个");
+    });
 });
