@@ -5255,16 +5255,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return str(tag.get("tag_name") or tag.get("name") or "")
         return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
-    async def delete_space(self, space_id: int) -> None:
+    async def delete_space(self, space_id: int, *, force: bool = False) -> None:
+        """Delete a knowledge space and all of its cascaded resources.
+
+        ``force=True`` is a system-maintenance bypass (used by the personal-space
+        cleanup script): it skips the 我的收藏/个人库 protection guards, skips the
+        caller permission check, and suppresses the per-owner "space deleted"
+        notification so a bulk cleanup does not spam users. It must never be
+        reachable from a user-facing API.
+        """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        if getattr(space, "is_favorite", False):
-            raise FavoriteSpaceProtectedError()
-        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
-        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
-            raise PersonalSpaceProtectedError()
-        await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        if not force:
+            if getattr(space, "is_favorite", False):
+                raise FavoriteSpaceProtectedError()
+            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+            if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+                raise PersonalSpaceProtectedError()
+            await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
@@ -5277,13 +5286,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
         await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
-        await self._send_space_event_notification(
-            action_code=SPACE_DELETED_MESSAGE,
-            receiver_user_ids=original_member_ids,
-            space_id=space_id,
-            space_name=space.name,
-            navigable=False,
-        )
+        if not force:
+            await self._send_space_event_notification(
+                action_code=SPACE_DELETED_MESSAGE,
+                receiver_user_ids=original_member_ids,
+                space_id=space_id,
+                space_name=space.name,
+                navigable=False,
+            )
 
         # Drop the private auto-tag library bound to this space (if any) so
         # we never leave orphan rows in knowledge_space_tag_library.

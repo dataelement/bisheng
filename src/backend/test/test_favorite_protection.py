@@ -39,6 +39,8 @@ async def test_delete_normal_space_not_blocked_by_favorite_guard():
     normal = Knowledge(id=300, name="普通库", user_id=7, type=3, is_favorite=False)
     with patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
                new=AsyncMock(return_value=normal)), \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id",
+               new=AsyncMock(return_value=None)), \
          patch.object(KnowledgeSpaceService, "_require_permission_id",
                       new=AsyncMock(side_effect=RuntimeError("perm-checked"))):
         with pytest.raises(RuntimeError):  # 走到了权限检查，说明没被收藏 guard 拦下
