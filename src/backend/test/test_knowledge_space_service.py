@@ -5049,7 +5049,12 @@ class TestSpaceListings:
             )
 
         assert result == []
-        mock_permission_ids.assert_awaited_once_with('knowledge_space', 2)
+        # Task 4 threads a shared tuple_cache + the batched-permission-level
+        # result (or _LEVEL_UNSET if the space wasn't in that batch) through
+        # to _get_effective_permission_ids; assert the actual new call shape.
+        mock_permission_ids.assert_awaited_once_with(
+            'knowledge_space', 2, tuple_cache={}, precomputed_permission_level=None,
+        )
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_excludes_spaces_created_by_current_user(self, service):

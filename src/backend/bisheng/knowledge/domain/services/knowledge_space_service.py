@@ -208,6 +208,7 @@ from bisheng.permission.domain.schemas.permission_schema import (
 )
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.permission.domain.services.fine_grained_permission_service import (
+    _LEVEL_UNSET,
     FineGrainedPermissionService,
 )
 from bisheng.permission.domain.services.owner_service import OwnerService
@@ -998,11 +999,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             permission_levels = {space_id: level_map.get(str(space_id)) for space_id in permission_space_ids}
         if required_permission_id and permission_id_space_ids:
+            shared_tuple_cache: dict[str, list[dict]] = {}
             permission_ids = await asyncio.gather(
                 *[
                     self._get_effective_permission_ids(
                         "knowledge_space",
                         space_id,
+                        tuple_cache=shared_tuple_cache,
+                        precomputed_permission_level=permission_levels.get(space_id, _LEVEL_UNSET),
                     )
                     for space_id in permission_id_space_ids
                 ]
@@ -1809,6 +1813,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         object_id: int,
         *,
         space_id: int | None = None,
+        tuple_cache: dict[str, list[dict]] | None = None,
+        precomputed_permission_level=_LEVEL_UNSET,
     ) -> set[str]:
         # Evaluate permissions across the resource lineage from child -> parent.
         # For a tuple backed by a custom relation model, permissions[] controls
@@ -1835,6 +1841,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             nearest_binding_wins=lineage_binding_can_override,
             return_match_metadata=True,
             use_permission_level_fallback=not lineage_binding_can_override,
+            tuple_cache=tuple_cache,
+            precomputed_permission_level=precomputed_permission_level,
         )
         for lineage_type, lineage_id in lineage:
             if lineage_type == "knowledge_space":
