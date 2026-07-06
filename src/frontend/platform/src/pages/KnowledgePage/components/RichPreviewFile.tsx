@@ -143,14 +143,14 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
 
   if (isMedia) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50">
+      <div className="flex h-full min-h-0 flex-col bg-gray-50">
         <div className="shrink-0 overflow-visible p-3 pb-0">
           <section className="overflow-visible rounded-md border bg-white p-3 shadow-sm">
             <div className="mb-2 text-sm font-medium text-gray-800">{title}</div>
             {isVideo ? (
               <video className="max-h-[280px] w-full rounded bg-black" src={mediaUrl} controls />
             ) : (
-              <div className="overflow-visible py-1">
+              <div className="flex min-h-[160px] flex-col justify-end overflow-visible py-1">
                 <audio className="w-full" src={mediaUrl} controls />
               </div>
             )}

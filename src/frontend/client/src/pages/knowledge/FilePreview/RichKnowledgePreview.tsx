@@ -247,7 +247,7 @@ export function RichKnowledgePreview({
                         actions={actions}
                     />
                 )}
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col">
                     <div className="shrink-0 overflow-visible px-5 pb-0 pt-5">
                         <section className="mx-auto w-full max-w-[980px] overflow-visible rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
                             <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
@@ -258,7 +258,7 @@ export function RichKnowledgePreview({
                                     controls
                                 />
                             ) : (
-                                <div className="overflow-visible py-1">
+                                <div className="flex min-h-[160px] flex-col justify-end overflow-visible py-1">
                                     <audio className="w-full" src={mediaPlaybackUrl} controls />
                                 </div>
                             )}
