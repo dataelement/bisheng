@@ -29,8 +29,8 @@ interface KnowledgeFolderTreeProps {
     currentFolderId?: string;
     /**
      * Status filter — must mirror what the right-side file panel sends so the
-     * tree and the panel show the same folders. For MEMBER-role users this is
-     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     * tree and the panel show the same folders. Backend now enforces
+     * restricted-status visibility per role; omit to let the backend decide.
      * Pass a stable reference (module constant or undefined) to avoid refetch churn.
      */
     fileStatus?: number[];

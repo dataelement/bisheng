@@ -55,6 +55,8 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNameSensitiveWordError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
+    SpacePersonalCreateForbiddenError,
+    PersonalSpaceProtectedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -115,6 +117,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
+    MEMBER_HIDDEN_FILE_STATUSES,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -1842,6 +1845,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         return effective_permissions
 
+    async def _space_user_can_view_all_statuses(self, space_id: int) -> bool:
+        """Managers (owner / can_manage, incl. global admin & space creator) see
+        files in any status; regular members only see restricted-status files
+        (parse-failed / timeout / violation) they uploaded themselves."""
+        space_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
+        return "manage_space_relation" in space_permissions
+
     async def _build_child_permission_context(self, space_id: int) -> dict:
         user_subject_strings = await self._get_current_user_subject_strings()
         bindings = await self._get_relation_bindings()
@@ -1849,6 +1859,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         models = await self._get_relation_models_map()
         membership_permission_ids = await self._membership_permission_ids(space_id)
         public_space_permission_ids = await self._public_space_viewer_permission_ids([("knowledge_space", space_id)])
+        can_view_all_statuses = await self._space_user_can_view_all_statuses(space_id)
         return {
             "models": models,
             "bindings": bindings,
@@ -1856,6 +1867,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "user_subject_strings": user_subject_strings,
             "membership_permission_ids": membership_permission_ids,
             "public_space_permission_ids": public_space_permission_ids,
+            "can_view_all_statuses": can_view_all_statuses,
             "tuple_cache": {},
             "tuple_department_paths": {},
         }
@@ -2185,6 +2197,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_ids: list[int] | None = None,
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
+        system_managed: bool = False,
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
@@ -2204,6 +2217,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf_last = now
 
         name = self._normalize_space_name(name)
+        if not system_managed and self._normalize_space_level(space_level) == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpacePersonalCreateForbiddenError()
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
                 self.login_user.user_id,
@@ -2475,6 +2490,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             description="系统默认收藏知识库",
             space_level=KnowledgeSpaceLevelEnum.PERSONAL,
             skip_user_limit=True,
+            system_managed=True,
         )
         space.is_favorite = True
         try:
@@ -2507,6 +2523,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if adopted_again:
                 return adopted_again
             raise
+
+    def personal_default_space_name(self) -> str:
+        return f"{self.login_user.user_name}的知识库"
+
+    async def _find_personal_default_space(self) -> Knowledge | None:
+        return await KnowledgeDao.async_get_personal_space_by_owner_name(
+            owner_id=self.login_user.user_id,
+            name=self.personal_default_space_name(),
+        )
+
+    async def _ensure_personal_default_space(self) -> Knowledge:
+        """懒创建、按名幂等：已有同名个人默认库→返回；否则创建；并发/撞名兜底回查。"""
+        existing = await self._find_personal_default_space()
+        if existing:
+            return existing
+        try:
+            return await self.create_knowledge_space(
+                name=self.personal_default_space_name(),
+                description="个人默认知识库",
+                space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                skip_user_limit=True,
+                system_managed=True,
+            )
+        except Exception:
+            again = await self._find_personal_default_space()
+            if again:
+                return again
+            raise
+
+    async def _ensure_personal_spaces(self) -> None:
+        """首次访问个人分组时，确保 我的收藏 + {用户名}的知识库 均存在。"""
+        await self._ensure_favorite_space()
+        await self._ensure_personal_default_space()
 
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
@@ -5212,6 +5261,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
@@ -5533,6 +5585,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         order_by: str = "update_time",
     ) -> GroupedKnowledgeSpacesResp:
+        await self._ensure_personal_spaces()
         spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
         for space in spaces:
@@ -5544,6 +5597,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.team_spaces.append(space)
             else:
                 grouped.personal_spaces.append(space)
+        grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
     async def get_spaces_by_level(
@@ -5554,8 +5608,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_level = self._normalize_space_level(space_level)
         favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            favorite_space = await self._ensure_favorite_space()
-            favorite_space_id = int(favorite_space.id)
+            await self._ensure_personal_spaces()
+            favorite_space = await self._find_favorite_space()
+            favorite_space_id = int(favorite_space.id) if favorite_space else None
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
@@ -5930,6 +5985,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
         - Modifying the creator's role is not allowed
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
@@ -6009,6 +6067,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins can remove regular members
         - Admins cannot remove other admins or creators
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
@@ -6776,6 +6837,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         return len(visible_files)
 
+    @staticmethod
+    def _hide_restricted_status_items(
+        items: list[KnowledgeFile],
+        *,
+        owner_user_id: int | None,
+    ) -> list[KnowledgeFile]:
+        """Drop files whose status is restricted (parse-failed / timeout / violation)
+        unless the current user uploaded them. Folders are never dropped here.
+        Callers gate this on the viewer NOT being a space manager."""
+        return [
+            item
+            for item in items
+            if item.file_type == FileType.DIR.value
+            or item.status not in MEMBER_HIDDEN_FILE_STATUSES
+            or item.user_id == owner_user_id
+        ]
+
     async def _filter_visible_child_items(
         self,
         items: list[KnowledgeFile],
@@ -6798,7 +6876,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
-        return [item for item, allowed in zip(items, visibility) if allowed]
+        visible = [item for item, allowed in zip(items, visibility) if allowed]
+        if not permission_context.get("can_view_all_statuses", False):
+            visible = self._hide_restricted_status_items(
+                visible, owner_user_id=self.login_user.user_id,
+            )
+        return visible
 
     @staticmethod
     def _paginate_items(items: list[KnowledgeFile], page: int, page_size: int) -> list[KnowledgeFile]:

@@ -814,6 +814,7 @@ async def test_create_space_keeps_auto_tag_binding_when_visibility_flag_is_false
             name='个人空间',
             auto_tag_enabled=True,
             auto_tag_library_id=9,
+            system_managed=True,
         )
 
     assert result.id == 11
@@ -4315,7 +4316,7 @@ class TestCreateSpace:
             new_callable=AsyncMock,
         ):
             with pytest.raises(Exception) as exc_info:
-                await service.create_knowledge_space(name='  重复空间  ')
+                await service.create_knowledge_space(name='  重复空间  ', system_managed=True)
 
         assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
         mock_get_personal.assert_awaited_once_with(
@@ -4388,7 +4389,7 @@ class TestCreateSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
         ):
-            result = await service.create_knowledge_space(name='重复空间')
+            result = await service.create_knowledge_space(name='重复空间', system_managed=True)
 
         assert result.id == 23
         mock_create_knowledge_base.assert_awaited_once()
@@ -4456,7 +4457,7 @@ class TestCreateSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
         ):
-            result = await service.create_knowledge_space(name='重复空间')
+            result = await service.create_knowledge_space(name='重复空间', system_managed=True)
 
         assert result.id == 23
         mock_create_knowledge_base.assert_awaited_once()
@@ -4671,7 +4672,7 @@ class TestCreateSpace:
             return_value=None,
         ):
             with pytest.raises(WorkbenchEmbeddingError):
-                await service.create_knowledge_space(name='Space')
+                await service.create_knowledge_space(name='Space', system_managed=True)
 
         mock_count.assert_awaited_once_with(
             service.login_user.user_id,
@@ -4924,6 +4925,10 @@ class TestSpaceListings:
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids',
             new_callable=AsyncMock,
             return_value=[SimpleNamespace(id=1, name='Root')],
+        ), patch.object(
+            service,
+            '_ensure_personal_spaces',
+            new_callable=AsyncMock,
         ):
             result = await service.get_grouped_spaces()
 
@@ -4983,6 +4988,8 @@ class TestSpaceListings:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids',
             new_callable=AsyncMock, return_value=[],
+        ), patch.object(
+            service, '_ensure_personal_spaces', new_callable=AsyncMock,
         ):
             result = await service.get_grouped_spaces()
 
@@ -5252,6 +5259,10 @@ class TestManagePermissionBoundaries:
 
         with patch.object(
             service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(level=KnowledgeSpaceLevelEnum.TEAM),
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_active_member_role',
             new_callable=AsyncMock,
@@ -7920,3 +7931,77 @@ class TestFineGrainedPermissionRuntime:
                 await service.delete_file(125)
 
         mock_delete_batch.assert_not_awaited()
+
+
+def test_hide_restricted_status_items_member_view():
+    KnowledgeSpaceService = _load_service_class()
+    owner_id = 7
+    items = [
+        _make_file(file_id=1, user_id=7, status=KnowledgeFileStatus.SUCCESS.value),      # 本人成功 -> 保留
+        _make_file(file_id=2, user_id=7, status=KnowledgeFileStatus.FAILED.value),       # 本人失败 -> 保留
+        _make_file(file_id=3, user_id=99, status=KnowledgeFileStatus.SUCCESS.value),     # 他人成功 -> 保留
+        _make_file(file_id=4, user_id=99, status=KnowledgeFileStatus.FAILED.value),      # 他人失败 -> 去除
+        _make_file(file_id=5, user_id=99, status=KnowledgeFileStatus.TIMEOUT.value),     # 他人超时 -> 去除
+        _make_file(file_id=6, user_id=99, status=KnowledgeFileStatus.VIOLATION.value),   # 他人违规 -> 去除
+        _make_file(file_id=7, user_id=99, status=KnowledgeFileStatus.VIOLATION.value,
+                   file_type=FileType.DIR.value),                                        # 文件夹 -> 保留
+    ]
+
+    kept = KnowledgeSpaceService._hide_restricted_status_items(items, owner_user_id=owner_id)
+    kept_ids = {f.id for f in kept}
+
+    assert kept_ids == {1, 2, 3, 7}
+
+
+@pytest.mark.asyncio
+async def test_space_user_can_view_all_statuses_true_for_manager(service):
+    with patch.object(
+        service, '_get_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_space', 'manage_space_relation'},
+    ):
+        assert await service._space_user_can_view_all_statuses(1) is True
+
+
+@pytest.mark.asyncio
+async def test_space_user_can_view_all_statuses_false_for_member(service):
+    with patch.object(
+        service, '_get_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_space', 'upload_file'},
+    ):
+        assert await service._space_user_can_view_all_statuses(1) is False
+
+
+@pytest.mark.asyncio
+async def test_filter_visible_child_items_hides_restricted_for_member(service):
+    items = [
+        _make_file(file_id=1, user_id=7, status=KnowledgeFileStatus.SUCCESS.value),
+        _make_file(file_id=2, user_id=7, status=KnowledgeFileStatus.VIOLATION.value),    # 本人违规 -> 保留
+        _make_file(file_id=3, user_id=99, status=KnowledgeFileStatus.SUCCESS.value),
+        _make_file(file_id=4, user_id=99, status=KnowledgeFileStatus.VIOLATION.value),   # 他人违规 -> 去除
+        _make_file(file_id=5, user_id=99, status=KnowledgeFileStatus.FAILED.value),      # 他人失败 -> 去除
+    ]
+    # login_user.user_id == 7（见 _make_login_user 默认）
+    with patch.object(
+        service, '_get_child_item_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_file', 'view_folder'},
+    ):
+        kept = await service._filter_visible_child_items(
+            items, space_id=1, context={"can_view_all_statuses": False},
+        )
+    assert {f.id for f in kept} == {1, 2, 3}
+
+
+@pytest.mark.asyncio
+async def test_filter_visible_child_items_manager_sees_all(service):
+    items = [
+        _make_file(file_id=4, user_id=99, status=KnowledgeFileStatus.VIOLATION.value),
+        _make_file(file_id=5, user_id=99, status=KnowledgeFileStatus.FAILED.value),
+    ]
+    with patch.object(
+        service, '_get_child_item_effective_permission_ids', new_callable=AsyncMock,
+        return_value={'view_file', 'view_folder'},
+    ):
+        kept = await service._filter_visible_child_items(
+            items, space_id=1, context={"can_view_all_statuses": True},
+        )
+    assert {f.id for f in kept} == {4, 5}

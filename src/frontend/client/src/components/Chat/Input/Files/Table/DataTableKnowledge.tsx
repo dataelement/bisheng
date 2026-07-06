@@ -76,8 +76,6 @@ export default function DataTableKnowledge<TData, TValue>({
 
   // 重复文件相关状态
   const [repeatFiles, setRepeatFiles] = useState([]);
-  const [retryLoad, setRetryLoad] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState([]);
   const [infoId, setInfoId] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const handleSearch = useCallback(
@@ -97,76 +95,9 @@ export default function DataTableKnowledge<TData, TValue>({
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
 
-  const unRetry = () => {
+  const handleCancelRepeatUpload = () => {
     setRepeatFiles([]);
-    setPendingFiles([]);
     setLoading(false);
-  };
-
-  const onRetry = async (files) => {
-    setRetryLoad(true);
-    try {
-      const formData = new FormData();
-      formData.append('retry', 'true');
-
-      files.forEach(file => {
-        if (file.file) {
-          formData.append('file', file.file);
-        }
-        if (file.name) {
-          formData.append('filename', file.name);
-        }
-      });
-      const fileList = repeatFiles.map(repeatFile => ({
-        file_path: repeatFile.file_path,
-        excel_rule: repeatFile.fileType === 'file' ? {} : {
-          "append_header": true,
-          "header_end_row": 1,
-          "header_start_row": 1,
-          "slice_length": 10
-        }
-      }));
-
-      // 一次上传所有重复文件
-      const params = {
-        knowledge_id: infoId,
-        file_list: fileList, // 数组，包含多个重复文件
-        separator: ["\n\n", "\n"],
-        separator_rule: ["after", "after"],
-        chunk_size: 1000,
-        chunk_overlap: 100,
-        retain_images: true,
-        enable_formula: true,
-        force_ocr: true,
-        fileter_page_header_footer: true
-      };
-
-      const uploadRes = await dataService.subUploadLibFile(params);
-
-      if (uploadRes.status_code === 200) {
-        showToast({
-          message: localize('com_tools_file_upload', { count: repeatFiles.length }),
-          severity: NotificationSeverity.SUCCESS,
-        });
-        onUpload();
-      } else {
-        showToast({
-          message: uploadRes.status_message || localize('com_tools_file_upload_failed'),
-          severity: NotificationSeverity.ERROR,
-        });
-      }
-    } catch (error) {
-      console.error('com_tools_file_upload_failed:', error);
-      showToast({
-        message: localize('com_tools_file_upload_failed') + error.message,
-        severity: NotificationSeverity.ERROR,
-      });
-    } finally {
-      setRetryLoad(false);
-      setRepeatFiles([]);
-      setPendingFiles([]);
-      setLoading(false);
-    }
   };
 
   const handleUpload = async (event) => {
@@ -180,7 +111,6 @@ export default function DataTableKnowledge<TData, TValue>({
       setLoading(false);
       return;
     }
-    setPendingFiles(files.map(file => ({ file, name: file.name })));
 
     try {
       const nonDuplicateFiles = [];
@@ -312,7 +242,7 @@ export default function DataTableKnowledge<TData, TValue>({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <Dialog open={!!repeatFiles.length} onOpenChange={(b) => !b && setRepeatFiles([])}>
+      <Dialog open={!!repeatFiles.length} onOpenChange={(b) => !b && handleCancelRepeatUpload()}>
         <DialogContent className="sm:max-w-[425px]" close={false}>
           <DialogHeader>
             <DialogTitle>{localize('com_tools_file_detected')}</DialogTitle>
@@ -328,16 +258,8 @@ export default function DataTableKnowledge<TData, TValue>({
             ))}
           </ul>
           <DialogFooter>
-            <Button className="h-8" variant="outline" onClick={unRetry}>
+            <Button className="h-8" variant="outline" onClick={handleCancelRepeatUpload}>
               {localize('com_tools_file_not_overwrite')}
-            </Button>
-            <Button
-              className="h-8"
-              disabled={retryLoad}
-              onClick={() => onRetry(pendingFiles)}
-            >
-              {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
-              {localize('com_tools_file_overwrite')}
             </Button>
           </DialogFooter>
         </DialogContent>

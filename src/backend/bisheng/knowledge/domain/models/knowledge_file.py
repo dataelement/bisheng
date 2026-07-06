@@ -22,6 +22,12 @@ class KnowledgeFileStatus(int, Enum):
     TIMEOUT = 6  # Super24Hour not parsed, parsing timeout
     VIOLATION = 7  # Content safety violation
 
+MEMBER_HIDDEN_FILE_STATUSES = frozenset({
+    KnowledgeFileStatus.FAILED.value,     # 3 解析失败
+    KnowledgeFileStatus.TIMEOUT.value,    # 6 解析超时
+    KnowledgeFileStatus.VIOLATION.value,  # 7 违规
+})
+
 class QAStatus(Enum):
     DISABLED = 0  # User manually closedQA
     ENABLED = 1  # Enabled
