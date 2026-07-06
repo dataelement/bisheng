@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-from bisheng.common.errcode.knowledge import PersonalSpaceProtectedError
+from bisheng.common.errcode.knowledge_space import PersonalSpaceProtectedError
 
 
 def _svc():

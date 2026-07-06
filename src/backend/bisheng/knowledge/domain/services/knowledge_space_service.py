@@ -2527,7 +2527,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def personal_default_space_name(self) -> str:
         return f"{self.login_user.user_name}的知识库"
 
-    async def _find_personal_default_space(self) -> Optional[Knowledge]:
+    async def _find_personal_default_space(self) -> Knowledge | None:
         return await KnowledgeDao.async_get_personal_space_by_owner_name(
             owner_id=self.login_user.user_id,
             name=self.personal_default_space_name(),

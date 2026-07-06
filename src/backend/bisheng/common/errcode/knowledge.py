@@ -199,16 +199,3 @@ class BackendProcessingError(BaseErrorCode):
 class KnowledgeInvalidCursorError(BaseErrorCode):
     Code: int = 10991
     Msg: str = 'Invalid pagination cursor'
-
-
-# ── Personal knowledge space guards ───────────────────────────────────────────
-# 与 knowledge_space.py 的 FavoriteSpaceProtectedError(18071) 同属「个人/系统知识库
-# 保护」语义，照抄其 BaseErrorCode 基类结构，取紧邻其后未占用的 18072/18073 业务码。
-class SpacePersonalCreateForbiddenError(BaseErrorCode):
-    Code: int = 18072
-    Msg: str = '个人知识库不支持手动新建'
-
-
-class PersonalSpaceProtectedError(BaseErrorCode):
-    Code: int = 18073
-    Msg: str = '个人知识库不支持删除或授权'

@@ -4988,6 +4988,8 @@ class TestSpaceListings:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids',
             new_callable=AsyncMock, return_value=[],
+        ), patch.object(
+            service, '_ensure_personal_spaces', new_callable=AsyncMock,
         ):
             result = await service.get_grouped_spaces()
 

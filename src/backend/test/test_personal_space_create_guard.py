@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
-from bisheng.common.errcode.knowledge import SpacePersonalCreateForbiddenError
+from bisheng.common.errcode.knowledge_space import SpacePersonalCreateForbiddenError
 
 
 def _svc(user_id=7):
