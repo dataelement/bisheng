@@ -8031,3 +8031,101 @@ async def test_filter_visible_child_items_manager_sees_all(service):
             items, space_id=1, context={"can_view_all_statuses": True},
         )
     assert {f.id for f in kept} == {4, 5}
+
+
+class TestFormatAccessibleSpacesCharacterization:
+    """锁住 _format_accessible_spaces 的输出，作为性能重构的等价性护栏。"""
+
+    @pytest.mark.asyncio
+    async def test_creator_space_maps_to_creator_role_and_subscribed(self, service):
+        own = _make_space(space_id=1, user_id=service.login_user.user_id, auth_type=AuthTypeEnum.PRIVATE)
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock, return_value=[own],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock, return_value={1: 7},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock, return_value=[],
+        ):
+            result = await service._format_accessible_spaces(
+                [1], 'update_time', memberships=[], required_permission_id='view_space',
+            )
+        assert [s.id for s in result] == [1]
+        assert result[0].user_role == UserRoleEnum.CREATOR
+        assert result[0].subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+        assert result[0].file_num == 7
+
+    @pytest.mark.asyncio
+    async def test_direct_grant_without_membership_maps_to_admin(self, service):
+        granted = _make_space(space_id=3, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock, return_value=[granted],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock, return_value='can_manage',
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock, return_value={'view_space', 'manage_space_relation'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock, return_value={3: 0},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock, return_value=[],
+        ):
+            result = await service._format_accessible_spaces(
+                [3], 'update_time', memberships=[], required_permission_id='view_space',
+            )
+        assert [s.id for s in result] == [3]
+        assert result[0].user_role == UserRoleEnum.ADMIN
+
+    @pytest.mark.asyncio
+    async def test_non_owner_space_without_view_space_is_excluded(self, service):
+        other = _make_space(space_id=5, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock, return_value=[other],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock, return_value=None,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock, return_value=set(),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock, return_value=[],
+        ):
+            result = await service._format_accessible_spaces(
+                [5], 'update_time', memberships=[], required_permission_id='view_space',
+            )
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_pinned_membership_space_sorts_first(self, service):
+        s_pinned = _make_space(space_id=10, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+        s_plain = _make_space(space_id=11, user_id=service.login_user.user_id, auth_type=AuthTypeEnum.PRIVATE)
+        member = _make_member(user_id=service.login_user.user_id, user_role=UserRoleEnum.MEMBER, space_id=10)
+        member.is_pinned = True
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock, return_value=[s_plain, s_pinned],
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock, return_value={'view_space'},
+        ), patch.object(
+            service, '_can_unsubscribe_space',
+            new_callable=AsyncMock, return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock, return_value={10: 1, 11: 2},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock, return_value=[],
+        ):
+            result = await service._format_accessible_spaces(
+                [10, 11], 'update_time', memberships=[member], required_permission_id='view_space',
+            )
+        assert result[0].id == 10 and result[0].is_pinned is True
