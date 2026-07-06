@@ -5,6 +5,7 @@ import {
     getSpaceTagsApi,
     getKnowledgeSpaceReviewTagVisibilityApi,
     addSpaceTagApi,
+    lookupSpaceTagApi,
     updateFileTagsApi,
 } from "~/api/knowledge";
 
@@ -24,54 +25,25 @@ jest.mock("@tanstack/react-query", () => ({
     useQueryClient: () => ({ invalidateQueries: jest.fn() }),
 }));
 
-jest.mock("~/api/knowledge", () => ({
-    getSpaceTagsApi: jest.fn(),
-    getKnowledgeSpaceReviewTagVisibilityApi: jest.fn(),
-    addSpaceTagApi: jest.fn(),
-    updateFileTagsApi: jest.fn(),
-    batchUpdateTagsApi: jest.fn(),
-    countSpaceNativeTags: (tags: Array<{ business_type?: string; name?: string }>, recommended: Array<{ name?: string }> = []) => {
-        const libraryNames = new Set(recommended.map((item) => String(item.name ?? "").trim().toLowerCase()).filter(Boolean));
-        return tags.filter((tag) => {
-            if (tag.business_type === "tag_library") return false;
-            const name = String(tag.name ?? "").trim().toLowerCase();
-            return !libraryNames.has(name);
-        }).length;
-    },
-    countBoundLibraryTagNamesForLimit: (
-        tags: Array<{ business_type?: string; name?: string; review_status?: number }>,
-        recommended: Array<{ name?: string }> = [],
-    ) => {
-        const libraryNames = new Set(recommended.map((item) => String(item.name ?? "").trim().toLowerCase()).filter(Boolean));
-        const names = new Set<string>();
-        for (const tag of tags) {
-            const isLibrary = tag.business_type === "tag_library" || libraryNames.has(String(tag.name ?? "").trim().toLowerCase());
-            if (!isLibrary) continue;
-            if (tag.review_status === 0 || tag.review_status === 2) continue;
-            const name = String(tag.name ?? "").trim().toLowerCase();
-            if (name) names.add(name);
-        }
-        return names.size;
-    },
-    isBoundLibraryTagForLimit: (
-        tag: { business_type?: string; name?: string },
-        recommended: Array<{ name?: string }> = [],
-    ) => {
-        if (tag.business_type === "tag_library") return true;
-        const normalized = String(tag.name ?? "").trim().toLowerCase();
-        return recommended.some((item) => item.name?.trim().toLowerCase() === normalized);
-    },
-    isBoundLibraryTagName: (tagName: string, recommended: Array<{ name?: string }> = []) => {
-        const normalized = tagName.trim().toLowerCase();
-        return recommended.some((item) => item.name?.trim().toLowerCase() === normalized);
-    },
-}));
+jest.mock("~/api/knowledge", () => {
+    const actual = jest.requireActual("~/api/knowledge") as typeof import("~/api/knowledge");
+    return {
+        ...actual,
+        getSpaceTagsApi: jest.fn(),
+        getKnowledgeSpaceReviewTagVisibilityApi: jest.fn(),
+        addSpaceTagApi: jest.fn(),
+        lookupSpaceTagApi: jest.fn(),
+        updateFileTagsApi: jest.fn(),
+        batchUpdateTagsApi: jest.fn(),
+    };
+});
 
 describe("EditTagsModal recommended tags", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.mocked(useToastContext).mockReturnValue({ showToast: mockShowToast });
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: true });
+        jest.mocked(lookupSpaceTagApi).mockResolvedValue(null);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
             { id: 1, name: "已有标签", business_type: "tag_library", resource_type: "manual_tag" },
             { id: 10, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
@@ -194,9 +166,11 @@ describe("EditTagsModal recommended tags", () => {
         const input = screen.getByRole("textbox");
         await user.type(input, "新手动");
         await user.keyboard("{Enter}");
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
         await user.click(screen.getByText("com_knowledge.confirm"));
 
         await waitFor(() => {
+            expect(addSpaceTagApi).toHaveBeenCalledWith("100", "新手动");
             expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [], [99]);
         });
     });
@@ -452,9 +426,13 @@ describe("EditTagsModal recommended tags", () => {
 
     it("shows under-review hint when adding a pending tag", async () => {
         const user = userEvent.setup();
-        jest.mocked(getSpaceTagsApi).mockResolvedValue([
-            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
-        ]);
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(lookupSpaceTagApi).mockResolvedValue({
+            id: 2,
+            name: "待审核",
+            review_status: 0,
+            resource_type: "manual_tag",
+        });
 
         render(
             <EditTagsModal
@@ -472,6 +450,42 @@ describe("EditTagsModal recommended tags", () => {
         await user.keyboard("{Enter}");
 
         await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith({
+                message: "com_knowledge.tag_under_review",
+                status: "warning",
+            });
+        });
+        expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "待审核");
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
+    });
+
+    it("calls lookup API on Enter for new tag names and skips create when duplicate on server", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(lookupSpaceTagApi).mockResolvedValue({
+            id: 88,
+            name: "服务端待审核",
+            review_status: 0,
+            resource_type: "manual_tag",
+        });
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "服务端待审核");
+        await user.keyboard("{Enter}");
+
+        await waitFor(() => {
+            expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "服务端待审核");
             expect(mockShowToast).toHaveBeenCalledWith({
                 message: "com_knowledge.tag_under_review",
                 status: "warning",
@@ -506,6 +520,8 @@ describe("EditTagsModal recommended tags", () => {
         const input = screen.getByRole("textbox");
         await user.type(input, "其他库标签");
         await user.keyboard("{Enter}");
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
+        await user.click(screen.getByText("com_knowledge.confirm"));
 
         await waitFor(() => {
             expect(addSpaceTagApi).toHaveBeenCalledWith("100", "其他库标签");
@@ -514,5 +530,86 @@ describe("EditTagsModal recommended tags", () => {
                 status: "warning",
             });
         });
+    });
+
+    it("renders pending manual tags in gray under manual recommended section", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
+            { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("待审核")).toBeInTheDocument();
+            expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
+        });
+
+        expect(screen.getByText("待审核").className).toContain("text-[#c9cdd4]");
+    });
+
+    it("shows duplicate hint when Enter repeats an already selected draft tag", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "本地草稿");
+        await user.keyboard("{Enter}");
+        await user.type(input, "本地草稿");
+        await user.keyboard("{Enter}");
+
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith({
+            message: "com_knowledge.tag_already_selected",
+            status: "warning",
+        });
+        expect(screen.getAllByText("本地草稿")).toHaveLength(1);
+    });
+
+    it("does not create review tags on Enter for new manual names", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "本地草稿");
+        await user.keyboard("{Enter}");
+
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
+        expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "本地草稿");
+        expect(mockShowToast).not.toHaveBeenCalledWith({
+            message: "com_knowledge.tag_under_review",
+            status: "warning",
+        });
+        expect(screen.getByText("本地草稿")).toBeInTheDocument();
     });
 });

@@ -58,6 +58,8 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNameSensitiveWordError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
+    SpacePersonalCreateForbiddenError,
+    PersonalSpaceProtectedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -118,6 +120,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
+    MEMBER_HIDDEN_FILE_STATUSES,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -174,19 +177,19 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
 )
-from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
-    KnowledgeAuditTelemetryService,
-)
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
-    KnowledgeSpaceTagLibraryService,
-)
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_CLASSIFICATION_UPDATED,
     FAVORITE_SOURCE_MOVED,
     FAVORITE_SOURCE_RENAMED,
     FAVORITE_SOURCE_TAGS_UPDATED,
     notify_favorite_source_changed,
+)
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
+    KnowledgeAuditTelemetryService,
+)
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
+    KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -1845,6 +1848,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         return effective_permissions
 
+    async def _space_user_can_view_all_statuses(self, space_id: int) -> bool:
+        """Managers (owner / can_manage, incl. global admin & space creator) see
+        files in any status; regular members only see restricted-status files
+        (parse-failed / timeout / violation) they uploaded themselves."""
+        space_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
+        return "manage_space_relation" in space_permissions
+
     async def _build_child_permission_context(self, space_id: int) -> dict:
         user_subject_strings = await self._get_current_user_subject_strings()
         bindings = await self._get_relation_bindings()
@@ -1852,6 +1862,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         models = await self._get_relation_models_map()
         membership_permission_ids = await self._membership_permission_ids(space_id)
         public_space_permission_ids = await self._public_space_viewer_permission_ids([("knowledge_space", space_id)])
+        can_view_all_statuses = await self._space_user_can_view_all_statuses(space_id)
         return {
             "models": models,
             "bindings": bindings,
@@ -1859,6 +1870,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "user_subject_strings": user_subject_strings,
             "membership_permission_ids": membership_permission_ids,
             "public_space_permission_ids": public_space_permission_ids,
+            "can_view_all_statuses": can_view_all_statuses,
             "tuple_cache": {},
             "tuple_department_paths": {},
         }
@@ -2188,6 +2200,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_ids: list[int] | None = None,
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
+        system_managed: bool = False,
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
@@ -2207,6 +2220,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             perf_last = now
 
         name = self._normalize_space_name(name)
+        if not system_managed and self._normalize_space_level(space_level) == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpacePersonalCreateForbiddenError()
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
                 self.login_user.user_id,
@@ -2478,6 +2493,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             description="系统默认收藏知识库",
             space_level=KnowledgeSpaceLevelEnum.PERSONAL,
             skip_user_limit=True,
+            system_managed=True,
         )
         space.is_favorite = True
         try:
@@ -2510,6 +2526,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if adopted_again:
                 return adopted_again
             raise
+
+    def personal_default_space_name(self) -> str:
+        return f"{self.login_user.user_name}的知识库"
+
+    async def _find_personal_default_space(self) -> Knowledge | None:
+        return await KnowledgeDao.async_get_personal_space_by_owner_name(
+            owner_id=self.login_user.user_id,
+            name=self.personal_default_space_name(),
+        )
+
+    async def _ensure_personal_default_space(self) -> Knowledge:
+        """懒创建、按名幂等：已有同名个人默认库→返回；否则创建；并发/撞名兜底回查。"""
+        existing = await self._find_personal_default_space()
+        if existing:
+            return existing
+        try:
+            return await self.create_knowledge_space(
+                name=self.personal_default_space_name(),
+                description="个人默认知识库",
+                space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                skip_user_limit=True,
+                system_managed=True,
+            )
+        except Exception:
+            again = await self._find_personal_default_space()
+            if again:
+                return again
+            raise
+
+    async def _ensure_personal_spaces(self) -> None:
+        """首次访问个人分组时，确保 我的收藏 + {用户名}的知识库 均存在。"""
+        await self._ensure_favorite_space()
+        await self._ensure_personal_default_space()
 
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
@@ -3153,8 +3202,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     limit=page_size,
                 )
             sections[section.tag] = [
-                item.model_dump(mode="json")
-                for item in hot_read_item_cache[page_size][:page_size]
+                item.model_dump(mode="json") for item in hot_read_item_cache[page_size][:page_size]
             ]
 
         tag_section_tags = [
@@ -3643,9 +3691,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             detect_has_more=True,
         )
         next_cursor = (
-            encode_cursor((next_offset,), context=cursor_context)
-            if has_more and next_offset is not None
-            else None
+            encode_cursor((next_offset,), context=cursor_context) if has_more and next_offset is not None else None
         )
         return self._build_shougang_portal_cursor_response(page_items, has_more, next_cursor)
 
@@ -3718,9 +3764,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
                 visible_file_map = {int(file.id): file for file in visible_files}
                 ordered_files = [
-                    visible_file_map[file_id]
-                    for file_id in bucket_file_ids
-                    if file_id in visible_file_map
+                    visible_file_map[file_id] for file_id in bucket_file_ids if file_id in visible_file_map
                 ]
                 page_items = await self._map_shougang_portal_files_to_items(
                     files=ordered_files,
@@ -4766,8 +4810,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @staticmethod
     def _is_shougang_portal_latest_selected_home_section(section: Any) -> bool:
         return (
-            str(getattr(section, "recommendation", "") or "").strip()
-            == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
+            str(getattr(section, "recommendation", "") or "").strip() == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
         )
 
     @staticmethod
@@ -5222,13 +5265,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return str(tag.get("tag_name") or tag.get("name") or "")
         return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
-    async def delete_space(self, space_id: int) -> None:
+    async def delete_space(self, space_id: int, *, force: bool = False) -> None:
+        """Delete a knowledge space and all of its cascaded resources.
+
+        ``force=True`` is a system-maintenance bypass (used by the personal-space
+        cleanup script): it skips the 我的收藏/个人库 protection guards, skips the
+        caller permission check, and suppresses the per-owner "space deleted"
+        notification so a bulk cleanup does not spam users. It must never be
+        reachable from a user-facing API.
+        """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        if getattr(space, "is_favorite", False):
-            raise FavoriteSpaceProtectedError()
-        await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        if not force:
+            if getattr(space, "is_favorite", False):
+                raise FavoriteSpaceProtectedError()
+            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+            if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+                raise PersonalSpaceProtectedError()
+            await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
@@ -5241,13 +5296,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
         await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
-        await self._send_space_event_notification(
-            action_code=SPACE_DELETED_MESSAGE,
-            receiver_user_ids=original_member_ids,
-            space_id=space_id,
-            space_name=space.name,
-            navigable=False,
-        )
+        if not force:
+            await self._send_space_event_notification(
+                action_code=SPACE_DELETED_MESSAGE,
+                receiver_user_ids=original_member_ids,
+                space_id=space_id,
+                space_name=space.name,
+                navigable=False,
+            )
 
         # Drop the private auto-tag library bound to this space (if any) so
         # we never leave orphan rows in knowledge_space_tag_library.
@@ -5549,6 +5605,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         order_by: str = "update_time",
     ) -> GroupedKnowledgeSpacesResp:
+        await self._ensure_personal_spaces()
         spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
         for space in spaces:
@@ -5560,6 +5617,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.team_spaces.append(space)
             else:
                 grouped.personal_spaces.append(space)
+        grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
     async def get_spaces_by_level(
@@ -5570,8 +5628,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_level = self._normalize_space_level(space_level)
         favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            favorite_space = await self._ensure_favorite_space()
-            favorite_space_id = int(favorite_space.id)
+            await self._ensure_personal_spaces()
+            favorite_space = await self._find_favorite_space()
+            favorite_space_id = int(favorite_space.id) if favorite_space else None
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
@@ -5946,6 +6005,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
         - Modifying the creator's role is not allowed
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
@@ -6025,6 +6087,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins can remove regular members
         - Admins cannot remove other admins or creators
         """
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(req.space_id)
+        if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise PersonalSpaceProtectedError()
         # 1. Verify can_manage permission via ReBAC
         await self._require_permission_id("knowledge_space", req.space_id, "manage_space_relation")
 
@@ -6669,25 +6734,51 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def _load_file_tags_batch(self, file_ids: list[int]) -> dict[int, list[dict]]:
-        """Load approved file tags only (pending review tags are excluded)."""
+        """Load approved file tags and pending review tags for display."""
         if not file_ids:
             return {}
 
         resource_ids = [str(file_id) for file_id in file_ids]
+        tenant_id = int(self.login_user.tenant_id)
         tag_dict = await asyncio.to_thread(
             TagDao.get_tags_by_resource_batch,
             [ResourceTypeEnum.SPACE_FILE],
             resource_ids,
         )
+        review_tag_dict = await asyncio.to_thread(
+            ReviewTagDao.get_tags_by_resource_batch,
+            [ResourceTypeEnum.SPACE_FILE],
+            resource_ids,
+            tenant_id=tenant_id,
+        )
+
         file_tags: dict[int, list[dict]] = {}
-        for fid_str, tags in tag_dict.items():
-            try:
-                normalized_file_id = int(fid_str)
-            except (TypeError, ValueError):
-                continue
-            file_tags[normalized_file_id] = [
-                {"id": tag.id, "name": tag.name, "resource_type": tag.resource_type} for tag in tags
-            ]
+        for file_id in file_ids:
+            fid_str = str(file_id)
+            items: list[dict] = []
+            seen_names: set[str] = set()
+            for tag in tag_dict.get(fid_str, []):
+                name = (tag.name or "").strip()
+                if not name:
+                    continue
+                seen_names.add(name.lower())
+                items.append({"id": tag.id, "name": tag.name, "resource_type": tag.resource_type})
+            for review_tag in review_tag_dict.get(fid_str, []):
+                if review_tag.review_status != 0:
+                    continue
+                name = (review_tag.name or "").strip()
+                if not name or name.lower() in seen_names:
+                    continue
+                items.append(
+                    {
+                        "id": review_tag.id,
+                        "name": review_tag.name,
+                        "resource_type": review_tag.resource_type,
+                        "review_status": review_tag.review_status,
+                    }
+                )
+            if items:
+                file_tags[file_id] = items
         return file_tags
 
     async def _handle_file_folder_extra_info(
@@ -6766,6 +6857,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         return len(visible_files)
 
+    @staticmethod
+    def _hide_restricted_status_items(
+        items: list[KnowledgeFile],
+        *,
+        owner_user_id: int | None,
+    ) -> list[KnowledgeFile]:
+        """Drop files whose status is restricted (parse-failed / timeout / violation)
+        unless the current user uploaded them. Folders are never dropped here.
+        Callers gate this on the viewer NOT being a space manager."""
+        return [
+            item
+            for item in items
+            if item.file_type == FileType.DIR.value
+            or item.status not in MEMBER_HIDDEN_FILE_STATUSES
+            or item.user_id == owner_user_id
+        ]
+
     async def _filter_visible_child_items(
         self,
         items: list[KnowledgeFile],
@@ -6788,7 +6896,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
-        return [item for item, allowed in zip(items, visibility) if allowed]
+        visible = [item for item, allowed in zip(items, visibility) if allowed]
+        if not permission_context.get("can_view_all_statuses", False):
+            visible = self._hide_restricted_status_items(
+                visible, owner_user_id=self.login_user.user_id,
+            )
+        return visible
 
     @staticmethod
     def _paginate_items(items: list[KnowledgeFile], page: int, page_size: int) -> list[KnowledgeFile]:
@@ -8646,27 +8759,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     # ──────────────────────────── Tags ───────────────────────────────────
-    async def get_space_tags(self, space_id: int) -> list[Tag]:
-        """Return tags from all tag libraries bound to the knowledge space."""
+    async def get_space_tags(self, space_id: int) -> list[Tag | ReviewTag]:
+        """Return bound library tags plus pending review tags for the knowledge space."""
         await self._require_read_permission(space_id)
 
-        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
-        if not library_ids:
-            return []
-
-        tag_map = await TagDao.aget_tags_by_business_ids(
-            TagBusinessTypeEnum.TAG_LIBRARY,
-            [str(library_id) for library_id in library_ids],
-        )
-
         merged: list[Tag] = []
-        for library_id in library_ids:
-            library_tags = await TagLibraryTagService._repair_legacy_library_resource_types(
-                tag_map.get(str(library_id), []),
+        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+        if library_ids:
+            tag_map = await TagDao.aget_tags_by_business_ids(
+                TagBusinessTypeEnum.TAG_LIBRARY,
+                [str(library_id) for library_id in library_ids],
             )
-            merged.extend(library_tags)
+            for library_id in library_ids:
+                library_tags = await TagLibraryTagService._repair_legacy_library_resource_types(
+                    tag_map.get(str(library_id), []),
+                )
+                merged.extend(library_tags)
+            merged = TagLibraryTagService.dedupe_library_tags_by_name(merged)
 
-        return TagLibraryTagService.dedupe_library_tags_by_name(merged)
+        library_names = {(tag.name or "").strip().lower() for tag in merged if (tag.name or "").strip()}
+
+        pending_review_tags = await ReviewTagDao.get_tags_by_business(
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+        )
+        result: list[Tag | ReviewTag] = list(merged)
+        for review_tag in pending_review_tags:
+            if review_tag.is_deleted or review_tag.review_status != 0:
+                continue
+            name = (review_tag.name or "").strip()
+            if not name or name.lower() in library_names:
+                continue
+            result.append(review_tag)
+        return result
 
     async def _find_tenant_library_tag_by_name(self, tag_name: str) -> Tag | None:
         return await TagLibraryTagService.find_library_tag_by_name(
@@ -8686,36 +8811,90 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     return library_tag
         return None
 
-    async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
-        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+    async def _find_tenant_pending_review_tag_by_name(
+        self,
+        tag_name: str,
+        *,
+        space_id: int | None = None,
+    ) -> ReviewTag | None:
+        """Match workstation pending-review list: tenant-wide by name, prefer current space."""
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            return None
+        tenant_id = int(self.login_user.tenant_id)
+        library_name_subq = select(Tag.name).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.tenant_id == tenant_id,
+        )
+        base_where = [
+            ReviewTag.tenant_id == tenant_id,
+            ReviewTag.name == normalized,
+            ReviewTag.is_deleted == False,
+            ReviewTag.review_status == 0,
+            ReviewTag.name.not_in(library_name_subq),
+        ]
+        async with get_async_db_session() as session:
+            if space_id is not None:
+                same_space = (
+                    await session.exec(
+                        select(ReviewTag).where(*base_where, ReviewTag.business_id == str(space_id)).limit(1)
+                    )
+                ).first()
+                if same_space:
+                    return same_space
+            return (await session.exec(select(ReviewTag).where(*base_where).limit(1))).first()
+
+    async def _find_space_tag_by_name(self, space_id: int, tag_name: str) -> Tag | ReviewTag | None:
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            return None
 
         existing_tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-            name=tag_name,
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+            name=normalized,
         )
         for tag in existing_tags:
-            if tag.name == tag_name:
+            if (tag.name or "").strip() == normalized:
                 return tag
 
         existing_review_tags = await ReviewTagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-            name=tag_name,
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+            name=normalized,
         )
         for review_tag in existing_review_tags:
-            if review_tag.name == tag_name:
+            if (review_tag.name or "").strip() == normalized and review_tag.review_status == 0:
                 return review_tag
 
-        library_tag = await self._find_tenant_library_tag_by_name(tag_name)
-        if library_tag:
-            await self._require_review_tag_feature_enabled()
-            return library_tag
+        tenant_pending = await self._find_tenant_pending_review_tag_by_name(normalized, space_id=space_id)
+        if tenant_pending:
+            return tenant_pending
+
+        return await self._find_tenant_library_tag_by_name(normalized)
+
+    async def lookup_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag | None:
+        """Resolve an existing tag by name without creating a new review tag."""
+        await self._require_read_permission(space_id)
+        return await self._find_space_tag_by_name(space_id, tag_name)
+
+    async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
+        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            raise ValueError("tag_name is required")
+
+        existing = await self._find_space_tag_by_name(space_id, normalized)
+        if existing:
+            if getattr(existing, "business_type", None) == TagBusinessTypeEnum.TAG_LIBRARY.value:
+                await self._require_review_tag_feature_enabled()
+            return existing
 
         await self._require_review_tag_feature_enabled()
 
         new_tag = ReviewTag(
-            name=tag_name,
+            name=normalized,
             user_id=self.login_user.user_id,
             tenant_id=int(self.login_user.tenant_id),
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,

@@ -385,6 +385,12 @@ export interface FileTag {
     id: number;
     name: string;
     resource_type?: string;
+    /** 0 = pending review; 1 = approved */
+    review_status?: number;
+}
+
+export function isPendingReviewTagStatus(reviewStatus?: number | null): boolean {
+    return reviewStatus === 0;
 }
 
 export interface SensitiveWordHit {
@@ -532,6 +538,8 @@ export interface KnowledgeSpaceTagLibraryTagItem {
     resource_count?: number;
     create_time?: string | null;
     creator_name?: string | null;
+    /** 0 = pending review */
+    review_status?: number;
 }
 
 /** Tag-library manual_tag entries are displayed as system tags (matches Platform). */
@@ -923,8 +931,12 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
                     t?.resource_type !== undefined && t?.resource_type !== null
                         ? String(t.resource_type)
                         : undefined;
+                const review_status =
+                    t?.review_status !== undefined && t?.review_status !== null
+                        ? Number(t.review_status)
+                        : undefined;
                 if (!name) return null;
-                return { id, name, resource_type };
+                return { id, name, resource_type, review_status };
             })
             .filter((v: FileTag | null): v is FileTag => v !== null)
         : [];
@@ -1036,9 +1048,6 @@ export function fileStatusToNumber(status: FileStatus): number {
         default: return 0;
     }
 }
-
-/** Backend `/children` filter for members: keep violation visible, exclude generic failed files. */
-export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6, 7];
 
 /** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
 export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
@@ -1726,6 +1735,22 @@ export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
 }
 
 /**
+ * Lookup an existing tag by name without creating a review tag.
+ * Backend: GET /api/v1/knowledge/space/{space_id}/tag/lookup
+ */
+export async function lookupSpaceTagApi(space_id: string, tag_name: string): Promise<SpaceTag | null> {
+    const res = await request.get<ApiResponse<SpaceTag | null>>(
+        `/api/v1/knowledge/space/${space_id}/tag/lookup`,
+        { params: { tag_name } },
+    );
+    const raw = res?.data;
+    if (!raw || raw.id === undefined || raw.id === null) {
+        return null;
+    }
+    return raw as SpaceTag;
+}
+
+/**
  * Add a new space tag.
  * Backend: POST /api/v1/knowledge/space/{space_id}/tag
  */
@@ -1909,8 +1934,8 @@ export async function listKnowledgeFolders(params: {
     parent_id?: string | number | null;
     /**
      * Status filter — must mirror what the right-side file panel sends so the
-     * tree and the panel stay consistent. For MEMBER-role users this should be
-     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     * tree and the panel stay consistent. Backend now enforces restricted-status
+     * visibility per role; omit to let the backend decide.
      */
     file_status?: number[];
 }): Promise<{ items: KnowledgeFolderNode[]; total: number }> {
@@ -2687,6 +2712,7 @@ export interface SearchableDocumentEntry {
     current_primary_version_no: number;
     primary_uploader_name?: string | null;
     primary_upload_time?: string | null;
+    primary_knowledge_file_id: number; // primary version's file id, used for preview
 }
 
 /**
@@ -2716,6 +2742,7 @@ export interface SimilarCandidateEntry {
     refined_similarity?: number; // TF-IDF cosine; preferred for display when present
     primary_uploader_name?: string;
     primary_upload_time?: string;
+    primary_knowledge_file_id: number; // primary version's file id, used for preview
 }
 
 /**

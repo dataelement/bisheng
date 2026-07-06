@@ -5,7 +5,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '~/components/ui/Tooltip2';
-import { FileTag } from '~/api/knowledge';
+import { FileTag, isPendingReviewTagStatus } from '~/api/knowledge';
 
 const TAG_TYPE_LABELS: Record<string, string> = {
     system_tag: '系统：',
@@ -14,6 +14,16 @@ const TAG_TYPE_LABELS: Record<string, string> = {
 };
 
 const getTagTypeLabel = (resourceType?: string) => TAG_TYPE_LABELS[resourceType || ''] || '';
+
+const APPROVED_TAG_CLASS =
+    'bg-[#EBF5FD] text-[#545A60] text-[12px] px-1.5 py-0.5 rounded-[4px] border border-[#E6E6E6] whitespace-nowrap';
+const PENDING_REVIEW_TAG_CLASS =
+    'bg-[#f2f3f5] text-[#c9cdd4] text-[12px] px-1.5 py-0.5 rounded-[4px] border border-[#EBECF0] whitespace-nowrap';
+
+function tagChipClassName(tag: FileTag, extra = ''): string {
+    const pending = isPendingReviewTagStatus(tag.review_status);
+    return `${pending ? PENDING_REVIEW_TAG_CLASS : APPROVED_TAG_CLASS} ${extra}`.trim();
+}
 
 const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: ReactNode }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -53,7 +63,7 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
             observer.observe(containerRef.current);
         }
         return () => observer.disconnect();
-    }, [tags]);
+    }, [tags, actionButton]);
 
     const visibleTags = tags.slice(0, visibleCount);
     const hiddenTags = tags.slice(visibleCount);
@@ -68,8 +78,10 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
                 {visibleTags.map((tag, index) => (
                     <div
                         key={tag.id}
-                        className={`bg-[#EBF5FD] text-[#545A60] text-[12px] px-1.5 py-0.5 rounded-[4px] border border-[#E6E6E6] whitespace-nowrap
-              ${index === 0 ? 'min-w-[30px] truncate flex-shrink' : 'flex-shrink-0'}`}
+                        className={tagChipClassName(
+                            tag,
+                            index === 0 ? 'min-w-[30px] truncate flex-shrink' : 'flex-shrink-0',
+                        )}
                     >
                         {tag.name}
                     </div>
@@ -96,7 +108,13 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
                                             <div key={label} className="flex flex-wrap items-start gap-1">
                                                 <span className="text-[#86909c] text-xs shrink-0 leading-5">{label}</span>
                                                 {groupTags.map((tag) => (
-                                                    <span key={tag.id} className="bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm">
+                                                    <span
+                                                        key={tag.id}
+                                                        className={`text-xs px-1.5 py-0.5 rounded-sm ${isPendingReviewTagStatus(tag.review_status)
+                                                            ? 'bg-[#f2f3f5] text-[#c9cdd4]'
+                                                            : 'bg-[#f2f3f5] text-[#4e5969]'
+                                                            }`}
+                                                    >
                                                         {tag.name}
                                                     </span>
                                                 ))}

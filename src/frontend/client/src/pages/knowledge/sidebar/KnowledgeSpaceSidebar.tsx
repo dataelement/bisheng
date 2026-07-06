@@ -198,6 +198,7 @@ export function KnowledgeSpaceSidebar({
 
     const getItemPermissions = (space: KnowledgeSpace) => {
         const isCreator = space.role === SpaceRole.CREATOR;
+        const isPersonal = space.spaceLevel === SpaceLevel.PERSONAL;
         const canEditSpace = isCreator || hasKnowledgeSpacePermission(
             spaceActionPermissions,
             space.id,
@@ -213,7 +214,12 @@ export function KnowledgeSpaceSidebar({
             space.id,
             "manage_space_relation",
         );
-        return { canEditSpace, canDeleteSpace, canManageMembers };
+        // Personal knowledge bases are edit-only: no delete, no authorize/member management.
+        return {
+            canEditSpace,
+            canDeleteSpace: isPersonal ? false : canDeleteSpace,
+            canManageMembers: isPersonal ? false : canManageMembers,
+        };
     };
 
     // CRUD operations with optimistic updates (mirrors useChannelActions)

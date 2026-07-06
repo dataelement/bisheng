@@ -228,7 +228,13 @@ class TagDao(Tag):
     async def get_tags_by_business(
         cls, business_type: TagBusinessTypeEnum, business_id: str, name: str = None
     ) -> list[Tag]:
-        statement = select(Tag).where(Tag.business_type == business_type, Tag.business_id == business_id)
+        business_type_value = (
+            business_type.value if isinstance(business_type, TagBusinessTypeEnum) else str(business_type)
+        )
+        statement = select(Tag).where(
+            Tag.business_type == business_type_value,
+            Tag.business_id == str(business_id),
+        )
         if name:
             statement = statement.where(Tag.name == name)
         async with get_async_db_session() as session:

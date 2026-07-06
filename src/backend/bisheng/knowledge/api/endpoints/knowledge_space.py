@@ -480,6 +480,16 @@ async def get_space_tag(
     return resp_200(result)
 
 
+@router.get("/{space_id}/tag/lookup")
+async def lookup_space_tag(
+    space_id: int,
+    tag_name: str = Query(..., description="标签名称"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.lookup_space_tag(space_id, tag_name)
+    return resp_200(result)
+
+
 @router.post("/{space_id}/tag")
 async def add_space_tags(
     space_id: int,
