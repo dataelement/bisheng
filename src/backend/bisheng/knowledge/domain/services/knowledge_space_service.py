@@ -115,6 +115,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
+    MEMBER_HIDDEN_FILE_STATUSES,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -6781,6 +6782,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             context=permission_context,
         )
         return len(visible_files)
+
+    @staticmethod
+    def _hide_restricted_status_items(
+        items: List[KnowledgeFile],
+        *,
+        owner_user_id: Optional[int],
+    ) -> List[KnowledgeFile]:
+        """Drop files whose status is restricted (parse-failed / timeout / violation)
+        unless the current user uploaded them. Folders are never dropped here.
+        Callers gate this on the viewer NOT being a space manager."""
+        return [
+            item
+            for item in items
+            if item.file_type == FileType.DIR.value
+            or item.status not in MEMBER_HIDDEN_FILE_STATUSES
+            or item.user_id == owner_user_id
+        ]
 
     async def _filter_visible_child_items(
         self,

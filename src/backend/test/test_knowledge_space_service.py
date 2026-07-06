@@ -7920,3 +7920,23 @@ class TestFineGrainedPermissionRuntime:
                 await service.delete_file(125)
 
         mock_delete_batch.assert_not_awaited()
+
+
+def test_hide_restricted_status_items_member_view():
+    KnowledgeSpaceService = _load_service_class()
+    owner_id = 7
+    items = [
+        _make_file(file_id=1, user_id=7, status=KnowledgeFileStatus.SUCCESS.value),      # 本人成功 -> 保留
+        _make_file(file_id=2, user_id=7, status=KnowledgeFileStatus.FAILED.value),       # 本人失败 -> 保留
+        _make_file(file_id=3, user_id=99, status=KnowledgeFileStatus.SUCCESS.value),     # 他人成功 -> 保留
+        _make_file(file_id=4, user_id=99, status=KnowledgeFileStatus.FAILED.value),      # 他人失败 -> 去除
+        _make_file(file_id=5, user_id=99, status=KnowledgeFileStatus.TIMEOUT.value),     # 他人超时 -> 去除
+        _make_file(file_id=6, user_id=99, status=KnowledgeFileStatus.VIOLATION.value),   # 他人违规 -> 去除
+        _make_file(file_id=7, user_id=99, status=KnowledgeFileStatus.VIOLATION.value,
+                   file_type=FileType.DIR.value),                                        # 文件夹 -> 保留
+    ]
+
+    kept = KnowledgeSpaceService._hide_restricted_status_items(items, owner_user_id=owner_id)
+    kept_ids = {f.id for f in kept}
+
+    assert kept_ids == {1, 2, 3, 7}
