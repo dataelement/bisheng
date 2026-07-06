@@ -1,4 +1,4 @@
-import { FolderPlus, FolderUp, Link2 } from "lucide-react";
+import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -12,7 +12,11 @@ import {
     DropdownMenuCheckboxItem
 } from "~/components/ui/DropdownMenu";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
+import {
+    ActionMenuContent,
+    ActionMenuItem,
+    actionMenuLabelClassName,
+} from "~/components/ActionMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
@@ -307,78 +311,73 @@ export function KnowledgeSpaceHeader({
                 </DropdownMenu>
             )}
             {showAddMenu && (
-                canUploadFile ? (
-                    // Split button per design 11495:14337: left half = direct upload, right half = dropdown
-                    // (only "新建文件夹"). When canCreateFolder is false the chevron half is omitted and the
-                    // shell becomes a single-action button.
-                    <div className="inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-md border border-[#ebebeb] bg-white">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                         <button
                             type="button"
                             disabled={isSearching}
-                            onClick={onTriggerUpload}
-                            className={cn(
-                                "inline-flex items-center justify-center px-4 text-sm text-[#212121] transition-colors",
-                                "hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent",
-                                "border-r border-[#ebebeb]"
-                            )}
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
                         >
                             {localize("com_knowledge.add_new")}
+                            <Outlined.Down className="size-4" />
                         </button>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button
-                                    type="button"
-                                    disabled={isSearching}
-                                    aria-label={localize("com_knowledge.add_new")}
-                                    className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
-                                >
-                                    <Outlined.Down className="size-4" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <ActionMenuContent align="end">
-                                <ActionMenuItem
-                                    onClick={onTriggerWebLink}
-                                    icon={<Link2 />}
-                                    label={localize("com_knowledge.web_link")}
-                                />
-                                <ActionMenuItem
-                                    onClick={onTriggerUploadFolder}
-                                    icon={<FolderUp />}
-                                    label={localize("com_knowledge.upload_folder")}
-                                />
-                                {canCreateFolder && (
-                                    <ActionMenuItem
-                                        onClick={onCreateFolder}
-                                        icon={<FolderPlus />}
-                                        label={localize("com_knowledge.new_folder")}
-                                    />
-                                )}
-                            </ActionMenuContent>
-                        </DropdownMenu>
-                    </div>
-                ) : (
-                    // Fallback when the user can only create folders: keep the original dropdown shape
-                    // so the single available action is still discoverable.
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                disabled={isSearching}
-                                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
-                            >
-                                {localize("com_knowledge.add_new")}
-                                <Outlined.Down className="size-4" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <ActionMenuContent align="end">
+                    </DropdownMenuTrigger>
+                    <ActionMenuContent align="end" width={200}>
+                        {canCreateFolder && (
                             <ActionMenuItem
                                 onClick={onCreateFolder}
                                 icon={<FolderPlus />}
                                 label={localize("com_knowledge.new_folder")}
                             />
-                        </ActionMenuContent>
-                    </DropdownMenu>
-                )
+                        )}
+                        {canUploadFile && (
+                            <>
+                                <ActionMenuItem
+                                    onClick={onTriggerUpload}
+                                    icon={<Outlined.Upload />}
+                                >
+                                    <div className="flex min-w-0 flex-1 items-center">
+                                        <span className={actionMenuLabelClassName}>
+                                            {localize("com_knowledge.upload_file")}
+                                        </span>
+                                        {supportedFormatsLabel ? (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <span
+                                                        className="ml-auto inline-flex size-4 shrink-0 items-center justify-center text-[#8a94a6]"
+                                                        onClick={(event) => event.stopPropagation()}
+                                                        onPointerDown={(event) => event.stopPropagation()}
+                                                    >
+                                                        <CircleHelp className="size-3.5" />
+                                                    </span>
+                                                </TooltipTrigger>
+                                                <TooltipContent
+                                                    noArrow
+                                                    side="left"
+                                                    className="z-[999] max-w-md bg-white px-3 py-2 shadow-md"
+                                                >
+                                                    {localize("com_knowledge.supported_formats_tip", {
+                                                        formats: supportedFormatsLabel,
+                                                    })}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        ) : null}
+                                    </div>
+                                </ActionMenuItem>
+                                <ActionMenuItem
+                                    onClick={onTriggerUploadFolder}
+                                    icon={<FolderUp />}
+                                    label={localize("com_knowledge.upload_folder")}
+                                />
+                                <ActionMenuItem
+                                    onClick={onTriggerWebLink}
+                                    icon={<Link2 />}
+                                    label={localize("com_knowledge.web_link")}
+                                />
+                            </>
+                        )}
+                    </ActionMenuContent>
+                </DropdownMenu>
             )}
         </div>
     );
