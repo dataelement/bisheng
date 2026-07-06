@@ -5717,7 +5717,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             elif space.space_level == KnowledgeSpaceLevelEnum.TEAM:
                 grouped.team_spaces.append(space)
             else:
-                grouped.personal_spaces.append(space)
+                # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
+                if int(getattr(space, "user_id", 0) or 0) == int(self.login_user.user_id):
+                    grouped.personal_spaces.append(space)
         grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
@@ -5735,6 +5737,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
+
+        if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
+            # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
+            current_user_id = int(self.login_user.user_id)
+            result = [
+                space
+                for space in result
+                if int(getattr(space, "user_id", 0) or 0) == current_user_id
+            ]
 
         if favorite_space_id is not None:
             for space in result:
