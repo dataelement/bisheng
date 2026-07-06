@@ -985,15 +985,15 @@ class PermissionService:
             ])
             results.update(dict(zip(still_unresolved, implicit)))
             return results
-        except FGAConnectionError as e:
-            logger.error('OpenFGA unreachable during get_permission_levels: %s', e)
-            for oid in pending:
-                results.setdefault(oid, None)
-            return results
         except Exception as e:
-            logger.error('Error getting permission levels: %s', e)
-            for oid in pending:
-                results.setdefault(oid, None)
+            logger.error('Batched permission-level check failed, falling back to per-object: %s', e)
+            fallback = await asyncio.gather(*[
+                cls.get_permission_level(
+                    user_id=user_id, object_type=object_type, object_id=oid, login_user=login_user)
+                for oid in pending
+            ])
+            for oid, level in zip(pending, fallback):
+                results[oid] = level
             return results
 
     # ── Internal helpers ────────────────────────────────────────

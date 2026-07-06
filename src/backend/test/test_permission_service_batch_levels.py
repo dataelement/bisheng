@@ -100,3 +100,44 @@ async def test_get_permission_levels_tenant_gate_denied_and_shortcut():
         result = await PermissionService.get_permission_levels(
             user_id=login_user.user_id, object_type='knowledge_space', object_ids=['1', '2', '3'], login_user=login_user)
     assert result == {'1': None, '2': 'owner', '3': None}
+
+
+@pytest.mark.asyncio
+async def test_get_permission_levels_falls_back_to_single_calls_on_batch_exception():
+    login_user = _fake_login_user()
+    object_ids = ['1', '2', '3']
+
+    fga = AsyncMock()
+    fga.batch_check.side_effect = RuntimeError('boom')
+
+    per_object_levels = {'1': 'owner', '2': 'can_read', '3': None}
+
+    async def _single(user_id, object_type, object_id, login_user=None):
+        return per_object_levels[object_id]
+
+    with patch.object(PermissionService, '_aget_fga', new_callable=AsyncMock, return_value=fga), \
+         patch.object(PermissionService, '_evaluate_tenant_gate', new_callable=AsyncMock, return_value=(False, None)), \
+         patch.object(PermissionService, 'get_permission_level', side_effect=_single) as mocked_single:
+        result = await PermissionService.get_permission_levels(
+            user_id=login_user.user_id, object_type='knowledge_space', object_ids=object_ids, login_user=login_user)
+
+    assert result == per_object_levels
+    assert mocked_single.await_count == len(object_ids)
+
+
+@pytest.mark.asyncio
+async def test_get_permission_levels_fga_none_uses_implicit_fallback():
+    login_user = _fake_login_user()
+    object_ids = ['1', '2', '3']
+    per_object_levels = {'1': 'owner', '2': 'can_read', '3': None}
+
+    async def _implicit(user_id, object_type, object_id, login_user=None):
+        return per_object_levels[object_id]
+
+    with patch.object(PermissionService, '_aget_fga', new_callable=AsyncMock, return_value=None), \
+         patch.object(PermissionService, '_evaluate_tenant_gate', new_callable=AsyncMock, return_value=(False, None)), \
+         patch.object(PermissionService, '_get_implicit_permission_level_after_gate', side_effect=_implicit):
+        result = await PermissionService.get_permission_levels(
+            user_id=login_user.user_id, object_type='knowledge_space', object_ids=object_ids, login_user=login_user)
+
+    assert result == per_object_levels
