@@ -207,6 +207,7 @@ class KnowledgeUtils(BaseService):
         """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
         file_name = os.path.basename(file_path)
         file_name_no_ext, file_ext = file_name.rsplit(".", 1)
+        file_ext = file_ext.lower()
         if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_name_no_ext}.docx"
         elif file_ext in ["xls", "xlsx", "et"]:
