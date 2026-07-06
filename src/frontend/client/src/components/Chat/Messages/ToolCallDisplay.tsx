@@ -19,10 +19,6 @@ import { cn } from "~/utils";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
-    /** Whether to render a short vertical timeline connector below this card.
-     *  Set to true when this is not the last tool in its group, so a visual
-     *  line bridges to the next tool even when both are collapsed. */
-    showConnector?: boolean;
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -225,17 +221,17 @@ function normaliseKnowledgeResults(
 
 const variantStyles = {
     knowledge: {
-        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#999999]" />,
+        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#1D2129]" />,
     },
     web: {
-        icon: <Outlined.Earth size={16} className="shrink-0 text-[#999999]" />,
+        icon: <Outlined.Earth size={16} className="shrink-0 text-[#1D2129]" />,
     },
     tool: {
-        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#999999]" />,
+        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#1D2129]" />,
     },
 } as const;
 
-const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
+const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
@@ -276,7 +272,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
         !!toolCall.error ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
-    // cofco: all nodes start collapsed — including failed calls; the red rail icon
+    // All nodes start collapsed — including failed calls; the red rail icon
     // and "失败" label already signal the error, the user expands for detail.
     const [expanded, setExpanded] = useState<boolean>(false);
     // Re-collapse when the call transitions (e.g. inflight → finished) so a
@@ -294,14 +290,9 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
     );
 
     return (
-        <div className="flex w-full min-w-0 gap-1.5">
-            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
+        <div className="flex w-full min-w-0 gap-2">
+            <div className="flex shrink-0 items-start pt-[3px]">
                 {railIcon}
-                {/* Rail line: keep the timeline continuous to the next node, and
-                    always flank this node's own expanded content. */}
-                {(showConnector || expanded) && (
-                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
-                )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
                 <button
