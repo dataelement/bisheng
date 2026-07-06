@@ -173,6 +173,14 @@ FILE_CATEGORY_CODE_KEY = "file_category_code"
 
 
 @dataclass(frozen=True)
+class FileSubcategoryOption:
+    code: str
+    label: str
+    parent_code: str
+    parent_label: str
+
+
+@dataclass(frozen=True)
 class FileEncodingRuntimeConfig:
     classify_prompt: str
     user_content_template: str
@@ -180,6 +188,7 @@ class FileEncodingRuntimeConfig:
     fallback_code: str
     seq_cap: int
     document_type_codes: frozenset[str]
+    subcategory_options_by_document_type: dict[str, tuple[FileSubcategoryOption, ...]]
     business_domain_codes: tuple[str, ...]
 
 
@@ -213,12 +222,18 @@ class FileEncodingTransformer(BaseDocumentTransformer):
     async def _do_work(self) -> None:
         shougang_conf = await bisheng_settings.aget_shougang_conf()
         business_domain_codes = await self._resolve_space_business_domain_codes()
-        encoding_config = self._resolve_encoding_config(shougang_conf, business_domain_codes)
+        portal_document_types = await self._resolve_portal_document_types()
+        encoding_config = self._resolve_encoding_config(
+            shougang_conf,
+            business_domain_codes,
+            portal_document_types,
+        )
         company_code = self._resolve_company_code(shougang_conf)
         selected_document_type_code = self._resolve_selected_document_type_code(encoding_config)
         selected_business_domain_code = self._resolve_selected_business_domain_code(encoding_config)
 
         if self.knowledge_file.file_encoding:
+            await self._ensure_file_subcategory_code(encoding_config)
             return
 
         try:
@@ -271,6 +286,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                     f"[shougang.encoding] file_id={self.knowledge_file.id} "
                     f"abandoned: outer={e} inner={inner}"
                 )
+        await self._ensure_file_subcategory_code(encoding_config)
 
     async def _classify_with_llm(self, encoding_config: FileEncodingRuntimeConfig | None = None) -> str:
         encoding_config = encoding_config or self._resolve_encoding_config(None)
@@ -321,6 +337,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self,
         shougang_conf: Any,
         business_domain_codes: Sequence[str] | None = None,
+        document_types_override: Sequence[Any] | None = None,
     ) -> FileEncodingRuntimeConfig:
         raw_config = getattr(shougang_conf, 'file_encoding', None) if shougang_conf is not None else None
         classify_prompt = self._resolve_nonempty_str(
@@ -330,7 +347,13 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         valid_pattern = self._resolve_valid_pattern(raw_config)
         fallback_code = self._resolve_fallback_code(raw_config, valid_pattern)
         seq_cap = self._resolve_seq_cap(raw_config)
-        document_type_codes = self._resolve_document_type_codes(raw_config)
+        raw_document_types = (
+            list(document_types_override)
+            if document_types_override
+            else self._get_config_value(raw_config, 'document_types')
+        )
+        document_type_codes = self._resolve_document_type_codes(raw_document_types)
+        subcategory_options_by_document_type = self._resolve_subcategory_options_by_document_type(raw_document_types)
         return FileEncodingRuntimeConfig(
             classify_prompt=classify_prompt,
             user_content_template=user_content_template,
@@ -338,8 +361,25 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             fallback_code=fallback_code,
             seq_cap=seq_cap,
             document_type_codes=document_type_codes,
+            subcategory_options_by_document_type=subcategory_options_by_document_type,
             business_domain_codes=tuple(business_domain_codes or sorted(BUSINESS_DOMAIN_CODES)),
         )
+
+    async def _resolve_portal_document_types(self) -> list[dict[str, Any]]:
+        try:
+            from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+                ShougangPortalConfigService,
+            )
+
+            portal_config = await ShougangPortalConfigService.get_config()
+            document_types = getattr(getattr(portal_config, 'portal', None), 'document_types', None) or []
+            return [item.model_dump(mode='json') for item in document_types if item]
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"failed to resolve portal document types, fallback to shougang config: {e}"
+            )
+            return []
 
     async def _resolve_space_business_domain_codes(self) -> tuple[str, ...]:
         knowledge_id = getattr(self.knowledge_file, 'knowledge_id', None)
@@ -470,8 +510,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         )
         return SEQ_CAP
 
-    def _resolve_document_type_codes(self, raw_config: Any) -> frozenset[str]:
-        raw_document_types = self._get_config_value(raw_config, 'document_types')
+    def _resolve_document_type_codes(self, raw_document_types: Any) -> frozenset[str]:
         codes: set[str] = set()
         if isinstance(raw_document_types, list):
             for item in raw_document_types:
@@ -489,6 +528,145 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             }
             codes.discard('')
         return frozenset(codes)
+
+    def _resolve_subcategory_options_by_document_type(
+        self,
+        raw_document_types: Any,
+    ) -> dict[str, tuple[FileSubcategoryOption, ...]]:
+        if not isinstance(raw_document_types, list) or not raw_document_types:
+            raw_document_types = DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES
+
+        options_by_parent: dict[str, tuple[FileSubcategoryOption, ...]] = {}
+        for item in raw_document_types:
+            parent_code = self._normalize_document_type_code(self._get_item_value(item, 'code'))
+            if not parent_code:
+                continue
+            parent_label = self._resolve_item_label(item, parent_code)
+            raw_children = self._get_item_value(item, 'children')
+            children = raw_children if isinstance(raw_children, list) and raw_children else [item]
+            options: list[FileSubcategoryOption] = []
+            seen: set[str] = set()
+            for child in children:
+                child_code = self._normalize_file_subcategory_code(self._get_item_value(child, 'code'))
+                if not child_code or child_code in seen:
+                    continue
+                seen.add(child_code)
+                options.append(
+                    FileSubcategoryOption(
+                        code=child_code,
+                        label=self._resolve_item_label(child, child_code),
+                        parent_code=parent_code,
+                        parent_label=parent_label,
+                    )
+                )
+            if not options:
+                options.append(
+                    FileSubcategoryOption(
+                        code=parent_code,
+                        label=parent_label,
+                        parent_code=parent_code,
+                        parent_label=parent_label,
+                    )
+                )
+            options_by_parent[parent_code] = tuple(options)
+        return options_by_parent
+
+    async def _ensure_file_subcategory_code(self, encoding_config: FileEncodingRuntimeConfig) -> None:
+        existing_code = self._normalize_file_subcategory_code(getattr(self.knowledge_file, 'file_subcategory_code', None))
+        if existing_code:
+            return
+        document_type_code = self._extract_document_type_code_from_file_encoding(self.knowledge_file.file_encoding)
+        if not document_type_code:
+            return
+        options = encoding_config.subcategory_options_by_document_type.get(document_type_code) or ()
+        if not options:
+            return
+        if len(options) == 1:
+            self.knowledge_file.file_subcategory_code = options[0].code
+            self.knowledge_file.file_subcategory_source = "fallback"
+            return
+        selected = await self._select_subcategory_with_llm(options)
+        if selected:
+            self.knowledge_file.file_subcategory_code = selected.code
+            self.knowledge_file.file_subcategory_source = "ai"
+            return
+        self.knowledge_file.file_subcategory_code = options[0].code
+        self.knowledge_file.file_subcategory_source = "fallback"
+
+    async def _select_subcategory_with_llm(
+        self,
+        options: tuple[FileSubcategoryOption, ...],
+    ) -> FileSubcategoryOption | None:
+        try:
+            from bisheng.llm.domain.services.llm import LLMService
+
+            tenant_id = getattr(self.knowledge_file, 'tenant_id', None)
+            llm_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
+            if (not llm_conf
+                    or not llm_conf.chat_title_llm
+                    or not llm_conf.chat_title_llm.id):
+                return None
+            llm = await LLMService.get_bisheng_llm(
+                model_id=llm_conf.chat_title_llm.id,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_name='shougang_file_subcategory',
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+                user_id=self.invoke_user_id,
+            )
+            response = await llm.ainvoke(self._build_subcategory_messages(options))
+            selected_code = self._normalize_file_subcategory_code((response.content or "").strip())
+            if not selected_code:
+                return None
+            return next((option for option in options if option.code == selected_code), None)
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"subcategory fallback: llm_error {e}"
+            )
+            return None
+
+    def _build_subcategory_messages(
+        self,
+        options: tuple[FileSubcategoryOption, ...],
+    ) -> list[dict[str, str]]:
+        option_lines = "\n".join(f"- {option.code}: {option.label}" for option in options)
+        content = (
+            "请根据文件标题和摘要，从候选二级分类中选择最合适的一个。\n"
+            "只输出二级分类编码，不要输出解释。\n\n"
+            f"一级分类: {options[0].parent_label} ({options[0].parent_code})\n"
+            f"候选二级分类:\n{option_lines}\n\n"
+            f"文件标题: {self.knowledge_file.file_name or ''}\n"
+            f"文件摘要: {self.knowledge_file.abstract or ''}"
+        )
+        return [
+            {"role": "system", "content": "你是企业知识库文件二级分类助手。"},
+            {"role": "user", "content": content},
+        ]
+
+    @classmethod
+    def _extract_document_type_code_from_file_encoding(cls, file_encoding: str | None) -> str | None:
+        parts = [part.strip() for part in (file_encoding or "").split("-") if part.strip()]
+        if len(parts) < 4:
+            return None
+        business_index = len(parts) - 1
+        while business_index >= 0 and re.fullmatch(r"\d{3,}", parts[business_index]):
+            business_index -= 1
+        document_index = business_index - 1
+        if document_index < 0:
+            return None
+        return cls._normalize_document_type_code(parts[document_index])
+
+    @staticmethod
+    def _get_item_value(item: Any, key: str) -> Any:
+        if isinstance(item, dict):
+            return item.get(key)
+        return getattr(item, key, None)
+
+    def _resolve_item_label(self, item: Any, fallback: str) -> str:
+        label = self._get_item_value(item, 'label')
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        return fallback
 
     def _resolve_selected_document_type_code(
         self,
@@ -598,6 +776,15 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             return None
         code = value.strip().upper()
         if re.fullmatch(r"[A-Z0-9_]{1,16}", code):
+            return code
+        return None
+
+    @staticmethod
+    def _normalize_file_subcategory_code(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        code = value.strip().upper()
+        if re.fullmatch(r"[A-Z0-9_-]{1,16}", code):
             return code
         return None
 

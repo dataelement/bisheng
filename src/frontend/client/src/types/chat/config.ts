@@ -562,6 +562,10 @@ export type BsConfig = {
       document_types?: Array<{
         code: string;
         label: string;
+        children?: Array<{
+          code: string;
+          label: string;
+        }>;
       }>;
       [key: string]: unknown;
     };

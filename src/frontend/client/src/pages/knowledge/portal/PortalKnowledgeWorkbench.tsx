@@ -67,6 +67,7 @@ import {
     isFolder,
     isPreviewable,
     isRetryable,
+    normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
     resolvePreviewUrl,
     toNumericIds,
@@ -937,11 +938,15 @@ export default function PortalKnowledgeWorkbench() {
     const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && (isActiveSpaceAdmin || canCreateFolder));
     const fileCategoryOptions = useMemo(() => {
         if (portalMetaConfig?.document_types?.length) {
-            return normalizePortalFileCategoryOptions(
-                portalMetaConfig.document_types.map((dt) => ({ code: dt.code, label: dt.label ?? dt.name ?? dt.code }))
-            );
+            return normalizePortalFileCategoryOptions(portalMetaConfig.document_types);
         }
         return normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types);
+    }, [portalMetaConfig, bsConfig]);
+    const fileCategoryGroups = useMemo(() => {
+        if (portalMetaConfig?.document_types?.length) {
+            return normalizePortalFileCategoryGroups(portalMetaConfig.document_types);
+        }
+        return normalizePortalFileCategoryGroups((bsConfig as any)?.shougang?.file_encoding?.document_types);
     }, [portalMetaConfig, bsConfig]);
 
     const businessDomainOptions = useMemo(() => {
@@ -1000,8 +1005,8 @@ export default function PortalKnowledgeWorkbench() {
         uploadFolderOptions,
         duplicateFiles,
         duplicateOverwriting,
-        fileCategoryCode,
-        fileCategoryOptions: resolvedFileCategoryOptions,
+        fileSubcategoryCode,
+        fileCategoryGroups: resolvedFileCategoryGroups,
         businessDomainCode,
         uploadTagOptions,
         selectedUploadTagValues,
@@ -1037,7 +1042,7 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderNode,
         currentPath,
         statusFilterNumbers,
-        fileCategoryOptions,
+        fileCategoryGroups,
         businessDomainOptions: uploadBusinessDomainOptions,
         enableEtl4lm: portalEnableEtl4lm,
         uploadSizeLimits: portalUploadSizeLimits,
@@ -2322,8 +2327,8 @@ export default function PortalKnowledgeWorkbench() {
                     uploadImporting,
                     uploadReviewRows,
                     uploadFolderOptions,
-                    fileCategoryCode,
-                    fileCategoryOptions: resolvedFileCategoryOptions,
+                    fileSubcategoryCode,
+                    fileCategoryGroups: resolvedFileCategoryGroups,
                     businessDomainCode,
                     businessDomainOptions: uploadBusinessDomainOptions,
                     uploadTagOptions,

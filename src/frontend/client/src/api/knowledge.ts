@@ -436,6 +436,7 @@ export interface KnowledgeFile {
     approvalStatus?: string;
     approvalReason?: string;
     fileEncoding?: string | null;        // mapped from file_encoding
+    fileSubcategoryCode?: string | null; // mapped from file_subcategory_code
     summary?: string;
     isPendingApproval?: boolean;
     version_no?: number;          // primary version number; absent for folders / legacy files
@@ -558,6 +559,7 @@ export interface KnowledgeSpaceTagLibraryPage {
 
 export interface UploadFileRegistrationMetadata {
     file_category_code?: string;
+    file_subcategory_code?: string;
     business_domain_code?: string;
     manual_tag_ids?: number[];
     manual_tag_names?: string[];
@@ -978,6 +980,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
         fileEncoding: raw?.file_encoding ?? null,
+        fileSubcategoryCode: raw?.file_subcategory_code ?? null,
         summary: raw?.summary ?? raw?.abstract ?? "",
         version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
         is_multi_version: Boolean(raw?.is_multi_version),

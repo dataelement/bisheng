@@ -3321,9 +3321,14 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const dialog = await screen.findByTestId("portal-upload-dialog");
         expect(within(dialog).getByText("上传文件")).toBeInTheDocument();
-        expect(within(dialog).getByLabelText("文件分类")).toHaveDisplayValue("请选择文件分类");
+        const categoryTree = within(dialog).getByRole("tree", { name: "文件分类" });
+        expect(within(categoryTree).getByRole("button", { name: "AI 自动生成" })).toBeInTheDocument();
+        const reportCategoryButton = within(categoryTree).getByRole("button", { name: "RPT / 报告" });
+        expect(reportCategoryButton).toHaveAttribute("aria-expanded", "false");
+        fireEvent.click(reportCategoryButton);
+        expect(reportCategoryButton).toHaveAttribute("aria-expanded", "true");
+        expect(within(categoryTree).getAllByRole("button", { name: "RPT / 报告" })).toHaveLength(2);
         expect(within(dialog).queryByText("*")).not.toBeInTheDocument();
-        expect(within(dialog).getByRole("option", { name: "报告" })).toHaveValue("RPT");
         expect(within(dialog).getByLabelText("业务域")).toHaveDisplayValue("AI 自动生成");
         expect(within(dialog).getByRole("option", { name: "PP / 生产" })).toHaveValue("PP");
         expect(within(dialog).getByText("文件标签")).toBeInTheDocument();
@@ -3945,9 +3950,8 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
             target: { files: [rootFile] },
         });
-        fireEvent.change(within(dialog).getByLabelText("文件分类"), {
-            target: { value: "RPT" },
-        });
+        fireEvent.click(within(dialog).getByRole("button", { name: "RPT / 报告" }));
+        fireEvent.click(within(dialog).getAllByRole("button", { name: "RPT / 报告" })[1]);
         fireEvent.click(within(dialog).getByRole("button", { name: "上传" }));
 
         await waitFor(() => {
@@ -3961,6 +3965,7 @@ describe("PortalKnowledgeWorkbench", () => {
             file_path: ["/tmp/根层文档.pdf"],
             parent_id: 777,
             file_category_code: "RPT",
+            file_subcategory_code: "RPT",
         });
         expect(getSimilarCandidatesApi).not.toHaveBeenCalled();
         expect(screen.queryByTestId("portal-upload-review-dialog")).not.toBeInTheDocument();
@@ -3996,9 +4001,8 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
             target: { files: [rootFile] },
         });
-        fireEvent.change(within(dialog).getByLabelText("文件分类"), {
-            target: { value: "RPT" },
-        });
+        fireEvent.click(within(dialog).getByRole("button", { name: "RPT / 报告" }));
+        fireEvent.click(within(dialog).getAllByRole("button", { name: "RPT / 报告" })[1]);
         fireEvent.click(within(dialog).getByRole("button", { name: "上传" }));
 
         await waitFor(() => {

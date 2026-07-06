@@ -30,9 +30,10 @@ import {
     isHiddenName,
     type UploadSizeLimits,
 } from "../../knowledgeUtils";
-import { DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS } from "../constants";
+import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../constants";
 import type {
-    PortalFileCategoryOption,
+    PortalFileCategoryGroupOption,
+    PortalFileSubcategoryOption,
     PortalFileTreeNode,
     PortalUploadFileItem,
     PortalUploadFolderNode,
@@ -67,7 +68,7 @@ interface UsePortalUploadDialogParams {
     currentFolderNode: PortalFileTreeNode | null;
     currentPath: Array<{ id?: string; name: string }>;
     statusFilterNumbers: number[];
-    fileCategoryOptions?: PortalFileCategoryOption[];
+    fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
     enableEtl4lm?: boolean;
     uploadSizeLimits?: UploadSizeLimits;
@@ -84,7 +85,7 @@ export function usePortalUploadDialog({
     uploadTargetSpace,
     canUploadInPortal,
     statusFilterNumbers,
-    fileCategoryOptions = DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
+    fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS,
     businessDomainOptions = [],
     enableEtl4lm = true,
     uploadSizeLimits,
@@ -111,7 +112,7 @@ export function usePortalUploadDialog({
     const [duplicateOverwriting, setDuplicateOverwriting] = useState(false);
     const [duplicateFileCategoryCode, setDuplicateFileCategoryCode] = useState<string | undefined>();
     const [duplicateUploadMetadataPayload, setDuplicateUploadMetadataPayload] = useState<PortalUploadMetadataPayload>({});
-    const [fileCategoryCode, setFileCategoryCode] = useState("");
+    const [fileSubcategoryCode, setFileSubcategoryCode] = useState("");
     const [businessDomainCode, setBusinessDomainCode] = useState(EMPTY_PORTAL_UPLOAD_METADATA.businessDomainCode);
     const [selectedUploadTagValues, setSelectedUploadTagValues] = useState<string[]>([]);
     const [uploadTagOptions, setUploadTagOptions] = useState<PortalUploadTagOption[]>([]);
@@ -172,7 +173,7 @@ export function usePortalUploadDialog({
         setDuplicateFiles([]);
         setDuplicateFileCategoryCode(undefined);
         setDuplicateUploadMetadataPayload({});
-        setFileCategoryCode("");
+        setFileSubcategoryCode("");
         setBusinessDomainCode("");
         setSelectedUploadTagValues([]);
         setUploadTagOptions([]);
@@ -197,7 +198,7 @@ export function usePortalUploadDialog({
         setDuplicateFiles([]);
         setDuplicateFileCategoryCode(undefined);
         setDuplicateUploadMetadataPayload({});
-        setFileCategoryCode("");
+        setFileSubcategoryCode("");
         setBusinessDomainCode("");
         setSelectedUploadTagValues([]);
         setUploadFolderId(null);
@@ -207,11 +208,20 @@ export function usePortalUploadDialog({
     }, [activeSpace, canUploadInPortal, setActiveSpace, uploadTargetSpace]);
 
     useEffect(() => {
-        if (!fileCategoryCode) return;
-        if (!fileCategoryOptions.some((option) => option.code === fileCategoryCode)) {
-            setFileCategoryCode("");
+        if (!fileSubcategoryCode) return;
+        if (!fileCategoryGroups.some((group) => group.children.some((option) => option.code === fileSubcategoryCode))) {
+            setFileSubcategoryCode("");
         }
-    }, [fileCategoryCode, fileCategoryOptions]);
+    }, [fileSubcategoryCode, fileCategoryGroups]);
+
+    const selectedFileSubcategory = useMemo<PortalFileSubcategoryOption | null>(() => {
+        if (!fileSubcategoryCode) return null;
+        for (const group of fileCategoryGroups) {
+            const option = group.children.find((child) => child.code === fileSubcategoryCode);
+            if (option) return option;
+        }
+        return null;
+    }, [fileCategoryGroups, fileSubcategoryCode]);
 
     useEffect(() => {
         if (!businessDomainCode) return;
@@ -368,7 +378,7 @@ export function usePortalUploadDialog({
     }, []);
 
     const handleSelectFileCategory = useCallback((code: string) => {
-        setFileCategoryCode(code);
+        setFileSubcategoryCode(code);
     }, []);
 
     const handleSelectBusinessDomain = useCallback((code: string) => {
@@ -518,7 +528,7 @@ export function usePortalUploadDialog({
             setUploadFolderName("根目录");
             setUploadFolderSelection({ mode: "ai" });
             setUploadReviewRows([]);
-            setFileCategoryCode("");
+            setFileSubcategoryCode("");
             setBusinessDomainCode("");
             setSelectedUploadTagValues([]);
             return;
@@ -534,7 +544,7 @@ export function usePortalUploadDialog({
         setUploadFolderName("根目录");
         setUploadFolderSelection({ mode: "ai" });
         setUploadReviewRows([]);
-        setFileCategoryCode("");
+        setFileSubcategoryCode("");
         setBusinessDomainCode("");
         setSelectedUploadTagValues([]);
         onUploaded?.();
@@ -609,7 +619,7 @@ export function usePortalUploadDialog({
         }
         const uploadMetadataPayload = buildPortalUploadMetadataPayload(
             { businessDomainCode, selectedTagValues: selectedUploadTagValues },
-            fileCategoryCode,
+            selectedFileSubcategory,
         );
 
         // Pre-upload sensitive-word check: filenames (batch)
@@ -743,7 +753,7 @@ export function usePortalUploadDialog({
         } finally {
             setUploadSubmitting(false);
         }
-    }, [activeSpace, businessDomainCode, fileCategoryCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, selectedUploadTagValues, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);
+    }, [activeSpace, businessDomainCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, selectedFileSubcategory, selectedUploadTagValues, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);
 
     const handleDuplicateSkip = useCallback(() => {
         setDuplicateFiles([]);
@@ -819,8 +829,8 @@ export function usePortalUploadDialog({
         uploadFolderOptions,
         duplicateFiles,
         duplicateOverwriting,
-        fileCategoryCode,
-        fileCategoryOptions,
+        fileSubcategoryCode,
+        fileCategoryGroups,
         businessDomainCode,
         uploadTagOptions,
         selectedUploadTagValues,

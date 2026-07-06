@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, ReactNode, SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, FileText, Folder, Upload, X } from "lucide-react";
 import {
     Button,
@@ -9,7 +9,7 @@ import {
     DialogTitle,
 } from "~/components/ui";
 import type {
-    PortalFileCategoryOption,
+    PortalFileCategoryGroupOption,
     PortalUploadFileItem,
     PortalUploadFolderNode,
     PortalUploadFolderSelection,
@@ -41,8 +41,8 @@ interface PortalUploadDialogProps {
     uploadImporting: boolean;
     uploadReviewRows: PortalUploadReviewRow[];
     uploadFolderOptions: Array<{ id: string | null; name: string }>;
-    fileCategoryCode: string;
-    fileCategoryOptions: PortalFileCategoryOption[];
+    fileSubcategoryCode: string;
+    fileCategoryGroups: PortalFileCategoryGroupOption[];
     businessDomainCode: string;
     businessDomainOptions?: BusinessDomainOptionItem[];
     uploadTagOptions: PortalUploadTagOption[];
@@ -139,8 +139,8 @@ export function PortalUploadDialog({
     uploadImporting,
     uploadReviewRows,
     uploadFolderOptions,
-    fileCategoryCode,
-    fileCategoryOptions,
+    fileSubcategoryCode,
+    fileCategoryGroups,
     businessDomainCode,
     businessDomainOptions = [],
     uploadTagOptions,
@@ -166,6 +166,15 @@ export function PortalUploadDialog({
     onBackToSelect,
     onStartUploadImport,
 }: PortalUploadDialogProps) {
+    const [expandedCategoryCode, setExpandedCategoryCode] = useState<string | null>(null);
+    const selectedFileSubcategory = useMemo(() => {
+        for (const group of fileCategoryGroups) {
+            const option = group.children.find((child) => child.code === fileSubcategoryCode);
+            if (option) return option;
+        }
+        return null;
+    }, [fileCategoryGroups, fileSubcategoryCode]);
+    const activeCategoryCode = expandedCategoryCode ?? selectedFileSubcategory?.parentCode ?? null;
     const selectedReviewCount = uploadReviewRows.filter((row) => row.selected).length;
     const isAiFolderSelection = uploadFolderSelection.mode === "ai";
     const selectedUploadFolderName = isAiFolderSelection ? "未选择目录（AI推荐）" : uploadFolderName;
@@ -277,24 +286,50 @@ export function PortalUploadDialog({
 
                             <div className={s.uploadSection}>
                                 <div className={s.uploadMetadataGrid}>
-                                    <label className={s.uploadField}>
+                                    <div className={s.uploadField}>
                                         <span>
                                             文件分类
                                         </span>
-                                        <select
-                                            aria-label="文件分类"
-                                            className={s.uploadSelect}
-                                            value={fileCategoryCode}
-                                            onChange={(event) => onSelectFileCategory(event.currentTarget.value)}
-                                        >
-                                            <option value="">请选择文件分类</option>
-                                            {fileCategoryOptions.map((option) => (
-                                                <option key={option.code} value={option.code}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
+                                        <div className={s.uploadCategoryPicker} role="tree" aria-label="文件分类">
+                                            <button
+                                                type="button"
+                                                className={`${s.uploadCategoryChildButton} ${!fileSubcategoryCode ? s.uploadCategoryChildButtonActive : ""}`}
+                                                onClick={() => onSelectFileCategory("")}
+                                            >
+                                                AI 自动生成
+                                            </button>
+                                            {fileCategoryGroups.map((group) => {
+                                                const expanded = activeCategoryCode === group.code;
+                                                return (
+                                                    <div key={group.code} className={s.uploadCategoryGroup}>
+                                                        <button
+                                                            type="button"
+                                                            className={s.uploadCategoryGroupButton}
+                                                            aria-expanded={expanded}
+                                                            onClick={() => setExpandedCategoryCode(expanded ? null : group.code)}
+                                                        >
+                                                            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                            <span>{group.code} / {group.label}</span>
+                                                        </button>
+                                                        {expanded ? (
+                                                            <div className={s.uploadCategoryChildren} role="group">
+                                                                {group.children.map((child) => (
+                                                                    <button
+                                                                        key={child.code}
+                                                                        type="button"
+                                                                        className={`${s.uploadCategoryChildButton} ${fileSubcategoryCode === child.code ? s.uploadCategoryChildButtonActive : ""}`}
+                                                                        onClick={() => onSelectFileCategory(child.code)}
+                                                                    >
+                                                                        {child.code} / {child.label}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
                                     <label className={s.uploadField}>
                                         <span>
                                             业务域

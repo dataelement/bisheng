@@ -2184,6 +2184,63 @@
   outline: 2px solid rgba(44, 118, 244, 0.16);
 }
 
+.uploadCategoryPicker {
+  max-height: 220px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 6px;
+  background: #fff;
+}
+
+.uploadCategoryGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.uploadCategoryGroupButton,
+.uploadCategoryChildButton {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #273142;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uploadCategoryGroupButton {
+  padding: 0 8px;
+  font-weight: 600;
+}
+
+.uploadCategoryGroupButton:hover,
+.uploadCategoryChildButton:hover {
+  background: #f4f7fb;
+}
+
+.uploadCategoryChildren {
+  display: grid;
+  gap: 3px;
+  padding-left: 22px;
+}
+
+.uploadCategoryChildButton {
+  padding: 0 8px;
+}
+
+.uploadCategoryChildButtonActive {
+  background: #eaf2ff;
+  color: #1d5fd6;
+  font-weight: 600;
+}
+
 .uploadMetadataGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
