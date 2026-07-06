@@ -1830,6 +1830,7 @@
     "update_time": "Update time",
     "upload_feature_dev": "Upload file feature is under development",
     "upload_file": "Upload file",
+    "upload_file_types_tip": "Supports document, image, audio and video files",
     "upload_folder": "Upload folder",
     "uploading_status": "Uploading",
     "users_count": "users",

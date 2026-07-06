@@ -1753,6 +1753,7 @@
     "update_time": "更新時間",
     "upload_feature_dev": "ファイルアップロード機能は開発中です",
     "upload_file": "ファイルのアップロード",
+    "upload_file_types_tip": "文書、画像、音声、動画ファイルに対応",
     "upload_folder": "フォルダーをアップロード",
     "uploading_status": "アップロード中",
     "users_count": "ユーザー",

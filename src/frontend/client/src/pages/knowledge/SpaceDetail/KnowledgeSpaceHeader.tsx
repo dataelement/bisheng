@@ -42,8 +42,6 @@ interface KnowledgeSpaceHeaderProps {
     onTriggerWebLink: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
-    /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
-    supportedFormatsLabel?: string;
 
     // Batch Operation Props
     selectedCount: number;
@@ -93,7 +91,6 @@ export function KnowledgeSpaceHeader({
     onTriggerWebLink,
     canCreateFolder = false,
     canUploadFile = false,
-    supportedFormatsLabel,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -340,28 +337,24 @@ export function KnowledgeSpaceHeader({
                                         <span className={actionMenuLabelClassName}>
                                             {localize("com_knowledge.upload_file")}
                                         </span>
-                                        {supportedFormatsLabel ? (
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span
-                                                        className="ml-auto inline-flex size-4 shrink-0 items-center justify-center text-[#8a94a6]"
-                                                        onClick={(event) => event.stopPropagation()}
-                                                        onPointerDown={(event) => event.stopPropagation()}
-                                                    >
-                                                        <CircleHelp className="size-3.5" />
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent
-                                                    noArrow
-                                                    side="left"
-                                                    className="z-[999] max-w-md bg-white px-3 py-2 shadow-md"
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <span
+                                                    className="ml-auto inline-flex size-4 shrink-0 items-center justify-center text-[#8a94a6]"
+                                                    onClick={(event) => event.stopPropagation()}
+                                                    onPointerDown={(event) => event.stopPropagation()}
                                                 >
-                                                    {localize("com_knowledge.supported_formats_tip", {
-                                                        formats: supportedFormatsLabel,
-                                                    })}
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        ) : null}
+                                                    <CircleHelp className="size-3.5" />
+                                                </span>
+                                            </TooltipTrigger>
+                                            <TooltipContent
+                                                noArrow
+                                                side="left"
+                                                className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
+                                            >
+                                                {localize("com_knowledge.upload_file_types_tip")}
+                                            </TooltipContent>
+                                        </Tooltip>
                                     </div>
                                 </ActionMenuItem>
                                 <ActionMenuItem

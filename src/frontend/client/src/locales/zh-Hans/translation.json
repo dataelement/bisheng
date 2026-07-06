@@ -1754,6 +1754,7 @@
     "update_time": "更新时间",
     "upload_feature_dev": "上传文件功能开发中",
     "upload_file": "上传文件",
+    "upload_file_types_tip": "支持上传文档、图片、音频和视频文件",
     "upload_folder": "上传文件夹",
     "uploading_status": "上传中",
     "users_count": "用户",
