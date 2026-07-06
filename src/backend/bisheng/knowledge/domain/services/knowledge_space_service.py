@@ -990,18 +990,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         permission_levels = {}
         permission_ids_map: dict[int, set[str]] = {}
         if permission_space_ids:
-            levels = await asyncio.gather(
-                *[
-                    PermissionService.get_permission_level(
-                        user_id=self.login_user.user_id,
-                        object_type="knowledge_space",
-                        object_id=str(space_id),
-                        login_user=self.login_user,
-                    )
-                    for space_id in permission_space_ids
-                ]
+            level_map = await PermissionService.get_permission_levels(
+                user_id=self.login_user.user_id,
+                object_type="knowledge_space",
+                object_ids=permission_space_ids,
+                login_user=self.login_user,
             )
-            permission_levels = {space_id: level for space_id, level in zip(permission_space_ids, levels)}
+            permission_levels = {space_id: level_map.get(str(space_id)) for space_id in permission_space_ids}
         if required_permission_id and permission_id_space_ids:
             permission_ids = await asyncio.gather(
                 *[

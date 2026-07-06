@@ -4835,9 +4835,9 @@ class TestSpaceListings:
             new_callable=AsyncMock,
             return_value=[granted_space],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
             new_callable=AsyncMock,
-            return_value='owner',
+            return_value={'2': 'owner'},
         ), patch.object(
             service, '_get_effective_permission_ids', new_callable=AsyncMock,
             return_value={'view_space'},
@@ -4876,9 +4876,9 @@ class TestSpaceListings:
             new_callable=AsyncMock,
             return_value=[granted_space],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
             new_callable=AsyncMock,
-            return_value='can_read',
+            return_value={'2': 'can_read'},
         ), patch.object(
             service, '_get_effective_permission_ids', new_callable=AsyncMock,
             return_value=set(),
@@ -4927,9 +4927,9 @@ class TestSpaceListings:
             new_callable=AsyncMock,
             return_value=[public_space],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
             new_callable=AsyncMock,
-            return_value=None,
+            return_value={'9': None},
         ), patch.object(
             service,
             '_get_effective_permission_ids',
@@ -4998,8 +4998,8 @@ class TestSpaceListings:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
             new_callable=AsyncMock, return_value=[my_fav, other_fav, my_normal],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock, return_value=None,
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
+            new_callable=AsyncMock, return_value={'20': None},
         ), patch.object(
             service, '_get_effective_permission_ids', new_callable=AsyncMock, return_value={'view_space'},
         ), patch(
@@ -5093,9 +5093,9 @@ class TestSpaceListings:
             new_callable=AsyncMock,
             return_value=[granted_space],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
             new_callable=AsyncMock,
-            return_value='can_manage',
+            return_value={'3': 'can_manage'},
         ), patch.object(
             service, '_get_effective_permission_ids', new_callable=AsyncMock,
             return_value={'manage_space_relation'},
@@ -8064,8 +8064,8 @@ class TestFormatAccessibleSpacesCharacterization:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
             new_callable=AsyncMock, return_value=[granted],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock, return_value='can_manage',
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
+            new_callable=AsyncMock, return_value={'3': 'can_manage'},
         ), patch.object(
             service, '_get_effective_permission_ids',
             new_callable=AsyncMock, return_value={'view_space', 'manage_space_relation'},
@@ -8089,8 +8089,8 @@ class TestFormatAccessibleSpacesCharacterization:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
             new_callable=AsyncMock, return_value=[other],
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
-            new_callable=AsyncMock, return_value=None,
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels',
+            new_callable=AsyncMock, return_value={'5': None},
         ), patch.object(
             service, '_get_effective_permission_ids',
             new_callable=AsyncMock, return_value=set(),
