@@ -33,6 +33,8 @@ FORWARDABLE_ACTION_CODES: set[str] = {
     "knowledge_space_made_private",
     "channel_dismissed",
     "knowledge_space_deleted",
+    "approved_review_tag",
+    "rejected_review_tag",
 }
 
 
@@ -186,6 +188,16 @@ _TEMPLATES: dict[str, dict[str, str]] = {
         "title": "[知源] 知识空间已删除",
         "normal": "知识空间「{resource_name}」",
         "highlight": "已被删除",
+    },
+    "approved_review_tag": {
+        "title": "[知源] 标签审核已通过",
+        "normal": "你提交的标签「{resource_name}」",
+        "highlight": "已通过",
+    },
+    "rejected_review_tag": {
+        "title": "[知源] 标签审核被拒绝",
+        "normal": "你提交的标签「{resource_name}」",
+        "highlight": "被拒绝",
     },
 }
 

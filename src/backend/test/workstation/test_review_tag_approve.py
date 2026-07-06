@@ -64,12 +64,24 @@ async def test_approve_review_tag_imports_to_selected_library():
     approve_tag_to_move = AsyncMock(return_value=[])
     service.approve_tag_to_move_operation = approve_tag_to_move
     service.review_tags_repository.approve_review_tag = AsyncMock()
+    service.review_tags_repository.list_submitter_notification_targets = AsyncMock(
+        return_value=[(42, 100)],
+    )
 
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
-    ) as library_service_cls:
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
+        ) as library_service_cls,
+        patch(
+            "bisheng.workstation.domain.services.review_tag_notification_service.ReviewTagNotificationService.notify_after_decision",
+            new=AsyncMock(),
+        ) as notify_after_decision,
+    ):
         library_service_cls.return_value.append_review_tag = append_review_tag
         await service.approve_or_reject_review_tag(data, tenant_id=1)
+
+    service.review_tags_repository.list_submitter_notification_targets.assert_awaited_once()
+    notify_after_decision.assert_awaited_once()
 
     append_review_tag.assert_awaited_once_with(
         library_id=10,
@@ -85,3 +97,31 @@ async def test_approve_review_tag_imports_to_selected_library():
     )
     service.review_tags_repository.approve_review_tag.assert_awaited_once()
     service.session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reject_review_tag_notifies_submitters():
+    service = _build_tags_service()
+    data = ApproveOrRejectRequest(
+        tag_name="人工标签",
+        status=ApproveOrRejectEnum.REJECT,
+        reject_reason="名称不规范",
+        resource_type=TagResourceTypeEnum.MANUAL_TAG,
+    )
+    service.review_tags_repository.reject_review_tag = AsyncMock()
+    service.review_tags_repository.list_submitter_notification_targets = AsyncMock(
+        return_value=[(88, 137)],
+    )
+
+    with patch(
+        "bisheng.workstation.domain.services.review_tag_notification_service.ReviewTagNotificationService.notify_after_decision",
+        new=AsyncMock(),
+    ) as notify_after_decision:
+        await service.approve_or_reject_review_tag(data, tenant_id=1)
+
+    service.review_tags_repository.reject_review_tag.assert_awaited_once()
+    notify_after_decision.assert_awaited_once()
+    kwargs = notify_after_decision.await_args.kwargs
+    assert kwargs["tag_name"] == "人工标签"
+    assert kwargs["reject_reason"] == "名称不规范"
+    assert kwargs["submitter_targets"][0].user_id == 88

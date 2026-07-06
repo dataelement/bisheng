@@ -73,6 +73,8 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     channel_dismissed: "com_notifications_action_channel_dismissed",
     knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
     qa_expert_invited: "com_notifications_action_qa_expert_invited",
+    approved_review_tag: "com_notifications_action_approved_review_tag",
+    rejected_review_tag: "com_notifications_action_rejected_review_tag",
 };
 
 const APPROVAL_CENTER_ACTION_CODES = new Set([
@@ -184,6 +186,8 @@ export function NotificationsDialog({
         actionCode === "approved_department_knowledge_space_upload" ||
         actionCode === "rejected_department_knowledge_space_upload" ||
         actionCode === "sensitive_rejected_department_knowledge_space_upload" ||
+        actionCode === "approved_review_tag" ||
+        actionCode === "rejected_review_tag" ||
         actionCode === "approval_instance_approved" ||
         actionCode === "approval_task_rejected" ||
         actionCode === "approval_exception_cancelled" ||

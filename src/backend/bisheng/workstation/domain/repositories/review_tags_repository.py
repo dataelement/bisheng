@@ -360,6 +360,48 @@ class ReviewTagsRepositoryImpl:
         review_tag_list = await self.session.exec(statement)
         return review_tag_list.scalars().all()
 
+    @staticmethod
+    def _parse_knowledge_space_id(business_id: str | None) -> int | None:
+        normalized = (business_id or "").strip()
+        if normalized.isdigit():
+            return int(normalized)
+        return None
+
+    async def list_submitter_notification_targets(
+        self,
+        tag_name: str,
+        resource_type: TagResourceTypeEnum,
+        tenant_id: int,
+        *,
+        exclude_user_id: int | None = None,
+    ) -> list[tuple[int, int | None]]:
+        """Return unique submitter user ids and their preferred knowledge space id."""
+        tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id)
+        user_space: dict[int, int | None] = {}
+
+        for tag in tags:
+            user_id = int(tag.user_id or 0)
+            if user_id <= 0:
+                continue
+            space_id = self._parse_knowledge_space_id(tag.business_id)
+            if user_id not in user_space or user_space[user_id] is None:
+                user_space[user_id] = space_id
+
+        tag_ids = [int(tag.id) for tag in tags if tag.id is not None]
+        if tag_ids:
+            tag_by_id = {int(tag.id): tag for tag in tags if tag.id is not None}
+            links = await self.get_review_tag_link_list_by_tag_id(tag_ids, tenant_id)
+            for link in links:
+                user_id = int(link.user_id or 0)
+                if user_id <= 0 or user_id in user_space:
+                    continue
+                parent_tag = tag_by_id.get(int(link.tag_id))
+                user_space[user_id] = self._parse_knowledge_space_id(parent_tag.business_id if parent_tag else None)
+
+        if exclude_user_id is not None:
+            user_space.pop(int(exclude_user_id), None)
+        return list(user_space.items())
+
     async def list_all_tags_by_page(self, page: int, page_size: int, keyword: str, tenant_id: int):
         return await self.tags_repository.list_all_tags_by_page(page, page_size, keyword, tenant_id)
 
