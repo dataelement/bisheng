@@ -1361,6 +1361,7 @@
     "18041": "The current tenant does not match the knowledge space owner tenant. This operation is not supported here. Switch to the knowledge space tenant and try again.",
     "18050": "Tag already exists in this space",
     "18051": "Pending review tags are disabled; AI and manual tags cannot be submitted",
+    "18077": "Bind a tag library to this knowledge space before adding tags",
     "18060": "Version management is disabled.",
     "18061": "File must finish parsing before version management.",
     "18062": "Target document is unavailable.",

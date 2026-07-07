@@ -30,10 +30,11 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
+from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.utils import extract_reasoning_content
@@ -543,12 +544,9 @@ class KnowledgeSpaceChatService:
 
         resolved_tag_ids: list[int] = []
         for tag_name in tag_names:
-            tags = await TagDao.get_tags_by_business(
-                business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                business_id=str(knowledge_id),
-                name=tag_name,
+            resolved_tag_ids.extend(
+                await TagLibraryTagService.resolve_tag_ids_by_name_for_space(knowledge_id, tag_name)
             )
-            resolved_tag_ids.extend([t.id for t in tags])
         if not resolved_tag_ids:
             return []
 
