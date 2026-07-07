@@ -76,7 +76,7 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
                         <div className="flex min-w-0 flex-col py-0.5">
                             <span>{opt.displayName ?? opt.name}</span>
                             {opt.description && (
-                                <span className="mt-0.5 whitespace-normal break-words text-xs text-gray-400">
+                                <span className="mt-0.5 whitespace-normal break-words text-xs font-normal text-[#999999]">
                                     {opt.description}
                                 </span>
                             )}
