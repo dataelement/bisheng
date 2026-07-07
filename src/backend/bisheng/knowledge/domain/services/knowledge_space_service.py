@@ -6681,6 +6681,76 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return folder_counts
 
+    async def _load_folder_direct_counts(
+        self, folders: list[KnowledgeFile]
+    ) -> dict[int, dict[str, int | bool]]:
+        """Shallow folder stats: DIRECT-child SUCCESS file count + has_children.
+
+        One batched query per space. NO recursion, NO permission (OpenFGA) checks.
+        A direct child of a folder has ``file_level_path == f"{folder.file_level_path}/{folder.id}"``.
+        ``visible_success_file_num`` here means direct SUCCESS files (not deep, not visibility-filtered);
+        precise <=20 enforcement stays in ``resolve_qa_scope_file_ids`` at QA time.
+        """
+        from sqlmodel import col
+
+        folder_counts: dict[int, dict[str, int | bool]] = {}
+        if not folders:
+            return folder_counts
+
+        prefix_to_folder: dict[str, int] = {}
+        prefixes_by_space: dict[int, list[str]] = {}
+        for folder in folders:
+            prefix = f"{folder.file_level_path or ''}/{folder.id}"
+            prefix_to_folder[prefix] = int(folder.id)
+            prefixes_by_space.setdefault(int(folder.knowledge_id), []).append(prefix)
+            folder_counts[int(folder.id)] = {
+                "file_num": 0,
+                "success_file_num": 0,
+                "visible_success_file_num": 0,
+                "processing_file_num": 0,
+                "has_children": False,
+            }
+
+        in_progress_statuses = {
+            KnowledgeFileStatus.PROCESSING.value,
+            KnowledgeFileStatus.WAITING.value,
+            KnowledgeFileStatus.REBUILDING.value,
+        }
+        for space_id, prefixes in prefixes_by_space.items():
+            stmt = (
+                select(
+                    KnowledgeFile.file_level_path,
+                    KnowledgeFile.file_type,
+                    KnowledgeFile.status,
+                    func.count(KnowledgeFile.id),
+                )
+                .where(
+                    KnowledgeFile.knowledge_id == space_id,
+                    col(KnowledgeFile.file_level_path).in_(prefixes),
+                )
+                .group_by(
+                    KnowledgeFile.file_level_path,
+                    KnowledgeFile.file_type,
+                    KnowledgeFile.status,
+                )
+            )
+            async with get_async_db_session() as session:
+                rows = (await session.exec(stmt)).all()
+            for level_path, file_type, status, count in rows:
+                folder_id = prefix_to_folder.get(level_path)
+                if folder_id is None:
+                    continue
+                entry = folder_counts[folder_id]
+                entry["has_children"] = True
+                if file_type == FileType.FILE.value:
+                    entry["file_num"] += count
+                    if status == KnowledgeFileStatus.SUCCESS.value:
+                        entry["success_file_num"] += count
+                        entry["visible_success_file_num"] += count
+                    elif status in in_progress_statuses:
+                        entry["processing_file_num"] += count
+        return folder_counts
+
     @staticmethod
     def _has_folder_stats_filters(
         *,
@@ -6944,6 +7014,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         include_folder_counts: bool = True,
         folder_counts_override: dict[int, dict[str, int]] | None = None,
         enrich_files: bool = True,
+        folder_count_mode: str = "deep",
     ) -> list[dict]:
         folder_ids = []
         file_ids = []
@@ -6959,7 +7030,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_counts = folder_counts_override
             else:
                 folders = [f for f in res if f.file_type == FileType.DIR]
-                folder_counts = await self._load_folder_stat_counts(folders)
+                if folder_count_mode == "shallow":
+                    folder_counts = await self._load_folder_direct_counts(folders)
+                else:
+                    folder_counts = await self._load_folder_stat_counts(folders)
 
         # file need find all tags (skip when caller does not consume enrichment, e.g. QA tree)
         file_tags = await self._load_file_tags_batch(file_ids) if (enrich_files and file_ids) else {}
@@ -7154,6 +7228,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int = 20,
         file_type: int | None = None,
         enrich_files: bool = True,
+        folder_count_mode: str = "deep",
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
@@ -7214,6 +7289,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             visible_page_items,
             include_folder_counts=True,
             enrich_files=enrich_files,
+            folder_count_mode=folder_count_mode,
         )
 
         next_cursor: str | None = None
