@@ -938,6 +938,30 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(personalGroup).queryByRole("button", { name: "新增个人知识库" })).not.toBeInTheDocument();
     });
 
+    test("懒查询：加载知识库界面时不批量查询侧栏非当前空间的操作权限", async () => {
+        const publicSpace = makeSpace("public-1", "公共空间01", { spaceLevel: SpaceLevel.PUBLIC });
+        const teamSpace = makeSpace("team-1", "团队空间01", { spaceLevel: SpaceLevel.TEAM });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [publicSpace],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+
+        renderWorkbench();
+
+        await waitFor(() => {
+            expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
+        });
+
+        // 懒查询：加载时不再批量查询所有空间的操作权限。侧栏里未打开菜单、也非当前空间的
+        // team-1 不应被请求（旧实现会把 public-1 与 team-1 一并批量查询）。
+        expect(mockUseKnowledgeSpaceActionPermissions).toHaveBeenCalled();
+        const requestedSpaceIds = mockUseKnowledgeSpaceActionPermissions.mock.calls
+            .flatMap((call) => call[0] as string[]);
+        expect(requestedSpaceIds).not.toContain("team-1");
+    });
+
     test("hides create row under a group without create permission", async () => {
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: true,
