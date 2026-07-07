@@ -292,17 +292,13 @@ class SgDepartmentsSyncService:
         mdm_id: int,
     ) -> None:
         old_parent_id = int(child.parent_id) if getattr(child, "parent_id", None) is not None else None
+        was_archived = getattr(child, "status", "") == "archived" or getattr(child, "is_deleted", 0) == 1
         ts = int(time.time())
-        dept = await DepartmentDao.aupsert_by_external_id(
-            source=cls.SOURCE,
-            external_id=str(child.external_id),
-            name=child.name,
+        dept = await DepartmentDao.aupdate_parent_link(
+            dept_id=int(child.id),
             parent_id=int(parent.id),
-            path=parent.path or "",
-            sort_order=child.sort_order or 0,
+            parent_path=parent.path or "",
             last_sync_ts=ts,
-            tenant_id=ROOT_TENANT_ID,
-            sync_parent_external_id=None,
         )
         if dept is not None and dept.id is not None:
             raw_parent_id = getattr(dept, "parent_id", None)
@@ -312,7 +308,7 @@ class SgDepartmentsSyncService:
                 old_parent_id=old_parent_id,
                 new_parent_id=new_parent_id,
                 is_new=False,
-                was_archived=False,
+                was_archived=was_archived,
             )
 
     @classmethod
