@@ -1383,7 +1383,7 @@
     "deleted": "已删除",
     "duplicate_file_title": "在当前知识库存在以下同名文件，请选择操作",
     "duplicate_replace": "替换",
-    "duplicate_cancel": "取消",
+    "duplicate_cancel": "取消上传",
     "direct_subscribe_desc": "任何人可直接订阅，无需审核",
     "dissolve_space": "解散知识库",
     "doc_loading": "文档加载中...",
