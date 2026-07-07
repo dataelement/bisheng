@@ -301,7 +301,14 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                     rows={1}
                                     disabled={disabled || submitted}
                                     value={customText[q.id] || ''}
-                                    placeholder={localize('com_linsight_clarify_custom')}
+                                    // Default placeholder is the short "自行输入"; once the row is
+                                    // highlighted (customSelected, i.e. focused/active) it grows the
+                                    // Shift+Enter hint — matching when the bg-[#EEE] highlight shows.
+                                    placeholder={localize(
+                                        customSelected
+                                            ? 'com_linsight_clarify_custom_active'
+                                            : 'com_linsight_clarify_custom',
+                                    )}
                                     onFocus={() => !customSelected && handleSelect(q, CUSTOM_KEY)}
                                     onChange={(e) => {
                                         setCustomText((prev) => ({ ...prev, [q.id]: e.target.value }));
@@ -328,10 +335,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                             handleConfirm();
                                         }
                                     }}
-                                    className={cn(
-                                        'flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-5 outline-none placeholder:text-[#8C8C8C]',
-                                        customSelected ? 'text-[#1A1A1A] font-medium' : 'text-[#1A1A1A]',
-                                    )}
+                                    className="flex-1 resize-none border-0 bg-transparent p-0 text-sm font-normal leading-5 text-[#1A1A1A] outline-none placeholder:text-[#8C8C8C]"
                                 />
                                 {!q.multiple && customSelected && customText[q.id]?.trim() && (
                                     <button

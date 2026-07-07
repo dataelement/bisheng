@@ -404,6 +404,7 @@
   "com_linsight_clarify_single": "単一選択",
   "com_linsight_clarify_multi": "複数選択",
   "com_linsight_clarify_custom": "自由入力",
+  "com_linsight_clarify_custom_active": "自由入力（Shift + Enter で改行）",
   "com_linsight_clarify_input_placeholder": "入力してください…",
   "com_linsight_clarify_skip": "スキップ",
   "com_linsight_clarify_skipped": "スキップ",

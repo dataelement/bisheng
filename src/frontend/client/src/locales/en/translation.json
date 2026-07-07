@@ -419,6 +419,7 @@
   "com_linsight_clarify_single": "Single choice",
   "com_linsight_clarify_multi": "Multiple choice",
   "com_linsight_clarify_custom": "Type your own",
+  "com_linsight_clarify_custom_active": "Type your own — Shift+Enter for a new line",
   "com_linsight_clarify_input_placeholder": "Type here…",
   "com_linsight_clarify_skip": "Skip",
   "com_linsight_clarify_skipped": "Skipped",
