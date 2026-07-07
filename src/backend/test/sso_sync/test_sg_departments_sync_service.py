@@ -304,7 +304,10 @@ class TestSgDepartmentsSyncService:
             path="/11/",
             sort_order=0,
             sync_parent_external_id="P1",
+            status="active",
+            is_deleted=0,
         )
+        relinked = SimpleNamespace(id=11, parent_id=10, path="/1/10/11/", status="active", is_deleted=0)
         payload = _request(
             SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="01"),
         )
@@ -335,13 +338,20 @@ class TestSgDepartmentsSyncService:
                     return_value=parent,
                 )
             )
+            relink = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupdate_parent_link",
+                    new_callable=AsyncMock,
+                    return_value=relinked,
+                )
+            )
             response = await SgDepartmentsSyncService.execute(payload)
 
         assert response.esb.code == "0"
-        relink_calls = [call for call in upsert.await_args_list if call.kwargs.get("external_id") == "C1"]
-        assert len(relink_calls) == 1
-        assert relink_calls[0].kwargs["parent_id"] == 10
-        assert relink_calls[0].kwargs["sync_parent_external_id"] is None
+        relink.assert_awaited_once()
+        assert relink.await_args.kwargs["dept_id"] == 11
+        assert relink.await_args.kwargs["parent_id"] == 10
+        upsert.assert_awaited_once()
 
     async def test_new_child_writes_fga_parent_tuple(self):
         from bisheng.department.domain.services.department_change_handler import (
@@ -467,8 +477,10 @@ class TestSgDepartmentsSyncService:
             path="/11/",
             sort_order=0,
             sync_parent_external_id="P1",
+            status="active",
+            is_deleted=0,
         )
-        relinked = SimpleNamespace(id=11, parent_id=10, path="/1/10/11/")
+        relinked = SimpleNamespace(id=11, parent_id=10, path="/1/10/11/", status="active", is_deleted=0)
         payload = _request(
             SgDepartmentFieldItem(uuid="u1", code="P1", remark="Parent", state="01"),
         )
@@ -496,7 +508,14 @@ class TestSgDepartmentsSyncService:
                 patch(
                     f"{MODULE}.DepartmentDao.aupsert_by_external_id",
                     new_callable=AsyncMock,
-                    side_effect=lambda **kwargs: relinked if kwargs.get("external_id") == "C1" else parent,
+                    return_value=parent,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupdate_parent_link",
+                    new_callable=AsyncMock,
+                    return_value=relinked,
                 )
             )
             on_created = stack.enter_context(
@@ -511,3 +530,76 @@ class TestSgDepartmentsSyncService:
             await SgDepartmentsSyncService.execute(payload)
 
         on_created.assert_any_call(11, 10)
+
+    async def test_archived_child_relinked_when_parent_arrives_in_later_batch(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        parent = _dept(dept_id=10, path="/1/10/")
+        child = SimpleNamespace(
+            id=11,
+            external_id="20000193",
+            name="北京首钢钢材配送有限公司",
+            parent_id=None,
+            path="/11/",
+            sort_order=0,
+            sync_parent_external_id="20001827",
+            status="archived",
+            is_deleted=1,
+        )
+        relinked = SimpleNamespace(
+            id=11,
+            parent_id=10,
+            path="/1/10/11/",
+            status="archived",
+            is_deleted=1,
+        )
+        payload = _request(
+            SgDepartmentFieldItem(
+                uuid="u1",
+                code="20001827",
+                remark="北京首钢股份有限公司营销中心",
+                state="01",
+            ),
+        )
+
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "DepartmentDao.aget_by_source_external_id": AsyncMock(
+                        side_effect=lambda _src, ext: parent if ext == "20001827" else None,
+                    ),
+                    "DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(
+                        return_value=[child],
+                    ),
+                },
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda ext, _tid: parent if ext == "20001827" else None,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    return_value=parent,
+                )
+            )
+            relink = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupdate_parent_link",
+                    new_callable=AsyncMock,
+                    return_value=relinked,
+                )
+            )
+            response = await SgDepartmentsSyncService.execute(payload)
+
+        assert response.esb.code == "0"
+        relink.assert_awaited_once()
+        assert relink.await_args.kwargs["dept_id"] == 11
+        assert relink.await_args.kwargs["parent_id"] == 10

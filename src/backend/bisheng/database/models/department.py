@@ -795,18 +795,52 @@ class DepartmentDao:
         sync_parent_external_id: str,
         tenant_id: int,
     ) -> list[Department]:
-        """List active departments waiting for a parent external_id."""
+        """List departments waiting for a parent external_id (active or archived)."""
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(Department).where(
                     Department.source == source,
                     Department.sync_parent_external_id == sync_parent_external_id,
                     Department.tenant_id == tenant_id,
-                    Department.is_deleted == 0,
-                    Department.status == "active",
                 )
             )
             return list(result.all())
+
+    @classmethod
+    async def aupdate_parent_link(
+        cls,
+        *,
+        dept_id: int,
+        parent_id: int,
+        parent_path: str,
+        last_sync_ts: int,
+    ) -> Department | None:
+        """Update parent linkage without changing department lifecycle status."""
+
+        def final_path(path_prefix: str, child_id: int) -> str:
+            base = (path_prefix or "").strip()
+            if base and not base.endswith("/"):
+                base = f"{base}/"
+            if not base.startswith("/"):
+                base = f"/{base}" if base else "/"
+            return f"{base}{child_id}/".replace("//", "/")
+
+        existing = await cls.aget_by_id(dept_id)
+        if existing is None:
+            return None
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(Department.id == dept_id)
+                .values(
+                    parent_id=parent_id,
+                    path=final_path(parent_path, dept_id),
+                    sync_parent_external_id=None,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        return await cls.aget_by_id(dept_id)
 
     @classmethod
     async def aupsert_by_external_id(
