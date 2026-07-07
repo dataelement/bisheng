@@ -1061,7 +1061,7 @@
     "createTime": "Created at",
     "creator": "Creator",
     "tagNameRequired": "Tag name is required",
-    "tagNamePlaceholder": "e.g. Safety",
+    "tagNamePlaceholder": "New tag name",
     "deleteTagTitle": "Delete Tag",
     "confirmDelete": "Confirm delete",
     "prevPage": "Previous",

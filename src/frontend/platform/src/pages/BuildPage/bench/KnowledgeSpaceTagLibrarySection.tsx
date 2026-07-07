@@ -18,6 +18,7 @@ import {
     type KnowledgeSpaceTagLibraryTagItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { cname } from "@/components/bs-ui/utils";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -241,6 +242,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
     const { toast } = useToast();
     const [tagItems, setTagItems] = useState<KnowledgeSpaceTagLibraryTagItem[]>([]);
     const [newTag, setNewTag] = useState("");
+    const [newTagError, setNewTagError] = useState("");
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -266,6 +268,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
     useEffect(() => {
         if (!open || !library?.id) return;
         setNewTag("");
+        setNewTagError("");
         loadTags();
     }, [open, library?.id, loadTags]);
 
@@ -298,9 +301,10 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
     const handleAddTag = async () => {
         const trimmed = newTag.trim();
         if (!trimmed) {
-            toast({ variant: "error", description: t("build.tagNameRequired", "标签名称不能为空") });
+            setNewTagError(t("build.tagNameRequired", "标签名称不能为空"));
             return;
         }
+        setNewTagError("");
         if (tagItems.some((item) => item.name === trimmed)) {
             toast({ variant: "error", description: t("build.tagAlreadyExists", "标签已存在") });
             return;
@@ -345,31 +349,41 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                     </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 px-6 py-5">
-                    <div className="flex items-center gap-2">
-                        <Input
-                            id="tag-library-tag-name"
-                            name="tag-library-tag-name"
-                            type="text"
-                            autoComplete="off"
-                            autoCorrect="off"
-                            autoCapitalize="off"
-                            spellCheck={false}
-                            data-1p-ignore
-                            data-lpignore="true"
-                            data-form-type="other"
-                            className="flex-1"
-                            value={newTag}
-                            maxLength={100}
-                            placeholder={t("build.tagNamePlaceholder", "例如：安全生产")}
-                            onChange={(e) => setNewTag(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    handleAddTag();
-                                }
-                            }}
-                        />
-                        <Button disabled={saving} onClick={handleAddTag}>
+                    <div className="flex items-start gap-2">
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                            <Input
+                                id="tag-library-tag-name"
+                                name="tag-library-tag-name"
+                                type="text"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                                data-1p-ignore
+                                data-lpignore="true"
+                                data-form-type="other"
+                                className={cname(newTagError && "border-red-500 focus-visible:ring-red-500")}
+                                value={newTag}
+                                maxLength={100}
+                                placeholder={t("build.tagNamePlaceholder", "新增标签名称")}
+                                onChange={(e) => {
+                                    setNewTag(e.target.value);
+                                    if (newTagError) {
+                                        setNewTagError("");
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleAddTag();
+                                    }
+                                }}
+                            />
+                            {newTagError ? (
+                                <p className="text-xs text-red-500">{newTagError}</p>
+                            ) : null}
+                        </div>
+                        <Button className="shrink-0" disabled={saving} onClick={handleAddTag}>
                             <Plus className="mr-1 size-4" />
                             {t("build.addTag", "新增标签")}
                         </Button>
