@@ -341,7 +341,7 @@ export function FileCard({
         onRetry && (
             file.status === FileStatus.FAILED ||
             file.status === FileStatus.VIOLATION ||
-            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
+            (isFolder && file.hasFailedFiles === true)
         )
     );
     // Version row actions visible for this file (parsed non-folder for management; multi-version for history).
@@ -501,28 +501,15 @@ export function FileCard({
                         <span className="shrink-0 text-xs leading-5 text-[#818181] tabular-nums">
                             {formatTimeCard(file.updatedAt)}
                         </span>
-                        {isFolder ? (
-                            (isAdmin || file.successFileNum != null) && file.fileNum != null && (
-                                <>
-                                    <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
-                                    <span className="shrink-0 whitespace-nowrap text-xs leading-5 text-[#999999] tabular-nums">
-                                        {localize("com_knowledge_items_count", {
-                                            count: isAdmin ? (file.fileNum ?? 0) : (file.successFileNum ?? 0),
-                                        })}
-                                    </span>
-                                </>
-                            )
-                        ) : (
-                            file.tags && file.tags.length > 0 && (
-                                <>
-                                    <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
-                                    <TagGroup
-                                        tags={file.tags}
-                                        variant="text-h5"
-                                        highlightedTagIds={highlightedTagIds}
-                                    />
-                                </>
-                            )
+                        {!isFolder && file.tags && file.tags.length > 0 && (
+                            <>
+                                <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                                <TagGroup
+                                    tags={file.tags}
+                                    variant="text-h5"
+                                    highlightedTagIds={highlightedTagIds}
+                                />
+                            </>
                         )}
                     </div>
                 </div>
@@ -716,19 +703,9 @@ export function FileCard({
                         {getStatusText()}
                     </div>
 
-                    {/* Footer (tags / count + time) */}
+                    {/* Footer (tags + time) */}
                     <div className="flex min-w-0 items-center justify-between gap-2">
                         <div className="flex min-h-[20px] min-w-0 flex-1 items-center">
-                            {isAdmin && isFolder && file.fileNum != null && (
-                                <span className="whitespace-nowrap text-[10px] leading-5 text-[#999] tabular-nums">
-                                    {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
-                                </span>
-                            )}
-                            {!isAdmin && isFolder && file.fileNum != null && (
-                                <span className="whitespace-nowrap text-[10px] leading-5 text-[#999] tabular-nums">
-                                    {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
-                                </span>
-                            )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (
                                 <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
                             )}
