@@ -319,7 +319,9 @@ class TestPermissionApiIntegration:
         assert body["status_code"] == 19000
         mock_authorize.assert_not_awaited()
 
-    def test_authorize_api_blocks_self_owner_revoke_when_it_is_the_last_owner(self):
+    def test_authorize_api_blocks_self_owner_revoke(self):
+        """Self-modification backstop: you cannot revoke your OWN owner (would lock
+        you out of the dialog), regardless of how many owners remain."""
         app = _make_app(_ViewerUser)
 
         with (
@@ -387,12 +389,15 @@ class TestPermissionApiIntegration:
                 )
                 body = resp.json()
 
-        # Owner/creator decoupled: removing the last owner is now refused with the
-        # dedicated PermissionLastOwnerError (19007) instead of a generic denial.
-        assert body["status_code"] == 19007
+        # Self owner revoke is blocked by the self-modification guard (19000),
+        # which runs before the last-owner check.
+        assert body["status_code"] == 19000
         mock_authorize.assert_not_awaited()
 
-    def test_authorize_api_allows_self_owner_revoke_when_another_owner_remains(self):
+    def test_authorize_api_allows_owner_revoke_of_another_user_when_another_owner_remains(self):
+        """Revoking ANOTHER user's owner is allowed while an owner remains (caller
+        is _ViewerUser=7; we revoke user 9, leaving 7). Self-revoke is covered by
+        test_authorize_api_blocks_self_owner_revoke."""
         app = _make_app(_ViewerUser)
 
         with (
@@ -462,7 +467,7 @@ class TestPermissionApiIntegration:
                         "revokes": [
                             {
                                 "subject_type": "user",
-                                "subject_id": 7,
+                                "subject_id": 9,
                                 "relation": "owner",
                             }
                         ],
@@ -815,6 +820,27 @@ class TestPermissionApiIntegration:
                 body = resp.json()
         assert body["status_code"] == 200
         mock_authorize.assert_awaited_once()
+
+    def test_authorize_blocks_modifying_own_permission(self):
+        """A user cannot change their OWN permission via the member dialog — a
+        self-downgrade (owner→editor) would strip management access and lock them
+        out. Backstop for every resource type; managing others is unaffected."""
+        app = _make_app(_AdminUser)  # user_id = 1
+        with patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v1/permissions/resources/workflow/wf-1/authorize",
+                    json={
+                        "grants": [{"subject_type": "user", "subject_id": 1, "relation": "editor"}],
+                        "revokes": [{"subject_type": "user", "subject_id": 1, "relation": "owner"}],
+                    },
+                )
+                body = resp.json()
+        assert body["status_code"] == 19000
+        mock_authorize.assert_not_awaited()
 
     def test_permissions_list_requires_can_edit_on_resource(self):
         app = _make_app(_ViewerUser)
