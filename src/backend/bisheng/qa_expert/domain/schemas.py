@@ -146,16 +146,56 @@ class QuestionUpdateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     business_domain: Optional[str] = None
-    # attachments: Optional[List[str]] = None
-    # related_docs: Optional[List[int]] = None
-    # invited_experts: Optional[List[int]] = None
+    attachments: Optional[str] = Field(default=None, description="附件列表")
+    related_docs: Optional[str] = Field(default=None, description="关联文档ID")
+    invited_experts: Optional[str] = Field(
+        default=None, description="邀请专家ID，多个用分号;分割"
+    )
+    experts_names: Optional[str] = Field(
+        default=None, description="邀请专家名称，多个用分号;分割"
+    )
+    image_url: Optional[str] = Field(
+        default=None, max_length=1024, description="图片URL"
+    )
+    status: int | str | None = Field(
+        default=None, description="状态: unsolved/solved/closed/pending"
+    )
+    created_by: Optional[str] = Field(default=None, description="创建人")
 
-    # @field_validator("invited_experts")
-    # @classmethod
-    # def validate_experts(cls, v):
-    #     if v and len(v) > 3:
-    #         raise ValueError("最多只能邀请 3 位专家")
-    #     return v
+    @field_validator("invited_experts", mode="before")
+    @classmethod
+    def validate_experts(cls, v):
+        if v is None or str(v).strip() == "":
+            return None
+        if not isinstance(v, str):
+            raise ValueError("invited_experts 必须是字符串格式")
+        expert_ids = [id_str.strip() for id_str in v.split(";") if id_str.strip()]
+        if len(expert_ids) > 10:
+            raise ValueError("最多只能邀请 10 位专家")
+        if not all(item.isdigit() for item in expert_ids):
+            raise ValueError("专家ID必须为纯数字")
+        return v
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def validate_status(cls, v):
+        if v is None:
+            return None
+        mapping = {
+            "unsolved": 0,
+            "solved": 1,
+            "closed": 2,
+            "pending": 3,
+        }
+        if isinstance(v, int):
+            if v not in mapping.values():
+                raise ValueError("status 必须是 0/1/2/3")
+            return v
+        if isinstance(v, str):
+            if v not in mapping:
+                raise ValueError("status 必须是 unsolved/solved/closed/pending")
+            return mapping[v]
+        raise ValueError("status 类型错误")
 
 
 class QuestionSimpleResponse(BaseModel):
