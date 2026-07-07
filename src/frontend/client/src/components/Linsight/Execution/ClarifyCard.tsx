@@ -10,7 +10,7 @@
  */
 import { ArrowRight, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -168,6 +168,19 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
+    // The custom-answer <textarea> is one reused DOM node across pages, and its
+    // grown height lives in an inline style set on input. On page change that
+    // stale height would leak into the next question (or a saved multi-line answer
+    // would show clipped). Re-fit it to the CURRENT question's content whenever the
+    // page changes — empty content collapses back to one row.
+    const customTaRef = useRef<HTMLTextAreaElement>(null);
+    useLayoutEffect(() => {
+        const el = customTaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [page]);
+
     return (
         <div
             className="my-3 w-full rounded-2xl border border-[#EEF2F6] bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
@@ -269,17 +282,23 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                         <li>
                             <div
                                 className={cn(
-                                    'flex h-9 items-center gap-2 rounded-lg px-4 transition-all duration-200',
+                                    // min-h (not fixed h) so the textarea can grow past one
+                                    // line when the user inserts Shift+Enter newlines.
+                                    // items-start: once grown, the number stays pinned to the
+                                    // FIRST line (top) instead of centering on the tall box.
+                                    // py-2 (8px) + a 20px line = 36px (h-9) when single-line.
+                                    'flex min-h-9 items-start gap-2 rounded-lg px-4 py-2 transition-all duration-200',
                                     // No box by default (matches the other options); the
                                     // input-box background only appears once it's active.
                                     customSelected ? 'bg-[#EEE]' : 'hover:bg-gray-50/80',
                                 )}
                             >
-                                <span className="shrink-0 text-sm font-medium text-[#8C8C8C]">
+                                <span className="shrink-0 text-sm font-medium leading-5 text-[#8C8C8C]">
                                     {q.options.length + 1}.
                                 </span>
-                                <input
-                                    type="text"
+                                <textarea
+                                    ref={customTaRef}
+                                    rows={1}
                                     disabled={disabled || submitted}
                                     value={customText[q.id] || ''}
                                     placeholder={localize('com_linsight_clarify_custom')}
@@ -287,16 +306,21 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                     onChange={(e) => {
                                         setCustomText((prev) => ({ ...prev, [q.id]: e.target.value }));
                                         if (!customSelected) handleSelect(q, CUSTOM_KEY);
+                                        // Auto-grow to fit its content (Shift+Enter newlines).
+                                        e.currentTarget.style.height = 'auto';
+                                        e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
                                     }}
                                     onKeyDown={(e) => {
-                                        // Enter confirms the typed custom answer and advances to
-                                        // the next question (both single- AND multi-select),
-                                        // matching the "下一题 ↵" hint — the input is focused, so
-                                        // the window-level Enter handler is bypassed and this is the
-                                        // only place that can advance. Guard the IME composition
-                                        // Enter so committing pinyin doesn't skip the question.
+                                        // Enter (without Shift) confirms the typed custom answer and
+                                        // advances to the next question (both single- AND
+                                        // multi-select), matching the "下一题 ↵" hint — the field is
+                                        // focused, so the window-level Enter handler is bypassed and
+                                        // this is the only place that can advance. Shift+Enter falls
+                                        // through to the textarea's native newline. Guard the IME
+                                        // composition Enter so committing pinyin doesn't skip.
                                         if (
                                             e.key === 'Enter' &&
+                                            !e.shiftKey &&
                                             !e.nativeEvent.isComposing &&
                                             customText[q.id]?.trim()
                                         ) {
@@ -305,7 +329,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                         }
                                     }}
                                     className={cn(
-                                        'flex-1 bg-transparent text-sm outline-none placeholder:text-[#8C8C8C]',
+                                        'flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-5 outline-none placeholder:text-[#8C8C8C]',
                                         customSelected ? 'text-[#1A1A1A] font-medium' : 'text-[#1A1A1A]',
                                     )}
                                 />
@@ -314,7 +338,9 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                         type="button"
                                         disabled={disabled || submitted}
                                         onClick={handleConfirm}
-                                        className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
+                                        // self-end pins 确定 to the bottom-right of the (possibly
+                                        // grown) box, while the number stays top-left.
+                                        className="flex shrink-0 self-end items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
                                     >
                                         {localize('com_linsight_clarify_submit')}
                                         <Outlined.CornerDownLeft size={14} className="shrink-0" />
