@@ -1206,6 +1206,8 @@
     "knowledgeSpace": "KnowledgeSpace",
     "model": "Model",
     "displayName": "Display Name",
+    "modelDescription": "Description",
+    "modelDescriptionPlaceholder": "Optional, shown in the workspace model picker",
     "vision": "Vision",
     "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability.",
     "webSearchPrompt": "Web Search Prompt",

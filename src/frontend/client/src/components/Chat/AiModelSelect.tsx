@@ -73,8 +73,15 @@ const AiModelSelect = memo(
                     the model list is already in memory via `options`. */}
                 <SelectContent auto className="bg-white w-auto min-w-[100px] max-w-[280px]">
                     {uniqueOptions.map((opt) => (
-                        <SelectItem key={opt.id + ""} value={opt.id + ""}>
-                            {opt.displayName}
+                        <SelectItem key={opt.id + ""} value={opt.id + ""} textValue={opt.displayName}>
+                            <div className="flex min-w-0 flex-col py-0.5">
+                                <span>{opt.displayName}</span>
+                                {opt.description && (
+                                    <span className="mt-0.5 whitespace-normal break-words text-xs text-gray-400">
+                                        {opt.description}
+                                    </span>
+                                )}
+                            </div>
                         </SelectItem>
                     ))}
                 </SelectContent>

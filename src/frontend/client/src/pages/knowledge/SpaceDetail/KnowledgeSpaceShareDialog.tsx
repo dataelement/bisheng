@@ -14,6 +14,8 @@ import {
     TabsTrigger,
 } from "~/components/ui";
 import { useLocalize } from "~/hooks";
+import { useRecoilValue } from "recoil";
+import store from "~/store";
 import { getGrantableRelationModels } from "~/api/permission";
 import type { RelationModel, ResourceType } from "~/api/permission";
 
@@ -41,6 +43,7 @@ export function KnowledgeSpaceShareDialog({
     isDepartmentSpace = false,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
+    const currentUser = useRecoilValue(store.user);
     const [refreshKey, setRefreshKey] = useState(0);
     const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
     const [grantDialogOpen, setGrantDialogOpen] = useState(false);
@@ -144,6 +147,7 @@ export function KnowledgeSpaceShareDialog({
                     resourceId={resourceId}
                     refreshKey={refreshKey}
                     fixedSubjectType={currentSubjectType}
+                    currentUserId={currentUser?.id}
                     prefetchedGrantableModels={grantableModels}
                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                     prefetchedUseDefaultModels={useDefaultModels}
