@@ -6943,6 +6943,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         include_folder_counts: bool = True,
         folder_counts_override: dict[int, dict[str, int]] | None = None,
+        enrich_files: bool = True,
     ) -> list[dict]:
         folder_ids = []
         file_ids = []
@@ -6960,8 +6961,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folders = [f for f in res if f.file_type == FileType.DIR]
                 folder_counts = await self._load_folder_stat_counts(folders)
 
-        # file need find all tags
-        file_tags = await self._load_file_tags_batch(file_ids) if file_ids else {}
+        # file need find all tags (skip when caller does not consume enrichment, e.g. QA tree)
+        file_tags = await self._load_file_tags_batch(file_ids) if (enrich_files and file_ids) else {}
 
         result = []
         for one in res:
@@ -6980,13 +6981,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     item.update(counts)
                 item["summary"] = ""
             else:
-                item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
-                item["tags"] = file_tags.get(one.id, [])
-                item["summary"] = one.abstract or ""
-                # Version enrichment fields set by _enrich_with_version_info (if version_repo is set).
-                item["version_no"] = getattr(one, "_version_no", None)
-                item["is_multi_version"] = getattr(one, "_is_multi_version", False)
-                item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
+                if enrich_files:
+                    item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
+                    item["tags"] = file_tags.get(one.id, [])
+                    item["summary"] = one.abstract or ""
+                    # Version enrichment fields set by _enrich_with_version_info (if version_repo is set).
+                    item["version_no"] = getattr(one, "_version_no", None)
+                    item["is_multi_version"] = getattr(one, "_is_multi_version", False)
+                    item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
             result.append(item)
 
         return result
@@ -7151,6 +7153,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cursor: str | None = None,
         page_size: int = 20,
         file_type: int | None = None,
+        enrich_files: bool = True,
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
@@ -7204,11 +7207,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
-        await self._enrich_with_version_info(visible_page_items)
+        if enrich_files:
+            await self._enrich_with_version_info(visible_page_items)
 
         data = await self._handle_file_folder_extra_info(
             visible_page_items,
             include_folder_counts=True,
+            enrich_files=enrich_files,
         )
 
         next_cursor: str | None = None

@@ -454,6 +454,10 @@ async def list_space_children(
         "`next_cursor`. Omit (or pass empty) to fetch the first page.",
     ),
     file_type: int | None = Query(default=None, description="0=DIR only, 1=FILE only, empty=both"),
+    enrich_files: bool = Query(
+        default=True,
+        description="是否富化文件的 tags/缩略图/摘要/版本字段；门户 QA 树传 false 以省开销",
+    ),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """List space children (F027 cursor-based pagination).
@@ -471,6 +475,7 @@ async def list_space_children(
         cursor=cursor,
         page_size=page_size,
         file_type=file_type,
+        enrich_files=enrich_files,
     )
     return resp_200(result)
 
