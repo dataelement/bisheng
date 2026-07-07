@@ -211,7 +211,7 @@ export default function WorkbenchModel({ onBack }) {
     const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
     const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
-        <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+        <div className="max-w-[640px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">
@@ -229,7 +229,7 @@ export default function WorkbenchModel({ onBack }) {
                     onLinsightDefaultChange={(id) => setForm((prev) => ({ ...prev, linsightDefaultModelId: id }))}
                     onAdd={() => setForm((prev) => ({
                         ...prev,
-                        models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }],
+                        models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', description: '', visual: false }],
                     }))}
                     onRemove={(index) => setForm((prev) => {
                         const removed = prev.models[index];
@@ -250,6 +250,10 @@ export default function WorkbenchModel({ onBack }) {
                     onNameChange={(index, displayName) => setForm((prev) => ({
                         ...prev,
                         models: prev.models.map((item, i) => i === index ? { ...item, displayName } : item),
+                    }))}
+                    onDescriptionChange={(index, description) => setForm((prev) => ({
+                        ...prev,
+                        models: prev.models.map((item, i) => i === index ? { ...item, description } : item),
                     }))}
                     onVisualToggle={(index, visual) => setForm((prev) => ({
                         ...prev,

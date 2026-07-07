@@ -70,10 +70,17 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
                     {label}
                 </span>
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent className="bg-white max-w-[280px]">
                 {options.map((opt: any) => (
-                    <SelectItem key={String(opt.id)} value={String(opt.id)}>
-                        {opt.displayName ?? opt.name}
+                    <SelectItem key={String(opt.id)} value={String(opt.id)} textValue={opt.displayName ?? opt.name}>
+                        <div className="flex min-w-0 flex-col py-0.5">
+                            <span>{opt.displayName ?? opt.name}</span>
+                            {opt.description && (
+                                <span className="mt-0.5 whitespace-normal break-words text-xs text-gray-400">
+                                    {opt.description}
+                                </span>
+                            )}
+                        </div>
                     </SelectItem>
                 ))}
             </SelectContent>
