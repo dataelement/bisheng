@@ -184,7 +184,7 @@ class TestSgUsersSyncRoute:
                     "code": "U1",
                     "desc34": "DEPT1",
                     "desc1": "Alice",
-                    "desc93": "01",
+                    "desc185": "01",
                 },
             ],
         }

@@ -90,7 +90,7 @@ def build_user_payload(
                 "code": code,
                 "desc34": dept_code,
                 "desc1": display_name or f"E2E SG User {user_suffix}",
-                "desc93": job_status,
+                "desc185": job_status,
             },
         ],
     }

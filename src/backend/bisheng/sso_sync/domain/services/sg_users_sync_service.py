@@ -70,7 +70,7 @@ class SgUsersSyncService:
                         external_id=external_id,
                         dept_external_id=dept_external_id,
                         remark=(item.desc1 or "").strip(),
-                        delete_flag=cls._parse_delete_flag(item.desc93),
+                        delete_flag=cls._parse_delete_flag(item.desc185),
                     )
                 )
             except Exception as exc:
@@ -257,7 +257,7 @@ class SgUsersSyncService:
             return 0
         if raw == "02":
             return 1
-        raise ValueError("desc93 must be 01(on-job) or 02(off-job)")
+        raise ValueError("desc185 must be 01(on-job) or 02(off-job)")
 
     @staticmethod
     def _failed_info(

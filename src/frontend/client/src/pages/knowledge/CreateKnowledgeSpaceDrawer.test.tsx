@@ -37,6 +37,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.auto_tag_generation_desc": "上传文件解析成功后自动生成标签",
             "com_knowledge.auto_tag_library": "标签库",
             "com_knowledge.select_auto_tag_library": "请选择标签库",
+            "com_knowledge.tag_library_required_on_create": "创建知识库时必须选择标签库",
             "com_knowledge.loading": "加载中...",
         };
         return dict[key] || key;
@@ -188,7 +189,9 @@ jest.mock("~/api/knowledge", () => ({
     getCreateSpaceDepartmentsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     getCreateSpaceUserGroupsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     getKnowledgeSpaceAutoTagVisibilityApi: jest.fn().mockResolvedValue({ visible: false }),
-    getKnowledgeSpaceTagLibrariesApi: jest.fn().mockResolvedValue({ data: [] }),
+    getKnowledgeSpaceTagLibrariesApi: jest.fn().mockResolvedValue({
+        data: [{ id: 1, name: "默认标签库", tag_count: 3, is_builtin: true }],
+    }),
     getKnowledgeSpaceTagLibrariesByKnowledgeApi: jest.fn().mockResolvedValue([]),
     getKnowledgeSpaceTagLibraryDetailApi: jest.fn().mockResolvedValue({ tags: [] }),
     getSpaceInfoApi: jest.fn().mockResolvedValue({ autoTagLibraryIds: [], autoTagLibraryId: null }),
@@ -210,6 +213,11 @@ function renderDrawer(props: Partial<ComponentProps<typeof CreateKnowledgeSpaceD
             />
         </QueryClientProvider>,
     );
+}
+
+async function selectDefaultTagLibrary() {
+    const option = await screen.findByRole("button", { name: "默认标签库" });
+    fireEvent.click(option);
 }
 
 describe("CreateKnowledgeSpaceDrawer", () => {
@@ -281,6 +289,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(onConfirm).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: "选择炼铁部" }));
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -346,6 +355,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "个人资料库" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -632,6 +642,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入申请理由"), {
             target: { value: "申请团队协作知识库" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -684,6 +695,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "个人资料库" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(screen.getByText("知识库创建成功")).toBeInTheDocument());

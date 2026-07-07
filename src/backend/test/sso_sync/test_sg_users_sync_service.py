@@ -63,7 +63,7 @@ class TestSgUsersSyncService:
                 code="U1",
                 desc34="DEPT1",
                 desc1="Alice",
-                desc93="01",
+                desc185="01",
             ),
         )
 
@@ -141,7 +141,7 @@ class TestSgUsersSyncService:
                 code="U1",
                 desc34="DEPT1",
                 desc1="Alice Updated",
-                desc93="01",
+                desc185="01",
             ),
         )
         with (
@@ -210,7 +210,7 @@ class TestSgUsersSyncService:
                 code="U1",
                 desc34="DEPT1",
                 desc1="Alice",
-                desc93="02",
+                desc185="02",
             ),
         )
         membership = SimpleNamespace(
@@ -289,7 +289,7 @@ class TestSgUsersSyncService:
                 code="U1",
                 desc34="MISSING",
                 desc1="Bob",
-                desc93="01",
+                desc185="01",
             ),
         )
         with (
@@ -317,7 +317,7 @@ class TestSgUsersSyncService:
         )
 
         payload = _request(
-            SgUserFieldItem(uuid="u1", code="U1", desc34="", desc93="01"),
+            SgUserFieldItem(uuid="u1", code="U1", desc34="", desc185="01"),
         )
         response = await SgUsersSyncService.execute(payload)
 
@@ -326,7 +326,7 @@ class TestSgUsersSyncService:
         assert info.status == "1"
         assert "desc34 is required" in info.error_text
 
-    async def test_invalid_desc93_returns_validation_failure(self):
+    async def test_invalid_desc185_returns_validation_failure(self):
         from bisheng.sso_sync.domain.services.sg_users_sync_service import (
             SgUsersSyncService,
         )
@@ -336,14 +336,14 @@ class TestSgUsersSyncService:
                 uuid="u1",
                 code="U1",
                 desc34="DEPT1",
-                desc93="99",
+                desc185="99",
             ),
         )
         response = await SgUsersSyncService.execute(payload)
 
         assert response.esb.code == "1"
         info = response.esb.data.data_infos.data_info[0]
-        assert "desc93 must be 01(on-job) or 02(off-job)" in info.error_text
+        assert "desc185 must be 01(on-job) or 02(off-job)" in info.error_text
 
     async def test_ensure_primary_membership_adds_new_row(self):
         from bisheng.sso_sync.domain.services.sg_users_sync_service import (
