@@ -172,8 +172,8 @@ export interface KnowledgeFile {
     sensitiveCheck?: KnowledgeFileSensitiveCheck;
     /** Number of successfully parsed files (folders only) */
     successFileNum?: number;
-    /** Total number of files (folders only) */
-    fileNum?: number;
+    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) */
+    hasFailedFiles?: boolean;
     /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
     processingFileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
@@ -571,7 +571,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         errorMessage: extractKnowledgeFileError(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
-        fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
+        hasFailedFiles: raw?.has_failed_files !== undefined ? Boolean(raw.has_failed_files) : undefined,
         processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
@@ -661,7 +661,6 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         errorMessage: extractKnowledgeFileError(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw.success_file_num,
-        fileNum: raw.file_num,
         processingFileNum: raw.processing_file_num,
     };
 }

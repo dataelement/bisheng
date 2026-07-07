@@ -2369,13 +2369,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     KnowledgeFileStatus.WAITING.value,
                     KnowledgeFileStatus.REBUILDING.value,
                 }
+                # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
+                retryable_statuses = {
+                    KnowledgeFileStatus.FAILED.value,
+                    KnowledgeFileStatus.VIOLATION.value,
+                }
                 async with get_async_db_session() as session:
                     rows = (await session.exec(stmt)).all()
-                    total = sum(r[1] for r in rows)
                     success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
                     processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
+                    failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
                     folder_counts[folder.id] = {
-                        "file_num": total,
+                        "has_failed_files": failed > 0,
                         "success_file_num": success,
                         "processing_file_num": processing,
                     }
@@ -2400,7 +2405,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(
                     one.id,
-                    {"file_num": 0, "success_file_num": 0, "processing_file_num": 0},
+                    {"has_failed_files": False, "success_file_num": 0, "processing_file_num": 0},
                 )
                 item.update(counts)
             else:
