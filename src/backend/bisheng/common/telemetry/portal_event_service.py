@@ -97,7 +97,7 @@ class PortalTelemetryEventService:
         *,
         offset: int = 0,
         limit: int = 100,
-        source_app: str = PORTAL_TELEMETRY_SOURCE_SHOUGANG,
+        source_app: str | None = None,
     ) -> list[dict[str, int]]:
         """Return file read-count buckets ordered by total portal document reads."""
         unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in space_ids if int(space_id) > 0))
@@ -107,15 +107,18 @@ class PortalTelemetryEventService:
             return []
 
         aggregation_size = min(safe_offset + safe_limit, PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE)
+        filters: list[dict[str, Any]] = [
+            {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value}},
+            {"terms": {"event_data.portal_document_read_space_id": unique_space_ids}},
+        ]
+        if source_app:
+            filters.append({"term": {"event_data.portal_document_read_source_app": source_app}})
+
         body = {
             "size": 0,
             "query": {
                 "bool": {
-                    "filter": [
-                        {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value}},
-                        {"term": {"event_data.portal_document_read_source_app": source_app}},
-                        {"terms": {"event_data.portal_document_read_space_id": unique_space_ids}},
-                    ]
+                    "filter": filters
                 }
             },
             "aggs": {

@@ -150,7 +150,7 @@ async def test_portal_document_read_counts_by_space_ids(monkeypatch):
             body = kwargs["body"]
             filters = body["query"]["bool"]["filter"]
             assert {"term": {"event_type": "portal_document_read"}} in filters
-            assert {"term": {"event_data.portal_document_read_source_app": "shougang_portal"}} in filters
+            assert not any("event_data.portal_document_read_source_app" in item.get("term", {}) for item in filters)
             assert {"terms": {"event_data.portal_document_read_space_id": [12, 13]}} in filters
             terms = body["aggs"]["by_file"]["terms"]
             assert terms["field"] == "event_data.portal_document_read_file_id"
