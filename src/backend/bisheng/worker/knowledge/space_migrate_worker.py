@@ -12,14 +12,21 @@ _logger = logging.getLogger(__name__)
 _PAGE_SIZE = 20
 
 
+def _worker_request() -> Request:
+    """worker 侧调用 delete_space 需要一个 ASGI Request。delete_space 的审计日志会调
+    get_request_ip(request)，它读 request.headers，并在无 X-Forwarded-For/X-Real-IP 时
+    读 request.client.host —— 故 scope 必须同时带 headers 与 client，否则删源库时
+    starlette 会在 list(scope["headers"]) 处抛 KeyError: 'headers'，导致迁移失败。"""
+    return Request(scope={"type": "http", "headers": [], "client": ("127.0.0.1", 0)})
+
+
 async def _delete_source_space(source_id: int, op_user_id: int) -> None:
     """迁移成功后删源库；传 migrate_free_space=False 跳过前置判定避免死循环。"""
     from bisheng.knowledge.domain.services.knowledge_space_service import (
         KnowledgeSpaceService,
     )
     login_user = UserPayload(user_id=op_user_id, user_name="system-worker", role="user")
-    request = Request(scope={"type": "http"})
-    svc = KnowledgeSpaceService(request=request, login_user=login_user)
+    svc = KnowledgeSpaceService(request=_worker_request(), login_user=login_user)
     await svc.delete_space(source_id, migrate_free_space=False)
     _logger.info("space_migrate 源库已删除 source=%s", source_id)
 

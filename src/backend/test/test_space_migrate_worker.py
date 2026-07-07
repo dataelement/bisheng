@@ -186,3 +186,13 @@ def test_migrate_aborts_and_keeps_source_when_copy_fails(monkeypatch):
     assert last.kwargs.get("state") == KnowledgeState.PUBLISHED or (
         last.args[1:] and last.args[1] == KnowledgeState.PUBLISHED
     )
+
+
+def test_worker_request_supports_get_request_ip():
+    """删源库会走 delete_space 的审计日志 get_request_ip(request)，它读 request.headers，
+    并在无代理头时读 request.client.host。worker 造的 Request 必须带 headers+client，
+    否则 starlette 在 list(scope["headers"]) 抛 KeyError: 'headers'，迁移在删源库处崩溃
+    （真实环境 source=167/177 已复现）。"""
+    from bisheng.utils import get_request_ip
+
+    assert get_request_ip(m._worker_request()) == "127.0.0.1"
