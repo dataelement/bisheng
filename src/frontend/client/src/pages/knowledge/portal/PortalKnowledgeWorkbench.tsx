@@ -67,6 +67,7 @@ import {
     isFolder,
     isPreviewable,
     isRetryable,
+    normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
     resolvePreviewUrl,
     toNumericIds,
@@ -937,11 +938,15 @@ export default function PortalKnowledgeWorkbench() {
     const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && (isActiveSpaceAdmin || canCreateFolder));
     const fileCategoryOptions = useMemo(() => {
         if (portalMetaConfig?.document_types?.length) {
-            return normalizePortalFileCategoryOptions(
-                portalMetaConfig.document_types.map((dt) => ({ code: dt.code, label: dt.label ?? dt.name ?? dt.code }))
-            );
+            return normalizePortalFileCategoryOptions(portalMetaConfig.document_types);
         }
         return normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types);
+    }, [portalMetaConfig, bsConfig]);
+    const fileCategoryGroups = useMemo(() => {
+        if (portalMetaConfig?.document_types?.length) {
+            return normalizePortalFileCategoryGroups(portalMetaConfig.document_types);
+        }
+        return normalizePortalFileCategoryGroups((bsConfig as any)?.shougang?.file_encoding?.document_types);
     }, [portalMetaConfig, bsConfig]);
 
     const businessDomainOptions = useMemo(() => {
@@ -1000,8 +1005,8 @@ export default function PortalKnowledgeWorkbench() {
         uploadFolderOptions,
         duplicateFiles,
         duplicateOverwriting,
-        fileCategoryCode,
-        fileCategoryOptions: resolvedFileCategoryOptions,
+        fileSubcategoryCode,
+        fileCategoryGroups: resolvedFileCategoryGroups,
         businessDomainCode,
         uploadTagOptions,
         selectedUploadTagValues,
@@ -1037,7 +1042,7 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderNode,
         currentPath,
         statusFilterNumbers,
-        fileCategoryOptions,
+        fileCategoryGroups,
         businessDomainOptions: uploadBusinessDomainOptions,
         enableEtl4lm: portalEnableEtl4lm,
         uploadSizeLimits: portalUploadSizeLimits,
@@ -1955,14 +1960,28 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [selectedFile?.fileEncoding, showToast]);
 
-    const handleUpdateSelectedFileEncoding = useCallback(async (newEncoding: string) => {
+    const handleUpdateSelectedFileEncoding = useCallback(async (newEncoding: string, fileSubcategoryCode?: string | null) => {
         if (!activeSpace || !selectedFile || !canEditSelectedFileEncoding) return;
 
         try {
-            await updateFileEncoding(String(selectedFile.spaceId || activeSpace.id), selectedFile.id, newEncoding);
+            if (fileSubcategoryCode !== undefined) {
+                await updateFileEncoding(
+                    String(selectedFile.spaceId || activeSpace.id),
+                    selectedFile.id,
+                    newEncoding,
+                    fileSubcategoryCode,
+                );
+            } else {
+                await updateFileEncoding(
+                    String(selectedFile.spaceId || activeSpace.id),
+                    selectedFile.id,
+                    newEncoding,
+                );
+            }
             patchFileById(selectedFile.id, (file) => ({
                 ...file,
                 fileEncoding: newEncoding,
+                ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
             }));
             showToast({ message: "编码更新成功", severity: NotificationSeverity.SUCCESS });
         } catch (error) {
@@ -2020,8 +2039,10 @@ export default function PortalKnowledgeWorkbench() {
             const result = await submitKnowledgeSpaceCreate(form);
 
             if (result.created && result.space) {
+                // 先等空间列表刷新（新空间进入 selectableSpaces），再切换当前空间；否则默认空间
+                // 守卫会在刷新完成前把 activeSpace 重置回默认库，导致“前往知识库”跳不到新空间。
+                await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 setActiveSpace(result.space);
-                void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
@@ -2132,7 +2153,12 @@ export default function PortalKnowledgeWorkbench() {
                                                     onDownloadFile={() => undefined}
                                                     onRenameFile={(fileId, newName) => void fileUpload.handleRenameFile(fileId, newName)}
                                                     onDeleteFile={(fileId) => void fileUpload.handleDeleteFile(fileId)}
-                                                    onMoveFile={(fileId, targetFolderId) => void fileUpload.handleMoveFile(fileId, targetFolderId)}
+                                                    onMoveFile={async (fileId, targetFolderId) => {
+                                                        await fileUpload.handleMoveFile(fileId, targetFolderId);
+                                                        // Refresh so the target folder's file-count stats update (move alone doesn't reload stats here).
+                                                        await reloadFiles();
+                                                    }}
+                                                    onMoveDialogFolderCreated={() => void reloadFiles()}
                                                     onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
                                                     onRetryFile={() => void reloadFiles()}
                                                     canRetryFile={canRetryPortalFailedFile}
@@ -2164,6 +2190,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideFilePermissionActions={isActiveSpacePersonal}
                                                     enableEncodingClassification
                                                     fileCategoryOptions={fileCategoryOptions}
+                                                    fileCategoryGroups={fileCategoryGroups}
                                                     businessDomainOptions={activeSpaceBusinessDomainOptions}
                                                     encodingPrefix={fileEncodingPrefix}
                                                     markPendingDeletion={markPendingDeletion}
@@ -2231,9 +2258,9 @@ export default function PortalKnowledgeWorkbench() {
                     onCopyEncoding={() => void handleCopyFileEncoding()}
                     onCopyShareLink={() => void copyShareLink()}
                     onDownload={() => void handleDownloadSelected()}
-                    fileCategoryOptions={fileCategoryOptions}
+                    fileCategoryGroups={fileCategoryGroups}
                     encodingPrefix={fileEncodingPrefix}
-                    onUpdateEncoding={(newEncoding) => handleUpdateSelectedFileEncoding(newEncoding)}
+                    onUpdateEncoding={(newEncoding, fileSubcategoryCode) => handleUpdateSelectedFileEncoding(newEncoding, fileSubcategoryCode)}
                     businessDomainOptions={activeSpaceBusinessDomainOptions}
                     onOpenPermission={() => {
                         if (!canManageSelectedFilePermission) return;
@@ -2317,8 +2344,8 @@ export default function PortalKnowledgeWorkbench() {
                     uploadImporting,
                     uploadReviewRows,
                     uploadFolderOptions,
-                    fileCategoryCode,
-                    fileCategoryOptions: resolvedFileCategoryOptions,
+                    fileSubcategoryCode,
+                    fileCategoryGroups: resolvedFileCategoryGroups,
                     businessDomainCode,
                     businessDomainOptions: uploadBusinessDomainOptions,
                     uploadTagOptions,
@@ -2355,7 +2382,7 @@ export default function PortalKnowledgeWorkbench() {
                 onOpenChange={setUploadedFilesOpen}
                 onRecordsChanged={() => reloadFiles()}
                 showToast={showToast}
-                fileCategoryOptions={fileCategoryOptions}
+                fileCategoryGroups={fileCategoryGroups}
                 businessDomainOptions={businessDomainOptions}
                 encodingPrefix={fileEncodingPrefix}
             />

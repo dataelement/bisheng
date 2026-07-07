@@ -897,6 +897,113 @@ class PermissionService:
             logger.error('Error getting permission level: %s', e)
             return None
 
+    # OpenFGA's batch_check endpoint defaults to maxChecksPerBatchCheck=50.
+    # Each pending object contributes len(PermissionLevel) (4) checks, so
+    # 12 objects * 4 = 48 checks per call stays safely under that cap.
+    _LEVEL_CHECK_BATCH_SPACES = 12
+
+    @classmethod
+    async def get_permission_levels(
+        cls,
+        user_id: int,
+        object_type: str,
+        object_ids: list[str | int],
+        login_user=None,
+    ) -> dict[str, str | None]:
+        """Batched equivalent of get_permission_level over many objects.
+
+        Merges the per-object 4-level batch_check into a single OpenFGA
+        batch_check request. Semantics are identical to calling
+        get_permission_level once per object.
+        """
+        ids = [str(o) for o in object_ids]
+        if not ids:
+            return {}
+        if login_user and login_user.is_admin():
+            return {oid: PermissionLevel.owner.value for oid in ids}
+
+        results: dict[str, str | None] = {}
+        gates = await asyncio.gather(*[
+            cls._evaluate_tenant_gate(
+                user_id=user_id, object_type=object_type, object_id=oid, login_user=login_user)
+            for oid in ids
+        ])
+        pending: list[str] = []
+        for oid, (denied, shortcut) in zip(ids, gates):
+            if denied:
+                results[oid] = None
+            elif shortcut is not None:
+                results[oid] = shortcut
+            else:
+                pending.append(oid)
+        if not pending:
+            return results
+
+        try:
+            fga = await cls._aget_fga()
+            if fga is None:
+                implicit = await asyncio.gather(*[
+                    cls._get_implicit_permission_level_after_gate(user_id, object_type, oid)
+                    for oid in pending
+                ])
+                results.update(dict(zip(pending, implicit)))
+                return results
+
+            levels = list(PermissionLevel)
+            unresolved: list[str] = []
+            batch_size = cls._LEVEL_CHECK_BATCH_SPACES
+            for start in range(0, len(pending), batch_size):
+                chunk = pending[start:start + batch_size]
+                checks = [
+                    {'user': f'user:{user_id}', 'relation': level.value, 'object': f'{object_type}:{oid}'}
+                    for oid in chunk
+                    for level in levels
+                ]
+                flat = await fga.batch_check(checks)
+                for i, oid in enumerate(chunk):
+                    row = flat[i * len(levels):(i + 1) * len(levels)]
+                    chosen = next((level.value for level, allowed in zip(levels, row) if allowed), None)
+                    if chosen is not None:
+                        results[oid] = chosen
+                    else:
+                        unresolved.append(oid)
+
+            # legacy alias fallback (per object, merged per object_type)
+            still_unresolved: list[str] = []
+            for oid in unresolved:
+                resolved_level = None
+                for legacy_type in await cls._legacy_alias_object_types(object_type, oid):
+                    legacy_checks = [
+                        {'user': f'user:{user_id}', 'relation': level.value, 'object': f'{legacy_type}:{oid}'}
+                        for level in levels
+                    ]
+                    legacy_results = await fga.batch_check(legacy_checks)
+                    resolved_level = next(
+                        (level.value for level, allowed in zip(levels, legacy_results) if allowed), None)
+                    if resolved_level is not None:
+                        break
+                if resolved_level is not None:
+                    results[oid] = resolved_level
+                else:
+                    still_unresolved.append(oid)
+
+            implicit = await asyncio.gather(*[
+                cls._get_implicit_permission_level_after_gate(user_id, object_type, oid)
+                for oid in still_unresolved
+            ])
+            results.update(dict(zip(still_unresolved, implicit)))
+            return results
+        except Exception as e:
+            logger.warning('Batched permission-level check failed, falling back to per-object: %s', e)
+            fallback = await asyncio.gather(*[
+                cls.get_permission_level(
+                    user_id=user_id, object_type=object_type, object_id=oid, login_user=login_user)
+                for oid in pending
+            ])
+            for oid, level in zip(pending, fallback):
+                results[oid] = level
+            return results
+
     # ── Internal helpers ────────────────────────────────────────
 
     @classmethod

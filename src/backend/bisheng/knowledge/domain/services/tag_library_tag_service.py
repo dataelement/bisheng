@@ -517,6 +517,164 @@ class TagLibraryTagService:
                 )
 
     @classmethod
+    def append_file_library_review_tags_sync(
+        cls,
+        *,
+        space_id: int,
+        file_id: int,
+        tag_names: list[str],
+        user_id: int,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.AI_AUTO_TAG,
+    ) -> None:
+        """Create pending review tags in the first bound library and link them to a file."""
+        normalized_names = cls._normalize_names(tag_names)
+        if not normalized_names:
+            return
+
+        library_id = cls._first_library_id_for_space(space_id)
+        if library_id is None:
+            logger.warning(
+                "skip_review_tag_insert_no_library space_id={} file_id={} tag_names={}",
+                space_id,
+                file_id,
+                normalized_names,
+            )
+            return
+
+        with get_sync_db_session() as session:
+            existing_tags = session.exec(
+                select(ReviewTag).where(
+                    ReviewTag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    ReviewTag.business_id == str(library_id),
+                    ReviewTag.name.in_(normalized_names),
+                )
+            ).all()
+            tag_by_name = {tag.name: tag for tag in existing_tags}
+            for tag_name in normalized_names:
+                if tag_name in tag_by_name:
+                    continue
+                if cls.find_library_tag_by_name_sync(tenant_id=tenant_id, tag_name=tag_name):
+                    continue
+                tag = ReviewTag(
+                    name=tag_name,
+                    business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    business_id=str(library_id),
+                    resource_type=resource_type.value,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                )
+                session.add(tag)
+                session.flush()
+                tag_by_name[tag_name] = tag
+
+            tag_ids = [tag_by_name[name].id for name in normalized_names if tag_by_name.get(name)]
+            if not tag_ids:
+                return
+
+            existing_links = session.exec(
+                select(ReviewTagLink).where(
+                    ReviewTagLink.resource_id == str(file_id),
+                    ReviewTagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    ReviewTagLink.tag_id.in_(tag_ids),
+                )
+            ).all()
+            existing_tag_ids = {link.tag_id for link in existing_links}
+            for tag_id in tag_ids:
+                if tag_id in existing_tag_ids:
+                    continue
+                session.add(
+                    ReviewTagLink(
+                        tag_id=tag_id,
+                        resource_id=str(file_id),
+                        resource_type=ResourceTypeEnum.SPACE_FILE.value,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                    )
+                )
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                logger.info(
+                    "append_file_library_review_tags_duplicate_link_ignored space_id={} file_id={}",
+                    space_id,
+                    file_id,
+                )
+
+    @classmethod
+    async def get_or_create_library_tag_async(
+        cls,
+        *,
+        space_id: int,
+        tag_name: str,
+        user_id: int,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.MANUAL_TAG,
+    ) -> Tag:
+        normalized = (tag_name or "").strip()
+        existing = await cls.find_library_tag_by_name(tenant_id=tenant_id, tag_name=normalized)
+        if existing:
+            return existing
+
+        library_id = cls._first_library_id_for_space(space_id)
+        if library_id is None:
+            raise KnowledgeSpaceTagLibraryNotBoundError()
+
+        return await TagDao.ainsert_tag(
+            Tag(
+                name=normalized,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+                business_id=cls._business_id(library_id),
+                resource_type=resource_type.value,
+            )
+        )
+
+    @classmethod
+    async def get_or_create_pending_review_tag_async(
+        cls,
+        *,
+        space_id: int,
+        tag_name: str,
+        user_id: int,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.MANUAL_TAG,
+    ) -> ReviewTag:
+        normalized = (tag_name or "").strip()
+        library_id = cls._first_library_id_for_space(space_id)
+        if library_id is None:
+            raise KnowledgeSpaceTagLibraryNotBoundError()
+
+        pending_tags = await ReviewTagDao.get_tags_by_business(
+            TagBusinessTypeEnum.TAG_LIBRARY,
+            str(library_id),
+            name=normalized,
+        )
+        for review_tag in pending_tags:
+            if (
+                (review_tag.name or "").strip() == normalized
+                and review_tag.review_status == 0
+                and not review_tag.is_deleted
+            ):
+                return review_tag
+
+        new_tag = ReviewTag(
+            name=normalized,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+            business_id=str(library_id),
+            resource_type=resource_type.value,
+            is_deleted=False,
+            review_status=0,
+            create_time=datetime.now(),
+            update_time=datetime.now(),
+        )
+        return await ReviewTagDao.ainsert_review_tag(new_tag)
+
+    @classmethod
     async def list_tenant_library_tag_name_keys(cls, tenant_id: int | None) -> set[str]:
         if tenant_id is None:
             return set()
@@ -702,6 +860,76 @@ class TagLibraryTagService:
                 )
             )
             await session.commit()
+
+    @classmethod
+    async def collect_space_portal_tag_map(cls, space_ids: list[int]) -> dict[str, list[Tag]]:
+        """Merge legacy space-scoped tags with bound tag-library tags for portal read paths."""
+        if not space_ids:
+            return {}
+
+        unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in space_ids))
+        tag_map: dict[str, list[Tag]] = {}
+
+        legacy_map = await TagDao.aget_tags_by_business_ids(
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            [str(space_id) for space_id in unique_space_ids],
+        )
+        for space_id in unique_space_ids:
+            tag_map[str(space_id)] = list(legacy_map.get(str(space_id), []))
+
+        library_ids_by_space: dict[int, list[int]] = {}
+        all_library_ids: list[int] = []
+        for space_id in unique_space_ids:
+            library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+            library_ids_by_space[space_id] = library_ids
+            all_library_ids.extend(library_ids)
+
+        unique_library_ids = list(dict.fromkeys(all_library_ids))
+        if not unique_library_ids:
+            return tag_map
+
+        library_tag_map = await TagDao.aget_tags_by_business_ids(
+            TagBusinessTypeEnum.TAG_LIBRARY,
+            [str(library_id) for library_id in unique_library_ids],
+        )
+        for space_id in unique_space_ids:
+            merged = list(tag_map.get(str(space_id), []))
+            seen_names = {(tag.name or "").lower() for tag in merged if tag.name}
+            for library_id in library_ids_by_space.get(space_id, []):
+                for tag in library_tag_map.get(str(library_id), []):
+                    name_key = (tag.name or "").lower()
+                    if name_key and name_key not in seen_names:
+                        merged.append(tag)
+                        seen_names.add(name_key)
+            tag_map[str(space_id)] = merged
+        return tag_map
+
+    @classmethod
+    async def resolve_tag_ids_by_name_for_space(cls, space_id: int, tag_name: str) -> list[int]:
+        """Resolve tag ids by name for a space (legacy knowledge_space + bound libraries)."""
+        normalized = (tag_name or "").strip()
+        if not normalized:
+            return []
+
+        tag_ids: list[int] = []
+        legacy_tags = await TagDao.get_tags_by_business(
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            str(space_id),
+            name=normalized,
+        )
+        tag_ids.extend(int(tag.id) for tag in legacy_tags if tag.id is not None)
+
+        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+        if library_ids:
+            library_tag_map = await TagDao.aget_tags_by_business_ids(
+                TagBusinessTypeEnum.TAG_LIBRARY,
+                [str(library_id) for library_id in library_ids],
+                name=normalized,
+            )
+            for tags in library_tag_map.values():
+                tag_ids.extend(int(tag.id) for tag in tags if tag.id is not None)
+
+        return list(dict.fromkeys(tag_ids))
 
     @staticmethod
     def _normalize_names(values: Iterable[str]) -> list[str]:

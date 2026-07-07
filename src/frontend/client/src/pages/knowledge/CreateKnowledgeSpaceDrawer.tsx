@@ -151,6 +151,24 @@ interface CreateKnowledgeSpaceDrawerProps {
     showApprovalReason?: boolean;
 }
 
+/**
+ * 计算创建弹窗应选中的知识库层级。
+ *
+ * 当前层级仍可创建时保持不变；否则**优先回退到用户点击进入的分类层级**
+ * (initialSpaceLevel)，再退到第一个可创建项。修复：create-options 已被侧栏预取缓存时，
+ * 打开弹窗的两个 effect 同一 commit 触发、后者读到旧 spaceLevel 而把层级冲回“公共”，
+ * 导致点“部门/团队”新建却默认公共。
+ */
+export function resolveInitialCreateLevel(
+    enabledLevels: SpaceLevel[],
+    currentLevel: SpaceLevel,
+    initialLevel?: SpaceLevel,
+): SpaceLevel {
+    if (enabledLevels.includes(currentLevel)) return currentLevel;
+    if (initialLevel && enabledLevels.includes(initialLevel)) return initialLevel;
+    return enabledLevels[0] ?? SpaceLevel.PERSONAL;
+}
+
 export function CreateKnowledgeSpaceDrawer({
     open,
     onOpenChange,
@@ -277,6 +295,15 @@ export function CreateKnowledgeSpaceDrawer({
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
 
+    const handleAutoTagLibraryIdsChange = (values: string[]) => {
+        const normalized = [...new Set(
+            values
+                .map((value) => normalizeTagLibraryId(value))
+                .filter((id): id is number => id !== null),
+        )];
+        setAutoTagLibraryIds(normalized);
+    };
+
     const resetForm = () => {
         setName("");
         setDescription("");
@@ -341,11 +368,13 @@ export function CreateKnowledgeSpaceDrawer({
 
     useEffect(() => {
         if (!open || mode !== "create" || !createOptions) return;
-        if (!enabledLevelOptions.some((option) => option.value === spaceLevel)) {
-            const next = enabledLevelOptions[0]?.value ?? SpaceLevel.PERSONAL;
-            setSpaceLevel(next);
-        }
-    }, [createOptions, enabledLevelOptions, mode, open, spaceLevel]);
+        const next = resolveInitialCreateLevel(
+            enabledLevelOptions.map((option) => option.value),
+            spaceLevel,
+            initialSpaceLevel,
+        );
+        if (next !== spaceLevel) setSpaceLevel(next);
+    }, [createOptions, enabledLevelOptions, mode, open, spaceLevel, initialSpaceLevel]);
 
     useEffect(() => {
         if (!open) {
@@ -488,6 +517,13 @@ export function CreateKnowledgeSpaceDrawer({
             return;
         }
         const effectiveAutoTagEnabled = autoTagEnabled;
+        if (mode === "create" && autoTagLibraryIds.length === 0) {
+            showToast({
+                message: localize("com_knowledge.tag_library_required_on_create"),
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
         if (effectiveAutoTagEnabled && autoTagLibraryIds.length === 0) {
             showToast({
                 message: localize("com_knowledge.auto_tag_library_required"),
@@ -697,12 +733,14 @@ export function CreateKnowledgeSpaceDrawer({
 
                             <div className="space-y-2">
                                 <Label className="text-[14px] font-medium text-[#1D2129]">
+                                    {mode === "create" ? <span className="text-[#F53F3F]">*</span> : null}
                                     {localize("com_knowledge.auto_tag_library")}
                                 </Label>
                                 <MultiSelect
-                                    key={`${editingSpace?.id ?? "create"}-${autoTagLibraryIds.join(",")}-${tagLibrarySelectOptions.length}`}
+                                    key={`tag-library-select-${editingSpace?.id ?? "create"}`}
                                     multiple
                                     className="w-full"
+                                    scroll
                                     value={autoTagLibraryIds.map(String)}
                                     options={tagLibrarySelectOptions}
                                     placeholder={
@@ -710,8 +748,9 @@ export function CreateKnowledgeSpaceDrawer({
                                             ? localize("com_knowledge.loading")
                                             : localize("com_knowledge.select_auto_tag_library")
                                     }
+                                    searchPlaceholder={localize("com_knowledge.search_auto_tag_library")}
                                     disabled={tagLibrariesLoading}
-                                    onChange={(values) => setAutoTagLibraryIds(values.map(Number))}
+                                    onChange={handleAutoTagLibraryIdsChange}
                                 />
                                 {tagLibraries.length === 0 && !tagLibrariesLoading && (
                                     <p className="text-[12px] text-[#F53F3F]">

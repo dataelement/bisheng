@@ -4,14 +4,9 @@ from collections.abc import Iterable, Sequence
 
 from langchain_core.documents import Document
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
-from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
+from bisheng.database.models.tag import TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileSource,
@@ -32,11 +27,6 @@ from bisheng.llm.domain import LLMService
 from bisheng.sensitive_word.domain.schemas import (
     SensitiveWordBusinessType,
 )
-
-from bisheng.knowledge.domain.services.tag_library_tag_service import (
-    TagLibraryTagService,
-)
-
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 
 REVIEW_TAG_MAX_CONTENT = 3000
@@ -134,6 +124,7 @@ class KnowledgeSpaceReviewTagService:
                 app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
                 user_id=db_file.user_id,
+                temperature=0,
             )
             system_prompt = (llm_config.review_tag_prompt or "").strip() or DEFAULT_REVIEW_TAG_SYSTEM_PROMPT
 
@@ -265,64 +256,11 @@ class KnowledgeSpaceReviewTagService:
         user_id: int,
         tenant_id: int | None,
     ) -> None:
-        if not tag_names:
-            return
-        with get_sync_db_session() as session:
-            existing_tags = session.exec(
-                select(ReviewTag).where(
-                    ReviewTag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                    ReviewTag.business_id == str(space_id),
-                    ReviewTag.name.in_(tag_names),
-                )
-            ).all()
-            tag_by_name = {tag.name: tag for tag in existing_tags}
-            for tag_name in tag_names:
-                if tag_name in tag_by_name:
-                    continue
-                if TagLibraryTagService.find_library_tag_by_name_sync(
-                    tenant_id=tenant_id,
-                    tag_name=tag_name,
-                ):
-                    continue
-                tag = ReviewTag(
-                    name=tag_name,
-                    business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                    business_id=str(space_id),
-                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
-                    user_id=user_id,
-                    tenant_id=tenant_id,
-                )
-                session.add(tag)
-                session.flush()
-                tag_by_name[tag_name] = tag
-
-            tag_ids = [tag_by_name[name].id for name in tag_names if tag_by_name.get(name)]
-            existing_links = session.exec(
-                select(ReviewTagLink).where(
-                    ReviewTagLink.resource_id == str(file_id),
-                    ReviewTagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
-                    ReviewTagLink.tag_id.in_(tag_ids),
-                )
-            ).all()
-            existing_tag_ids = {link.tag_id for link in existing_links}
-            for tag_id in tag_ids:
-                if tag_id in existing_tag_ids:
-                    continue
-                session.add(
-                    ReviewTagLink(
-                        tag_id=tag_id,
-                        resource_id=str(file_id),
-                        resource_type=ResourceTypeEnum.SPACE_FILE.value,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                    )
-                )
-            try:
-                session.commit()
-            except IntegrityError:
-                session.rollback()
-                logger.info(
-                    "auto_tag_duplicate_link_ignored space_id={} file_id={}",
-                    space_id,
-                    file_id,
-                )
+        TagLibraryTagService.append_file_library_review_tags_sync(
+            space_id=space_id,
+            file_id=file_id,
+            tag_names=tag_names,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+        )

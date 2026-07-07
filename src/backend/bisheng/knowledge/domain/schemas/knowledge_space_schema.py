@@ -361,6 +361,9 @@ class ShougangPortalFileSearchReq(BaseModel):
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     file_ext: str | None = Field(default=None, description="File extension filter")
     document_type: str | None = Field(default=None, description="Document type code from file_encoding segment 2")
+    file_subcategory_code: str | None = Field(
+        default=None, max_length=16, description="Second-level file category code for portal filtering"
+    )
     business_domain_code: str | None = Field(
         default=None, max_length=16, description="Business domain code from file_encoding segment 3"
     )
@@ -384,6 +387,14 @@ class ShougangPortalFileSearchReq(BaseModel):
             raise ValueError("business_domain_code is invalid")
         return normalized
 
+    @field_validator("file_subcategory_code", mode="before")
+    @classmethod
+    def normalize_file_subcategory_code_field(cls, value: Any):
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        return normalized or None
+
 
 class ShougangPortalFileTagResp(BaseModel):
     tag_name: str = ""
@@ -402,6 +413,7 @@ class ShougangPortalFileItemResp(BaseModel):
     file_ext: str = ""
     file_size: str = ""
     file_encoding: str = ""
+    file_subcategory_code: str = ""
     folder_path: str = Field(
         default="",
         description="Readable source folder path '<source space>/<folder>/<folder>'. "
@@ -517,6 +529,11 @@ class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
     )
 
 
+class DepartmentBindingReq(BaseModel):
+    space_id: int = Field(..., description="Team-level knowledge space id to bind")
+    department_id: int = Field(..., description="Department id to bind the space to")
+
+
 class FolderCreateReq(BaseModel):
     name: str = Field(..., description="Folder Name")
     parent_id: int | None = Field(None, description="Parent Folder ID")
@@ -534,6 +551,7 @@ class FileCreateReq(BaseModel):
     file_path: list[str] = Field(..., description="File Path")
     parent_id: int | None = Field(None, description="Parent Folder ID")
     file_category_code: str | None = Field(None, max_length=16, description="Selected business file category code")
+    file_subcategory_code: str | None = Field(None, max_length=16, description="Selected second-level file category code")
     business_domain_code: str | None = Field(None, max_length=16, description="Selected business domain code")
     manual_tag_ids: list[int] = Field(default_factory=list, description="Selected existing tag IDs")
     manual_tag_names: list[str] = Field(default_factory=list, description="Selected tag names")
@@ -549,6 +567,14 @@ class FileCreateReq(BaseModel):
         if not normalized:
             raise ValueError("business_domain_code is invalid")
         return normalized
+
+    @field_validator("file_subcategory_code", mode="before")
+    @classmethod
+    def normalize_file_subcategory_code_field(cls, value: Any):
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        return normalized or None
 
     @field_validator("manual_tag_ids", mode="before")
     @classmethod
@@ -631,6 +657,11 @@ class FileEncodingUpdateReq(BaseModel):
         min_length=1,
         max_length=64,
         description="New file encoding (free text, 1-64 chars)",
+    )
+    file_subcategory_code: str | None = Field(
+        default=None,
+        max_length=16,
+        description="Selected second-level file category code. Does not participate in file_encoding.",
     )
 
 

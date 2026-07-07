@@ -299,6 +299,7 @@ describe("usePortalUploadDialog", () => {
             file_path: ["/tmp/uploaded.pdf"],
             parent_id: null,
             file_category_code: "RPT",
+            file_subcategory_code: "RPT",
         });
     });
 
@@ -405,7 +406,7 @@ describe("usePortalUploadDialog", () => {
 
         expect(retryDuplicateFilesApi).toHaveBeenCalledWith("space-1", [
             { id: "101", file_name: "重复.pdf" },
-        ], { file_category_code: "RPT" });
+        ], { file_category_code: "RPT", file_subcategory_code: "RPT" });
         expect(reloadFiles).toHaveBeenCalledTimes(1);
         expect(hook.result.current.duplicateFiles).toEqual([]);
         expect(hook.result.current.uploadDialogOpen).toBe(false);

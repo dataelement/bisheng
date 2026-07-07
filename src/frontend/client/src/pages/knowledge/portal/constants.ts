@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { FileStatus, type GroupedKnowledgeSpaces } from "~/api/knowledge";
 import LegacyFileIcon from "~/components/ui/icon/File";
-import type { PortalFileCategoryOption, SpaceGroupKey } from "./types";
+import type { PortalFileCategoryGroupOption, PortalFileCategoryOption, SpaceGroupKey } from "./types";
 
 export const EMPTY_GROUPED_SPACES: GroupedKnowledgeSpaces = {
     publicSpaces: [],
@@ -23,6 +23,18 @@ export const DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS: PortalFileCategoryOption[] = 
     { code: "PAT", label: "专利与知识产权" },
     { code: "TRN", label: "培训资源" },
 ];
+
+export const DEFAULT_PORTAL_FILE_CATEGORY_GROUPS: PortalFileCategoryGroupOption[] =
+    DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS.map((option) => ({
+        ...option,
+        children: [{
+            code: option.code,
+            label: option.label,
+            parentCode: option.code,
+            parentLabel: option.label,
+            displayLabel: option.label,
+        }],
+    }));
 
 const KNOWLEDGE_PORTAL_ASSET_BASE = "/assets/knowledge-portal";
 

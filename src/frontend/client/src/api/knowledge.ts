@@ -1,4 +1,4 @@
-import request from "./request";
+import request, { formatApiErrorMessage } from "./request";
 
 function logKnowledgeMutationStart(action: string, details: Record<string, unknown>): number {
     const startedAt = Date.now();
@@ -436,6 +436,7 @@ export interface KnowledgeFile {
     approvalStatus?: string;
     approvalReason?: string;
     fileEncoding?: string | null;        // mapped from file_encoding
+    fileSubcategoryCode?: string | null; // mapped from file_subcategory_code
     summary?: string;
     isPendingApproval?: boolean;
     version_no?: number;          // primary version number; absent for folders / legacy files
@@ -558,6 +559,7 @@ export interface KnowledgeSpaceTagLibraryPage {
 
 export interface UploadFileRegistrationMetadata {
     file_category_code?: string;
+    file_subcategory_code?: string;
     business_domain_code?: string;
     manual_tag_ids?: number[];
     manual_tag_names?: string[];
@@ -635,7 +637,7 @@ export interface UploadFileResponse {
 // ─────────────────────────────────────────────
 
 /** Map a raw backend space to the frontend KnowledgeSpace model */
-function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
+export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
     return {
         id: String(raw.id),
         name: raw.name,
@@ -978,6 +980,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
         fileEncoding: raw?.file_encoding ?? null,
+        fileSubcategoryCode: raw?.file_subcategory_code ?? null,
         summary: raw?.summary ?? raw?.abstract ?? "",
         version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
         is_multi_version: Boolean(raw?.is_multi_version),
@@ -1471,7 +1474,7 @@ export async function createSpaceApi(data: {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;
     if (statusCode !== 200) {
-        throw new Error(res?.status_message || res?.message || "createSpaceApi failed");
+        throw new Error(formatApiErrorMessage(res) || "createSpaceApi failed");
     }
     const raw = res?.data;
     if (!raw || raw?.id === undefined || raw?.id === null) {
@@ -1877,7 +1880,14 @@ export async function unsubscribeSpaceApi(space_id: string): Promise<void> {
  * DELETE /api/v1/knowledge/space/{space_id}
  */
 export async function deleteSpaceApi(space_id: string): Promise<void> {
-    await request.delete(`/api/v1/knowledge/space/${space_id}`);
+    await request.delete(
+        `/api/v1/knowledge/space/${space_id}`,
+        // Opt into the interceptor's business-error pipeline: a blocked delete
+        // (e.g. 科室知识库禁止删除 / 权限不足) returns HTTP 200 with an envelope
+        // status_code !== 200; without this it would resolve as a false success.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
+    );
 }
 
 /**
@@ -2588,10 +2598,14 @@ export async function updateFileEncoding(
     spaceId: string,
     fileId: string,
     encoding: string,
+    fileSubcategoryCode?: string | null,
 ): Promise<KnowledgeFile> {
     const res = await request.put(
         `/api/v1/knowledge/space/${spaceId}/files/${fileId}/encoding`,
-        { encoding },
+        {
+            encoding,
+            ...(fileSubcategoryCode !== undefined ? { file_subcategory_code: fileSubcategoryCode } : {}),
+        },
     ) as ApiResponse<any> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "update file encoding failed");

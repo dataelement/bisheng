@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDownloadReq,
     ChatFolderReq,
     ChatReq,
+    DepartmentBindingReq,
     DepartmentKnowledgeSpaceBatchCreateReq,
     FileCreateReq,
     FileEncodingUpdateReq,
@@ -310,6 +311,63 @@ async def batch_create_department_spaces(
             req=req,
         )
         return resp_200(spaces)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post("/department-binding")
+async def bind_department_space(
+    body: DepartmentBindingReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        data = await DepartmentKnowledgeSpaceService.bind_space_to_department(
+            login_user, space_id=body.space_id, department_id=body.department_id)
+        return resp_200(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.delete("/department-binding/{space_id}")
+async def unbind_department_space(
+    space_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        await DepartmentKnowledgeSpaceService.unbind_space(login_user, space_id=space_id)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/department-binding/bindings")
+async def list_department_bindings(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        return resp_200(await DepartmentKnowledgeSpaceService.list_bindings(login_user))
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/department-binding/bindable-spaces")
+async def list_bindable_spaces(
+    keyword: str | None = None,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        return resp_200(await DepartmentKnowledgeSpaceService.list_bindable_team_spaces(
+            login_user, keyword=keyword))
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/department-binding/departments")
+async def list_binding_departments(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        return resp_200(await DepartmentKnowledgeSpaceService.list_departments(login_user))
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
@@ -624,6 +682,7 @@ async def add_file(
         file_path=req.file_path,
         parent_id=req.parent_id,
         file_category_code=req.file_category_code,
+        file_subcategory_code=req.file_subcategory_code,
         business_domain_code=req.business_domain_code,
         manual_tag_ids=req.manual_tag_ids,
         manual_tag_names=req.manual_tag_names,
@@ -677,7 +736,11 @@ async def update_file_encoding(
     req: FileEncodingUpdateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    file_record = await svc.update_file_encoding(file_id, req.encoding)
+    file_record = await svc.update_file_encoding(
+        file_id,
+        req.encoding,
+        file_subcategory_code=req.file_subcategory_code,
+    )
     return resp_200(file_record)
 
 

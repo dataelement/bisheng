@@ -53,7 +53,7 @@ import {
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
-import type { PortalFileCategoryOption } from "../portal/types";
+import type { PortalFileCategoryGroupOption, PortalFileCategoryOption } from "../portal/types";
 import type { BusinessDomainOptionItem } from "../portal/uploadMetadata";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
@@ -84,6 +84,8 @@ interface KnowledgeSpaceContentProps {
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
+    /** Called after a folder is created inside the move dialog, so the host can refresh its list. */
+    onMoveDialogFolderCreated?: () => void;
     currentPath: Array<{ id?: string; name: string }>;
     currentFolderId?: string;
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
@@ -104,6 +106,7 @@ interface KnowledgeSpaceContentProps {
     hideFilePermissionActions?: boolean;
     enableEncodingClassification?: boolean;
     fileCategoryOptions?: PortalFileCategoryOption[];
+    fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
     encodingPrefix?: string;
     markPendingDeletion: (ids: Array<string | number>) => void;
@@ -134,6 +137,7 @@ export function KnowledgeSpaceContent({
     onEditTags,
     onRetryFile,
     onMoveFile,
+    onMoveDialogFolderCreated,
     currentPath,
     currentFolderId,
     onDragStateChange,
@@ -154,6 +158,7 @@ export function KnowledgeSpaceContent({
     hideFilePermissionActions = false,
     enableEncodingClassification = false,
     fileCategoryOptions = [],
+    fileCategoryGroups,
     businessDomainOptions = [],
     encodingPrefix,
     markPendingDeletion,
@@ -1427,11 +1432,16 @@ export function KnowledgeSpaceContent({
                                     retryActionLabel={retryActionLabel}
                                     enableEncodingClassification={enableEncodingClassification}
                                     fileCategoryOptions={fileCategoryOptions}
+                                    fileCategoryGroups={fileCategoryGroups}
                                     businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
-                                    onFileEncodingUpdated={(fileId, newEncoding) => {
+                                    onFileEncodingUpdated={(fileId, newEncoding, fileSubcategoryCode) => {
                                         setFiles((prev) => prev.map((file) => (
-                                            file.id === fileId ? { ...file, fileEncoding: newEncoding } : file
+                                            file.id === fileId ? {
+                                                ...file,
+                                                fileEncoding: newEncoding,
+                                                ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
+                                            } : file
                                         )));
                                     }}
                                 />
@@ -1500,6 +1510,7 @@ export function KnowledgeSpaceContent({
                         setMovingFile(null);
                     }}
                     onCancel={() => setMovingFile(null)}
+                    onFolderCreated={onMoveDialogFolderCreated}
                 />
             )}
 

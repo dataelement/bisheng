@@ -1,10 +1,9 @@
-import json
 import importlib.util
+import json
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from types import ModuleType
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -34,10 +33,7 @@ def _load_knowledge_utils(monkeypatch):
     base_module.BaseService = BaseService
     monkeypatch.setitem(sys.modules, "bisheng.common.services.base", base_module)
 
-    module_path = (
-        Path(__file__).resolve().parents[2]
-        / "bisheng/knowledge/domain/services/knowledge_utils.py"
-    )
+    module_path = Path(__file__).resolve().parents[2] / "bisheng/knowledge/domain/services/knowledge_utils.py"
     spec = importlib.util.spec_from_file_location(
         "knowledge_utils_upload_domain_tags_under_test",
         module_path,
@@ -146,36 +142,59 @@ async def test_manual_upload_tags_resolve_create_link_and_mark_files(monkeypatch
     created_tag = Tag(
         id=3,
         name="安全",
-        business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-        business_id="7",
+        business_type=TagBusinessTypeEnum.TAG_LIBRARY,
+        business_id="20",
     )
     linked = []
     updated_files = []
+    review_linked = []
 
-    async def fake_insert(tag):
-        assert tag.name == "安全"
-        assert tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE
-        assert tag.business_id == "7"
+    async def fake_get_tags_by_ids(tag_ids):
+        return [existing_by_id]
+
+    async def fake_get_tags_by_business(**kwargs):
+        if kwargs.get("name") == "制度":
+            return [existing_by_name]
+        return []
+
+    async def fake_find_library_tag(*, tenant_id, tag_name):
+        return None
+
+    async def fake_create_library_tag(**kwargs):
+        assert kwargs["tag_name"] == "安全"
         return created_tag
+
+    async def fake_review_enabled():
+        return False
 
     async def fake_add_tags(tag_ids, resource_id, resource_type, user_id):
         linked.append((tag_ids, resource_id, resource_type, user_id))
+        return True
+
+    async def fake_add_review_tags(review_tag_ids, resource_id, resource_type, user_id, tenant_id=None):
+        review_linked.append((review_tag_ids, resource_id, resource_type, user_id, tenant_id))
         return True
 
     async def fake_update(file):
         updated_files.append(file)
         return file
 
-    async def fake_get_tags_by_ids(tag_ids):
-        return [existing_by_id]
-
-    async def fake_get_tags_by_business(**kwargs):
-        return [existing_by_id, existing_by_name]
-
     monkeypatch.setattr("bisheng.database.models.tag.TagDao.aget_tags_by_ids", fake_get_tags_by_ids)
     monkeypatch.setattr("bisheng.database.models.tag.TagDao.get_tags_by_business", fake_get_tags_by_business)
-    monkeypatch.setattr("bisheng.database.models.tag.TagDao.ainsert_tag", fake_insert)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.tag_library_tag_service.TagLibraryTagService.find_library_tag_by_name",
+        fake_find_library_tag,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.tag_library_tag_service.TagLibraryTagService.get_or_create_library_tag_async",
+        fake_create_library_tag,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._is_review_tag_feature_enabled",
+        fake_review_enabled,
+    )
     monkeypatch.setattr("bisheng.database.models.tag.TagDao.add_tags", fake_add_tags)
+    monkeypatch.setattr("bisheng.database.models.review_tags.ReviewTagDao.add_tags", fake_add_review_tags)
     monkeypatch.setattr(
         "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.async_update",
         fake_update,
@@ -194,11 +213,59 @@ async def test_manual_upload_tags_resolve_create_link_and_mark_files(monkeypatch
         ([1, 2, 3], "11", ResourceTypeEnum.SPACE_FILE, 9),
         ([1, 2, 3], "12", ResourceTypeEnum.SPACE_FILE, 9),
     ]
+    assert review_linked == []
     assert len(updated_files) == 2
-    assert all(
-        file.user_metadata["manual_upload_tags_applied"] is True
-        for file in updated_files
+    assert all(file.user_metadata["manual_upload_tags_applied"] is True for file in updated_files)
+
+
+@pytest.mark.asyncio
+async def test_manual_upload_tag_library_ids_resolve_by_name(monkeypatch):
+    knowledge = Knowledge(
+        id=7,
+        tenant_id=3,
+        user_id=2,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
     )
+    login_user = SimpleNamespace(user_id=9, user_name="tester")
+    files = [KnowledgeFile(id=11, knowledge_id=7, file_name="a.txt", tenant_id=3)]
+    library_tag = Tag(
+        id=91,
+        name="典型案例",
+        business_type=TagBusinessTypeEnum.TAG_LIBRARY,
+        business_id="20",
+        tenant_id=3,
+    )
+    linked = []
+
+    async def fake_get_tags_by_ids(tag_ids):
+        assert tag_ids == [91]
+        return [library_tag]
+
+    async def fake_add_tags(tag_ids, resource_id, resource_type, user_id):
+        linked.append((tag_ids, resource_id, resource_type, user_id))
+        return True
+
+    async def fake_update(file):
+        return file
+
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.aget_tags_by_ids", fake_get_tags_by_ids)
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.add_tags", fake_add_tags)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.async_update",
+        fake_update,
+    )
+
+    applied_ids = await KnowledgeService.apply_manual_upload_tags(
+        login_user=login_user,
+        knowledge=knowledge,
+        files=files,
+        manual_tag_ids=[91],
+        manual_tag_names=[],
+    )
+
+    assert applied_ids == [91]
+    assert linked == [([91], "11", ResourceTypeEnum.SPACE_FILE, 9)]
 
 
 @pytest.mark.asyncio
@@ -255,13 +322,15 @@ def test_sync_process_knowledge_file_applies_manual_upload_tags(monkeypatch):
     )
 
     assert result == process_files
-    assert calls == [{
-        "login_user": login_user,
-        "knowledge": knowledge,
-        "files": process_files,
-        "manual_tag_ids": [1],
-        "manual_tag_names": ["制度"],
-    }]
+    assert calls == [
+        {
+            "login_user": login_user,
+            "knowledge": knowledge,
+            "files": process_files,
+            "manual_tag_ids": [1],
+            "manual_tag_names": ["制度"],
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -307,47 +376,68 @@ async def test_space_add_file_persists_upload_metadata(monkeypatch):
         tag_calls.append(kwargs)
         return [1]
 
-    with patch.object(
-        service, "_require_permission_id", new_callable=AsyncMock,
-    ), patch.object(
-        service, "_check_filename_sensitive_words",
-        return_value=None,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
-        new_callable=AsyncMock,
-        return_value=space,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size",
-        new_callable=AsyncMock,
-        return_value=0,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
-        side_effect=fake_process_one_file,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.apply_manual_upload_tags",
-        side_effect=fake_apply_manual_upload_tags,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
-        new_callable=AsyncMock,
-    ), patch.object(
-        service, "update_folder_update_time", new_callable=AsyncMock,
-    ), patch.object(
-        service, "_initialize_child_resource_permissions", new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
-        new=fake_session_ctx,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery",
-        new_callable=MagicMock,
-    ) as mock_celery:
+    with (
+        patch.object(
+            service,
+            "_require_permission_id",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "_check_filename_sensitive_words",
+            return_value=None,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
+            side_effect=fake_process_one_file,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.apply_manual_upload_tags",
+            side_effect=fake_apply_manual_upload_tags,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "update_folder_update_time",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "_initialize_child_resource_permissions",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            new=fake_session_ctx,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery",
+            new_callable=MagicMock,
+        ) as mock_celery,
+    ):
         mock_celery.delay = MagicMock()
 
         result = await service.add_file(
@@ -362,13 +452,15 @@ async def test_space_add_file_persists_upload_metadata(monkeypatch):
     assert result == [added_file]
     assert captured_split_rules[0]["file_category_code"] == "RPT"
     assert captured_split_rules[0]["business_domain_code"] == "PP"
-    assert tag_calls == [{
-        "login_user": login_user,
-        "knowledge": space,
-        "files": [added_file],
-        "manual_tag_ids": [1],
-        "manual_tag_names": ["制度"],
-    }]
+    assert tag_calls == [
+        {
+            "login_user": login_user,
+            "knowledge": space,
+            "files": [added_file],
+            "manual_tag_ids": [1],
+            "manual_tag_names": ["制度"],
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -398,35 +490,49 @@ async def test_retry_space_files_preserves_upload_metadata(monkeypatch):
         tag_calls.append(kwargs)
         return [1]
 
-    with patch.object(
-        service, "_require_read_permission", new_callable=AsyncMock,
-    ), patch.object(
-        service, "_require_resource_permission", new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
-        new_callable=AsyncMock,
-        return_value=space,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids",
-        new_callable=AsyncMock,
-        return_value=[db_file],
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.apply_manual_upload_tags",
-        side_effect=fake_apply_manual_upload_tags,
-    ), patch.object(
-        service,
-        "process_retry_files",
-        side_effect=fake_process_retry_files,
-    ), patch.object(
-        service,
-        "update_folder_update_time",
-        new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
-        new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
-        new_callable=AsyncMock,
+    with (
+        patch.object(
+            service,
+            "_require_read_permission",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "_require_resource_permission",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids",
+            new_callable=AsyncMock,
+            return_value=[db_file],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.apply_manual_upload_tags",
+            side_effect=fake_apply_manual_upload_tags,
+        ),
+        patch.object(
+            service,
+            "process_retry_files",
+            side_effect=fake_process_retry_files,
+        ),
+        patch.object(
+            service,
+            "update_folder_update_time",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
     ):
         await service.retry_space_files(
             7,
@@ -443,10 +549,12 @@ async def test_retry_space_files_preserves_upload_metadata(monkeypatch):
     assert split_rule["file_category_code"] == "RPT"
     assert split_rule["business_domain_code"] == "PP"
     assert process_calls[0][2] == login_user
-    assert tag_calls == [{
-        "login_user": login_user,
-        "knowledge": space,
-        "files": [db_file],
-        "manual_tag_ids": [1],
-        "manual_tag_names": ["制度"],
-    }]
+    assert tag_calls == [
+        {
+            "login_user": login_user,
+            "knowledge": space,
+            "files": [db_file],
+            "manual_tag_ids": [1],
+            "manual_tag_names": ["制度"],
+        }
+    ]

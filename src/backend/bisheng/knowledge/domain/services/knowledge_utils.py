@@ -499,6 +499,10 @@ class KnowledgeUtils(BaseService):
                 or cls.get_business_domain_code_from_split_rule(file.split_rule)
             ):
                 file.file_encoding = None
+            file_subcategory_code = str(input_file.get("file_subcategory_code") or "").strip().upper()
+            if file_subcategory_code:
+                file.file_subcategory_code = file_subcategory_code
+                file.file_subcategory_source = "manual"
             # Content has been replaced (overwrite path) — the previous
             # similar-document marker and simhash were computed against the
             # old content and must be cleared so the new parse re-scans from

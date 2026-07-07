@@ -1050,7 +1050,7 @@
     "createTime": "创建时间",
     "creator": "创建者",
     "tagNameRequired": "标签名称不能为空",
-    "tagNamePlaceholder": "例如：安全生产",
+    "tagNamePlaceholder": "新增标签名称",
     "deleteTagTitle": "删除标签",
     "confirmDelete": "确认删除",
     "prevPage": "上一页",

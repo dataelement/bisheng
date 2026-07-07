@@ -1746,8 +1746,8 @@
 }
 
 .uploadDialogContent {
-  width: min(760px, calc(100vw - 48px));
-  max-width: 760px;
+  width: min(920px, calc(100vw - 64px)) !important;
+  max-width: min(920px, calc(100vw - 64px)) !important;
   max-height: calc(100dvh - 80px);
 }
 
@@ -1816,7 +1816,7 @@
 .uploadRecordsRow {
   min-width: 1240px;
   display: grid;
-  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(130px, .9fr) minmax(120px, .8fr) minmax(110px, .8fr) minmax(180px, 1.1fr);
+  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(170px, 1fr) minmax(120px, .8fr) minmax(110px, .8fr) minmax(180px, 1.1fr);
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
@@ -1844,6 +1844,41 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.uploadRecordsRow > .uploadRecordCategoryCell {
+  position: relative;
+  overflow: visible;
+  z-index: auto;
+}
+
+.uploadRecordsRow > .uploadRecordCategoryCell:focus-within {
+  z-index: 20;
+}
+
+.uploadRecordCategoryCell .uploadCategoryDropdown {
+  min-width: 0;
+}
+
+.uploadRecordCategoryCell .uploadCategoryTrigger {
+  height: 34px;
+  border-color: #d8e1ee;
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.uploadRecordCategoryCell .uploadCategoryMenu {
+  width: max(100%, 240px);
+  max-width: min(320px, calc(100vw - 96px));
+  max-height: 260px;
+  z-index: 80;
+}
+
+.uploadRecordCategoryCell .uploadCategoryGroupButton,
+.uploadRecordCategoryCell .uploadCategoryChildButton {
+  min-height: 30px;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .uploadRecordStatusBadge {
@@ -2155,6 +2190,7 @@
 }
 
 .uploadField {
+  min-width: 0;
   display: grid;
   gap: 8px;
 }
@@ -2170,6 +2206,8 @@
 }
 
 .uploadSelect {
+  width: 100%;
+  min-width: 0;
   height: 36px;
   border: 1px solid #dfe5ee;
   border-radius: 5px;
@@ -2184,9 +2222,138 @@
   outline: 2px solid rgba(44, 118, 244, 0.16);
 }
 
+.uploadCategoryDropdown {
+  min-width: 0;
+  position: relative;
+}
+
+.uploadCategoryTrigger {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 0 12px;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uploadCategoryTriggerClearable {
+  padding-right: 58px;
+}
+
+.uploadCategoryTrigger:hover {
+  border-color: #b9c8dd;
+}
+
+.uploadCategoryTrigger:focus {
+  border-color: #2c76f4;
+  outline: 2px solid rgba(44, 118, 244, 0.16);
+}
+
+.uploadCategoryTrigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadCategoryClearButton {
+  position: absolute;
+  top: 50%;
+  right: 30px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #7b8798;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.uploadCategoryClearButton:hover {
+  background: #eef3f8;
+  color: #273142;
+}
+
+.uploadCategoryMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 6px;
+  background: #fff;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.14);
+}
+
+.uploadCategoryGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.uploadCategoryGroupButton,
+.uploadCategoryChildButton {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #273142;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uploadCategoryGroupButton {
+  padding: 0 8px;
+  font-weight: 600;
+}
+
+.uploadCategoryGroupButton:hover,
+.uploadCategoryChildButton:hover {
+  background: #f4f7fb;
+}
+
+.uploadCategoryChildren {
+  display: grid;
+  gap: 3px;
+  padding-left: 22px;
+}
+
+.uploadCategoryChildButton {
+  padding: 0 8px;
+}
+
+.uploadCategoryChildButtonActive {
+  background: #eaf2ff;
+  color: #1d5fd6;
+  font-weight: 600;
+}
+
 .uploadMetadataGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
 

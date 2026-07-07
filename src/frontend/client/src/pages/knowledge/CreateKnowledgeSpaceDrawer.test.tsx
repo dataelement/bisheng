@@ -37,6 +37,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.auto_tag_generation_desc": "上传文件解析成功后自动生成标签",
             "com_knowledge.auto_tag_library": "标签库",
             "com_knowledge.select_auto_tag_library": "请选择标签库",
+            "com_knowledge.tag_library_required_on_create": "创建知识库时必须选择标签库",
             "com_knowledge.loading": "加载中...",
         };
         return dict[key] || key;
@@ -79,6 +80,36 @@ jest.mock("~/components/ui/Tabs", () => ({
 
 jest.mock("~/components/ui/Textarea", () => ({
     Textarea: (props: any) => <textarea {...props} />,
+}));
+
+jest.mock("~/components/ui/MultiSelect", () => ({
+    __esModule: true,
+    default: ({ value = [], options = [], onChange, multiple }: any) => (
+        <div data-testid="tag-library-multi-select" data-multiple={multiple ? "true" : "false"}>
+            {options.map((option: { label: string; value: string }) => {
+                const selected = value.includes(option.value);
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                            if (!multiple) {
+                                onChange?.([option.value]);
+                                return;
+                            }
+                            const next = selected
+                                ? value.filter((item: string) => item !== option.value)
+                                : [...value, option.value];
+                            onChange?.(next);
+                        }}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    ),
 }));
 
 jest.mock("~/components/icons/channels", () => ({
@@ -158,7 +189,9 @@ jest.mock("~/api/knowledge", () => ({
     getCreateSpaceDepartmentsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     getCreateSpaceUserGroupsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     getKnowledgeSpaceAutoTagVisibilityApi: jest.fn().mockResolvedValue({ visible: false }),
-    getKnowledgeSpaceTagLibrariesApi: jest.fn().mockResolvedValue({ data: [] }),
+    getKnowledgeSpaceTagLibrariesApi: jest.fn().mockResolvedValue({
+        data: [{ id: 1, name: "默认标签库", tag_count: 3, is_builtin: true }],
+    }),
     getKnowledgeSpaceTagLibrariesByKnowledgeApi: jest.fn().mockResolvedValue([]),
     getKnowledgeSpaceTagLibraryDetailApi: jest.fn().mockResolvedValue({ tags: [] }),
     getSpaceInfoApi: jest.fn().mockResolvedValue({ autoTagLibraryIds: [], autoTagLibraryId: null }),
@@ -180,6 +213,11 @@ function renderDrawer(props: Partial<ComponentProps<typeof CreateKnowledgeSpaceD
             />
         </QueryClientProvider>,
     );
+}
+
+async function selectDefaultTagLibrary() {
+    const option = await screen.findByRole("button", { name: "默认标签库" });
+    fireEvent.click(option);
 }
 
 describe("CreateKnowledgeSpaceDrawer", () => {
@@ -251,6 +289,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(onConfirm).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: "选择炼铁部" }));
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -316,6 +355,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "个人资料库" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -400,6 +440,57 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         expect(screen.getByText("编辑知识库")).toBeInTheDocument();
         expect(screen.getByText("部门知识库")).toBeInTheDocument();
+    });
+
+    test("创建模式可选择多个标签库", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.TEAM,
+        });
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
+            data: [
+                { id: 1, name: "通用标签库", tag_count: 10, is_builtin: true },
+                { id: 2, name: "行业标签库", tag_count: 5, is_builtin: false },
+            ],
+            total: 2,
+        } as any);
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockImplementation(async (id: number) => ({
+            id,
+            name: id === 1 ? "通用标签库" : "行业标签库",
+            tags: id === 1 ? ["A"] : ["B"],
+            tag_count: 1,
+            is_builtin: false,
+        } as any));
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM, onConfirm });
+
+        await waitFor(() => {
+            expect(screen.getByTestId("tag-library-multi-select")).toHaveAttribute("data-multiple", "true");
+            expect(screen.getByRole("button", { name: "通用标签库" })).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole("button", { name: "通用标签库" }));
+        fireEvent.click(screen.getByRole("button", { name: "行业标签库" }));
+
+        expect(screen.getByRole("button", { name: "通用标签库" })).toHaveAttribute("aria-pressed", "true");
+        expect(screen.getByRole("button", { name: "行业标签库" })).toHaveAttribute("aria-pressed", "true");
+
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
+            target: { value: "多标签库空间" },
+        });
+        fireEvent.click(screen.getByRole("radio", { name: "是" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            autoTagEnabled: true,
+            autoTagLibraryIds: [1, 2],
+        }));
     });
 
     test("编辑模式回显已关联的标签库", async () => {
@@ -551,6 +642,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入申请理由"), {
             target: { value: "申请团队协作知识库" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -603,6 +695,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "个人资料库" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(screen.getByText("知识库创建成功")).toBeInTheDocument());

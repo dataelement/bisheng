@@ -1,5 +1,5 @@
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
-import type { PanelKey, PortalFileCategoryOption, PreviewState } from "../types";
+import type { PanelKey, PortalFileCategoryGroupOption, PreviewState } from "../types";
 import type { BusinessDomainOptionItem } from "../uploadMetadata";
 import { DocumentPreview } from "./DocumentPreview";
 import { PortalAiDrawer } from "./PortalAiDialog";
@@ -16,7 +16,7 @@ interface PortalPreviewWorkspaceProps {
     canManagePermission: boolean;
     documentPath: string;
     encodingPrefix: string;
-    fileCategoryOptions: PortalFileCategoryOption[];
+    fileCategoryGroups: PortalFileCategoryGroupOption[];
     businessDomainOptions: BusinessDomainOptionItem[];
     isPersonalSpace: boolean;
     preview: PreviewState;
@@ -27,7 +27,7 @@ interface PortalPreviewWorkspaceProps {
     onCopyEncoding: () => void;
     onCopyShareLink: () => void;
     onDownload: () => void;
-    onUpdateEncoding: (newEncoding: string) => void | Promise<void>;
+    onUpdateEncoding: (newEncoding: string, fileSubcategoryCode?: string | null) => void | Promise<void>;
     onOpenPermission: () => void;
     onOpenTags: () => void;
     onPanelChange: (panel: PanelKey | null) => void;
@@ -43,7 +43,7 @@ export function PortalPreviewWorkspace({
     canManagePermission,
     documentPath,
     encodingPrefix,
-    fileCategoryOptions,
+    fileCategoryGroups,
     businessDomainOptions,
     isPersonalSpace,
     preview,
@@ -89,7 +89,7 @@ export function PortalPreviewWorkspace({
                     selectedFile={selectedFile}
                     documentPath={documentPath}
                     canEditEncoding={canEditEncoding}
-                    fileCategoryOptions={fileCategoryOptions}
+                    fileCategoryGroups={fileCategoryGroups}
                     businessDomainOptions={businessDomainOptions}
                     encodingPrefix={encodingPrefix}
                     onClose={() => onPanelChange(null)}

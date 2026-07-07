@@ -74,7 +74,7 @@ class SpaceFileEncodingDuplicateError(BaseErrorCode):
 
 class SpaceBusinessDomainCodeInvalidError(BaseErrorCode):
     Code: int = 18026
-    Msg: str = 'Invalid business domain code'
+    Msg: str = "Invalid business domain code"
 
 
 # ── Subscribe ────────────────────────────────────────────────────────────────
@@ -214,3 +214,29 @@ class SpacePersonalCreateForbiddenError(BaseErrorCode):
 class PersonalSpaceProtectedError(BaseErrorCode):
     Code: int = 18076
     Msg: str = "个人知识库不支持删除或授权"
+
+
+class KnowledgeSpaceTagLibraryNotBoundError(BaseErrorCode):
+    Code: int = 18077
+    Msg: str = "请先为知识库绑定标签库后再添加标签"
+
+
+# —— Free space deletion / migration to department knowledge space
+class DepartmentSpaceDeleteForbiddenError(BaseErrorCode):
+    Code: int = 18080
+    Msg: str = "科室知识库禁止删除，请先在后台解除部门绑定"
+
+
+class FreeSpaceMigrationTargetNotFoundError(BaseErrorCode):
+    Code: int = 18081
+    Msg: str = "无法迁移：创建者无主部门，或所属部门（含上级）未绑定科室知识库"
+
+
+class FreeSpaceMigrationEmbeddingMismatchError(BaseErrorCode):
+    Code: int = 18082
+    Msg: str = "无法迁移：源库与目标科室库的向量模型不一致"
+
+
+class FreeSpaceMigratingError(BaseErrorCode):
+    Code: int = 18083
+    Msg: str = "该知识库正在迁移中，请稍后再试"

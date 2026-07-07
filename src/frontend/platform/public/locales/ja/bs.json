@@ -1044,7 +1044,7 @@
     "createTime": "作成日時",
     "creator": "作成者",
     "tagNameRequired": "タグ名は必須です",
-    "tagNamePlaceholder": "例：安全生産",
+    "tagNamePlaceholder": "新規タグ名",
     "deleteTagTitle": "タグを削除",
     "confirmDelete": "削除を確認",
     "prevPage": "前へ",

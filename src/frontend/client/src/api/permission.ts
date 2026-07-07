@@ -211,7 +211,9 @@ export async function checkPermission(
     const requestRevision = permissionCheckCacheRevision;
     requestPromise = request.post(`/api/v1/permissions/check`, {
       object_type: objectType,
-      object_id: objectId,
+      // 后端要求 object_id 为字符串；部分调用方传入的是数字 id（如新建空间返回的 raw id），
+      // 统一转字符串，避免 “入参是数字导致接口报错”。
+      object_id: String(objectId),
       relation,
       permission_id: permissionId,
     }, withPermissionRequestOptions())

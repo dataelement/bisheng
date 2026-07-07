@@ -4,7 +4,7 @@ import math
 import os
 from datetime import datetime
 from time import perf_counter
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, Request
@@ -19,69 +19,81 @@ from bisheng.api.services.knowledge_imp import (
 )
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
+    ExcelRule,
     FileChunk,
     FileProcessBase,
     KnowledgeFileOne,
     KnowledgeFileProcess,
-    UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
+    KnowledgeFileReProcess,
+    UpdatePreviewFileChunk,
 )
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
-    KnowledgeInvalidCursorError,
-    KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
-    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeTenantMismatchError,
+    KnowledgeFileFailedError,
     KnowledgeFileTagLimitError,
+    KnowledgeInvalidCursorError,
+    KnowledgeNoEmbeddingError,
+    KnowledgeNotQAError,
+    KnowledgeTagExistError,
+    KnowledgeTagNotExistError,
+    KnowledgeTenantMismatchError,
 )
-from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
-from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.core.ai import FakeEmbeddings
-from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
-from bisheng.core.cache.utils import file_download, async_file_download
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.cache.utils import async_file_download, file_download
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_admin_scope_tenant_id, get_current_tenant_id
-from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
+from bisheng.database.models.review_tags import ReviewTagDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
+from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao, TagResourceTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeCreate,
     KnowledgeDao,
     KnowledgeRead,
+    KnowledgeState,
     KnowledgeTypeEnum,
-    KnowledgeUpdate, KnowledgeState,
+    KnowledgeUpdate,
 )
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
-    KnowledgeFileStatus, ParseType,
+    KnowledgeFileStatus,
+    ParseType,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
-from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
-    UpdateKnowledgeMetadataFieldsReq
+from bisheng.knowledge.domain.schemas.knowledge_schema import (
+    AddKnowledgeMetadataFieldsReq,
+    UpdateKnowledgeMetadataFieldsReq,
+)
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid, generate_knowledge_index_name
+from bisheng.utils import generate_knowledge_index_name, generate_uuid
 
 _KNOWLEDGE_LIST_PERMISSION_IDS = [
-    'view_kb',
-    'use_kb',
-    'edit_kb',
-    'delete_kb',
-    'manage_kb_owner',
-    'manage_kb_manager',
-    'manage_kb_viewer',
+    "view_kb",
+    "use_kb",
+    "edit_kb",
+    "delete_kb",
+    "manage_kb_owner",
+    "manage_kb_manager",
+    "manage_kb_viewer",
 ]
 
 MANUAL_UPLOAD_TAGS_APPLIED_KEY = "manual_upload_tags_applied"
@@ -95,11 +107,14 @@ class KnowledgeService(KnowledgeUtils):
     permission_service = KnowledgePermissionService()
     audit_telemetry_service = KnowledgeAuditTelemetryService()
 
-    def __init__(self, knowledge_repository: 'KnowledgeRepository',
-                 knowledge_file_repository: 'KnowledgeFileRepository',
-                 permission_service: KnowledgePermissionService = None,
-                 audit_telemetry_service: KnowledgeAuditTelemetryService = None,
-                 metadata_service: KnowledgeMetadataService = None):
+    def __init__(
+        self,
+        knowledge_repository: "KnowledgeRepository",
+        knowledge_file_repository: "KnowledgeFileRepository",
+        permission_service: KnowledgePermissionService = None,
+        audit_telemetry_service: KnowledgeAuditTelemetryService = None,
+        metadata_service: KnowledgeMetadataService = None,
+    ):
         self.knowledge_repository = knowledge_repository
         self.knowledge_file_repository = knowledge_file_repository
         self.permission_service = permission_service or self.__class__.permission_service
@@ -113,17 +128,21 @@ class KnowledgeService(KnowledgeUtils):
     async def add_metadata_fields(self, login_user: UserPayload, add_metadata_fields: AddKnowledgeMetadataFieldsReq):
         return await self.metadata_service.add_metadata_fields(login_user, add_metadata_fields)
 
-    async def update_metadata_fields(self, login_user: UserPayload,
-                                     update_metadata_fields: UpdateKnowledgeMetadataFieldsReq,
-                                     background_tasks: BackgroundTasks):
+    async def update_metadata_fields(
+        self,
+        login_user: UserPayload,
+        update_metadata_fields: UpdateKnowledgeMetadataFieldsReq,
+        background_tasks: BackgroundTasks,
+    ):
         return await self.metadata_service.update_metadata_fields(
             login_user=login_user,
             update_metadata_fields=update_metadata_fields,
             background_tasks=background_tasks,
         )
 
-    async def delete_metadata_fields(self, login_user: UserPayload, knowledge_id: int, field_names: list[str],
-                                     background_tasks: BackgroundTasks):
+    async def delete_metadata_fields(
+        self, login_user: UserPayload, knowledge_id: int, field_names: list[str], background_tasks: BackgroundTasks
+    ):
         return await self.metadata_service.delete_metadata_fields(
             login_user=login_user,
             knowledge_id=knowledge_id,
@@ -132,9 +151,7 @@ class KnowledgeService(KnowledgeUtils):
         )
 
     @classmethod
-    def ensure_knowledge_upload_tenant_consistency(
-        cls, login_user: UserPayload, knowledge: Knowledge
-    ) -> None:
+    def ensure_knowledge_upload_tenant_consistency(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
         current_tid = get_current_tenant_id()
         knowledge_tid = knowledge.tenant_id
         if knowledge_tid is None or current_tid in (None, knowledge_tid):
@@ -178,11 +195,11 @@ class KnowledgeService(KnowledgeUtils):
         return knowledge
 
     @staticmethod
-    def _deduplicate_tag_ids(tag_ids: List[int]) -> List[int]:
+    def _deduplicate_tag_ids(tag_ids: list[int]) -> list[int]:
         return list(dict.fromkeys(tag_ids))
 
     @staticmethod
-    def _get_tag_scope(knowledge: Knowledge) -> Tuple[TagBusinessTypeEnum, ResourceTypeEnum]:
+    def _get_tag_scope(knowledge: Knowledge) -> tuple[TagBusinessTypeEnum, ResourceTypeEnum]:
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             return TagBusinessTypeEnum.KNOWLEDGE_SPACE, ResourceTypeEnum.SPACE_FILE
         return TagBusinessTypeEnum.KNOWLEDGE, ResourceTypeEnum.KNOWLEDGE_FILE
@@ -191,8 +208,8 @@ class KnowledgeService(KnowledgeUtils):
     async def _validate_knowledge_tag_ids(
         cls,
         knowledge_id: int,
-        tag_ids: List[int],
-        knowledge: Optional[Knowledge] = None,
+        tag_ids: list[int],
+        knowledge: Knowledge | None = None,
     ) -> None:
         if not tag_ids:
             return
@@ -211,7 +228,7 @@ class KnowledgeService(KnowledgeUtils):
                 raise KnowledgeTagNotExistError()
 
     @staticmethod
-    def _normalize_manual_tag_names(tag_names: Optional[List[str]]) -> List[str]:
+    def _normalize_manual_tag_names(tag_names: list[str] | None) -> list[str]:
         normalized = []
         seen = set()
         for tag_name in tag_names or []:
@@ -224,34 +241,153 @@ class KnowledgeService(KnowledgeUtils):
         return normalized
 
     @classmethod
+    async def _resolve_space_manual_upload_tag_ids(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        manual_tag_ids: list[int] | None,
+        manual_tag_names: list[str] | None,
+    ) -> tuple[list[int], list[int]]:
+        space_id = int(knowledge.id)
+        tenant_id = knowledge.tenant_id
+        input_tag_ids = cls._deduplicate_tag_ids([int(tag_id) for tag_id in manual_tag_ids or []])
+        tag_names = cls._normalize_manual_tag_names(manual_tag_names)
+        approved_ids: list[int] = []
+
+        if input_tag_ids:
+            input_tags = await TagDao.aget_tags_by_ids(input_tag_ids)
+            tags_by_id = {int(tag.id): tag for tag in input_tags if tag.id is not None}
+            if len(tags_by_id) != len(input_tag_ids):
+                raise KnowledgeTagNotExistError()
+
+            for tag_id in input_tag_ids:
+                tag = tags_by_id.get(tag_id)
+                if tag is None:
+                    raise KnowledgeTagNotExistError()
+                if tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value:
+                    if tag_id not in approved_ids:
+                        approved_ids.append(tag_id)
+                    continue
+                if tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE.value and tag.business_id == str(space_id):
+                    if tag_id not in approved_ids:
+                        approved_ids.append(tag_id)
+                    continue
+                raise KnowledgeTagNotExistError()
+
+        review_ids: list[int] = []
+        review_enabled = False
+        if tag_names:
+            from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+            review_enabled = await KnowledgeSpaceService._is_review_tag_feature_enabled()
+
+        for tag_name in tag_names:
+            library_tag = await TagLibraryTagService.find_library_tag_by_name(
+                tenant_id=tenant_id,
+                tag_name=tag_name,
+            )
+            if library_tag and library_tag.id is not None:
+                tag_id = int(library_tag.id)
+                if tag_id not in approved_ids:
+                    approved_ids.append(tag_id)
+                continue
+
+            legacy_tags = await TagDao.get_tags_by_business(
+                business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+                business_id=str(space_id),
+                name=tag_name,
+            )
+            legacy_match = next(
+                (tag for tag in legacy_tags if (tag.name or "").strip() == tag_name and tag.id is not None),
+                None,
+            )
+            if legacy_match is not None:
+                tag_id = int(legacy_match.id)
+                if tag_id not in approved_ids:
+                    approved_ids.append(tag_id)
+                continue
+
+            if review_enabled:
+                pending_tag = await TagLibraryTagService.get_or_create_pending_review_tag_async(
+                    space_id=space_id,
+                    tag_name=tag_name,
+                    user_id=login_user.user_id,
+                    tenant_id=tenant_id,
+                    resource_type=TagResourceTypeEnum.MANUAL_TAG,
+                )
+                if pending_tag.id is not None and int(pending_tag.id) not in review_ids:
+                    review_ids.append(int(pending_tag.id))
+                continue
+
+            created_tag = await TagLibraryTagService.get_or_create_library_tag_async(
+                space_id=space_id,
+                tag_name=tag_name,
+                user_id=login_user.user_id,
+                tenant_id=tenant_id,
+                resource_type=TagResourceTypeEnum.MANUAL_TAG,
+            )
+            if created_tag.id is not None and int(created_tag.id) not in approved_ids:
+                approved_ids.append(int(created_tag.id))
+
+        if len(approved_ids) + len(review_ids) > MANUAL_UPLOAD_TAG_LIMIT:
+            raise KnowledgeFileTagLimitError()
+        return approved_ids, review_ids
+
+    @classmethod
     async def _resolve_manual_upload_tag_ids(
         cls,
         login_user: UserPayload,
         knowledge: Knowledge,
-        manual_tag_ids: Optional[List[int]],
-        manual_tag_names: Optional[List[str]],
-    ) -> List[int]:
+        manual_tag_ids: list[int] | None,
+        manual_tag_names: list[str] | None,
+    ) -> list[int]:
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            approved_ids, _review_ids = await cls._resolve_space_manual_upload_tag_ids(
+                login_user=login_user,
+                knowledge=knowledge,
+                manual_tag_ids=manual_tag_ids,
+                manual_tag_names=manual_tag_names,
+            )
+            return approved_ids
+
         business_type, _ = cls._get_tag_scope(knowledge)
-        tag_ids = cls._deduplicate_tag_ids([int(tag_id) for tag_id in manual_tag_ids or []])
+        input_tag_ids = cls._deduplicate_tag_ids([int(tag_id) for tag_id in manual_tag_ids or []])
+        tag_ids: list[int] = []
         tag_names = cls._normalize_manual_tag_names(manual_tag_names)
-        if not tag_ids and not tag_names:
+        if not input_tag_ids and not tag_names:
             return []
+
+        if input_tag_ids:
+            input_tags = await TagDao.aget_tags_by_ids(input_tag_ids)
+            tags_by_id = {int(tag.id): tag for tag in input_tags if tag.id is not None}
+            if len(tags_by_id) != len(input_tag_ids):
+                raise KnowledgeTagNotExistError()
+
+            for tag_id in input_tag_ids:
+                tag = tags_by_id.get(tag_id)
+                if tag is None:
+                    raise KnowledgeTagNotExistError()
+                if tag.business_type == business_type and tag.business_id == str(knowledge.id):
+                    tag_ids.append(tag_id)
+                    continue
+                if tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY:
+                    tag_name = (tag.name or "").strip()
+                    if not tag_name:
+                        raise KnowledgeTagNotExistError()
+                    tag_names.append(tag_name)
+                    continue
+                raise KnowledgeTagNotExistError()
+
+            tag_names = cls._normalize_manual_tag_names(tag_names)
 
         if len(tag_ids) + len(tag_names) > MANUAL_UPLOAD_TAG_LIMIT:
             raise KnowledgeFileTagLimitError()
-
-        if tag_ids:
-            await cls._validate_knowledge_tag_ids(knowledge.id, tag_ids, knowledge)
 
         scope_tags = await TagDao.get_tags_by_business(
             business_type=business_type,
             business_id=str(knowledge.id),
         )
-        tags_by_lower_name = {
-            (tag.name or "").strip().lower(): tag
-            for tag in scope_tags
-            if (tag.name or "").strip()
-        }
+        tags_by_lower_name = {(tag.name or "").strip().lower(): tag for tag in scope_tags if (tag.name or "").strip()}
 
         resolved_ids = list(tag_ids)
         for tag_name in tag_names:
@@ -282,58 +418,83 @@ class KnowledgeService(KnowledgeUtils):
         cls,
         login_user: UserPayload,
         knowledge: Knowledge,
-        files: List[KnowledgeFile],
-        manual_tag_ids: Optional[List[int]],
-        manual_tag_names: Optional[List[str]],
-    ) -> List[int]:
+        files: list[KnowledgeFile],
+        manual_tag_ids: list[int] | None,
+        manual_tag_names: list[str] | None,
+    ) -> list[int]:
         valid_files = [file for file in files or [] if getattr(file, "id", None)]
         if not valid_files:
             return []
 
-        resolved_tag_ids = await cls._resolve_manual_upload_tag_ids(
-            login_user=login_user,
-            knowledge=knowledge,
-            manual_tag_ids=manual_tag_ids,
-            manual_tag_names=manual_tag_names,
-        )
-        if not resolved_tag_ids:
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            resolved_tag_ids, resolved_review_tag_ids = await cls._resolve_space_manual_upload_tag_ids(
+                login_user=login_user,
+                knowledge=knowledge,
+                manual_tag_ids=manual_tag_ids,
+                manual_tag_names=manual_tag_names,
+            )
+        else:
+            resolved_tag_ids = await cls._resolve_manual_upload_tag_ids(
+                login_user=login_user,
+                knowledge=knowledge,
+                manual_tag_ids=manual_tag_ids,
+                manual_tag_names=manual_tag_names,
+            )
+            resolved_review_tag_ids = []
+
+        if not resolved_tag_ids and not resolved_review_tag_ids:
             return []
 
         _, resource_type = cls._get_tag_scope(knowledge)
         for file in valid_files:
-            await TagDao.add_tags(
-                resolved_tag_ids,
-                str(file.id),
-                resource_type,
-                login_user.user_id,
-            )
+            if resolved_tag_ids:
+                await TagDao.add_tags(
+                    resolved_tag_ids,
+                    str(file.id),
+                    resource_type,
+                    login_user.user_id,
+                )
+            if resolved_review_tag_ids:
+                await ReviewTagDao.add_tags(
+                    resolved_review_tag_ids,
+                    str(file.id),
+                    resource_type,
+                    login_user.user_id,
+                    tenant_id=knowledge.tenant_id,
+                )
             metadata = dict(file.user_metadata or {})
             metadata[MANUAL_UPLOAD_TAGS_APPLIED_KEY] = True
-            metadata[MANUAL_UPLOAD_TAGS_KEY] = {"tag_ids": resolved_tag_ids}
+            metadata[MANUAL_UPLOAD_TAGS_KEY] = {
+                "tag_ids": resolved_tag_ids,
+                "review_tag_ids": resolved_review_tag_ids,
+            }
             file.user_metadata = metadata
             await KnowledgeFileDao.async_update(file)
-        return resolved_tag_ids
+        return resolved_tag_ids + resolved_review_tag_ids
 
     @classmethod
     def apply_manual_upload_tags_sync(
         cls,
         login_user: UserPayload,
         knowledge: Knowledge,
-        files: List[KnowledgeFile],
-        manual_tag_ids: Optional[List[int]],
-        manual_tag_names: Optional[List[str]],
-    ) -> List[int]:
-        return asyncio.run(cls.apply_manual_upload_tags(
-            login_user=login_user,
-            knowledge=knowledge,
-            files=files,
-            manual_tag_ids=manual_tag_ids,
-            manual_tag_names=manual_tag_names,
-        ))
+        files: list[KnowledgeFile],
+        manual_tag_ids: list[int] | None,
+        manual_tag_names: list[str] | None,
+    ) -> list[int]:
+        return asyncio.run(
+            cls.apply_manual_upload_tags(
+                login_user=login_user,
+                knowledge=knowledge,
+                files=files,
+                manual_tag_ids=manual_tag_ids,
+                manual_tag_names=manual_tag_names,
+            )
+        )
 
     @classmethod
-    def get_all_knowledge_by_time_range(cls, start_data: datetime, end_data: datetime, page: int = 1,
-                                        page_size: int = 10):
+    def get_all_knowledge_by_time_range(
+        cls, start_data: datetime, end_data: datetime, page: int = 1, page_size: int = 10
+    ):
         """Get all the knowledge bases created in a certain timeframe"""
 
         return KnowledgeDao.get_knowledge_by_time_range(start_data, end_data, page, page_size)
@@ -346,7 +507,7 @@ class KnowledgeService(KnowledgeUtils):
     def _is_scoped_super_admin(cls, login_user: UserPayload) -> bool:
         current_tid = get_current_tenant_id()
         return bool(
-            getattr(login_user, 'is_global_super', False)
+            getattr(login_user, "is_global_super", False)
             and get_admin_scope_tenant_id() is not None
             and current_tid is not None
             and current_tid != DEFAULT_TENANT_ID
@@ -360,10 +521,10 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_type: KnowledgeTypeEnum,
         name: str = None,
         sort_by: str = "update_time",
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         page_size: int = 10,
-        permission_id: str = 'use_kb',
-        preferred_ids: Optional[List[int]] = None,
+        permission_id: str = "use_kb",
+        preferred_ids: list[int] | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
         """List knowledge bases with cursor-based pagination (F027).
 
@@ -380,7 +541,7 @@ class KnowledgeService(KnowledgeUtils):
         # ---- 1. Decode cursor (branch on sort_by) ----
         if sort_by not in {"create_time", "update_time", "name"}:
             sort_by = "update_time"
-        is_name_sort = (sort_by == "name")
+        is_name_sort = sort_by == "name"
         context = f"knowledge|sort_by={sort_by}"
         try:
             decoded = decode_cursor(
@@ -403,15 +564,17 @@ class KnowledgeService(KnowledgeUtils):
 
         # ---- 2. ReBAC + permission_map + DAO call ----
         scoped_super_admin = cls._is_scoped_super_admin(login_user)
-        permission_map: Dict[int, set[str]] = {}
+        permission_map: dict[int, set[str]] = {}
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
         # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
-        accessible_ids = None if scoped_super_admin else await login_user.rebac_list_accessible('can_read',
-                                                                                                'knowledge_library')
+        accessible_ids = (
+            None if scoped_super_admin else await login_user.rebac_list_accessible("can_read", "knowledge_library")
+        )
         if accessible_ids is not None:
             filter_start = perf_counter()
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
-                login_user.user_id, knowledge_type,
+                login_user.user_id,
+                knowledge_type,
             )
             merged = set(int(k) for k in accessible_ids) | set(creator_ids)
             permission_map = await cls.permission_service.get_knowledge_permission_map_async(
@@ -420,9 +583,7 @@ class KnowledgeService(KnowledgeUtils):
                 _KNOWLEDGE_LIST_PERMISSION_IDS,
             )
             knowledge_id_extra = [
-                knowledge_id
-                for knowledge_id in merged
-                if permission_id in permission_map.get(int(knowledge_id), set())
+                knowledge_id for knowledge_id in merged if permission_id in permission_map.get(int(knowledge_id), set())
             ]
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
@@ -436,8 +597,8 @@ class KnowledgeService(KnowledgeUtils):
                 cursor=keyset_cursor,
             )
             logger.info(
-                '[perf][knowledge.list.filter] user_id={} permission_id={} type={} accessible_ids={} creator_ids={} '
-                'filtered_ids={} sort_by={} page_size={} rows={} took_ms={:.2f}',
+                "[perf][knowledge.list.filter] user_id={} permission_id={} type={} accessible_ids={} creator_ids={} "
+                "filtered_ids={} sort_by={} page_size={} rows={} took_ms={:.2f}",
                 login_user.user_id,
                 permission_id,
                 knowledge_type.value,
@@ -452,7 +613,9 @@ class KnowledgeService(KnowledgeUtils):
         else:
             dao_start = perf_counter()
             res = await KnowledgeDao.aget_all_knowledge(
-                name, knowledge_type, sort_by,
+                name,
+                knowledge_type,
+                sort_by,
                 page=(page_num if is_name_sort else 0),
                 limit=fetch_limit,
                 preferred_ids=preferred_ids,
@@ -465,8 +628,8 @@ class KnowledgeService(KnowledgeUtils):
             full_perms = set(_KNOWLEDGE_LIST_PERMISSION_IDS)
             permission_map = {int(one.id): set(full_perms) for one in res}
             logger.info(
-                '[perf][knowledge.list.dao] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} '
-                'took_ms={:.2f}',
+                "[perf][knowledge.list.dao] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} "
+                "took_ms={:.2f}",
                 login_user.user_id,
                 permission_id,
                 knowledge_type.value,
@@ -485,7 +648,7 @@ class KnowledgeService(KnowledgeUtils):
         enrich_start = perf_counter()
         result_data = await cls.aconvert_knowledge_read(login_user, res, permission_map=permission_map)
         logger.info(
-            '[perf][knowledge.list.enrich] user_id={} permission_id={} type={} rows={} took_ms={:.2f}',
+            "[perf][knowledge.list.enrich] user_id={} permission_id={} type={} rows={} took_ms={:.2f}",
             login_user.user_id,
             permission_id,
             knowledge_type.value,
@@ -494,7 +657,7 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         # ---- 5. Compute next_cursor (None if has_more is False) ----
-        next_cursor: Optional[str] = None
+        next_cursor: str | None = None
         if has_more and result_data:
             last = result_data[-1]
             if is_name_sort:
@@ -505,8 +668,8 @@ class KnowledgeService(KnowledgeUtils):
                 next_cursor = encode_cursor((last.update_time, last.id), context=context)
 
         logger.info(
-            '[perf][knowledge.list.total] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} '
-            'has_more={} took_ms={:.2f}',
+            "[perf][knowledge.list.total] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} "
+            "has_more={} took_ms={:.2f}",
             login_user.user_id,
             permission_id,
             knowledge_type.value,
@@ -527,19 +690,16 @@ class KnowledgeService(KnowledgeUtils):
     async def aconvert_knowledge_read(
         cls,
         login_user: UserPayload,
-        knowledge_list: List[Knowledge],
-        permission_map: Optional[Dict[int, set[str]]] = None,
-    ) -> List[KnowledgeRead]:
+        knowledge_list: list[Knowledge],
+        permission_map: dict[int, set[str]] | None = None,
+    ) -> list[KnowledgeRead]:
         """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
         if not knowledge_list:
             return []
         db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
-        owned_ids = {
-            int(one.id) for one in knowledge_list
-            if login_user.user_id == one.user_id
-        }
+        owned_ids = {int(one.id) for one in knowledge_list if login_user.user_id == one.user_id}
         if permission_map is None:
             permission_map = await cls.permission_service.get_knowledge_permission_map_async(
                 login_user,
@@ -553,7 +713,7 @@ class KnowledgeService(KnowledgeUtils):
                 permission_ids = list(_KNOWLEDGE_LIST_PERMISSION_IDS)
             else:
                 permission_ids = sorted(permission_map.get(int(one.id), set()))
-                copiable = 'edit_kb' in permission_ids
+                copiable = "edit_kb" in permission_ids
             return KnowledgeRead(
                 **one.model_dump(),
                 user_name=db_user_dict.get(one.user_id, str(one.user_id)),
@@ -564,9 +724,7 @@ class KnowledgeService(KnowledgeUtils):
         return [_row(one) for one in knowledge_list]
 
     @classmethod
-    def convert_knowledge_read(
-        cls, login_user: UserPayload, knowledge_list: List[Knowledge]
-    ) -> List[KnowledgeRead]:
+    def convert_knowledge_read(cls, login_user: UserPayload, knowledge_list: list[Knowledge]) -> list[KnowledgeRead]:
         db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
@@ -593,14 +751,14 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_knowledge_info(
-        cls, request: Request, login_user: UserPayload, knowledge_id: List[int]
-    ) -> List[KnowledgeRead]:
+        cls, request: Request, login_user: UserPayload, knowledge_id: list[int]
+    ) -> list[KnowledgeRead]:
         db_knowledge = KnowledgeDao.get_list_by_ids(knowledge_id)
         filter_knowledge = db_knowledge
         if not login_user.is_admin():
             filter_knowledge = []
             for one in db_knowledge:
-                if cls.permission_service.check_permission_id_sync(login_user, one.id, 'view_kb'):
+                if cls.permission_service.check_permission_id_sync(login_user, one.id, "view_kb"):
                     filter_knowledge.append(one)
         if not filter_knowledge:
             return []
@@ -608,15 +766,11 @@ class KnowledgeService(KnowledgeUtils):
         return cls.convert_knowledge_read(login_user, filter_knowledge)
 
     @classmethod
-    def create_knowledge(
-        cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
-    ) -> Knowledge:
+    def create_knowledge(cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate) -> Knowledge:
         from bisheng.llm.domain.share_fallback import get_model_by_id_with_share_fallback
 
         # Determine if the Knowledge Base is Renamed
-        repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
-            knowledge.name, login_user.user_id
-        )
+        repeat_knowledge = KnowledgeDao.get_knowledge_by_name(knowledge.name, login_user.user_id)
         if repeat_knowledge:
             raise KnowledgeExistError.http_exception()
 
@@ -649,8 +803,7 @@ class KnowledgeService(KnowledgeUtils):
         repeat_knowledge = await KnowledgeDao.aget_user_knowledge(
             login_user.user_id,
             None,
-            KnowledgeTypeEnum(knowledge.type)
-            if not isinstance(knowledge.type, KnowledgeTypeEnum) else knowledge.type,
+            KnowledgeTypeEnum(knowledge.type) if not isinstance(knowledge.type, KnowledgeTypeEnum) else knowledge.type,
             knowledge.name,
             page=1,
             limit=1,
@@ -674,9 +827,14 @@ class KnowledgeService(KnowledgeUtils):
         return await cls.acreate_knowledge_base(request, login_user, db_knowledge)
 
     @classmethod
-    def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge,
-                              skip_hook: bool = False,
-                              initialize_indices: bool = True) -> Knowledge:
+    def create_knowledge_base(
+        cls,
+        request,
+        login_user: UserPayload,
+        db_knowledge: Knowledge,
+        skip_hook: bool = False,
+        initialize_indices: bool = True,
+    ) -> Knowledge:
         # generate index_name and collection_name
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
@@ -690,19 +848,20 @@ class KnowledgeService(KnowledgeUtils):
         # todo change qa and other knowledge one metadata_schema
         if initialize_indices and db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
-                vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
-                                                                                    knowledge=db_knowledge,
-                                                                                    metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+                vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                    login_user.user_id, knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+                )
                 cls.ensure_milvus_schema_ready(
                     invoke_user_id=login_user.user_id,
                     knowledge=db_knowledge,
                     vector_client=vector_client,
                 )
 
-                es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
-                                                                            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+                es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
+                    knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+                )
                 es_client._store._create_index_if_not_exists()
-            except Exception as e:
+            except Exception:
                 logger.exception("create knowledge index name error")
 
         # Handling the next steps in creating a Knowledge Base
@@ -749,9 +908,7 @@ class KnowledgeService(KnowledgeUtils):
                 logger.exception("create knowledge index name error")
 
         if not skip_hook:
-            await OwnerService.write_owner_tuple(
-                login_user.user_id, 'knowledge_library', str(db_knowledge.id)
-            )
+            await OwnerService.write_owner_tuple(login_user.user_id, "knowledge_library", str(db_knowledge.id))
             await run_in_threadpool(
                 cls.audit_telemetry_service.audit_create_knowledge,
                 login_user,
@@ -766,12 +923,11 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    def create_knowledge_hook(
-        cls, request: Request, login_user: UserPayload, knowledge: Knowledge
-    ):
+    def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
         # F008: Write owner tuple to OpenFGA (INV-2)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_library', str(knowledge.id))
+
+        OwnerService.write_owner_tuple_sync(login_user.user_id, "knowledge_library", str(knowledge.id))
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -779,9 +935,7 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def update_knowledge(
-        cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate
-    ) -> KnowledgeRead:
+    def update_knowledge(cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate) -> KnowledgeRead:
         db_knowledge = KnowledgeDao.query_by_id(knowledge.knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -796,9 +950,7 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
 
         if knowledge.name and knowledge.name != db_knowledge.name:
-            repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
-                knowledge.name, db_knowledge.user_id
-            )
+            repeat_knowledge = KnowledgeDao.get_knowledge_by_name(knowledge.name, db_knowledge.user_id)
             if repeat_knowledge and repeat_knowledge.id != db_knowledge.id:
                 raise KnowledgeExistError.http_exception()
             db_knowledge.name = knowledge.name
@@ -850,12 +1002,11 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
         embeddings = FakeEmbeddings()
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=0, knowledge=knowledge,
-                                                                            embeddings=embeddings)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            invoke_user_id=0, knowledge=knowledge, embeddings=embeddings
+        )
         if isinstance(vector_client.col, Collection):
-            logger.info(
-                f"delete_vector col={knowledge.collection_name} knowledge_id={knowledge.id}"
-            )
+            logger.info(f"delete_vector col={knowledge.collection_name} knowledge_id={knowledge.id}")
             if knowledge.collection_name.startswith("col"):
                 # Singularcollection, simply delete it
                 vector_client.col.drop()
@@ -868,18 +1019,15 @@ class KnowledgeService(KnowledgeUtils):
             logger.info(f"act=delete_es index={index_name} res={res}")
 
     @classmethod
-    def delete_knowledge_hook(
-        cls, request: Request, login_user: UserPayload, knowledge: Knowledge
-    ):
-        logger.info(
-            f"delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}"
-        )
+    def delete_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
+        logger.info(f"delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}")
 
         cls.audit_telemetry_service.audit_delete_knowledge(login_user, request, knowledge)
 
         # F008: Clean up all FGA tuples for this resource (AC-03)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.delete_resource_tuples_sync('knowledge_library', str(knowledge.id))
+
+        OwnerService.delete_resource_tuples_sync("knowledge_library", str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
@@ -893,9 +1041,7 @@ class KnowledgeService(KnowledgeUtils):
         minio_client = get_minio_storage_sync()
 
         for i in range(page_num):
-            file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(
-                knowledge_id, i + 1, page_size
-            )
+            file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1, page_size)
             for file in file_list:
                 minio_client.remove_object_sync(object_name=str(file[0]))
                 for object_name in file[1:]:
@@ -932,7 +1078,7 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     async def get_preview_file_chunk(
         cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
-    ) -> (str, str, List[FileChunk], Any):
+    ) -> (str, str, list[FileChunk], Any):
         """
         0Parse Mode: uns or local
         1: Converted file path
@@ -972,8 +1118,8 @@ class KnowledgeService(KnowledgeUtils):
         file_name = cls.get_upload_file_original_name(file_name)
 
         # Split text using PreviewFilePipeline
-        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
         from bisheng.api.v1.schemas import FileProcessBase
+        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
 
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
@@ -1025,12 +1171,10 @@ class KnowledgeService(KnowledgeUtils):
         minio_client = await get_minio_storage()
 
         file_share_url = minio_client.clear_minio_share_host(file_path)
-        if file_ext in ['doc', 'docx', 'wps', 'xls', 'xlsx', 'et', 'ppt', 'pptx', 'dps']:
+        if file_ext in ["doc", "docx", "wps", "xls", "xlsx", "et", "ppt", "pptx", "dps"]:
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
-                file_share_url = await minio_client.get_share_link(
-                    new_file_name, minio_client.tmp_bucket
-                )
+                file_share_url = await minio_client.get_share_link(new_file_name, minio_client.tmp_bucket)
 
         # Deposit Cache
         await cls.async_save_preview_cache(cache_key, mapping=cache_map)
@@ -1056,14 +1200,10 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
         chunk_info["text"] = req_data.text
         chunk_info["metadata"]["bbox"] = req_data.bbox
-        await cls.async_save_preview_cache(
-            cache_key, chunk_index=req_data.chunk_index, value=chunk_info
-        )
+        await cls.async_save_preview_cache(cache_key, chunk_index=req_data.chunk_index, value=chunk_info)
 
     @classmethod
-    def delete_preview_file_chunk(
-        cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
-    ):
+    def delete_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         try:
             cls.permission_service.ensure_knowledge_write_sync(
@@ -1083,7 +1223,7 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         req_data: KnowledgeFileProcess,
         *,
-        upload_limit_bytes: Optional[int] = None,
+        upload_limit_bytes: int | None = None,
     ):
         """Process uploaded files, Uploaded to only minio and mysql.
 
@@ -1120,15 +1260,13 @@ class KnowledgeService(KnowledgeUtils):
                 db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
                 # Duplicate file data using asynchronous tasks to execute
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
-                    if getattr(db_file, 'id', None):
+                    if getattr(db_file, "id", None):
                         created_file_ids.append(db_file.id)
                     current_total_file_size += int(db_file.file_size or 0)
                     if limit_bytes is not None and current_total_file_size > limit_bytes:
                         raise SpaceFileSizeLimitError()
                     # Get a preview cache of this filekey
-                    cache_key = cls.get_preview_cache_key(
-                        req_data.knowledge_id, one.file_path
-                    )
+                    cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                 else:
@@ -1140,7 +1278,7 @@ class KnowledgeService(KnowledgeUtils):
                 try:
                     KnowledgeFileDao.delete_batch(created_file_ids)
                 except Exception as cleanup_exc:
-                    logger.warning(f'Failed to cleanup files after upload quota error: {cleanup_exc}')
+                    logger.warning(f"Failed to cleanup files after upload quota error: {cleanup_exc}")
             raise
         return knowledge, failed_files, process_files, preview_cache_keys
 
@@ -1150,7 +1288,7 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         req_data: KnowledgeFileProcess,
         *,
-        upload_limit_bytes: Optional[int] = None,
+        upload_limit_bytes: int | None = None,
     ):
         """Async upload path for request-driven file ingestion."""
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
@@ -1172,23 +1310,17 @@ class KnowledgeService(KnowledgeUtils):
         preview_cache_keys = []
         split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
         limit_bytes = upload_limit_bytes
-        current_total_file_size = int(
-            await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id)
-        )
+        current_total_file_size = int(await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id))
         try:
             for one in req_data.file_list:
-                db_file = await run_in_threadpool(
-                    cls.process_one_file, login_user, knowledge, one, split_rule_dict
-                )
+                db_file = await run_in_threadpool(cls.process_one_file, login_user, knowledge, one, split_rule_dict)
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
-                    if getattr(db_file, 'id', None):
+                    if getattr(db_file, "id", None):
                         created_file_ids.append(db_file.id)
                     current_total_file_size += int(db_file.file_size or 0)
                     if limit_bytes is not None and current_total_file_size > limit_bytes:
                         raise SpaceFileSizeLimitError()
-                    cache_key = cls.get_preview_cache_key(
-                        req_data.knowledge_id, one.file_path
-                    )
+                    cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                 else:
@@ -1200,7 +1332,7 @@ class KnowledgeService(KnowledgeUtils):
                 try:
                     await KnowledgeFileDao.adelete_batch(created_file_ids)
                 except Exception as cleanup_exc:
-                    logger.warning(f'Failed to cleanup files after upload quota error: {cleanup_exc}')
+                    logger.warning(f"Failed to cleanup files after upload quota error: {cleanup_exc}")
             raise
         return knowledge, failed_files, process_files, preview_cache_keys
 
@@ -1212,13 +1344,13 @@ class KnowledgeService(KnowledgeUtils):
         background_tasks: BackgroundTasks,
         req_data: KnowledgeFileProcess,
         *,
-        upload_limit_bytes: Optional[int] = None,
-    ) -> List[KnowledgeFile]:
+        upload_limit_bytes: int | None = None,
+    ) -> list[KnowledgeFile]:
         from bisheng.worker.knowledge import file_worker
 
         """Process uploaded files"""
-        knowledge, failed_files, process_files, preview_cache_keys = (
-            cls.save_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
+        knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
+            login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
 
         cls.apply_manual_upload_tags_sync(
@@ -1244,12 +1376,12 @@ class KnowledgeService(KnowledgeUtils):
         background_tasks: BackgroundTasks,
         req_data: KnowledgeFileProcess,
         *,
-        upload_limit_bytes: Optional[int] = None,
-    ) -> List[KnowledgeFile]:
+        upload_limit_bytes: int | None = None,
+    ) -> list[KnowledgeFile]:
         from bisheng.worker.knowledge import file_worker
 
-        knowledge, failed_files, process_files, preview_cache_keys = (
-            await cls.asave_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
+        knowledge, failed_files, process_files, preview_cache_keys = await cls.asave_knowledge_file(
+            login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
 
         await cls.apply_manual_upload_tags(
@@ -1263,9 +1395,7 @@ class KnowledgeService(KnowledgeUtils):
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
 
-        await run_in_threadpool(
-            cls.upload_knowledge_file_hook, request, login_user, knowledge, process_files
-        )
+        await run_in_threadpool(cls.upload_knowledge_file_hook, request, login_user, knowledge, process_files)
         return failed_files + process_files
 
     @classmethod
@@ -1275,11 +1405,11 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         req_data: KnowledgeFileProcess,
         *,
-        upload_limit_bytes: Optional[int] = None,
-    ) -> List[KnowledgeFile]:
+        upload_limit_bytes: int | None = None,
+    ) -> list[KnowledgeFile]:
         """Sync uploaded files"""
-        knowledge, failed_files, process_files, preview_cache_keys = (
-            cls.save_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
+        knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
+            login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
 
         cls.apply_manual_upload_tags_sync(
@@ -1304,9 +1434,7 @@ class KnowledgeService(KnowledgeUtils):
         return failed_files + process_files
 
     @classmethod
-    async def rebuild_knowledge_file(cls, request: Request,
-                                     login_user: UserPayload,
-                                     req_data: KnowledgeFileReProcess):
+    async def rebuild_knowledge_file(cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess):
         """
         Rebuild Knowledge Base Files
         :param request:
@@ -1348,7 +1476,7 @@ class KnowledgeService(KnowledgeUtils):
             return []
         id2input = {file.get("id"): file for file in db_file_retry}
         file_ids = list(id2input.keys())
-        db_files: List[KnowledgeFile] = await KnowledgeFileDao.aget_file_by_ids(file_ids=file_ids)
+        db_files: list[KnowledgeFile] = await KnowledgeFileDao.aget_file_by_ids(file_ids=file_ids)
         if not db_files:
             return []
         knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
@@ -1383,11 +1511,9 @@ class KnowledgeService(KnowledgeUtils):
         request: Request,
         login_user: UserPayload,
         knowledge: Knowledge,
-        file_list: List[KnowledgeFile],
+        file_list: list[KnowledgeFile],
     ):
-        logger.info(
-            f"act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge.id}"
-        )
+        logger.info(f"act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge.id}")
         if file_list:
             KnowledgeDao.update_knowledge_update_time(knowledge)
         # Log Audit Logs
@@ -1402,8 +1528,8 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge: Knowledge,
         file_info: KnowledgeFileOne,
-        split_rule: Dict,
-        file_kwargs: Dict = None,
+        split_rule: dict,
+        file_kwargs: dict = None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         # download original file
@@ -1416,12 +1542,8 @@ class KnowledgeService(KnowledgeUtils):
         file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
         # Does it contain duplicate files?
-        content_repeat = KnowledgeFileDao.get_file_by_condition(
-            md5_=md5_, knowledge_id=knowledge.id
-        )
-        name_repeat = KnowledgeFileDao.get_file_by_condition(
-            file_name=original_file_name, knowledge_id=knowledge.id
-        )
+        content_repeat = KnowledgeFileDao.get_file_by_condition(md5_=md5_, knowledge_id=knowledge.id)
+        name_repeat = KnowledgeFileDao.get_file_by_condition(file_name=original_file_name, knowledge_id=knowledge.id)
 
         if not file_info.excel_rule:
             file_info.excel_rule = ExcelRule()
@@ -1435,9 +1557,7 @@ class KnowledgeService(KnowledgeUtils):
             file_type = file_name.rsplit(".", 1)[-1]
             obj_name = f"tmp/{db_file.id}.{file_type}"
             db_file.object_name = obj_name
-            db_file.remark = json.dumps({
-                "new_name": original_file_name,
-                "old_name": old_name}, ensure_ascii=False)
+            db_file.remark = json.dumps({"new_name": original_file_name, "old_name": old_name}, ensure_ascii=False)
             # Uploaded to minio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
             minio_client.put_object_tmp_sync(db_file.object_name, filepath)
             cls.remove_unused_file(file_info.file_path)
@@ -1465,8 +1585,7 @@ class KnowledgeService(KnowledgeUtils):
         cls.audit_telemetry_service.telemetry_new_knowledge_file(login_user)
         # Saving original files
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
-        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
-                                     file=filepath)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name, file=filepath)
         cls.remove_unused_file(file_info.file_path)
 
         logger.info("upload_original_file path={}", db_file.object_name)
@@ -1480,18 +1599,18 @@ class KnowledgeService(KnowledgeUtils):
         minio_share_host = minio_client.get_minio_share_host()
         if file_path.startswith(minio_share_host):
             url_obj = urlparse(file_path)
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
             minio_client.remove_object_sync(bucket_name=bucket_name, object_name=object_name)
 
     @classmethod
-    def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: List[KnowledgeFile]) -> Dict[str, str]:
+    def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: list[KnowledgeFile]) -> dict[str, str]:
         """Adoption of documentsidGet file title"""
         if not files:
             return {}
         files = [one for one in files if one.status == KnowledgeFileStatus.SUCCESS.value]
         if not files:
             return {}
-        file_title_map: Dict[str, str] = {}
+        file_title_map: dict[str, str] = {}
         try:
             es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
             search_data = {
@@ -1505,19 +1624,15 @@ class KnowledgeService(KnowledgeUtils):
                         }
                     }
                 ],
-                "post_filter": {
-                    "terms": {"metadata.document_id": [one.id for one in files]}
-                },
+                "post_filter": {"terms": {"metadata.document_id": [one.id for one in files]}},
                 "collapse": {"field": "metadata.document_id"},
             }
-            es_res = es_client.client.search(
-                index=db_knowledge.index_name, body=search_data
-            )
+            es_res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
             for one in es_res["hits"]["hits"]:
                 file_title_map[str(one["_source"]["metadata"]["document_id"])] = one["_source"]["metadata"]["abstract"]
         except Exception as e:
             # maybe es index not exist so ignore this error
-            logger.warning(f"act=get_knowledge_files error={str(e)}")
+            logger.warning(f"act=get_knowledge_files error={e!s}")
             pass
         return file_title_map
 
@@ -1528,11 +1643,11 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         file_name: str = None,
-        status: List[int] = None,
+        status: list[int] = None,
         page: int = 1,
         page_size: int = 10,
-        file_ids: List[int] = None,
-    ) -> (List[KnowledgeFileResp], int, bool):
+        file_ids: list[int] = None,
+    ) -> (list[KnowledgeFileResp], int, bool):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -1546,32 +1661,38 @@ class KnowledgeService(KnowledgeUtils):
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
-        res = KnowledgeFileDao.get_file_by_filters(
-            knowledge_id, file_name, status, page, page_size, file_ids
-        )
+        res = KnowledgeFileDao.get_file_by_filters(knowledge_id, file_name, status, page, page_size, file_ids)
         total = KnowledgeFileDao.count_file_by_filters(knowledge_id, file_name, status)
 
         # get file title from es
         finally_res = []
         file_title_map = cls.get_knowledge_files_title(db_knowledge, res)
-        file_tags_map = TagDao.get_tags_by_resource(
-            ResourceTypeEnum.KNOWLEDGE_FILE,
-            [str(one.id) for one in res],
-        ) if res else {}
+        file_tags_map = (
+            TagDao.get_tags_by_resource(
+                ResourceTypeEnum.KNOWLEDGE_FILE,
+                [str(one.id) for one in res],
+            )
+            if res
+            else {}
+        )
         timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             # Parsing more than one day, setting status to failed
-            if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
-                datetime.now() - one.update_time).total_seconds() > 86400:
+            if (
+                one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value]
+                and (datetime.now() - one.update_time).total_seconds() > 86400
+            ):
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
             finally_res[index].tags = file_tags_map.get(str(one.id), [])
         if timeout_files:
-            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.TIMEOUT,
-                                                KnowledgeFileFailedError(
-                                                    data={"exception": 'Parsing time exceeds 24 hours'}).to_json_str())
+            KnowledgeFileDao.update_file_status(
+                timeout_files,
+                KnowledgeFileStatus.TIMEOUT,
+                KnowledgeFileFailedError(data={"exception": "Parsing time exceeds 24 hours"}).to_json_str(),
+            )
 
         return (
             finally_res,
@@ -1591,12 +1712,12 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         file_name: str = None,
-        status: List[int] = None,
+        status: list[int] = None,
         page: int = 1,
         page_size: int = 10,
-        file_ids: List[int] = None,
+        file_ids: list[int] = None,
         file_type: int = None,
-    ) -> (List[KnowledgeFileResp], int, bool):
+    ) -> (list[KnowledgeFileResp], int, bool):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -1612,12 +1733,14 @@ class KnowledgeService(KnowledgeUtils):
 
         extra_file_ids = None
         if file_name:
-            all_tags = await TagDao.asearch_tags(file_name, business_type=TagBusinessTypeEnum.KNOWLEDGE,
-                                                 business_id=str(knowledge_id))
+            all_tags = await TagDao.asearch_tags(
+                file_name, business_type=TagBusinessTypeEnum.KNOWLEDGE, business_id=str(knowledge_id)
+            )
             if all_tags:
                 tag_ids = [one.id for one in all_tags]
-                extra_file_ids = await TagDao.aget_resources_by_tags(tag_ids,
-                                                                     resource_type=ResourceTypeEnum.KNOWLEDGE_FILE)
+                extra_file_ids = await TagDao.aget_resources_by_tags(
+                    tag_ids, resource_type=ResourceTypeEnum.KNOWLEDGE_FILE
+                )
                 extra_file_ids = [int(one.resource_id) for one in extra_file_ids]
 
         res = await KnowledgeFileDao.aget_file_by_filters(
@@ -1644,18 +1767,24 @@ class KnowledgeService(KnowledgeUtils):
             db_knowledge,
             res,
         )
-        file_tags_map = await asyncio.to_thread(
-            TagDao.get_tags_by_resource,
-            ResourceTypeEnum.KNOWLEDGE_FILE,
-            [str(one.id) for one in res],
-        ) if res else {}
+        file_tags_map = (
+            await asyncio.to_thread(
+                TagDao.get_tags_by_resource,
+                ResourceTypeEnum.KNOWLEDGE_FILE,
+                [str(one.id) for one in res],
+            )
+            if res
+            else {}
+        )
 
         finally_res = []
         timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
-            if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
-                datetime.now() - one.update_time).total_seconds() > 86400:
+            if (
+                one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value]
+                and (datetime.now() - one.update_time).total_seconds() > 86400
+            ):
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
@@ -1664,9 +1793,7 @@ class KnowledgeService(KnowledgeUtils):
             await KnowledgeFileDao.aupdate_file_status(
                 timeout_files,
                 KnowledgeFileStatus.TIMEOUT,
-                KnowledgeFileFailedError(
-                    data={"exception": 'Parsing time exceeds 24 hours'}
-                ).to_json_str(),
+                KnowledgeFileFailedError(data={"exception": "Parsing time exceeds 24 hours"}).to_json_str(),
             )
 
         writeable = await cls.permission_service.check_access_async(
@@ -1678,9 +1805,7 @@ class KnowledgeService(KnowledgeUtils):
         return finally_res, total, writeable
 
     @classmethod
-    def delete_knowledge_file(
-        cls, request: Request, login_user: UserPayload, file_ids: List[int]
-    ):
+    def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: list[int]):
         from bisheng.worker.knowledge import file_worker
 
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
@@ -1702,13 +1827,12 @@ class KnowledgeService(KnowledgeUtils):
         cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
 
         # Delete Audit Log for Knowledge Base Files
-        cls.delete_knowledge_file_hook(
-            request, login_user, db_knowledge.id, knowledge_file
-        )
+        cls.delete_knowledge_file_hook(request, login_user, db_knowledge.id, knowledge_file)
 
         # 5Minutes to check if the file was actually deleted
-        file_worker.delete_knowledge_file_celery.apply_async(args=(file_ids, knowledge_file[0].knowledge_id, True),
-                                                             countdown=300)
+        file_worker.delete_knowledge_file_celery.apply_async(
+            args=(file_ids, knowledge_file[0].knowledge_id, True), countdown=300
+        )
 
         return True
 
@@ -1718,11 +1842,9 @@ class KnowledgeService(KnowledgeUtils):
         request: Request,
         login_user: UserPayload,
         knowledge_id: int,
-        file_list: List[KnowledgeFile],
+        file_list: list[KnowledgeFile],
     ):
-        logger.info(
-            f"act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}"
-        )
+        logger.info(f"act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}")
         cls.audit_telemetry_service.audit_delete_knowledge_file(login_user, request, knowledge_id, file_list)
 
     @classmethod
@@ -1767,11 +1889,11 @@ class KnowledgeService(KnowledgeUtils):
         request: Request,
         login_user: UserPayload,
         knowledge_id: int,
-        file_ids: List[int] = None,
+        file_ids: list[int] = None,
         keyword: str = None,
         page: int = None,
         limit: int = None,
-    ) -> (List[FileChunk], int):
+    ) -> (list[FileChunk], int):
         db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE)
 
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
@@ -1803,7 +1925,7 @@ class KnowledgeService(KnowledgeUtils):
         try:
             res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
         except Exception as e:
-            logger.warning(f"act=get_knowledge_chunks error={str(e)}")
+            logger.warning(f"act=get_knowledge_chunks error={e!s}")
             raise KnowledgeChunkError.http_exception()
 
         # Query the file information corresponding to the next block
@@ -1850,7 +1972,7 @@ class KnowledgeService(KnowledgeUtils):
                 record["updater"] = login_user.user_name
                 record["update_time"] = update_time
                 vector_client.col.upsert(record)
-        logger.debug(f"update_milvus_chunk_updater_info over")
+        logger.debug("update_milvus_chunk_updater_info over")
 
         res = es_client.client.update_by_query(
             index=db_knowledge.index_name,
@@ -1882,9 +2004,7 @@ class KnowledgeService(KnowledgeUtils):
     ):
         db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
-        logger.info(
-            f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
-        )
+        logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         # search metadata
         output_fields = [s.name for s in vector_client.col.schema.fields if s.name != "vector"]
@@ -1911,9 +2031,7 @@ class KnowledgeService(KnowledgeUtils):
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)
         logger.info(f"act=update_vector_over {res}")
 
-        logger.info(
-            f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
-        )
+        logger.info(f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.update_by_query(
             index=db_knowledge.index_name,
@@ -1950,9 +2068,7 @@ class KnowledgeService(KnowledgeUtils):
     ):
         db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
-        logger.info(
-            f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
-        )
+        logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         res = vector_client.col.delete(
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
@@ -1983,8 +2099,8 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def get_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> Tuple[str, str]:
-        """ Get the original download address of the file with authentication """
+    def get_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> tuple[str, str]:
+        """Get the original download address of the file with authentication"""
         file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
             raise NotFoundError(msg="file not found")
@@ -1999,7 +2115,7 @@ class KnowledgeService(KnowledgeUtils):
         return cls.get_file_share_url(file=file)
 
     @classmethod
-    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> Tuple[str, str]:
+    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> tuple[str, str]:
         """Async permission-safe variant of ``get_file_share_with_auth``."""
         file = await KnowledgeFileDao.query_by_id(file_id)
         if not file:
@@ -2050,17 +2166,15 @@ class KnowledgeService(KnowledgeUtils):
         }
 
     @classmethod
-    def get_file_share_url(cls, file_id: int = None, file: KnowledgeFile = None) -> Tuple[str, str]:
-        """ Get the original download address of the file And Corresponding preview file download address """
+    def get_file_share_url(cls, file_id: int = None, file: KnowledgeFile = None) -> tuple[str, str]:
+        """Get the original download address of the file And Corresponding preview file download address"""
         if file is None:
             file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
             raise NotFoundError(msg="file not found")
         minio_client = get_minio_storage_sync()
         original_object_name = cls.resolve_source_object_name(file.id, file.file_name, file.object_name)
-        preview_object_name = cls.resolve_preview_object_name(
-            file.id, file.file_name, file.preview_file_object_name
-        )
+        preview_object_name = cls.resolve_preview_object_name(file.id, file.file_name, file.preview_file_object_name)
         if file.preview_file_object_name:
             original_url = cls.get_file_share_url_with_empty(original_object_name)
             preview_url = cls.get_file_share_url_with_empty(preview_object_name)
@@ -2091,9 +2205,7 @@ class KnowledgeService(KnowledgeUtils):
         return ""
 
     @classmethod
-    def get_file_bbox(
-        cls, request: Request, login_user: UserPayload, file_id: int
-    ) -> Any:
+    def get_file_bbox(cls, request: Request, login_user: UserPayload, file_id: int) -> Any:
         file_info = KnowledgeFileDao.select_list([file_id])
         file_info = file_info[0]
         if not file_info.bbox_object_name:
@@ -2151,8 +2263,9 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowledge: Knowledge,
         knowledge_name: str = None,
     ) -> Any:
-        await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
-                                              update_time=qa_knowledge.update_time)
+        await KnowledgeDao.async_update_state(
+            qa_knowledge.id, KnowledgeState.COPYING, update_time=qa_knowledge.update_time
+        )
         qa_knowldge_dict = qa_knowledge.model_dump()
         qa_knowldge_dict.pop("id")
         qa_knowldge_dict.pop("create_time")
@@ -2173,15 +2286,17 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
-        copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
-                                       login_user_id=login_user.user_id)
+
+        copy_qa_knowledge_celery.delay(
+            source_knowledge_id=qa_knowledge.id,
+            target_knowledge_id=target_qa_knowlege.id,
+            login_user_id=login_user.user_id,
+        )
 
         return target_qa_knowlege
 
     @classmethod
-    def judge_qa_knowledge_write(
-        cls, login_user: UserPayload, qa_knowledge_id: int
-    ) -> Knowledge:
+    def judge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:
         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
         # Query the current knowledge base, whether there are write permissions
         if not db_knowledge:
@@ -2200,9 +2315,7 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    async def ajudge_qa_knowledge_write(
-        cls, login_user: UserPayload, qa_knowledge_id: int
-    ) -> Knowledge:
+    async def ajudge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:
         db_knowledge = await KnowledgeDao.aquery_by_id(qa_knowledge_id)
         if not db_knowledge:
             raise NotFoundError()
@@ -2220,28 +2333,24 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    def judge_qa_knowledge_view(
-        cls, login_user: UserPayload, qa_knowledge_id: int
-    ) -> Knowledge:
+    def judge_qa_knowledge_view(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:
         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
         if not db_knowledge:
             raise NotFoundError()
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
-        if not cls.permission_service.check_permission_id_sync(login_user, qa_knowledge_id, 'view_kb'):
+        if not cls.permission_service.check_permission_id_sync(login_user, qa_knowledge_id, "view_kb"):
             raise UnAuthorizedError.http_exception()
         return db_knowledge
 
     @classmethod
-    async def ajudge_qa_knowledge_view(
-        cls, login_user: UserPayload, qa_knowledge_id: int
-    ) -> Knowledge:
+    async def ajudge_qa_knowledge_view(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:
         db_knowledge = await KnowledgeDao.aquery_by_id(qa_knowledge_id)
         if not db_knowledge:
             raise NotFoundError()
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
-        if not await cls.permission_service.check_permission_id_async(login_user, qa_knowledge_id, 'view_kb'):
+        if not await cls.permission_service.check_permission_id_async(login_user, qa_knowledge_id, "view_kb"):
             raise UnAuthorizedError.http_exception()
         return db_knowledge
 
@@ -2250,7 +2359,7 @@ class KnowledgeService(KnowledgeUtils):
         cls,
         login_user: UserPayload,
         knowledge_id: int,
-        file_ids: List[int],
+        file_ids: list[int],
     ) -> str:
         """Batch download knowledge-base files.
 
@@ -2273,7 +2382,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError(msg="file_ids must not be empty")
 
         # ── 2. Query file records ────────────────────────────────────────────────
-        db_files: List[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
+        db_files: list[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
         # Keep only files that actually belong to this knowledge base
         db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
         if not db_files:
@@ -2335,10 +2444,10 @@ class KnowledgeService(KnowledgeUtils):
         cls,
         login_user: UserPayload,
         knowledge_id: int,
-        keyword: Optional[str] = None,
+        keyword: str | None = None,
         page: int = 1,
         limit: int = 10,
-    ) -> Tuple[List[Tag], int]:
+    ) -> tuple[list[Tag], int]:
         knowledge = await cls._get_readable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
         business_type, _ = cls._get_tag_scope(knowledge)
         keyword = keyword.strip() if keyword else None
@@ -2361,8 +2470,9 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
         business_type, _ = cls._get_tag_scope(knowledge)
 
-        existing_tags = await TagDao.get_tags_by_business(business_type=business_type,
-                                                          business_id=str(knowledge_id), name=tag_name)
+        existing_tags = await TagDao.get_tags_by_business(
+            business_type=business_type, business_id=str(knowledge_id), name=tag_name
+        )
         if any(t.name == tag_name for t in existing_tags):
             raise KnowledgeTagExistError()
 
@@ -2390,12 +2500,11 @@ class KnowledgeService(KnowledgeUtils):
     async def delete_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_id: int):
         knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
         business_type, _ = cls._get_tag_scope(knowledge)
-        return await TagDao.delete_business_tag(tag_id, business_id=str(knowledge_id),
-                                                business_type=business_type)
+        return await TagDao.delete_business_tag(tag_id, business_id=str(knowledge_id), business_type=business_type)
 
     @classmethod
-    async def update_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_id: int, tag_ids: List[int]):
-        """ 设置单文件的标签 (全量替换) """
+    async def update_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_id: int, tag_ids: list[int]):
+        """设置单文件的标签 (全量替换)"""
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
         knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
@@ -2411,9 +2520,10 @@ class KnowledgeService(KnowledgeUtils):
         await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, login_user.user_id)
 
     @classmethod
-    async def batch_add_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_ids: List[int],
-                                  tag_ids: List[int]):
-        """ 批量添加标签到文档 """
+    async def batch_add_file_tags(
+        cls, login_user: UserPayload, knowledge_id: int, file_ids: list[int], tag_ids: list[int]
+    ):
+        """批量添加标签到文档"""
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
         knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
@@ -2433,7 +2543,7 @@ class KnowledgeService(KnowledgeUtils):
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, login_user.user_id)
 
     @classmethod
-    async def apply_tag_pre_filter(cls, tag_ids: List[int], knowledge_id: int) -> Optional[List[str]]:
+    async def apply_tag_pre_filter(cls, tag_ids: list[int], knowledge_id: int) -> list[str] | None:
         """
         根据标签 ID 获取 document_id (知识库文件的 file_id 的字符串列表)，用于传入向量检索的 filter_expr。
         返回 None 表示无需过滤（未指定标签）。

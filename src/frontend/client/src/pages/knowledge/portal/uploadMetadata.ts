@@ -1,5 +1,5 @@
 import type { SpaceTag } from "~/api/knowledge";
-import type { PortalFileCategoryOption } from "./types";
+import type { PortalFileSubcategoryOption, PortalFileCategoryOption } from "./types";
 
 export const DEFAULT_ENCODING_PREFIX = "SGGF";
 export const DEFAULT_ENCODING_SERIAL = "00000000000001";
@@ -33,6 +33,7 @@ export interface PortalUploadMetadataState {
 
 export interface PortalUploadMetadataPayload {
     file_category_code?: string;
+    file_subcategory_code?: string;
     business_domain_code?: string;
     manual_tag_ids?: number[];
     manual_tag_names?: string[];
@@ -45,6 +46,7 @@ export interface PortalUploadTagOption {
 
 export type EncodingDraft = {
     fileCategoryCode?: string;
+    fileSubcategoryCode?: string | null;
     businessDomainCode?: string;
 };
 
@@ -186,11 +188,12 @@ export function parseUploadTagValues(values: string[]) {
 
 export function buildPortalUploadMetadataPayload(
     metadata: PortalUploadMetadataState,
-    fileCategoryCode?: string,
+    fileSubcategory?: PortalFileSubcategoryOption | null,
 ): PortalUploadMetadataPayload {
     const payload: PortalUploadMetadataPayload = {};
-    if (fileCategoryCode) {
-        payload.file_category_code = fileCategoryCode;
+    if (fileSubcategory?.parentCode && fileSubcategory.code) {
+        payload.file_category_code = fileSubcategory.parentCode;
+        payload.file_subcategory_code = fileSubcategory.code;
     }
     if (metadata.businessDomainCode) {
         payload.business_domain_code = metadata.businessDomainCode;

@@ -5,6 +5,7 @@ import {
     dedupeFilesById,
     dedupeTreeNodesByFileId,
     extractExt,
+    normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
 } from "./utils";
 
@@ -91,6 +92,61 @@ describe("portal preview utils", () => {
             ).toEqual([
                 { code: "STD", label: "标准规范" },
                 { code: "CAS", label: "案例" },
+            ]);
+        });
+
+        it("keeps first-level categories for file encoding options", () => {
+            expect(
+                normalizePortalFileCategoryOptions([
+                    {
+                        code: "POL",
+                        label: "政策制度",
+                        children: [
+                            { code: "POL-REG", label: "制度文件" },
+                            { code: "POL-NOTICE", label: "通知公告" },
+                        ],
+                    },
+                    { code: "RPT", label: "报告" },
+                ]),
+            ).toEqual([
+                { code: "POL", label: "政策制度" },
+                { code: "RPT", label: "报告" },
+            ]);
+        });
+
+        it("builds upload category groups with selectable second-level children", () => {
+            expect(
+                normalizePortalFileCategoryGroups([
+                    {
+                        code: "POL",
+                        label: "政策制度",
+                        children: [
+                            { code: "POL_REG", label: "制度文件" },
+                            { code: "POL_NOTICE", label: "通知公告" },
+                        ],
+                    },
+                ]),
+            ).toEqual([
+                {
+                    code: "POL",
+                    label: "政策制度",
+                    children: [
+                        {
+                            code: "POL_REG",
+                            label: "制度文件",
+                            parentCode: "POL",
+                            parentLabel: "政策制度",
+                            displayLabel: "政策制度 / 制度文件",
+                        },
+                        {
+                            code: "POL_NOTICE",
+                            label: "通知公告",
+                            parentCode: "POL",
+                            parentLabel: "政策制度",
+                            displayLabel: "政策制度 / 通知公告",
+                        },
+                    ],
+                },
             ]);
         });
 

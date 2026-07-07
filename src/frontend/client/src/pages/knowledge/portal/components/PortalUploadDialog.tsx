@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, ReactNode, SetStateAction } from "react";
+import { type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, FileText, Folder, Upload, X } from "lucide-react";
 import {
     Button,
@@ -9,7 +9,7 @@ import {
     DialogTitle,
 } from "~/components/ui";
 import type {
-    PortalFileCategoryOption,
+    PortalFileCategoryGroupOption,
     PortalUploadFileItem,
     PortalUploadFolderNode,
     PortalUploadFolderSelection,
@@ -22,6 +22,7 @@ import {
 } from "../uploadMetadata";
 
 import { formatFileSize } from "../utils";
+import { PortalFileCategoryDropdown } from "./PortalFileCategoryDropdown";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 interface PortalUploadDialogProps {
@@ -41,8 +42,8 @@ interface PortalUploadDialogProps {
     uploadImporting: boolean;
     uploadReviewRows: PortalUploadReviewRow[];
     uploadFolderOptions: Array<{ id: string | null; name: string }>;
-    fileCategoryCode: string;
-    fileCategoryOptions: PortalFileCategoryOption[];
+    fileSubcategoryCode: string;
+    fileCategoryGroups: PortalFileCategoryGroupOption[];
     businessDomainCode: string;
     businessDomainOptions?: BusinessDomainOptionItem[];
     uploadTagOptions: PortalUploadTagOption[];
@@ -139,8 +140,8 @@ export function PortalUploadDialog({
     uploadImporting,
     uploadReviewRows,
     uploadFolderOptions,
-    fileCategoryCode,
-    fileCategoryOptions,
+    fileSubcategoryCode,
+    fileCategoryGroups,
     businessDomainCode,
     businessDomainOptions = [],
     uploadTagOptions,
@@ -277,24 +278,19 @@ export function PortalUploadDialog({
 
                             <div className={s.uploadSection}>
                                 <div className={s.uploadMetadataGrid}>
-                                    <label className={s.uploadField}>
+                                    <div className={s.uploadField}>
                                         <span>
                                             文件分类
                                         </span>
-                                        <select
-                                            aria-label="文件分类"
-                                            className={s.uploadSelect}
-                                            value={fileCategoryCode}
-                                            onChange={(event) => onSelectFileCategory(event.currentTarget.value)}
-                                        >
-                                            <option value="">请选择文件分类</option>
-                                            {fileCategoryOptions.map((option) => (
-                                                <option key={option.code} value={option.code}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
+                                        <PortalFileCategoryDropdown
+                                            groups={fileCategoryGroups}
+                                            value={fileSubcategoryCode}
+                                            placeholder="AI 自动生成"
+                                            clearable
+                                            ariaLabel="文件分类"
+                                            onChange={(option) => onSelectFileCategory(option?.code ?? "")}
+                                        />
+                                    </div>
                                     <label className={s.uploadField}>
                                         <span>
                                             业务域
