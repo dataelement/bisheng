@@ -205,7 +205,8 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
             return;
         }
         if (preferredSpacePending) return;
-        if (activeSpace && selectableSpaces.some((space) => space.id === activeSpace.id)) return;
+        // 用 String() 兜底：新建返回的 space id 可能是数字，避免与列表里的字符串 id 不匹配而误重置
+        if (activeSpace && selectableSpaces.some((space) => String(space.id) === String(activeSpace.id))) return;
         if (personalSpacesQuery.isLoading) return;
         setActiveSpace(defaultPersonalSpace ?? selectableSpaces[0] ?? null);
     }, [

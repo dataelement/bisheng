@@ -2039,8 +2039,10 @@ export default function PortalKnowledgeWorkbench() {
             const result = await submitKnowledgeSpaceCreate(form);
 
             if (result.created && result.space) {
+                // 先等空间列表刷新（新空间进入 selectableSpaces），再切换当前空间；否则默认空间
+                // 守卫会在刷新完成前把 activeSpace 重置回默认库，导致“前往知识库”跳不到新空间。
+                await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 setActiveSpace(result.space);
-                void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }

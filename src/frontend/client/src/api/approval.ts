@@ -4,8 +4,10 @@ import {
   FileType,
   type KnowledgeFile,
   type KnowledgeSpace,
+  mapSpace,
   type SimilarCandidateEntry,
   SpaceLevel,
+  SpaceRole,
   VisibilityType,
 } from "./knowledge";
 
@@ -290,7 +292,15 @@ export async function submitShougangKnowledgeSpaceCreateApprovalApi(
     "/api/v1/approval/shougang/knowledge-space-create/submit",
     data,
   );
-  return unwrapPayload(response);
+  const result = unwrapPayload(response);
+  // 审批直通创建（如管理员自动通过）时后端返回的是原始 space（数字 id、raw 字段）。
+  // 统一走 mapSpace 归一化为前端 KnowledgeSpace（id 转字符串、字段规范）；否则数字 id 会
+  // 导致后续权限检查入参为数字而报错，且“前往知识库”因 id 类型不一致无法定位到新空间。
+  if (result?.created && result.space) {
+    const rawSpace = result.space as unknown as Record<string, unknown>;
+    result.space = mapSpace({ ...rawSpace, user_role: rawSpace.user_role ?? SpaceRole.CREATOR } as never);
+  }
+  return result;
 }
 
 export async function getShougangFilePublishTargetSpacesApi(sourceSpaceId: string | number): Promise<{

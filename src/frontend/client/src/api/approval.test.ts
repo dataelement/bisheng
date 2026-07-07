@@ -8,6 +8,7 @@ import {
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
   revokeMenuAccessGrantApi,
+  submitShougangKnowledgeSpaceCreateApprovalApi,
   withdrawApprovalInstanceApi,
 } from "./approval";
 
@@ -160,5 +161,29 @@ describe("approval api", () => {
       menu_key: "knowledge_space",
       menu_name: "知识库",
     });
+  });
+
+  it("审批直通创建时将 raw space 归一化（数字 id → 字符串），供跳转/权限检查使用", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 200,
+      data: {
+        decision: "auto_approved",
+        created: true,
+        space: { id: 162, name: "新空间", space_level: "public", user_id: 1, auth_type: "public" },
+      },
+    });
+
+    const result = await submitShougangKnowledgeSpaceCreateApprovalApi({
+      name: "新空间",
+      description: "",
+      auth_type: "public",
+      is_released: false,
+      space_level: "public",
+    } as never);
+
+    expect(result.created).toBe(true);
+    expect(result.space?.id).toBe("162");
+    expect(typeof result.space?.id).toBe("string");
+    expect(result.space?.spaceLevel).toBe("public");
   });
 });

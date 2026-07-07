@@ -637,7 +637,7 @@ export interface UploadFileResponse {
 // ─────────────────────────────────────────────
 
 /** Map a raw backend space to the frontend KnowledgeSpace model */
-function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
+export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
     return {
         id: String(raw.id),
         name: raw.name,
