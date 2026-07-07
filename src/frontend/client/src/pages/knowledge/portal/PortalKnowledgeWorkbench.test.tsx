@@ -921,7 +921,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
-    test("shows create row under a permitted group and opens drawer with that group level", async () => {
+    test("个人知识库分组不展示新建入口（不能手动新建）", async () => {
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
@@ -931,68 +931,10 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const personalGroup = screen.getByTestId("space-group-personal");
-        const createRow = await within(personalGroup).findByRole("button", { name: "新建知识库" });
-
-        expect(createRow).toBeEnabled();
-        expect(createRow.querySelector("img")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/create-knowledge-space.png",
-        );
-
-        fireEvent.click(createRow);
-
-        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.PERSONAL}`);
-    });
-
-    test("opens personal create drawer with success member management hidden", async () => {
-        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [],
-            departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [],
-        } as any);
-
-        renderWorkbench();
-
-        const personalGroup = screen.getByTestId("space-group-personal");
-        fireEvent.click(await within(personalGroup).findByRole("button", { name: "新建知识库" }));
-
-        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.PERSONAL}`);
-        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("successManageMembers:false");
-    });
-
-    test("creates personal knowledge space directly without submitting approval", async () => {
-        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [],
-            departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [],
-        } as any);
-        const { queryClient } = renderWorkbench();
-        const neverSettlingInvalidate = jest
-            .spyOn(queryClient, "invalidateQueries")
-            .mockImplementation(() => new Promise(() => undefined) as any);
-
-        const personalGroup = screen.getByTestId("space-group-personal");
-        fireEvent.click(await within(personalGroup).findByRole("button", { name: "新建知识库" }));
-        fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
-
-        await waitFor(() => {
-            expect(createSpaceApi).toHaveBeenCalledTimes(1);
-        });
-        expect(createSpaceApi).toHaveBeenCalledWith(expect.objectContaining({
-            name: "新空间",
-            auth_type: VisibilityType.PRIVATE,
-            is_released: false,
-            space_level: SpaceLevel.PERSONAL,
-        }));
-        expect(submitShougangKnowledgeSpaceCreateApprovalApi).not.toHaveBeenCalled();
-        expect(neverSettlingInvalidate).toHaveBeenCalledWith({ queryKey: ["knowledgeSpaces"] });
-        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "创建知识库成功" }));
-        await waitFor(() => {
-            expect(mockCreateSpaceConfirmResult).toBe(true);
-        });
+        const personalGroup = await screen.findByTestId("space-group-personal");
+        // 个人库仅由系统按需自动创建：分组内不出现「新建知识库」行，标题旁也无「新增个人知识库」(+)
+        expect(within(personalGroup).queryByRole("button", { name: "新建知识库" })).not.toBeInTheDocument();
+        expect(within(personalGroup).queryByRole("button", { name: "新增个人知识库" })).not.toBeInTheDocument();
     });
 
     test("hides create row under a group without create permission", async () => {

@@ -26,7 +26,8 @@ import {
     sidebarListMoreMenuItemClassName,
     sidebarListMoreMenuLabelClassName,
 } from "~/components/SidebarListMoreMenu";
-import type { KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
+import { SpaceLevel } from "~/api/knowledge";
+import type { KnowledgeSpace } from "~/api/knowledge";
 import {
     PORTAL_SIDEBAR_TITLE_ICON_SRC,
 } from "../constants";
@@ -357,19 +358,21 @@ export function SpaceSidebar({
                                             {(() => { const Icon = SPACE_GROUP_ICONS[group.key]; return <Icon className={`${s.groupIcon} ${expanded ? s.groupIconExpanded : ""}`} aria-hidden="true" data-testid={`space-group-icon-${group.key}`} />; })()}
                                             <strong>{group.title}</strong>
                                         </button>
-                                        <button
-                                            type="button"
-                                            className={s.groupCreateButton}
-                                            aria-label={`新增${group.title}`}
-                                            title={canCreate ? `新增${group.title}` : "无创建权限"}
-                                            disabled={!canCreate}
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                onOpenCreateSpace(group);
-                                            }}
-                                        >
-                                            <Plus size={14} />
-                                        </button>
+                                        {group.level !== SpaceLevel.PERSONAL ? (
+                                            <button
+                                                type="button"
+                                                className={s.groupCreateButton}
+                                                aria-label={`新增${group.title}`}
+                                                title={canCreate ? `新增${group.title}` : "无创建权限"}
+                                                disabled={!canCreate}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onOpenCreateSpace(group);
+                                                }}
+                                            >
+                                                <Plus size={14} />
+                                            </button>
+                                        ) : null}
                                     </div>
                                     {expanded ? (
                                         <>

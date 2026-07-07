@@ -140,7 +140,8 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         [SpaceLevel.PUBLIC]: Boolean(createOptions?.canCreatePublic),
         [SpaceLevel.DEPARTMENT]: Boolean(createOptions?.canCreateDepartment),
         [SpaceLevel.TEAM]: Boolean(createOptions?.canCreateTeam),
-        [SpaceLevel.PERSONAL]: Boolean(createOptions?.canCreatePersonal),
+        // 个人知识库不允许手动新建（我的收藏 / {用户名}的知识库 由系统按需自动创建）
+        [SpaceLevel.PERSONAL]: false,
     }), [createOptions]);
 
     const selectableSpaces = useMemo(

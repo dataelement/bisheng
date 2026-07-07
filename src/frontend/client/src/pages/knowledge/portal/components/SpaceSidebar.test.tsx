@@ -26,8 +26,9 @@ const createSpace = (overrides: Partial<KnowledgeSpace> = {}): KnowledgeSpace =>
         ...overrides,
     }) as KnowledgeSpace;
 
-function renderSidebar() {
+function renderSidebar(extraGroups: SpaceGroup[] = []) {
     const groups: SpaceGroup[] = [
+        ...extraGroups,
         {
             key: "personal",
             title: "个人知识库",
@@ -89,5 +90,25 @@ describe("SpaceSidebar 收藏库操作门控（portal 内嵌工作台）", () =>
         expect(await screen.findByText("置顶空间")).toBeInTheDocument();
         expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
         expect(screen.queryByText("删除空间")).not.toBeInTheDocument();
+    });
+});
+
+describe("SpaceSidebar 个人知识库不能新建（去掉 + 按钮）", () => {
+    it("个人知识库分组不渲染新增(+)按钮", () => {
+        renderSidebar();
+        expect(screen.queryByLabelText("新增个人知识库")).not.toBeInTheDocument();
+    });
+
+    it("其他分组（公共）仍渲染新增(+)按钮", () => {
+        const publicGroup: SpaceGroup = {
+            key: "public",
+            title: "公共知识库",
+            level: SpaceLevel.PUBLIC,
+            iconSrc: { collapsed: "", expanded: "" },
+            spaces: [],
+        };
+        renderSidebar([publicGroup]);
+        expect(screen.getByLabelText("新增公共知识库")).toBeInTheDocument();
+        expect(screen.queryByLabelText("新增个人知识库")).not.toBeInTheDocument();
     });
 });
