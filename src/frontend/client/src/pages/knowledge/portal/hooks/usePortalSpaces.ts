@@ -11,9 +11,38 @@ import {
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
+    type KnowledgeSpaceActionPermission,
 } from "../../hooks/useKnowledgeSpacePermissions";
 import { GROUP_ICON_SRC } from "../constants";
 import type { SpaceGroup } from "../types";
+
+export interface SpaceActionPermissions {
+    canEditSpace: boolean;
+    canDeleteSpace: boolean;
+    canManageMembers: boolean;
+}
+
+/**
+ * 计算某个知识空间在 portal 侧栏上可用的操作权限。
+ *
+ * 个人知识库只有编辑功能：即便当前用户是 creator / 全局超管，也不能删除、
+ * 不能授权/管理成员（与部门/团队/公共库区别对待）。
+ */
+export function resolveSpacePermissions(
+    space: KnowledgeSpace,
+    spaceActionPermissions: Record<string, KnowledgeSpaceActionPermission[]>,
+): SpaceActionPermissions {
+    const hasFullAccess = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const hasPermission = (permissionId: KnowledgeSpaceActionPermission) => (
+        hasFullAccess || hasKnowledgeSpacePermission(spaceActionPermissions, space.id, permissionId)
+    );
+    const isPersonal = space.spaceLevel === SpaceLevel.PERSONAL;
+    return {
+        canEditSpace: hasPermission("edit_space"),
+        canDeleteSpace: isPersonal ? false : hasPermission("delete_space"),
+        canManageMembers: isPersonal ? false : hasPermission("manage_space_relation"),
+    };
+}
 
 interface UsePortalSpacesParams {
     activeSpace: KnowledgeSpace | null;
@@ -162,20 +191,10 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         [activeSpace?.id, groups],
     );
 
-    const getSpacePermissions = useCallback((space: KnowledgeSpace) => {
-        const hasFullAccess = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
-        const hasPermission = (permissionId: "edit_space" | "delete_space" | "manage_space_relation") => (
-            hasFullAccess || hasKnowledgeSpacePermission(spaceActionPermissions, space.id, permissionId)
-        );
-        const canManageMembers = space.spaceLevel === SpaceLevel.PERSONAL
-            ? false
-            : hasPermission("manage_space_relation");
-        return {
-            canEditSpace: hasPermission("edit_space"),
-            canDeleteSpace: hasPermission("delete_space"),
-            canManageMembers,
-        };
-    }, [spaceActionPermissions]);
+    const getSpacePermissions = useCallback(
+        (space: KnowledgeSpace) => resolveSpacePermissions(space, spaceActionPermissions),
+        [spaceActionPermissions],
+    );
 
     useEffect(() => {
         if (preferredSpace) {

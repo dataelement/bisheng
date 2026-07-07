@@ -529,6 +529,11 @@ class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
     )
 
 
+class DepartmentBindingReq(BaseModel):
+    space_id: int = Field(..., description="Team-level knowledge space id to bind")
+    department_id: int = Field(..., description="Department id to bind the space to")
+
+
 class FolderCreateReq(BaseModel):
     name: str = Field(..., description="Folder Name")
     parent_id: int | None = Field(None, description="Parent Folder ID")
@@ -652,6 +657,11 @@ class FileEncodingUpdateReq(BaseModel):
         min_length=1,
         max_length=64,
         description="New file encoding (free text, 1-64 chars)",
+    )
+    file_subcategory_code: str | None = Field(
+        default=None,
+        max_length=16,
+        description="Selected second-level file category code. Does not participate in file_encoding.",
     )
 
 

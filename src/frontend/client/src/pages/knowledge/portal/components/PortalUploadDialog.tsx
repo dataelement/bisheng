@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from "react";
+import { type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, FileText, Folder, Upload, X } from "lucide-react";
 import {
     Button,
@@ -22,6 +22,7 @@ import {
 } from "../uploadMetadata";
 
 import { formatFileSize } from "../utils";
+import { PortalFileCategoryDropdown } from "./PortalFileCategoryDropdown";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 interface PortalUploadDialogProps {
@@ -166,19 +167,6 @@ export function PortalUploadDialog({
     onBackToSelect,
     onStartUploadImport,
 }: PortalUploadDialogProps) {
-    const [expandedCategoryCode, setExpandedCategoryCode] = useState<string | null>(null);
-    const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-    const selectedFileSubcategory = useMemo(() => {
-        for (const group of fileCategoryGroups) {
-            const option = group.children.find((child) => child.code === fileSubcategoryCode);
-            if (option) return option;
-        }
-        return null;
-    }, [fileCategoryGroups, fileSubcategoryCode]);
-    const activeCategoryCode = expandedCategoryCode ?? selectedFileSubcategory?.parentCode ?? null;
-    const selectedFileCategoryText = selectedFileSubcategory
-        ? `${selectedFileSubcategory.parentLabel} / ${selectedFileSubcategory.label}`
-        : "AI 自动生成";
     const selectedReviewCount = uploadReviewRows.filter((row) => row.selected).length;
     const isAiFolderSelection = uploadFolderSelection.mode === "ai";
     const selectedUploadFolderName = isAiFolderSelection ? "未选择目录（AI推荐）" : uploadFolderName;
@@ -294,70 +282,14 @@ export function PortalUploadDialog({
                                         <span>
                                             文件分类
                                         </span>
-                                        <div className={s.uploadCategoryDropdown}>
-                                            <button
-                                                type="button"
-                                                className={`${s.uploadCategoryTrigger} ${fileSubcategoryCode ? s.uploadCategoryTriggerClearable : ""}`}
-                                                aria-label={`文件分类 当前选择：${selectedFileCategoryText}`}
-                                                aria-haspopup="tree"
-                                                aria-expanded={categoryDropdownOpen}
-                                                onClick={() => setCategoryDropdownOpen((value) => !value)}
-                                            >
-                                                <span>{selectedFileCategoryText}</span>
-                                                <ChevronDown size={16} />
-                                            </button>
-                                            {fileSubcategoryCode ? (
-                                                <button
-                                                    type="button"
-                                                    className={s.uploadCategoryClearButton}
-                                                    aria-label="清空文件分类选择"
-                                                    onClick={() => {
-                                                        onSelectFileCategory("");
-                                                        setExpandedCategoryCode(null);
-                                                        setCategoryDropdownOpen(false);
-                                                    }}
-                                                >
-                                                    <X size={14} />
-                                                </button>
-                                            ) : null}
-                                            {categoryDropdownOpen ? (
-                                                <div className={s.uploadCategoryMenu} role="tree" aria-label="文件分类">
-                                                    {fileCategoryGroups.map((group) => {
-                                                        const expanded = activeCategoryCode === group.code;
-                                                        return (
-                                                            <div key={group.code} className={s.uploadCategoryGroup}>
-                                                                <button
-                                                                    type="button"
-                                                                    className={s.uploadCategoryGroupButton}
-                                                                    aria-expanded={expanded}
-                                                                    onClick={() => setExpandedCategoryCode(expanded ? null : group.code)}
-                                                                >
-                                                                    {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                                                    <span>{group.code} / {group.label}</span>
-                                                                </button>
-                                                                {expanded ? (
-                                                                    <div className={s.uploadCategoryChildren} role="group">
-                                                                        {group.children.map((child) => (
-                                                                            <button
-                                                                                key={child.code}
-                                                                                type="button"
-                                                                                className={`${s.uploadCategoryChildButton} ${fileSubcategoryCode === child.code ? s.uploadCategoryChildButtonActive : ""}`}
-                                                                                onClick={() => {
-                                                                                    onSelectFileCategory(child.code);
-                                                                                    setCategoryDropdownOpen(false);
-                                                                                }}
-                                                                            >
-                                                                                {child.code} / {child.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : null}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            ) : null}
-                                        </div>
+                                        <PortalFileCategoryDropdown
+                                            groups={fileCategoryGroups}
+                                            value={fileSubcategoryCode}
+                                            placeholder="AI 自动生成"
+                                            clearable
+                                            ariaLabel="文件分类"
+                                            onChange={(option) => onSelectFileCategory(option?.code ?? "")}
+                                        />
                                     </div>
                                     <label className={s.uploadField}>
                                         <span>

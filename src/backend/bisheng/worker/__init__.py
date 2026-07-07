@@ -10,6 +10,7 @@ from bisheng.worker.knowledge.space_init_worker import (
     grant_knowledge_space_scope_permissions,
     init_knowledge_space_indices,
 )
+from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.worker.org_sync.reconcile_tasks import (
     reconcile_all_organizations,
     report_ts_conflicts_daily_escalation,

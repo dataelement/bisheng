@@ -4,6 +4,7 @@ shougang deployments.
 Encoding format: COMPANY-DOCTYPE-DOMAIN-YYYYMMNNNNNNNN
 Example: SGGF-RPT-PP-20260500000001
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,8 +51,10 @@ class _AsyncRunner:
                 return
             loop = asyncio.new_event_loop()
             thread = threading.Thread(
-                target=self._run, args=(loop,),
-                daemon=True, name='shougang-encoding-async',
+                target=self._run,
+                args=(loop,),
+                daemon=True,
+                name="shougang-encoding-async",
             )
             thread.start()
             self._loop = loop
@@ -161,8 +164,8 @@ CLASSIFY_PROMPT = """# 角色
 - 输出格式必须严格为: 文档类型编码-业务域编码, 例如: RPT-PP"""
 
 VALID_PATTERN_TEXT = (
-    r'^(POL|STD|PRO|SPC|RPT|CAS|DGN|PAT|TRN|NEW)-'
-    r'(PP|QM|PM|EM|SA|EN|IM|RD|MM|SD|FI|HR|IT|AD)$'
+    r"^(POL|STD|PRO|SPC|RPT|CAS|DGN|PAT|TRN|NEW)-"
+    r"(PP|QM|PM|EM|SA|EN|IM|RD|MM|SD|FI|HR|IT|AD)$"
 )
 VALID_PATTERN = re.compile(VALID_PATTERN_TEXT)
 DEFAULT_COMPANY_CODE = "SGGF"
@@ -202,9 +205,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self.invoke_user_id = invoke_user_id
         self.knowledge_file = knowledge_file
 
-    def transform_documents(
-        self, documents: Sequence[Document], **kwargs: Any
-    ) -> Sequence[Document]:
+    def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         # Sync entry point. Pipeline.run calls this directly. Pipeline.arun's
         # default atransform_documents wraps us in a thread executor. We
         # delegate the actual async work to a single shared runner loop so
@@ -214,8 +215,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             _async_runner.submit(self._do_work())
         except Exception as e:
             logger.warning(
-                f"[shougang.encoding] file_id={getattr(self.knowledge_file, 'id', None)} "
-                f"transformer_error: {e}"
+                f"[shougang.encoding] file_id={getattr(self.knowledge_file, 'id', None)} transformer_error: {e}"
             )
         return list(documents)
 
@@ -250,8 +250,10 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             )
             seq = await self._compute_seq(encoding_config.seq_cap)
             self.knowledge_file.file_encoding = self._compose_encoding(
-                company_code, type_business_code,
-                self.knowledge_file.create_time, seq,
+                company_code,
+                type_business_code,
+                self.knowledge_file.create_time,
+                seq,
             )
             logger.info(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
@@ -274,18 +276,14 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                     encoding_config,
                 )
                 self.knowledge_file.file_encoding = self._compose_encoding(
-                    company_code, fallback_code,
-                    self.knowledge_file.create_time, seq,
+                    company_code,
+                    fallback_code,
+                    self.knowledge_file.create_time,
+                    seq,
                 )
-                logger.warning(
-                    f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                    f"fallback used: {e}"
-                )
+                logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} fallback used: {e}")
             except Exception as inner:
-                logger.error(
-                    f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                    f"abandoned: outer={e} inner={inner}"
-                )
+                logger.error(f"[shougang.encoding] file_id={self.knowledge_file.id} abandoned: outer={e} inner={inner}")
         await self._ensure_file_subcategory_code(encoding_config)
 
     async def _classify_with_llm(self, encoding_config: FileEncodingRuntimeConfig | None = None) -> str:
@@ -297,23 +295,19 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             # so the workbench config row resolves to that tenant's row (or
             # Root via share fallback) rather than the worker's empty
             # ContextVar.
-            tenant_id = getattr(self.knowledge_file, 'tenant_id', None)
+            tenant_id = getattr(self.knowledge_file, "tenant_id", None)
             llm_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
-            if (not llm_conf
-                    or not llm_conf.chat_title_llm
-                    or not llm_conf.chat_title_llm.id):
-                logger.warning(
-                    f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                    f"fallback: chat_title_llm_unset"
-                )
+            if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+                logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} fallback: chat_title_llm_unset")
                 return self._resolve_allowed_fallback_code(encoding_config)
 
             llm = await LLMService.get_bisheng_llm(
                 model_id=llm_conf.chat_title_llm.id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                app_name='shougang_file_encoding',
+                app_name="shougang_file_encoding",
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
                 user_id=self.invoke_user_id,
+                temperature=0,
             )
 
             response = await llm.ainvoke(self._build_classify_messages(encoding_config))
@@ -322,15 +316,11 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             if self._is_type_business_code_allowed(result, encoding_config):
                 return result
             logger.warning(
-                f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                f"fallback: invalid_format raw={result!r}"
+                f"[shougang.encoding] file_id={self.knowledge_file.id} fallback: invalid_format raw={result!r}"
             )
             return self._resolve_allowed_fallback_code(encoding_config)
         except Exception as e:
-            logger.warning(
-                f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                f"fallback: llm_error {e}"
-            )
+            logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} fallback: llm_error {e}")
             return self._resolve_allowed_fallback_code(encoding_config)
 
     def _resolve_encoding_config(
@@ -339,9 +329,11 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         business_domain_codes: Sequence[str] | None = None,
         document_types_override: Sequence[Any] | None = None,
     ) -> FileEncodingRuntimeConfig:
-        raw_config = getattr(shougang_conf, 'file_encoding', None) if shougang_conf is not None else None
+        raw_config = getattr(shougang_conf, "file_encoding", None) if shougang_conf is not None else None
         classify_prompt = self._resolve_nonempty_str(
-            raw_config, 'classify_prompt', CLASSIFY_PROMPT,
+            raw_config,
+            "classify_prompt",
+            CLASSIFY_PROMPT,
         )
         user_content_template = self._resolve_user_content_template(raw_config)
         valid_pattern = self._resolve_valid_pattern(raw_config)
@@ -350,7 +342,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         raw_document_types = (
             list(document_types_override)
             if document_types_override
-            else self._get_config_value(raw_config, 'document_types')
+            else self._get_config_value(raw_config, "document_types")
         )
         document_type_codes = self._resolve_document_type_codes(raw_document_types)
         subcategory_options_by_document_type = self._resolve_subcategory_options_by_document_type(raw_document_types)
@@ -372,8 +364,8 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             )
 
             portal_config = await ShougangPortalConfigService.get_config()
-            document_types = getattr(getattr(portal_config, 'portal', None), 'document_types', None) or []
-            return [item.model_dump(mode='json') for item in document_types if item]
+            document_types = getattr(getattr(portal_config, "portal", None), "document_types", None) or []
+            return [item.model_dump(mode="json") for item in document_types if item]
         except Exception as e:
             logger.warning(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
@@ -382,7 +374,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             return []
 
     async def _resolve_space_business_domain_codes(self) -> tuple[str, ...]:
-        knowledge_id = getattr(self.knowledge_file, 'knowledge_id', None)
+        knowledge_id = getattr(self.knowledge_file, "knowledge_id", None)
         if not knowledge_id:
             return tuple(sorted(BUSINESS_DOMAIN_CODES))
         try:
@@ -446,8 +438,8 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         ]
 
     def _format_user_content(self, template: str) -> str:
-        file_name = self.knowledge_file.file_name or ''
-        abstract = self.knowledge_file.abstract or ''
+        file_name = self.knowledge_file.file_name or ""
+        abstract = self.knowledge_file.abstract or ""
         try:
             return template.format(file_name=file_name, abstract=abstract)
         except Exception as e:
@@ -459,10 +451,12 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     def _resolve_user_content_template(self, raw_config: Any) -> str:
         template = self._resolve_nonempty_str(
-            raw_config, 'user_content_template', DEFAULT_USER_CONTENT_TEMPLATE,
+            raw_config,
+            "user_content_template",
+            DEFAULT_USER_CONTENT_TEMPLATE,
         )
         try:
-            template.format(file_name='', abstract='')
+            template.format(file_name="", abstract="")
             return template
         except Exception as e:
             logger.warning(
@@ -472,7 +466,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             return DEFAULT_USER_CONTENT_TEMPLATE
 
     def _resolve_valid_pattern(self, raw_config: Any) -> re.Pattern:
-        pattern_text = self._get_config_value(raw_config, 'valid_pattern')
+        pattern_text = self._get_config_value(raw_config, "valid_pattern")
         if not isinstance(pattern_text, str) or not pattern_text.strip():
             return VALID_PATTERN
         try:
@@ -485,7 +479,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             return VALID_PATTERN
 
     def _resolve_fallback_code(self, raw_config: Any, valid_pattern: re.Pattern) -> str:
-        fallback_code = self._get_config_value(raw_config, 'fallback_code')
+        fallback_code = self._get_config_value(raw_config, "fallback_code")
         if isinstance(fallback_code, str) and fallback_code.strip():
             fallback_code = fallback_code.strip()
             if valid_pattern.match(fallback_code):
@@ -497,7 +491,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         return FALLBACK
 
     def _resolve_seq_cap(self, raw_config: Any) -> int:
-        seq_cap = self._get_config_value(raw_config, 'seq_cap')
+        seq_cap = self._get_config_value(raw_config, "seq_cap")
         try:
             seq_cap = int(seq_cap)
         except (TypeError, ValueError):
@@ -515,18 +509,18 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         if isinstance(raw_document_types, list):
             for item in raw_document_types:
                 if isinstance(item, dict):
-                    code = item.get('code')
+                    code = item.get("code")
                 else:
-                    code = getattr(item, 'code', None)
+                    code = getattr(item, "code", None)
                 normalized = self._normalize_document_type_code(code)
                 if normalized:
                     codes.add(normalized)
         if not codes:
             codes = {
-                self._normalize_document_type_code(item.get('code')) or ''
+                self._normalize_document_type_code(item.get("code")) or ""
                 for item in DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES
             }
-            codes.discard('')
+            codes.discard("")
         return frozenset(codes)
 
     def _resolve_subcategory_options_by_document_type(
@@ -538,16 +532,16 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
         options_by_parent: dict[str, tuple[FileSubcategoryOption, ...]] = {}
         for item in raw_document_types:
-            parent_code = self._normalize_document_type_code(self._get_item_value(item, 'code'))
+            parent_code = self._normalize_document_type_code(self._get_item_value(item, "code"))
             if not parent_code:
                 continue
             parent_label = self._resolve_item_label(item, parent_code)
-            raw_children = self._get_item_value(item, 'children')
+            raw_children = self._get_item_value(item, "children")
             children = raw_children if isinstance(raw_children, list) and raw_children else [item]
             options: list[FileSubcategoryOption] = []
             seen: set[str] = set()
             for child in children:
-                child_code = self._normalize_file_subcategory_code(self._get_item_value(child, 'code'))
+                child_code = self._normalize_file_subcategory_code(self._get_item_value(child, "code"))
                 if not child_code or child_code in seen:
                     continue
                 seen.add(child_code)
@@ -572,7 +566,9 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         return options_by_parent
 
     async def _ensure_file_subcategory_code(self, encoding_config: FileEncodingRuntimeConfig) -> None:
-        existing_code = self._normalize_file_subcategory_code(getattr(self.knowledge_file, 'file_subcategory_code', None))
+        existing_code = self._normalize_file_subcategory_code(
+            getattr(self.knowledge_file, "file_subcategory_code", None)
+        )
         if existing_code:
             return
         document_type_code = self._extract_document_type_code_from_file_encoding(self.knowledge_file.file_encoding)
@@ -600,18 +596,17 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         try:
             from bisheng.llm.domain.services.llm import LLMService
 
-            tenant_id = getattr(self.knowledge_file, 'tenant_id', None)
+            tenant_id = getattr(self.knowledge_file, "tenant_id", None)
             llm_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
-            if (not llm_conf
-                    or not llm_conf.chat_title_llm
-                    or not llm_conf.chat_title_llm.id):
+            if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
                 return None
             llm = await LLMService.get_bisheng_llm(
                 model_id=llm_conf.chat_title_llm.id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                app_name='shougang_file_subcategory',
+                app_name="shougang_file_subcategory",
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
                 user_id=self.invoke_user_id,
+                temperature=0,
             )
             response = await llm.ainvoke(self._build_subcategory_messages(options))
             selected_code = self._normalize_file_subcategory_code((response.content or "").strip())
@@ -619,10 +614,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                 return None
             return next((option for option in options if option.code == selected_code), None)
         except Exception as e:
-            logger.warning(
-                f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                f"subcategory fallback: llm_error {e}"
-            )
+            logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} subcategory fallback: llm_error {e}")
             return None
 
     def _build_subcategory_messages(
@@ -663,7 +655,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         return getattr(item, key, None)
 
     def _resolve_item_label(self, item: Any, fallback: str) -> str:
-        label = self._get_item_value(item, 'label')
+        label = self._get_item_value(item, "label")
         if isinstance(label, str) and label.strip():
             return label.strip()
         return fallback
@@ -672,7 +664,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self,
         encoding_config: FileEncodingRuntimeConfig,
     ) -> str | None:
-        split_rule = getattr(self.knowledge_file, 'split_rule', None)
+        split_rule = getattr(self.knowledge_file, "split_rule", None)
         if not split_rule:
             return None
         try:
@@ -694,8 +686,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         if selected_code in encoding_config.document_type_codes:
             return selected_code
         logger.warning(
-            f"[shougang.encoding] file_id={self.knowledge_file.id} "
-            f"invalid file category code ignored: {selected_code}"
+            f"[shougang.encoding] file_id={self.knowledge_file.id} invalid file category code ignored: {selected_code}"
         )
         return None
 
@@ -703,7 +694,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self,
         encoding_config: FileEncodingRuntimeConfig,
     ) -> str | None:
-        split_rule = getattr(self.knowledge_file, 'split_rule', None)
+        split_rule = getattr(self.knowledge_file, "split_rule", None)
         if not split_rule:
             return None
         try:
@@ -816,7 +807,9 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         start, end = self._month_window()
         async with get_async_db_session() as session:
             count = await session.scalar(
-                select(func.count()).select_from(KnowledgeFile).where(
+                select(func.count())
+                .select_from(KnowledgeFile)
+                .where(
                     KnowledgeFile.create_time >= start,
                     KnowledgeFile.create_time < end,
                     KnowledgeFile.knowledge_id == self.knowledge_file.knowledge_id,
@@ -842,13 +835,12 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     @staticmethod
     def _resolve_company_code(shougang_conf: Any) -> str:
-        prefix = getattr(shougang_conf, 'prefix', None)
+        prefix = getattr(shougang_conf, "prefix", None)
         if isinstance(prefix, str) and prefix.strip():
             return prefix.strip()
         return DEFAULT_COMPANY_CODE
 
     @staticmethod
-    def _compose_encoding(prefix: str, type_business: str,
-                          create_time: datetime, seq: int) -> str:
+    def _compose_encoding(prefix: str, type_business: str, create_time: datetime, seq: int) -> str:
         ym = create_time.strftime("%Y%m")
         return f"{prefix}-{type_business}-{ym}{seq:08d}"

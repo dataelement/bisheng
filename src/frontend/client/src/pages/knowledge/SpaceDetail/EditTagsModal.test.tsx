@@ -532,9 +532,15 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
-    it("renders pending manual tags in gray under manual recommended section", async () => {
+    it("does not render knowledge_space tags from space tag API in recommended section", async () => {
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
-            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
+            {
+                id: 2,
+                name: "待审核",
+                review_status: 0,
+                resource_type: "manual_tag",
+                business_type: "knowledge_space",
+            },
             { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
         ]);
 
@@ -549,11 +555,42 @@ describe("EditTagsModal recommended tags", () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText("待审核")).toBeInTheDocument();
+            expect(screen.getByText("人工C")).toBeInTheDocument();
             expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
         });
 
-        expect(screen.getByText("待审核").className).toContain("text-[#c9cdd4]");
+        expect(screen.queryByText("待审核")).not.toBeInTheDocument();
+    });
+
+    it("keeps file-attached pending tags in the input area without listing them as recommended tags", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            {
+                id: 2,
+                name: "待审核",
+                review_status: 0,
+                resource_type: "manual_tag",
+                business_type: "knowledge_space",
+            },
+            { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[2]}
+                initialTags={[
+                    { id: 2, name: "待审核", resource_type: "manual_tag", review_status: 0 },
+                ]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getAllByText("待审核").length).toBe(1);
+            expect(screen.getByText("人工C")).toBeInTheDocument();
+        });
     });
 
     it("shows duplicate hint when Enter repeats an already selected draft tag", async () => {
@@ -611,5 +648,69 @@ describe("EditTagsModal recommended tags", () => {
             status: "warning",
         });
         expect(screen.getByText("本地草稿")).toBeInTheDocument();
+    });
+
+    it("preserves typed input when parent re-renders with a new initialTagIds array reference", async () => {
+        const user = userEvent.setup();
+        const tenTags = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            name: `标签${i + 1}`,
+            business_type: "tag_library" as const,
+            resource_type: "manual_tag" as const,
+        }));
+        jest.mocked(getSpaceTagsApi).mockResolvedValue(tenTags);
+
+        const createProps = () => ({
+            isOpen: true as const,
+            onClose: jest.fn(),
+            spaceId: "100",
+            fileId: "1",
+            initialTagIds: tenTags.map((t) => t.id),
+            initialTags: tenTags,
+        });
+
+        const { rerender } = render(<EditTagsModal {...createProps()} />);
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "新标签");
+        expect(input).toHaveValue("新标签");
+
+        rerender(<EditTagsModal {...createProps()} />);
+
+        expect(input).toHaveValue("新标签");
+    });
+
+    it("keeps input text when Enter is pressed at the 10-tag limit", async () => {
+        const user = userEvent.setup();
+        const tenTags = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            name: `标签${i + 1}`,
+            business_type: "tag_library" as const,
+            resource_type: "manual_tag" as const,
+        }));
+        jest.mocked(getSpaceTagsApi).mockResolvedValue(tenTags);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={tenTags.map((t) => t.id)}
+                initialTags={tenTags}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "第11个");
+        await user.keyboard("{Enter}");
+
+        expect(mockShowToast).toHaveBeenCalledWith({
+            message: "com_knowledge.tags_count_limit_exceeded",
+            status: "error",
+        });
+        expect(input).toHaveValue("第11个");
     });
 });

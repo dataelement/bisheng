@@ -36,7 +36,11 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentSpaceDeleteForbiddenError,
     FavoriteSpaceProtectedError,
+    FreeSpaceMigrationEmbeddingMismatchError,
+    FreeSpaceMigrationTargetNotFoundError,
+    FreeSpaceMigratingError,
     SpaceBusinessDomainCodeInvalidError,
     SpaceCreateDepartmentDeniedError,
     SpaceCreatePublicDeniedError,
@@ -177,6 +181,9 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
 )
+from bisheng.knowledge.domain.services.free_space_migration_service import (
+    FreeSpaceMigrationService,
+)
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_CLASSIFICATION_UPDATED,
     FAVORITE_SOURCE_MOVED,
@@ -230,6 +237,7 @@ from bisheng.telemetry.domain.mid_table.knowledge_space_content import Knowledge
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.knowledge import file_worker
+from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
@@ -5351,14 +5359,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return str(tag.get("tag_name") or tag.get("name") or "")
         return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
-    async def delete_space(self, space_id: int, *, force: bool = False) -> None:
+    async def delete_space(
+        self, space_id: int, *, force: bool = False, migrate_free_space: bool = True
+    ) -> None:
         """Delete a knowledge space and all of its cascaded resources.
 
         ``force=True`` is a system-maintenance bypass (used by the personal-space
         cleanup script): it skips the 我的收藏/个人库 protection guards, skips the
-        caller permission check, and suppresses the per-owner "space deleted"
-        notification so a bulk cleanup does not spam users. It must never be
-        reachable from a user-facing API.
+        caller permission check, skips 自由库迁移, and suppresses the per-owner
+        "space deleted" notification so a bulk cleanup does not spam users. It
+        must never be reachable from a user-facing API.
+
+        ``migrate_free_space=False`` skips the free-space migration guard so the
+        migration worker can delete the source space after copying without
+        re-triggering the guard (avoids recursion).
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -5370,6 +5384,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
                 raise PersonalSpaceProtectedError()
             await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            if migrate_free_space:
+                decision = await FreeSpaceMigrationService.pre_delete_guard(space)
+                if decision.action == "block":
+                    raise {
+                        "department_space_forbidden": DepartmentSpaceDeleteForbiddenError,
+                        "target_not_found": FreeSpaceMigrationTargetNotFoundError,
+                        "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
+                        "migrating": FreeSpaceMigratingError,
+                    }.get(decision.reason, DepartmentSpaceDeleteForbiddenError)()
+                if decision.action == "migrate":
+                    await KnowledgeDao.async_update_state(
+                        knowledge_id=space_id, state=KnowledgeState.COPYING,
+                    )
+                    try:
+                        space_migrate_celery.delay({
+                            "source_id": space_id,
+                            "target_id": decision.target_space_id,
+                            "op_user_id": self.login_user.user_id,
+                        })
+                    except Exception:
+                        await KnowledgeDao.async_update_state(
+                            knowledge_id=space_id, state=KnowledgeState.PUBLISHED,
+                        )
+                        raise
+                    return
+                # decision.action == "normal_delete" → 继续原清理逻辑
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
@@ -5719,7 +5759,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             elif space.space_level == KnowledgeSpaceLevelEnum.TEAM:
                 grouped.team_spaces.append(space)
             else:
-                grouped.personal_spaces.append(space)
+                # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
+                if int(getattr(space, "user_id", 0) or 0) == int(self.login_user.user_id):
+                    grouped.personal_spaces.append(space)
         grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
@@ -5737,6 +5779,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
+
+        if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
+            # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
+            current_user_id = int(self.login_user.user_id)
+            result = [
+                space
+                for space in result
+                if int(getattr(space, "user_id", 0) or 0) == current_user_id
+            ]
 
         if favorite_space_id is not None:
             for space in result:
@@ -8643,8 +8694,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         file_id: int,
         encoding: str,
+        file_subcategory_code: str | None = None,
     ) -> KnowledgeFile:
-        """Update a file's file_encoding (shougang feature). Owner/admin only."""
+        """Update a file's file_encoding and optional second-level category (shougang feature)."""
         file_record = await self._get_file_for_action(file_id)
         # Reuse 'rename_file' permission action — that action is owner/admin-only,
         # matching the required privilege level for editing encoding.
@@ -8663,15 +8715,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             db_knowledge,
             self._extract_business_domain_code_from_encoding(cleaned),
         )
-        if await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
+        old_encoding = file_record.file_encoding
+        old_subcategory_code = self.normalize_file_category_code(
+            getattr(file_record, "file_subcategory_code", None),
+        )
+        encoding_changed = (old_encoding or "") != cleaned
+        if encoding_changed and await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
             raise SpaceFileEncodingDuplicateError()
 
-        old_encoding = file_record.file_encoding
         file_record.file_encoding = cleaned
+        normalized_file_subcategory_code = self.normalize_file_category_code(file_subcategory_code)
+        subcategory_changed = file_subcategory_code is not None and old_subcategory_code != normalized_file_subcategory_code
+        if file_subcategory_code is not None:
+            file_record.file_subcategory_code = normalized_file_subcategory_code
+            file_record.file_subcategory_source = "manual" if normalized_file_subcategory_code else None
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
         updated_file = await KnowledgeFileDao.async_update(file_record)
-        if (old_encoding or "") != cleaned:
+        if encoding_changed or subcategory_changed:
             await self._notify_favorite_source_changed(
                 source_file_id=file_id,
                 file_name=updated_file.file_name,

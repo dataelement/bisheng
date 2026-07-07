@@ -2591,10 +2591,14 @@ export async function updateFileEncoding(
     spaceId: string,
     fileId: string,
     encoding: string,
+    fileSubcategoryCode?: string | null,
 ): Promise<KnowledgeFile> {
     const res = await request.put(
         `/api/v1/knowledge/space/${spaceId}/files/${fileId}/encoding`,
-        { encoding },
+        {
+            encoding,
+            ...(fileSubcategoryCode !== undefined ? { file_subcategory_code: fileSubcategoryCode } : {}),
+        },
     ) as ApiResponse<any> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "update file encoding failed");
