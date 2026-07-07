@@ -151,6 +151,24 @@ interface CreateKnowledgeSpaceDrawerProps {
     showApprovalReason?: boolean;
 }
 
+/**
+ * 计算创建弹窗应选中的知识库层级。
+ *
+ * 当前层级仍可创建时保持不变；否则**优先回退到用户点击进入的分类层级**
+ * (initialSpaceLevel)，再退到第一个可创建项。修复：create-options 已被侧栏预取缓存时，
+ * 打开弹窗的两个 effect 同一 commit 触发、后者读到旧 spaceLevel 而把层级冲回“公共”，
+ * 导致点“部门/团队”新建却默认公共。
+ */
+export function resolveInitialCreateLevel(
+    enabledLevels: SpaceLevel[],
+    currentLevel: SpaceLevel,
+    initialLevel?: SpaceLevel,
+): SpaceLevel {
+    if (enabledLevels.includes(currentLevel)) return currentLevel;
+    if (initialLevel && enabledLevels.includes(initialLevel)) return initialLevel;
+    return enabledLevels[0] ?? SpaceLevel.PERSONAL;
+}
+
 export function CreateKnowledgeSpaceDrawer({
     open,
     onOpenChange,
@@ -350,11 +368,13 @@ export function CreateKnowledgeSpaceDrawer({
 
     useEffect(() => {
         if (!open || mode !== "create" || !createOptions) return;
-        if (!enabledLevelOptions.some((option) => option.value === spaceLevel)) {
-            const next = enabledLevelOptions[0]?.value ?? SpaceLevel.PERSONAL;
-            setSpaceLevel(next);
-        }
-    }, [createOptions, enabledLevelOptions, mode, open, spaceLevel]);
+        const next = resolveInitialCreateLevel(
+            enabledLevelOptions.map((option) => option.value),
+            spaceLevel,
+            initialSpaceLevel,
+        );
+        if (next !== spaceLevel) setSpaceLevel(next);
+    }, [createOptions, enabledLevelOptions, mode, open, spaceLevel, initialSpaceLevel]);
 
     useEffect(() => {
         if (!open) {
