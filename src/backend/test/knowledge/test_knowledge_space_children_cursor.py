@@ -335,7 +335,10 @@ def test_list_space_children_does_not_repeat_view_permission_checks():
     assert '_require_permission_id("folder", parent_id, "view_folder"' not in func_src
 
 
-def test_list_space_children_skips_folder_count_enrichment():
+def test_list_space_children_includes_folder_counts():
+    # F027 children render folder file counts ("N 个文件"), so list_space_children
+    # requests folder counts; the portal QA tree gets the lightweight variant via
+    # folder_count_mode=shallow rather than by disabling counts.
     src = _read("knowledge/domain/services/knowledge_space_service.py")
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
@@ -345,7 +348,7 @@ def test_list_space_children_skips_folder_count_enrichment():
     )
     func_src = ast.get_source_segment(src, func)
 
-    assert "include_folder_counts=False" in func_src
+    assert "include_folder_counts=True" in func_src
 
 
 # ---------------------------------------------------------------------------

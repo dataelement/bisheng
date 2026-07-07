@@ -7193,16 +7193,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not batch_items:
                 break
 
-            visible_batch = await self._filter_visible_child_items(
-                batch_items,
-                space_id=space_id,
-                context=permission_context,
-            )
-            for item in visible_batch:
-                visible_page_items.append(item)
-                if len(visible_page_items) > page_size:
-                    # Got the +1 probe — done scanning.
-                    return visible_page_items[:page_size], True
+            # Permission-check the fetched batch in chunks, stopping as soon as we
+            # have page_size + 1 visible items. Each ReBAC check is an OpenFGA
+            # round-trip, so filtering the whole batch (up to
+            # _CHILD_PERMISSION_SCAN_BATCH_SIZE) just to return page_size items
+            # wastes checks — early-stop bounds them to roughly what the page needs.
+            # Chunk size page_size + 1 fills-and-probes a page in a single chunk
+            # when items are visible; sparser visibility simply consumes more chunks.
+            chunk_size = page_size + 1
+            for chunk_start in range(0, len(batch_items), chunk_size):
+                chunk = batch_items[chunk_start : chunk_start + chunk_size]
+                visible_chunk = await self._filter_visible_child_items(
+                    chunk,
+                    space_id=space_id,
+                    context=permission_context,
+                )
+                for item in visible_chunk:
+                    visible_page_items.append(item)
+                    if len(visible_page_items) > page_size:
+                        # Got the +1 probe — done scanning.
+                        return visible_page_items[:page_size], True
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
             # visible) so the next batch picks up strictly after; if we used
