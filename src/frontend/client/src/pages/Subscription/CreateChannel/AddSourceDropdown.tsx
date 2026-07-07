@@ -397,7 +397,7 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "list" && (
                             <>
                                 {displayList.length === 0 ? (
-                                    <div className="p-8 text-center text-[14px] text-[#86909C]">{localize("com_subscription.no_data")}</div>
+                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-[#86909C]">{localize("com_subscription.no_data")}</div>
                                 ) : (
                                     <div className="">
                                         {displayList.map((source) => {
