@@ -23,10 +23,6 @@ export function PermissionDialog({
       resourceType={resourceType}
       resourceId={resourceId}
       resourceName={resourceName}
-      currentUserRole={null}
-      showShareTab={false}
-      showMembersTab={false}
-      showPermissionTab
     />
   );
 }

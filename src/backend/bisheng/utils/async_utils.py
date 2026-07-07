@@ -9,6 +9,8 @@ same loop.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import contextvars
 import threading
 from collections.abc import Awaitable
 from typing import Any
@@ -38,6 +40,11 @@ class _BackgroundLoop:
         self._lock = threading.Lock()
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        # Prefer a loop the worker registered so run_async_task and
+        # run_async_safe share ONE loop process-wide (see set_preferred_bridge_loop).
+        preferred = _preferred_loop
+        if preferred is not None and not preferred.is_closed():
+            return preferred
         loop = self._loop
         if loop is not None and not loop.is_closed():
             return loop
@@ -66,6 +73,27 @@ class _BackgroundLoop:
 
 
 _background_loop = _BackgroundLoop()
+
+# A process may host TWO sync->async bridge loops: the Celery worker's persistent
+# loop (``worker/_asyncio_utils`` -> ``run_async_task``) and this module's
+# ``_BackgroundLoop`` (``run_async_safe``). Async singletons — OpenFGA's
+# ``httpx.AsyncClient``, aiomysql / aioredis — cache connections bound to
+# whichever loop first drove them; driving the same singleton from the *other*
+# loop raises ``RuntimeError: ... got Future ... attached to a different loop``.
+# When the worker registers its loop here, ``run_async_safe`` submits onto it too
+# so the whole process shares ONE bridge loop and cached clients never cross loops.
+_preferred_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_preferred_bridge_loop(loop: asyncio.AbstractEventLoop | None) -> None:
+    """Register a process-wide loop for ``run_async_safe`` to submit onto.
+
+    The Celery worker calls this with its persistent loop so ``run_async_task``
+    and ``run_async_safe`` share a single loop. Pass ``None`` to unregister
+    (e.g. on worker shutdown). No-op for FastAPI / scripts that never call it.
+    """
+    global _preferred_loop
+    _preferred_loop = loop
 
 
 def run_async_safe(coro: Awaitable[Any], *, timeout: float = 10) -> Any:
@@ -112,3 +140,52 @@ def run_async_safe(coro: Awaitable[Any], *, timeout: float = 10) -> Any:
         raise
 
     return _background_loop.run(coro, timeout)
+
+
+async def run_on_bridge_loop(coro: Awaitable[Any]) -> Any:
+    """Await ``coro`` on the registered bridge loop when the caller runs on a
+    foreign/throwaway loop; otherwise await it inline.
+
+    Async callbacks driven by a *sync* run execute on a transient loop that is
+    closed immediately after — LangChain runs async callback handlers via a
+    per-batch ``asyncio.Runner`` when the surrounding invoke is synchronous. Any
+    process-global async client (such as pooled connections of the async DB
+    engine) that the callback touches is then left bound to that now-dead loop, poisoning
+    the shared pool for later callers ("Future attached to a different loop" /
+    "Event loop is closed"). Hopping the work onto the persistent worker bridge
+    loop (see ``set_preferred_bridge_loop``) keeps every shared-pool call on ONE
+    loop.
+
+    Contextvars (e.g. ``current_tenant_id``) are propagated to the bridge loop so
+    tenant-scoped writes keep working. No-op (awaits inline) when no bridge loop
+    is registered (FastAPI / scripts) or the caller already runs on it.
+    """
+    current = asyncio.get_running_loop()
+    pref = _preferred_loop
+    if pref is None or pref is current or pref.is_closed():
+        return await coro
+
+    ctx = contextvars.copy_context()
+    result_future: concurrent.futures.Future = concurrent.futures.Future()
+
+    def _schedule() -> None:
+        def _on_done(task: asyncio.Task) -> None:
+            if task.cancelled():
+                result_future.cancel()
+            elif (exc := task.exception()) is not None:
+                result_future.set_exception(exc)
+            else:
+                result_future.set_result(task.result())
+
+        def _create() -> None:
+            # Creating the task inside ctx.run() propagates all ContextVars
+            # (Task.__init__ copies the current context) onto the bridge loop.
+            async def _run() -> Any:
+                return await coro
+
+            pref.create_task(_run()).add_done_callback(_on_done)
+
+        ctx.run(_create)
+
+    pref.call_soon_threadsafe(_schedule)
+    return await asyncio.wrap_future(result_future)

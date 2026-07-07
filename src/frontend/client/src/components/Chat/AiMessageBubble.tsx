@@ -273,8 +273,6 @@ function AgentTimeline({
     messageId,
 }: {
     events: AgentEvent[];
-    /** Whether the message is still streaming — used to mark the trailing group
-     * as live so its thinking node shows the 正在/已 status. */
     isStreaming: boolean;
     /** Index in `blocks` of the trailing text block to skip (rendered by the
      * main bubble Markdown). -1 if no such block. */

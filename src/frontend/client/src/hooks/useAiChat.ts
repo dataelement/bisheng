@@ -161,6 +161,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             if (!text.trim() || isStreaming) return;
             const taskMode = !!opts?.taskMode;
 
+            // Drop client-only fields (e.g. the local `previewUrl` blob string used
+            // for input-box image previews) before they reach the message state or
+            // the SSE payload — the backend only cares about the file ids/paths.
+            const cleanFiles = (files ?? []).map(({ previewUrl, ...rest }) => rest);
+
             const parentMsg = messagesRef.current[messagesRef.current.length - 1];
             const parentMessageId = parentMsg?.messageId ?? NO_PARENT;
             const currentConvoId =
@@ -179,7 +184,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 conversationId: currentConvoId ?? "",
                 messageId: userMessageId,
                 error: false,
-                files: files ?? [],
+                files: cleanFiles,
             };
 
             // Create placeholder response
@@ -224,7 +229,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
                 isContinued: false,
                 isTemporary: false,
-                files: files ?? [],
+                files: cleanFiles,
                 // v2.5: present `tools` array → backend agent flow.
                 // Absent (null/undefined) → legacy flow. We always send the
                 // field when the user has toggled any tool on.

@@ -92,6 +92,32 @@ a single head. Do **not** "fix" a fork by editing an already-released migration'
 
 ## 5. Writing the migration body (this repo's specifics)
 
+**Migrations are DDL-only — no data migration.** A revision's `upgrade()` / `downgrade()`
+may contain **only schema DDL** (`create_table`, `add_column`, `create_index`,
+`*_constraint`, `alter_column`). The **only** permitted data effect is the row-fill the
+DDL itself performs — a `server_default` on an added column, which the engine backfills
+declaratively. **Forbidden** — these are data-migration / maintenance operations; run
+them as a separate operational procedure (a `scripts/` job or DBA runbook), out-of-band,
+**never** in a revision:
+
+- reading rows then writing based on them (`SELECT` → `UPDATE` / `INSERT`);
+- `INSERT … FROM SELECT`, backfilling a column from another column/table, seeding rows;
+- dedup / cleanup / purge / reconcile that inspects existing data;
+- anything conditional on the current data state.
+
+The *"I must clean the data before adding a constraint"* case (e.g. dedup before
+`uk_user_active`) is **not** an exception: the cleanup is an operational prerequisite run
+**before** the deploy; the migration only issues `ADD CONSTRAINT`, and fails loudly at
+deploy if the data wasn't prepared — that is the correct signal, not something to paper
+over with an inline dedup.
+
+Why: migrations gate API startup (`entrypoint.sh`, now fail-fast) and replay on every
+environment. Inline data logic is unbounded — a `SELECT`-then-`UPDATE` or per-row Python
+loop that is fine at 1k rows stalls the boot at 100k+ — plus non-resumable,
+un-dry-runnable, and it silently mutates business data. Many existing revisions (`f001`,
+`f011`'s dedup, `f035`, `f024`, `f013`, `f029*`, `f043`, …) predate this rule and are
+grandfathered: do **not** edit released migrations, but never add new ones like them.
+
 - **Idempotent / dual-path.** A fresh install runs `SQLModel.metadata.create_all()`
   *before* alembic, so tables/columns may already exist; an upgrade runs the DDL
   for the first time. Guard with the shared helpers — do not re-inline these
@@ -113,11 +139,10 @@ a single head. Do **not** "fix" a fork by editing an already-released migration'
     already skips equivalent `create_index`/`add_constraint`, but keep names stable.
   - Identifiers come back **uppercase** from DM8 reflection — compare
     case-insensitively (the `*_exists` helpers already do).
-- **Testable business logic** goes in `alembic_helpers/` (e.g. `f011.py`) taking a
-  live `Connection`, so it can be unit-tested on SQLite without the alembic
-  pipeline. Keep revision files as thin orchestrators (`op.*` + helper calls).
-- **Schema only.** Bulk data backfill/cleanup that is not part of a schema change
-  belongs in `scripts/`, not a revision (see `src/backend/AGENTS.md`).
+- **Reusable DDL guards** go in `alembic_helpers/online.py` (`table_exists`,
+  `column_exists`) so revisions stay thin. Do **not** treat `alembic_helpers/f011.py`
+  as a template — it holds read-then-write *data* logic from a pre-rule revision, which
+  the DDL-only rule above now forbids.
 
 ---
 
@@ -128,4 +153,6 @@ a single head. Do **not** "fix" a fork by editing an already-released migration'
 - [ ] `down_revision` equals the head that existed *before* this change.
 - [ ] `revision` is a readable `f0NN_<slug>` (not a random hash).
 - [ ] DDL reviewed for DM8 (not just MySQL autogen) and made idempotent.
-- [ ] Pure data jobs moved to `scripts/`, not buried in the revision.
+- [ ] `upgrade()` is DDL-only — no `SELECT`→`UPDATE`/`INSERT`, no `INSERT…SELECT`, no
+      dedup/backfill/cleanup (only a `server_default` fill is allowed). Any such data op
+      lives in a `scripts/` ops job run out-of-band, not in the revision.

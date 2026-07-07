@@ -949,7 +949,7 @@ export function KnowledgeSpaceContent({
             .filter(f => selectedFiles.has(f.id) && (
                 f.status === FileStatus.FAILED ||
                 f.status === FileStatus.VIOLATION ||
-                (f.successFileNum !== undefined && f.fileNum !== undefined && f.successFileNum < f.fileNum)
+                (f.type === FileType.FOLDER && f.hasFailedFiles === true)
             ))
             .map(f => Number(f.id));
 
@@ -997,7 +997,7 @@ export function KnowledgeSpaceContent({
         selectedFiles.has(f.id) && (
             f.status === FileStatus.FAILED ||
             f.status === FileStatus.VIOLATION ||
-            (f.type === FileType.FOLDER && f.successFileNum! < f.fileNum!)
+            (f.type === FileType.FOLDER && f.hasFailedFiles === true)
         )
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
@@ -1637,10 +1637,6 @@ export function KnowledgeSpaceContent({
                     resourceType={permTarget.type}
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
-                    currentUserRole={space.role}
-                    showShareTab={false}
-                    showMembersTab={false}
-                    showPermissionTab
                     isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}

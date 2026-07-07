@@ -19,6 +19,10 @@ import { cn } from "~/utils";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
+    /** Whether to render a short vertical timeline connector below this card.
+     *  Set to true when this is not the last tool in its group, so a visual
+     *  line bridges to the next tool even when both are collapsed. */
+    showConnector?: boolean;
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -221,17 +225,17 @@ function normaliseKnowledgeResults(
 
 const variantStyles = {
     knowledge: {
-        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#1D2129]" />,
+        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#999999]" />,
     },
     web: {
-        icon: <Outlined.Earth size={16} className="shrink-0 text-[#1D2129]" />,
+        icon: <Outlined.Earth size={16} className="shrink-0 text-[#999999]" />,
     },
     tool: {
-        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#1D2129]" />,
+        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#999999]" />,
     },
 } as const;
 
-const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
+const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
@@ -272,14 +276,22 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
         !!toolCall.error ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
-    // Collapsed by default; only errors auto-expand so failures stay visible
-    // without a click. (Knowledge KB-level failures count as errors too.)
+    // Web variant stays open by default after finish (spec §3.2.4); errors
+    // stay open to surface the message; knowledge variant auto-expands when
+    // any KB failed so the error detail is visible without another click.
     const hasKnowledgeErrors =
         variant === "knowledge" && knowledgeChips.some((kb) => kb.error);
-    const initialExpanded = !!toolCall.error || hasKnowledgeErrors;
+    const initialExpanded =
+        !!toolCall.error ||
+        hasKnowledgeErrors ||
+        (variant === "web" && !toolCall.inflight);
     const [expanded, setExpanded] = useState<boolean>(initialExpanded);
     useEffect(() => {
-        if (toolCall.error || hasKnowledgeErrors) {
+        if (toolCall.error) {
+            setExpanded(true);
+        } else if (hasKnowledgeErrors) {
+            setExpanded(true);
+        } else if (variant === "web" && !toolCall.inflight) {
             setExpanded(true);
         } else {
             setExpanded(false);
@@ -295,9 +307,14 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     );
 
     return (
-        <div className="flex w-full min-w-0 gap-2">
-            <div className="flex shrink-0 items-start pt-[3px]">
+        <div className="flex w-full min-w-0 gap-1.5">
+            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
                 {railIcon}
+                {/* Rail line: keep the timeline continuous to the next node, and
+                    always flank this node's own expanded content. */}
+                {(showConnector || expanded) && (
+                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
+                )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
                 <button

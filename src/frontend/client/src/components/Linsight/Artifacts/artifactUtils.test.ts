@@ -1,4 +1,39 @@
-import { applyHtmlViewerTabIdentity, openHtmlArtifactViewer } from './artifactUtils';
+import { applyHtmlViewerTabIdentity, openHtmlArtifactViewer, stripWorkspacePaths } from './artifactUtils';
+
+describe('stripWorkspacePaths', () => {
+    it('drops the output/ folder prefix, keeping the filename', () => {
+        expect(stripWorkspacePaths('见 output/report.md')).toBe('见 report.md');
+    });
+
+    it('drops a leading-slash /output/ prefix (tool-result echo form)', () => {
+        expect(stripWorkspacePaths('Updated file /output/knowledge_base_full.md')).toBe(
+            'Updated file knowledge_base_full.md',
+        );
+    });
+
+    it('strips the prefix inside a markdown code span, keeping the backticks', () => {
+        expect(stripWorkspacePaths('导出到 `output/knowledge_base_full.md`，主要包括：')).toBe(
+            '导出到 `knowledge_base_full.md`，主要包括：',
+        );
+    });
+
+    it('handles scratch/ and multiple occurrences in one string', () => {
+        expect(stripWorkspacePaths('output/a.md 与 scratch/b.docx')).toBe('a.md 与 b.docx');
+    });
+
+    it('leaves prose without a file token untouched (输入/输出, bare "output 文件夹")', () => {
+        expect(stripWorkspacePaths('这是输入/输出分析，见 output 文件夹')).toBe('这是输入/输出分析，见 output 文件夹');
+    });
+
+    it('does not strip a mid-word match like myoutput/ (alphanumeric boundary)', () => {
+        expect(stripWorkspacePaths('myoutput/a.md')).toBe('myoutput/a.md');
+    });
+
+    it('is safe on empty / undefined input', () => {
+        expect(stripWorkspacePaths('')).toBe('');
+        expect(stripWorkspacePaths(undefined as unknown as string)).toBe(undefined);
+    });
+});
 
 describe('openHtmlArtifactViewer', () => {
     const origEnv = (global as any).__APP_ENV__;

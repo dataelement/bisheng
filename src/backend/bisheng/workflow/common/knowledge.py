@@ -342,17 +342,20 @@ class RagUtils(BaseNode):
     def _fetch_non_primary_file_ids(self, knowledge_ids: list[int]) -> list[int]:
         """Best-effort sync fetch of non-primary file ids for the given knowledges.
 
-        Workflow runs in sync Celery worker context, so asyncio.run() is safe.
-        Failures degrade gracefully — version filter is excluded but retrieval still works.
+        Runs on the shared worker bridge loop via ``run_async_safe`` — NOT
+        ``asyncio.run``. ``asyncio.run`` spins up a throwaway loop and closes it,
+        leaving the connection it opened in the process-global async DB pool bound
+        to a dead loop; a later query then hits "Event loop is closed" / "Future
+        attached to a different loop". The bridge keeps every async DB call on one
+        loop. Failures degrade gracefully — version filter excluded, retrieval still works.
         """
         if not knowledge_ids:
             return []
-        import asyncio
-
         from bisheng.core.database import get_async_db_session
         from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
             KnowledgeDocumentVersionRepositoryImpl,
         )
+        from bisheng.utils.async_utils import run_async_safe
 
         async def _fetch():
             async with get_async_db_session() as session:
@@ -360,9 +363,9 @@ class RagUtils(BaseNode):
                 return await repo.find_non_primary_file_ids_by_knowledge_ids(knowledge_ids)
 
         try:
-            return asyncio.run(_fetch())
+            return run_async_safe(_fetch())
         except RuntimeError:
-            logger.warning("version filter skipped: already in async context", exc_info=True)
+            logger.warning("version filter skipped: running inside an event loop", exc_info=True)
             return []
         except Exception:
             logger.warning("version filter fetch failed", exc_info=True)
