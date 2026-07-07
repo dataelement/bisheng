@@ -277,9 +277,11 @@ export function KnowledgeSpaceContent({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
 
+    // 详情页只消费 share_space（分享按钮），按需只查这一项而非全部 4 个操作权限；
+    // creator/admin 由 fullAccessSpaceIds 直接放行，不发请求。
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
         [space.id],
-        { fullAccessSpaceIds: isAdmin ? [space.id] : [] },
+        { fullAccessSpaceIds: isAdmin ? [space.id] : [], permissionIds: ["share_space"] },
     );
     // Version-management write entries (process-similar button, list "similar"
     // pill) gate on the user's OpenFGA relation to this space: creator (owner)
@@ -287,10 +289,12 @@ export function KnowledgeSpaceContent({
     // spaces can return a stale SpaceChannelMember.user_role for users whose
     // real grant lives only in OpenFGA. checkPermission(..., "manager") covers
     // both owner and manager — OpenFGA's owner ⊃ manager makes owners allowed too.
+    // creator 本就是 owner（OpenFGA owner ⊃ manager），无需再发 manager 检查 —— 懒查询：
+    // 只有非 creator（可能是 manager/普通成员，role 可能过期不可信）才真正发请求核实。
     const { data: spaceManageCheck } = useQuery({
         queryKey: ["space-manage-check", space.id],
         queryFn: () => checkPermission("knowledge_space", space.id, "manager"),
-        enabled: !!space.id,
+        enabled: !!space.id && space.role !== SpaceRole.CREATOR,
     });
     const canManageMembers = space.role === SpaceRole.CREATOR
         || Boolean(spaceManageCheck?.allowed);
