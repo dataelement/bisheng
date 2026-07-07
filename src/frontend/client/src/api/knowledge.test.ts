@@ -7,6 +7,7 @@ import {
   batchDownloadApi,
   createFolderApi,
   deleteFolderApi,
+  deleteSpaceApi,
   getSquareSpacesApi,
   getSpaceFolderStatsApi,
   listMyUploadedFilesApi,
@@ -185,6 +186,27 @@ describe("deleteFolderApi", () => {
     });
 
     await expect(deleteFolderApi("101", "202")).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("deleteSpaceApi", () => {
+  beforeEach(() => {
+    mockDelete.mockReset();
+  });
+
+  // A blocked delete (e.g. 科室知识库禁止删除 / 权限不足) comes back as HTTP 200 with an
+  // envelope status_code !== 200. Passing skip403Redirect opts the call into the response
+  // interceptor's business-error pipeline, which toasts the backend message and rejects —
+  // so the caller shows the reason instead of a false "删除成功".
+  it("opts into the business-error pipeline via skip403Redirect", async () => {
+    mockDelete.mockResolvedValue({ status_code: 200, data: null });
+
+    await deleteSpaceApi("175");
+
+    expect(mockDelete).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/175",
+      { skip403Redirect: true },
+    );
   });
 });
 
