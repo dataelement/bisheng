@@ -208,7 +208,7 @@ export function PortalDialogs({
                     ) : null}
                     <DialogFooter>
                         <Button variant="outline" className="h-8" disabled={duplicateOverwriting} onClick={onDuplicateSkip}>
-                            取消上传
+                            取消覆盖
                         </Button>
                         <Button className="h-8" disabled={duplicateOverwriting} onClick={onDuplicateOverwrite}>
                             {duplicateOverwriting ? "覆盖中…" : "覆盖"}
