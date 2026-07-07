@@ -24,7 +24,8 @@ export default function PreviewFile({
   resultFiles,
   etl,
   previewUrl,
-  previewData
+  previewData,
+  previewErrorMessage,
 }: {
   urlState: { load: boolean; url: string };
   file: any;
@@ -34,6 +35,7 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
   previewData?: any;
+  previewErrorMessage?: string;
 }) {
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
@@ -226,7 +228,16 @@ export default function PreviewFile({
     const { url, load } = urlState;
 
     // 加载状态处理
-    if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
+    if (!load && !url) {
+      if (previewErrorMessage) {
+        return (
+          <div className="flex justify-center items-center h-full px-6 text-center text-gray-500">
+            <p className="text-sm leading-6 whitespace-pre-line">{previewErrorMessage}</p>
+          </div>
+        );
+      }
+      return <div className="flex justify-center items-center h-full text-gray-400">{t('previewFailed')}</div>;
+    }
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
     if (isRichKnowledgePreview(previewData)) {
       return <RichPreviewFile file={file} previewData={previewData} />;

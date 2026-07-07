@@ -114,6 +114,20 @@ describe("useFileUpload helpers", () => {
     );
   });
 
+  test("extractKnowledgeFileError formats missing knowledge-base ASR configuration", () => {
+    const remark = JSON.stringify({
+      status_code: 10014,
+      status_message: "Knowledge base ASR model is not configured",
+      data: {
+        exception: "Knowledge base ASR model is not configured",
+      },
+    });
+
+    expect(extractKnowledgeFileError({ remark })).toBe(
+      "未配置知识库语音转文字（ASR）模型，请在「系统模型设置 → 知识库模型」中配置后再上传音视频。",
+    );
+  });
+
   test("extractKnowledgeFileError formats sensitive check hits for violation detail", () => {
     const remark = JSON.stringify({
       reason: "sensitive_check",
