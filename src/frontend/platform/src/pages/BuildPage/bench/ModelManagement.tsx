@@ -43,6 +43,17 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         const { t } = useTranslation();
         const navigate = useNavigate();
 
+        // Resolve the selected model's name from the cascader options so the
+        // display-name input can fall back to it as placeholder when left empty.
+        const getModelLabel = (id: string) => {
+            if (!id) return '';
+            for (const group of assistantLlmOptions) {
+                const hit = group.children?.find((el) => el.value == id);
+                if (hit) return hit.label;
+            }
+            return '';
+        };
+
         const selectFooter = (
             <div
                 className="px-3 py-2 text-sm text-primary cursor-pointer hover:bg-[#EBF0FF] dark:hover:bg-gray-700"
@@ -125,7 +136,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                             <Input
                                 value={model.displayName}
                                 onChange={(e) => onNameChange(index, e.target.value)}
-                                placeholder={t('bench.displayName')}
+                                placeholder={getModelLabel(model.id) || t('bench.displayName')}
                             />
                             {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
                         </div>
