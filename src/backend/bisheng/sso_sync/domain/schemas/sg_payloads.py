@@ -51,14 +51,14 @@ class SgUserFieldItem(BaseModel):
     code: str = ""
     desc34: str = ""
     desc1: str = ""
-    desc93: str = "01"
+    desc185: str = "01"
 
     @field_validator(
         "uuid",
         "code",
         "desc34",
         "desc1",
-        "desc93",
+        "desc185",
         mode="before",
     )
     @classmethod
