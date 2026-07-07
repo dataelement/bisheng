@@ -15,9 +15,8 @@ import {
   DropdownPopup,
 } from '~/components/ui';
 import { useUpdatePromptPermissionsMutation } from '~/hooks/queries/data-provider';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useAuthContext } from '~/hooks';
-import { useToastContext } from '~/Providers';
+import { useToastContext, useConfirm } from '~/Providers';
 
 type FormValues = Record<Permissions, boolean>;
 
@@ -63,10 +62,20 @@ const AdminSettings = () => {
   const localize = useLocalize();
   const { user, roles } = useAuthContext();
   const { showToast } = useToastContext();
-  const [confirmAdminUseChange, setConfirmAdminUseChange] = useState<{
-    newValue: boolean;
-    callback: (value: boolean) => void;
-      } | null>(null);
+  const confirm = useConfirm();
+
+  const handleAdminUseChange = async (newValue: boolean, onChange: (value: boolean) => void) => {
+    const ok = await confirm({
+      variant: 'destructive',
+      title: localize('com_ui_confirm_change'),
+      description: localize('com_ui_confirm_admin_use_change'),
+      confirmText: localize('com_ui_confirm_action'),
+    });
+    if (!ok) {
+      return;
+    }
+    onChange(newValue);
+  };
   const { mutate, isLoading } = useUpdatePromptPermissionsMutation({
     onSuccess: () => {
       showToast({ status: 'success', message: localize('com_ui_saved') });
@@ -190,12 +199,7 @@ const AdminSettings = () => {
                       getValues={getValues}
                       setValue={setValue}
                       {...(selectedRole === SystemRoles.ADMIN && promptPerm === Permissions.USE
-                        ? {
-                          confirmChange: (
-                            newValue: boolean,
-                            onChange: (value: boolean) => void,
-                          ) => setConfirmAdminUseChange({ newValue, callback: onChange }),
-                        }
+                        ? { confirmChange: handleAdminUseChange }
                         : {})}
                     />
                     {selectedRole === SystemRoles.ADMIN && promptPerm === Permissions.USE && (
@@ -226,34 +230,6 @@ const AdminSettings = () => {
             </form>
           </div>
         </OGDialogContent>
-      </OGDialog>
-
-      <OGDialog
-        open={confirmAdminUseChange !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setConfirmAdminUseChange(null);
-          }
-        }}
-      >
-        <OGDialogTemplate
-          showCloseButton={true}
-          title={localize('com_ui_confirm_change')}
-          className="w-11/12 max-w-lg"
-          main={<p className="mb-4">{localize('com_ui_confirm_admin_use_change')}</p>}
-          selection={{
-            selectHandler: () => {
-              if (confirmAdminUseChange) {
-                confirmAdminUseChange.callback(confirmAdminUseChange.newValue);
-              }
-              setConfirmAdminUseChange(null);
-            },
-            selectClasses:
-              'bg-surface-destructive hover:bg-surface-destructive-hover text-white transition-colors duration-200',
-            selectText: localize('com_ui_confirm_action'),
-            isLoading: false,
-          }}
-        />
       </OGDialog>
     </>
   );

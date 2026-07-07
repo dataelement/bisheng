@@ -525,10 +525,17 @@ async def get_linsight_session_version_list(
         if not (shared_to_session or shared_to_version):
             return UnAuthorizedError.return_resp()
 
-        # Only return to the shared version of the Inspiration session
-        linsight_session_version_models = [
-            model for model in linsight_session_version_models if model.id == share_link.meta_data.get("versionId")
-        ]
+        # Narrow to a single version ONLY for a single-version (linsight_session)
+        # share, whose meta_data explicitly pins a versionId. A whole-conversation
+        # (workbench_chat) share carries no versionId — in 2.6 task mode a session
+        # holds one session_version per turn, so it must return EVERY turn's version.
+        # Filtering it by a missing versionId would collapse the list to empty and
+        # break the recipient's task-detail hydration ("任务详情加载失败").
+        shared_version_id = share_link.meta_data.get("versionId") if share_link.meta_data else None
+        if shared_version_id:
+            linsight_session_version_models = [
+                model for model in linsight_session_version_models if model.id == shared_version_id
+            ]
 
     return resp_200([model.model_dump() for model in linsight_session_version_models])
 

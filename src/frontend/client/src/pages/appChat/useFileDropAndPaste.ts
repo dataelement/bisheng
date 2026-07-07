@@ -1,4 +1,24 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { generateUUID } from '~/utils';
+
+// Clipboard screenshots always arrive as an image File named "image.png" (or
+// with an empty name). InputFiles dedups by file name, so pasting a second
+// screenshot collides on that name and gets dropped as a duplicate. Give
+// generically-named pasted images a unique name so each paste is kept and can
+// be addressed / previewed independently. Real named files (e.g. copied from
+// Finder) keep their name.
+const GENERIC_IMAGE_NAME = /^(image|screenshot|clipboard)?\.(png|jpe?g|gif|webp|bmp)$/i;
+const uniquifyPastedFile = (file: File): File => {
+    if (!file.type?.startsWith('image/')) return file;
+    if (file.name && !GENERIC_IMAGE_NAME.test(file.name)) return file;
+    const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const uniqueName = `image-${generateUUID(8)}.${ext}`;
+    try {
+        return new File([file], uniqueName, { type: file.type, lastModified: file.lastModified });
+    } catch {
+        return file;
+    }
+};
 
 export const useFileDropAndPaste = ({ enabled, onFilesReceived }) => {
     const [isDragging, setIsDragging] = useState(false);
@@ -67,7 +87,7 @@ export const useFileDropAndPaste = ({ enabled, onFilesReceived }) => {
             for (let i = 0; i < items.length; i++) {
                 if (items[i].kind === 'file') {
                     const file = items[i].getAsFile();
-                    if (file) files.push(file);
+                    if (file) files.push(uniquifyPastedFile(file));
                 }
             }
         }

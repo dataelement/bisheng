@@ -1016,10 +1016,6 @@ export default function Knowledge() {
                 onOpenChange={setSpacePermissionDialogOpen}
                 resourceId={spacePermissionDialogSpace?.id || ""}
                 resourceName={spacePermissionDialogSpace?.name || ""}
-                currentUserRole={spacePermissionDialogSpace?.role || null}
-                showShareTab={false}
-                showMembersTab={false}
-                showPermissionTab
                 isDepartmentSpace={spacePermissionDialogSpace?.spaceKind === "department"}
             />
 

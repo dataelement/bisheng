@@ -879,7 +879,7 @@ function FileRow({
         (
             file.status === FileStatus.FAILED ||
             file.status === FileStatus.VIOLATION ||
-            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
+            (isFolder && file.hasFailedFiles === true)
         )
     );
     const showMoveItem = Boolean(onMove) && !isCreating;

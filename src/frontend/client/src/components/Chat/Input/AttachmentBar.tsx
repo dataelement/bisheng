@@ -25,6 +25,7 @@ import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import type { FileType } from "~/components/ui/icon/File/FileIcon";
+import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
 
 /** Fixed card geometry from the design (Figma 12841:47405). */
@@ -73,15 +74,21 @@ const CardShell = ({
     label,
     title,
     onRemove,
+    onClick,
 }: {
     icon: React.ReactNode;
     label: string;
     title?: string;
     onRemove?: () => void;
+    onClick?: () => void;
 }) => (
     <div
-        className="group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]"
+        className={cn(
+            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]",
+            onClick && "cursor-pointer",
+        )}
         style={{ width: CARD_WIDTH }}
+        onClick={onClick}
     >
         <span className="flex size-4 shrink-0 items-center justify-center text-[#999]">{icon}</span>
         <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
@@ -90,7 +97,9 @@ const CardShell = ({
         {onRemove && (
             <button
                 type="button"
-                onClick={onRemove}
+                // Stop propagation so removing a card never triggers the card's
+                // own click (e.g. opening the image preview).
+                onClick={(e) => { e.stopPropagation(); onRemove(); }}
                 // Hover-reveal on hover-capable pointers; always visible where the
                 // pointer can't hover (touch) — gated by CSS hover capability, not
                 // screen width, so a small-screen PC still gets the hover behaviour.
@@ -115,6 +124,43 @@ const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
 
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     const FileTypeIcon = CHIP_FILE_ICONS[resolveFileType(file)] ?? Outlined.File;
+    // Locally-generated preview URL for pasted / uploaded images. When present the
+    // chip shows a thumbnail and opens a full-size preview on click.
+    const previewUrl: string | undefined = file?.previewUrl;
+    const [previewOpen, setPreviewOpen] = useState(false);
+
+    if (previewUrl) {
+        return (
+            <>
+                <CardShell
+                    icon={
+                        <img
+                            src={previewUrl}
+                            alt=""
+                            className="size-4 rounded-[2px] object-cover"
+                        />
+                    }
+                    label={file.name}
+                    onRemove={onRemove}
+                    onClick={() => setPreviewOpen(true)}
+                />
+                <OGDialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                    <OGDialogContent
+                        showCloseButton={false}
+                        className={cn("w-auto max-w-[92vw] overflow-hidden bg-transparent p-0 shadow-none")}
+                        disableScroll={false}
+                    >
+                        <img
+                            src={previewUrl}
+                            alt={file.name}
+                            className="max-h-[85vh] max-w-full rounded-md object-contain"
+                        />
+                    </OGDialogContent>
+                </OGDialog>
+            </>
+        );
+    }
+
     return (
         <CardShell
             icon={<FileTypeIcon size={16} />}
