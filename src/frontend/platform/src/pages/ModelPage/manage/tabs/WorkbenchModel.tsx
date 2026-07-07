@@ -76,6 +76,17 @@ export default function WorkbenchModel({ onBack }) {
 
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
+    // Look up the model's own name from the cascader options by id, used as
+    // the default displayName when the admin leaves it empty.
+    const findModelLabel = (id) => {
+        if (!id) return '';
+        for (const group of llmOptions) {
+            const hit = group.children?.find((el) => el.value == id);
+            if (hit) return hit.label;
+        }
+        return '';
+    };
+
     const handleSave = async () => {
         const { linsightDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
         const errors = [];
@@ -86,7 +97,9 @@ export default function WorkbenchModel({ onBack }) {
         setSaveLoad(true);
         try {
             const data = {
-                models,
+                // Empty displayName falls back to the model's own name so the
+                // workspace model picker never renders a blank option.
+                models: models.map((m) => m.displayName ? m : { ...m, displayName: findModelLabel(m.id) }),
                 embedding_model: { id: String(sourceModelId) },
                 // Linsight default executor model: one of the workbench chat models' id.
                 linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
