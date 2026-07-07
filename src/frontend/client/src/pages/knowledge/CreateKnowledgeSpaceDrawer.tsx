@@ -497,6 +497,13 @@ export function CreateKnowledgeSpaceDrawer({
             return;
         }
         const effectiveAutoTagEnabled = autoTagEnabled;
+        if (mode === "create" && autoTagLibraryIds.length === 0) {
+            showToast({
+                message: localize("com_knowledge.tag_library_required_on_create"),
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
         if (effectiveAutoTagEnabled && autoTagLibraryIds.length === 0) {
             showToast({
                 message: localize("com_knowledge.auto_tag_library_required"),
@@ -706,6 +713,7 @@ export function CreateKnowledgeSpaceDrawer({
 
                             <div className="space-y-2">
                                 <Label className="text-[14px] font-medium text-[#1D2129]">
+                                    {mode === "create" ? <span className="text-[#F53F3F]">*</span> : null}
                                     {localize("com_knowledge.auto_tag_library")}
                                 </Label>
                                 <MultiSelect

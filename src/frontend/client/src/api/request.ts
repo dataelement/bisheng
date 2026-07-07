@@ -114,6 +114,27 @@ const translateApiErrorMessage = (data: any) => {
   return statusMessage || (statusCodeKey ? i18next.t(statusCodeKey, data?.data) : "");
 };
 
+/** Prefer i18n status text and append backend ``data.message`` when it adds detail. */
+export const formatApiErrorMessage = (data: any): string => {
+  const baseMessage = translateApiErrorMessage(data);
+  const detailMessage =
+    typeof data?.data?.message === "string" ? data.data.message.trim() : "";
+  const statusMessage =
+    typeof data?.status_message === "string" ? data.status_message.trim() : "";
+
+  if (!detailMessage) {
+    return baseMessage || statusMessage || "";
+  }
+  if (!baseMessage && !statusMessage) {
+    return detailMessage;
+  }
+  const headline = baseMessage || statusMessage;
+  if (detailMessage === headline) {
+    return headline;
+  }
+  return `${headline}：${detailMessage}`;
+};
+
 customAxios.interceptors.response.use(
   (response) => {
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
@@ -133,7 +154,7 @@ customAxios.interceptors.response.use(
       && response.data
       && response.data.status_code !== 200
     ) {
-      const message = translateApiErrorMessage(response.data);
+      const message = formatApiErrorMessage(response.data);
       const display = message || response.data.status_message || "";
       if (display) {
         window.showToast?.({ message: display, status: 'error' });
@@ -147,7 +168,7 @@ customAxios.interceptors.response.use(
 
     if (response.config.showError && response.data && response.data.status_code !== 200) {
       console.log('业务错误:>> ', response.config.url, response.data);
-      window.showToast?.({ message: translateApiErrorMessage(response.data), status: 'error' });
+      window.showToast?.({ message: formatApiErrorMessage(response.data), status: 'error' });
     }
     return response;
   },

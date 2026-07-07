@@ -510,10 +510,15 @@ async def test_team_space_create_accepts_no_user_group_for_any_user():
             new_callable=AsyncMock,
             return_value=SimpleNamespace(embedding_model=SimpleNamespace(id="embedding-1")),
         ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
     ):
         level, owner_type, owner_id = await svc.validate_knowledge_space_create(
             name="团队空间",
             space_level=KnowledgeSpaceLevelEnum.TEAM,
+            auto_tag_library_ids=[1],
         )
 
     assert level == KnowledgeSpaceLevelEnum.TEAM
@@ -570,10 +575,15 @@ async def test_validate_team_space_create_does_not_require_business_domain_codes
             new_callable=AsyncMock,
             return_value=SimpleNamespace(embedding_model=SimpleNamespace(id="embedding-1")),
         ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
     ):
         level, owner_type, owner_id = await svc.validate_knowledge_space_create(
             name="团队空间",
             space_level=KnowledgeSpaceLevelEnum.TEAM,
+            auto_tag_library_ids=[1],
         )
 
     assert level == KnowledgeSpaceLevelEnum.TEAM
@@ -600,10 +610,15 @@ async def test_validate_personal_space_create_does_not_require_business_domain_c
             new_callable=AsyncMock,
             return_value=SimpleNamespace(embedding_model=SimpleNamespace(id="embedding-1")),
         ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
     ):
         level, owner_type, owner_id = await svc.validate_knowledge_space_create(
             name="个人空间",
             space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+            auto_tag_library_ids=[1],
         )
 
     assert level == KnowledgeSpaceLevelEnum.PERSONAL
@@ -699,10 +714,26 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space",
             new_callable=AsyncMock,
         ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=created_space,
+        ),
+        patch.object(
+            svc,
+            "_apply_auto_tag_binding",
+            new_callable=AsyncMock,
+            return_value=(False, 1),
+        ),
     ):
         result = await svc.create_knowledge_space(
             name="团队空间",
             space_level=KnowledgeSpaceLevelEnum.TEAM,
+            auto_tag_library_ids=[1],
         )
 
     assert result.id == 11
@@ -776,11 +807,27 @@ async def test_create_department_space_enqueues_default_scope_permissions():
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space",
             new_callable=AsyncMock,
         ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=created_space,
+        ),
+        patch.object(
+            svc,
+            "_apply_auto_tag_binding",
+            new_callable=AsyncMock,
+            return_value=(False, 1),
+        ),
     ):
         result = await svc.create_knowledge_space(
             name="部门空间",
             space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
             department_id=99,
+            auto_tag_library_ids=[1],
         )
 
     assert result.id == 11
@@ -5107,10 +5154,26 @@ class TestCreateSpace:
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=created_space,
+            ),
+            patch.object(
+                service,
+                "_apply_auto_tag_binding",
+                new_callable=AsyncMock,
+                return_value=(False, 1),
+            ),
         ):
             result = await service.create_knowledge_space(
                 name="重复空间",
                 space_level=KnowledgeSpaceLevelEnum.TEAM,
+                auto_tag_library_ids=[1],
             )
 
         assert result.id == 23
@@ -5177,10 +5240,26 @@ class TestCreateSpace:
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=created_space,
+            ),
+            patch.object(
+                service,
+                "_apply_auto_tag_binding",
+                new_callable=AsyncMock,
+                return_value=(False, 1),
+            ),
         ):
             result = await service.create_knowledge_space(
                 name="团队空间",
                 space_level=KnowledgeSpaceLevelEnum.TEAM,
+                auto_tag_library_ids=[1],
             )
 
         assert result.id == 23

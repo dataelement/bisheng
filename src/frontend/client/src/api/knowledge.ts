@@ -1,4 +1,4 @@
-import request from "./request";
+import request, { formatApiErrorMessage } from "./request";
 
 function logKnowledgeMutationStart(action: string, details: Record<string, unknown>): number {
     const startedAt = Date.now();
@@ -1474,7 +1474,7 @@ export async function createSpaceApi(data: {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;
     if (statusCode !== 200) {
-        throw new Error(res?.status_message || res?.message || "createSpaceApi failed");
+        throw new Error(formatApiErrorMessage(res) || "createSpaceApi failed");
     }
     const raw = res?.data;
     if (!raw || raw?.id === undefined || raw?.id === null) {

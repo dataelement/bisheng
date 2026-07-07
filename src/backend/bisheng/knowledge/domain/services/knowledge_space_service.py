@@ -2179,18 +2179,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             or auto_tag_library_ids is not None
             or auto_tag_custom_tags is not None
         )
-        if auto_tag_touched:
-            if auto_tag_custom_tags is not None:
-                normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
-                if not normalized:
-                    raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须提供至少一个自定义标签")
-            else:
-                await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(
-                    self._resolve_requested_library_ids(
-                        auto_tag_library_id,
-                        auto_tag_library_ids,
-                    )
-                )
+        if auto_tag_custom_tags is not None:
+            normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
+            if not normalized:
+                raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须提供至少一个自定义标签")
+        else:
+            requested_ids = self._resolve_requested_library_ids(
+                auto_tag_library_id,
+                auto_tag_library_ids,
+            )
+            if not requested_ids:
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="创建知识库时必须绑定标签库")
+            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
 
         return level, owner_type, owner_id
 
@@ -2254,6 +2254,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_type=owner_type,
             owner_id=owner_id,
         )
+        if not system_managed and auto_tag_custom_tags is None:
+            requested_ids = self._resolve_requested_library_ids(
+                auto_tag_library_id,
+                auto_tag_library_ids,
+            )
+            if not requested_ids:
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="创建知识库时必须绑定标签库")
+            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
         log_perf_stage("validate")
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
@@ -2284,7 +2292,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         log_perf_stage("enqueue_index_init")
 
-        if auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None:
+        if (
+            not system_managed
+            or auto_tag_enabled
+            or auto_tag_library_id is not None
+            or auto_tag_library_ids is not None
+            or auto_tag_custom_tags is not None
+        ):
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=knowledge_space,
                 auto_tag_enabled=auto_tag_enabled,
