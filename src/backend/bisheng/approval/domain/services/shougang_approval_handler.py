@@ -510,6 +510,7 @@ async def _link_file_as_version(
         KnowledgeFileRepositoryImpl,
     )
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
+    from bisheng.message.api.dependencies import get_message_service
 
     async with get_async_db_session() as session:
         service = KnowledgeVersionService(
@@ -519,6 +520,8 @@ async def _link_file_as_version(
             version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
             knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
         )
+        # 审批通过后执行版本关联时，收藏了受影响文件的用户也应收到站内信。
+        service.message_service = await get_message_service(session)
         result = await service.link_file_to_document(knowledge_file_id, target_document_id)
         if file_level_path is not None and level is not None:
             target_doc = await service.doc_repo.find_by_id(target_document_id)
