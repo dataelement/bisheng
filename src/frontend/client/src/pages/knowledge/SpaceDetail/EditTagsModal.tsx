@@ -140,8 +140,18 @@ function isPendingReviewSpaceTag(tag: SpaceTag): boolean {
 }
 
 function normalizeCreatedSpaceTag(tag: SpaceTag, reviewTagEnabled: boolean): SpaceTag {
-    if (!reviewTagEnabled || isLibrarySpaceTag(tag)) {
+    if (!reviewTagEnabled) {
         return tag;
+    }
+    if (isLibrarySpaceTag(tag)) {
+        if (tag.review_status === 1 || tag.review_status === 2) {
+            return tag;
+        }
+        return {
+            ...tag,
+            review_status: 0,
+            resource_type: tag.resource_type || "manual_tag",
+        };
     }
     if (tag.review_status === 0) {
         return tag;
@@ -157,12 +167,13 @@ function splitSelectedTagIds(
     selectedTagIds: Set<number>,
     spaceTags: SpaceTag[],
     tagMetaRef: React.MutableRefObject<Map<number, SpaceTag>>,
+    reviewTagIds: Set<number> = new Set(),
 ): { approvedTagIds: number[]; reviewTagIds: number[] } {
     const approved: number[] = [];
     const review: number[] = [];
     for (const id of selectedTagIds) {
-        const tag = tagMetaRef.current.get(id) ?? spaceTags.find((item) => item.id === id);
-        if (tag && isPendingReviewSpaceTag(tag)) {
+        const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
+        if ((tag && isPendingReviewSpaceTag(tag)) || reviewTagIds.has(id)) {
             review.push(id);
         } else {
             approved.push(id);
@@ -212,18 +223,21 @@ function buildSavedFileTags(
     selectedIds: Set<number>,
     spaceTags: SpaceTag[],
     tagMetaRef: React.MutableRefObject<Map<number, SpaceTag>>,
+    reviewTagIds: Set<number> = new Set(),
 ): FileTag[] {
     const saved: FileTag[] = [];
     const seen = new Set<number>();
     for (const id of selectedIds) {
         if (seen.has(id)) continue;
-        const tag = tagMetaRef.current.get(id) ?? spaceTags.find((item) => item.id === id);
-        if (!tag?.name || isPendingReviewSpaceTag(tag)) continue;
+        const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
+        if (!tag?.name) continue;
         seen.add(id);
+        const pending = isPendingReviewSpaceTag(tag) || reviewTagIds.has(id);
         saved.push({
             id: tag.id,
             name: tag.name,
             resource_type: tag.resource_type,
+            ...(pending ? { review_status: tag.review_status ?? 0 } : {}),
         });
     }
     return saved;
@@ -556,12 +570,12 @@ export function EditTagsModal({
     const persistDraftTagsBeforeSave = async (): Promise<Set<number>> => {
         const resolvedIds = new Set<number>();
         for (const selectedId of selectedTagIdsRef.current) {
-            const tag = resolveSpaceTag(selectedId, spaceTags, tagMetaRef);
-            if (!tag?.name) continue;
             if (!isDraftSpaceTagId(selectedId)) {
                 resolvedIds.add(selectedId);
                 continue;
             }
+            const tag = resolveSpaceTag(selectedId, spaceTags, tagMetaRef);
+            if (!tag?.name) continue;
 
             try {
                 const created = await addSpaceTagApi(spaceId, tag.name);
@@ -606,8 +620,8 @@ export function EditTagsModal({
         syncSelectedTagIds(resolvedIds);
         const reviewIds = new Set<number>();
         for (const id of resolvedIds) {
-            const tag = tagMetaRef.current.get(id);
-            if (tag && isPendingReviewSpaceTag(tag)) {
+            const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
+            if ((tag && isPendingReviewSpaceTag(tag)) || selectedReviewTagIdsRef.current.has(id)) {
                 reviewIds.add(id);
             }
         }
@@ -655,6 +669,7 @@ export function EditTagsModal({
                 resolvedIds,
                 spaceTags,
                 tagMetaRef,
+                selectedReviewTagIdsRef.current,
             );
             if (isBatchMode && fileIds) {
                 await batchUpdateTagsApi(spaceId, {
@@ -663,12 +678,22 @@ export function EditTagsModal({
                     review_tag_ids: reviewTagIds,
                 });
                 showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
-                const addedTags = buildSavedFileTags(resolvedIds, spaceTags, tagMetaRef);
+                const addedTags = buildSavedFileTags(
+                    resolvedIds,
+                    spaceTags,
+                    tagMetaRef,
+                    selectedReviewTagIdsRef.current,
+                );
                 onSaved?.(addedTags, { fileIds });
             } else if (fileId) {
                 await updateFileTagsApi(spaceId, fileId, approvedTagIds, reviewTagIds);
                 showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
-                const savedTags = buildSavedFileTags(resolvedIds, spaceTags, tagMetaRef);
+                const savedTags = buildSavedFileTags(
+                    resolvedIds,
+                    spaceTags,
+                    tagMetaRef,
+                    selectedReviewTagIdsRef.current,
+                );
                 onSaved?.(savedTags);
             }
             queryClient.invalidateQueries({ queryKey: ["spaceTags", spaceId] });

@@ -1091,8 +1091,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _logger.info(
             "grouped_spaces_perf user_id=%s n_spaces=%s levels_ms=%.1f effective_ms=%.1f "
             "file_count_ms=%.1f decorate_ms=%.1f total_ms=%.1f",
-            self.login_user.user_id, len(spaces),
-            levels_ms, effective_ms, file_count_ms, decorate_ms,
+            self.login_user.user_id,
+            len(spaces),
+            levels_ms,
+            effective_ms,
+            file_count_ms,
+            decorate_ms,
             (time.perf_counter() - t0) * 1000,
         )
         return result
@@ -5707,7 +5711,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if cached is not None:
             _logger.info(
                 "list_accessible_spaces cache_hit=1 user_id=%s n=%s",
-                self.login_user.user_id, len(cached),
+                self.login_user.user_id,
+                len(cached),
             )
             return cached
 
@@ -5738,7 +5743,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         collect_ms = (time.perf_counter() - _t) * 1000
         _logger.info(
             "list_accessible_spaces cache_hit=0 user_id=%s collect_ms=%.1f",
-            self.login_user.user_id, collect_ms,
+            self.login_user.user_id,
+            collect_ms,
         )
 
         formatted = await self._format_accessible_spaces(
@@ -6681,9 +6687,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return folder_counts
 
-    async def _load_folder_direct_counts(
-        self, folders: list[KnowledgeFile]
-    ) -> dict[int, dict[str, int | bool]]:
+    async def _load_folder_direct_counts(self, folders: list[KnowledgeFile]) -> dict[int, dict[str, int | bool]]:
         """Shallow folder stats: DIRECT-child SUCCESS file count + has_children.
 
         One batched query per space. NO recursion, NO permission (OpenFGA) checks.
@@ -9260,16 +9264,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return normalized_tags, normalized_review
 
         async with get_async_db_session() as session:
-            tag_rows = (await session.exec(select(Tag.id).where(Tag.id.in_(normalized_tags)))).all()
             review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(normalized_tags)))).all()
-        tag_id_set = {int(row) for row in tag_rows}
         review_id_set = {int(row) for row in review_rows}
-        misclassified_review = review_id_set - tag_id_set
-        if not misclassified_review:
+        if not review_id_set:
             return normalized_tags, normalized_review
 
-        normalized_review = list(dict.fromkeys(normalized_review + list(misclassified_review)))
-        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in misclassified_review]
+        # ReviewTag and Tag use separate sequences; numeric id collisions are possible.
+        # Membership in review_tag must win over accidental Tag.id overlap.
+        normalized_review = list(
+            dict.fromkeys(normalized_review + [tag_id for tag_id in normalized_tags if tag_id in review_id_set])
+        )
+        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in review_id_set]
         return normalized_tags, normalized_review
 
     async def _promote_review_tags_existing_in_libraries(

@@ -152,8 +152,12 @@ class TagRepositoryImpl:
                 return tag_library
         return None
 
-    async def get_knowledgefile_by_resource_id(self, resource_id: int, tenant_id: int):
-        statement = select(KnowledgeFile).where(KnowledgeFile.id == resource_id, KnowledgeFile.tenant_id == tenant_id)
+    async def get_knowledgefile_by_resource_id(self, resource_id: int | str, tenant_id: int):
+        normalized_resource_id = int(resource_id)
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.id == normalized_resource_id,
+            KnowledgeFile.tenant_id == tenant_id,
+        )
         knowledgefile = await self.session.exec(statement)
         return knowledgefile.first()
 

@@ -106,6 +106,7 @@ export function PortalDialogs({
                     spaceId={activeSpace.id}
                     fileId={selectedFile.id}
                     initialTagIds={selectedFile.tags.map((tag) => tag.id).filter((id) => id >= 0)}
+                    initialTags={selectedFile.tags ?? []}
                 />
             ) : null}
 
