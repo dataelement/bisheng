@@ -220,11 +220,11 @@ class QuestionService:
         await self.answer_repo.update(answer_id, status=1,adopted=True)
 
         # 发送采纳通知
-        # await self._send_adoption_notification(
-        #     question.id,
-        #     question.user_id,
-        #     answer.user_id,
-        # )
+        await self._send_adoption_notification(
+            question.id,
+            question.user_id,
+            answer.user_id,
+        )
 
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question
@@ -285,7 +285,12 @@ class QuestionService:
             raise ExpertNotFoundError()
 
         update_data = request.model_dump(exclude_unset=True)
-        return await self.repository.update(question_id, **update_data)
+        new_question = await self.repository.update(question_id, **update_data)
+         # 发送邀请通知
+        await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
+    
+        logger.info(f"Question updated: {new_question.id} by user {user_id}")
+        return new_question
     
     async def _send_expert_invitation_inbox_notice(
         self,
@@ -400,11 +405,11 @@ class AnswerService:
         await self.expert_repo.increment_answer_count(expert.id, count=1)
 
         # 发送回答通知给提问者
-        # await self._send_answer_notification(
-        #     question.id,
-        #     user_id,
-        #     question.user_id,
-        # )
+        await self._send_answer_notification(
+             question.id,
+             user_id,
+             question.user_id,
+        )
 
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
         return answer
@@ -527,7 +532,11 @@ class CommentService:
         comment = await self.repository.create(comment)
 
         # 3. 发送评论通知 (按需开启)
-        # await self._send_comment_notification(...)
+        await self._send_comment_notification(
+            question_id=question.question_id,
+            commenter_id=user_id,
+            answerer_id=answer.user_id,
+        )
 
         return comment
 
