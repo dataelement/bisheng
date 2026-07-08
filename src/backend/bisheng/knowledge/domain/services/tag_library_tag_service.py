@@ -12,6 +12,7 @@ from sqlmodel import delete, func, select, update
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import (
     Tag,
     TagBusinessTypeEnum,
