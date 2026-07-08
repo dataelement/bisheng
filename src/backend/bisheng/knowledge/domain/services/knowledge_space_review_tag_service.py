@@ -14,9 +14,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileStatus,
 )
-from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
-    KnowledgeTagLibraryLinkDao,
-)
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
     KnowledgeSpaceAutoTagService,
 )
@@ -133,7 +130,12 @@ class KnowledgeSpaceReviewTagService:
             selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
             matched = cls._match_library_tags(selected, tags_list)
             if not matched:
-                logger.info("review_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
+                logger.info(
+                    "review_tag_no_match space_id={} file_id={} selected_count={}",
+                    knowledge.id,
+                    db_file.id,
+                    len(selected),
+                )
                 return
 
             cls._append_file_tags(
@@ -158,13 +160,13 @@ class KnowledgeSpaceReviewTagService:
 
     @staticmethod
     def _should_run(knowledge: Knowledge, db_file: KnowledgeFile) -> bool:
-        has_libraries = bool(
-            KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(int(knowledge.id)) or knowledge.auto_tag_library_id
-        )
+        if not knowledge or not db_file:
+            return False
+        # Align with KnowledgeSpaceAutoTagService._resolve_library_ids so a space
+        # with only the default library fallback can still run link B.
+        has_libraries = bool(KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge))
         return (
-            knowledge
-            and db_file
-            and knowledge.type == KnowledgeTypeEnum.SPACE.value
+            knowledge.type == KnowledgeTypeEnum.SPACE.value
             and knowledge.auto_tag_enabled
             and has_libraries
             and db_file.file_type == FileType.FILE.value
