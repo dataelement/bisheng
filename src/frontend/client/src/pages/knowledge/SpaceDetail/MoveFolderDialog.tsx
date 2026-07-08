@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronRight, Folder, FolderPlus, Home, Loader2 } from "lucide-react";
+import { ChevronRight, Folder, FolderPlus, Home, Loader2, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { getSpaceChildrenApi, createFolderApi, KnowledgeFile, FileType } from "~/api/knowledge";
+import { getSpaceChildrenApi, createFolderApi, renameFolderApi, KnowledgeFile, FileType } from "~/api/knowledge";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 
 interface BreadcrumbItem {
@@ -44,6 +44,11 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
     const [savingFolder, setSavingFolder] = useState(false);
     // Guards against double-submit when Enter and blur both fire
     const submittingRef = useRef(false);
+    // Inline rename: null = not renaming; string = the folder id being renamed
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [renamingName, setRenamingName] = useState("");
+    // Guards against double-submit when Enter and blur both fire (rename)
+    const renameSubmittingRef = useRef(false);
 
     const loadFolders = useCallback(async (parentId: string | null) => {
         setLoading(true);
@@ -72,6 +77,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
             setBreadcrumb([{ id: null, name: localize("com_knowledge.root_directory") }]);
             setSelected(undefined);
             setCreatingName(null);
+            setRenamingId(null);
             loadFolders(null);
         }
     }, [open]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -81,6 +87,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         setBreadcrumb(prev => [...prev, { id: folder.id, name: folder.name || folder.id }]);
         setSelected(undefined);
         setCreatingName(null);
+        setRenamingId(null);
         loadFolders(folder.id);
     };
 
@@ -89,6 +96,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         setBreadcrumb(prev => prev.slice(0, index + 1));
         setSelected(undefined);
         setCreatingName(null);
+        setRenamingId(null);
         loadFolders(item.id);
     };
 
@@ -99,6 +107,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
 
     const handleStartCreate = () => {
         setSelected(undefined);
+        setRenamingId(null);
         setCreatingName(localize("com_knowledge.unnamed_folder_random", { 0: genRandomStr() }));
     };
 
@@ -122,6 +131,38 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
             // Error is surfaced by the response interceptor; keep the row for retry/cancel.
         } finally {
             submittingRef.current = false;
+            setSavingFolder(false);
+        }
+    };
+
+    const handleStartRename = (folder: KnowledgeFile) => {
+        // Mutual exclusion with the new-folder editor
+        setCreatingName(null);
+        setRenamingId(folder.id);
+        setRenamingName(folder.name || "");
+    };
+
+    const handleCancelRename = () => setRenamingId(null);
+
+    const handleConfirmRename = async (folder: KnowledgeFile) => {
+        if (renameSubmittingRef.current || renamingId !== folder.id) return;
+        const name = renamingName.trim();
+        // No-op when empty or unchanged
+        if (!name || name === (folder.name || "")) { setRenamingId(null); return; }
+        renameSubmittingRef.current = true;
+        setSavingFolder(true);
+        try {
+            await renameFolderApi(spaceId, folder.id, name);
+            setRenamingId(null);
+            await loadFolders(currentFolderId);
+            // SpaceDetail: refresh its file list + left folder tree via the global event.
+            dispatchKnowledgeSpaceFilesRefresh(spaceId);
+            // Portal (and any host that manages its own list): refresh through the callback.
+            onFolderCreated?.();
+        } catch {
+            // Error is surfaced by the response interceptor; keep the row for retry/cancel.
+        } finally {
+            renameSubmittingRef.current = false;
             setSavingFolder(false);
         }
     };
@@ -231,30 +272,71 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                             {localize("com_knowledge.no_sub_folders")}
                         </div>
                     ) : (
-                        folders.map((folder) => (
-                            <div
-                                key={folder.id}
-                                onClick={() => setSelected(folder.id)}
-                                className={cn(
-                                    "flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-[#e5e6eb] last:border-b-0 text-sm transition-colors group",
-                                    selected === folder.id
-                                        ? "bg-[#e8f3ff] text-[#165dff]"
-                                        : "hover:bg-[#f5f6fa] text-[#1d2129]"
-                                )}
-                            >
-                                <Folder className="size-4 shrink-0 text-[#f7ba1e]" />
-                                <span className="flex-1 truncate">{folder.name}</span>
-                                {/* Navigate into sub-folder */}
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleNavigateInto(folder); }}
-                                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#165dff]/10 transition-opacity"
-                                    title={localize("com_knowledge.folder")}
+                        folders.map((folder) => {
+                            const isRenaming = renamingId === folder.id;
+                            return (
+                                <div
+                                    key={folder.id}
+                                    onClick={() => { if (!isRenaming) setSelected(folder.id); }}
+                                    className={cn(
+                                        "flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e6eb] last:border-b-0 text-sm transition-colors group",
+                                        isRenaming
+                                            ? "bg-[#f5f6fa]"
+                                            : selected === folder.id
+                                                ? "cursor-pointer bg-[#e8f3ff] text-[#165dff]"
+                                                : "cursor-pointer hover:bg-[#f5f6fa] text-[#1d2129]"
+                                    )}
                                 >
-                                    <ChevronRight className="size-4 text-[#4e5969]" />
-                                </button>
-                            </div>
-                        ))
+                                    <Folder className="size-4 shrink-0 text-[#f7ba1e]" />
+                                    {isRenaming ? (
+                                        <>
+                                            <input
+                                                autoFocus
+                                                value={renamingName}
+                                                disabled={savingFolder}
+                                                onChange={(e) => setRenamingName(e.target.value)}
+                                                onFocus={(e) => e.target.select()}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        e.preventDefault();
+                                                        handleConfirmRename(folder);
+                                                    } else if (e.key === "Escape") {
+                                                        e.preventDefault();
+                                                        handleCancelRename();
+                                                    }
+                                                }}
+                                                onBlur={() => handleConfirmRename(folder)}
+                                                className="min-w-0 flex-1 rounded border border-[#165dff] bg-white px-2 py-1 text-sm outline-none"
+                                            />
+                                            {savingFolder && <Loader2 className="size-4 shrink-0 animate-spin text-[#86909c]" />}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="flex-1 truncate">{folder.name}</span>
+                                            {/* Rename this folder */}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleStartRename(folder); }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#165dff]/10 transition-opacity"
+                                                title={localize("com_knowledge.rename")}
+                                            >
+                                                <Pencil className="size-4 text-[#4e5969]" />
+                                            </button>
+                                            {/* Navigate into sub-folder */}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleNavigateInto(folder); }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#165dff]/10 transition-opacity"
+                                                title={localize("com_knowledge.folder")}
+                                            >
+                                                <ChevronRight className="size-4 text-[#4e5969]" />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
 
