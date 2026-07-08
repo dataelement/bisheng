@@ -34,7 +34,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.yes": "是",
             "com_knowledge.no": "否",
             "com_knowledge.auto_tag_generation": "自动标签生成",
-            "com_knowledge.auto_tag_generation_desc": "上传文件解析成功后自动生成标签",
+            "com_knowledge.auto_tag_generation_desc": "上传文件解析成功后，系统会基于文件内容生成相关文件标签",
             "com_knowledge.auto_tag_library": "标签库",
             "com_knowledge.select_auto_tag_library": "请选择标签库",
             "com_knowledge.tag_library_required_on_create": "创建知识库时必须选择标签库",

@@ -57,7 +57,7 @@ def test_auto_tag_should_run_only_for_successful_uploaded_space_file():
         id=1,
         name="space",
         type=KnowledgeTypeEnum.SPACE.value,
-        auto_tag_enabled=True,
+        auto_tag_enabled=False,
         auto_tag_library_id=10,
     )
     db_file = KnowledgeFile(
@@ -143,3 +143,24 @@ def test_auto_tag_llm_uses_zero_temperature():
 
     assert get_llm.call_args.kwargs["temperature"] == 0
     append_file_tags.assert_called_once()
+
+
+def test_auto_tag_should_run_even_when_space_auto_tag_disabled():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=False,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+
+    with patch(_LINK_DAO_PATCH, return_value=[]):
+        assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
