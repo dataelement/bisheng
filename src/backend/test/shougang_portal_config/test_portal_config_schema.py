@@ -101,6 +101,7 @@ def test_portal_document_type_generates_missing_child_codes():
         {
             'code': 'pol',
             'label': '政策制度',
+            'description_examples': '  例如：管理制度、通知公告  ',
             'children': [
                 {'label': '制度文件'},
                 {'code': 'POL-OLD', 'label': '历史分类'},
@@ -119,6 +120,7 @@ def test_portal_document_type_generates_missing_child_codes():
     assert children[0].label == '制度文件'
     assert children[1].code == 'POL-OLD'
     assert children[1].label == '历史分类'
+    assert config.portal.document_types[0].description_examples == '例如：管理制度、通知公告'
 
 
 def test_internal_config_endpoint_returns_full_config_without_auth(monkeypatch):
