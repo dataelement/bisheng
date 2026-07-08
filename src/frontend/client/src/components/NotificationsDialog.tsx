@@ -73,6 +73,9 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     channel_dismissed: "com_notifications_action_channel_dismissed",
     knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
     qa_expert_invited: "com_notifications_action_qa_expert_invited",
+    qa_expert_answered: "com_notifications_action_qa_expert_answered",
+    qa_expert_commented: "com_notifications_action_qa_expert_commented",
+    qa_expert_accepted: "com_notifications_action_qa_expert_accepted",
     // 收藏的源文件发生变更（名称/位置/标签/分类·业务域/版本）
     favorite_source_renamed: "com_notifications_action_favorite_source_renamed",
     favorite_source_moved: "com_notifications_action_favorite_source_moved",

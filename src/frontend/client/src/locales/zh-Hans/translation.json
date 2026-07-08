@@ -2136,5 +2136,8 @@
   "com_approval_task_badge_rejected": "已拒绝",
   "com_approval_section_business_content": "业务内容",
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
-  "com_notifications_action_qa_expert_invited": "邀请你回答专家问答问题「{{target}}」"
+  "com_notifications_action_qa_expert_invited": "邀请你回答专家问答问题「{{target}}」",
+  "com_notifications_action_qa_expert_answered": "回答了你在专家问答提出的「{{target}}」",
+  "com_notifications_action_qa_expert_commented": "评论了你在专家问答「{{target}}」问题中做出的回答",
+  "com_notifications_action_qa_expert_accepted": "采纳了你在专家问答「{{target}}」问题中做出的回答",
 }
