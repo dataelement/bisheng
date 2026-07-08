@@ -250,7 +250,7 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 document link opens it directly in ChatView's inline workspace
                 panel (preview), replacing the legacy right-side drawer. */}
             {completed && (
-                <ResultPanel>
+                <ResultPanel versionId={versionId} liked={linsight?.liked ?? undefined} allowFeedback={!readOnly}>
                     <ResultSection
                         answer={linsight.output_result?.answer}
                         files={fileList}

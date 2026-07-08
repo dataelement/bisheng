@@ -83,6 +83,7 @@ function MessageTreeNode({
     onRegenerate,
     knowledgeChatLayout,
     allowExport,
+    allowFeedback,
     onOpenCitationPanel,
     activeCitationMessageId,
     onPreviewFile,
@@ -95,6 +96,7 @@ function MessageTreeNode({
     onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
+    allowFeedback?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
 }) {
@@ -140,6 +142,7 @@ function MessageTreeNode({
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
                 allowExport={allowExport}
+                allowFeedback={allowFeedback}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
                 onPreviewFile={onPreviewFile}
@@ -154,6 +157,7 @@ function MessageTreeNode({
                     onRegenerate={onRegenerate}
                     knowledgeChatLayout={knowledgeChatLayout}
                     allowExport={allowExport}
+                    allowFeedback={allowFeedback}
                     onOpenCitationPanel={onOpenCitationPanel}
                     activeCitationMessageId={activeCitationMessageId}
                     onPreviewFile={onPreviewFile}
@@ -283,6 +287,10 @@ export default function AiChatMessages({
 
     const hasMessages = messages.length > 0;
 
+    // 点赞/点踩 is offered on every real chat surface; the read-only anonymous
+    // share view (which carries a shareToken) opts out.
+    const allowFeedback = !shareToken;
+
     // --- Empty state ---
     if (!hasMessages && !isLoading && !hideEmptyState) {
         return (
@@ -408,6 +416,7 @@ export default function AiChatMessages({
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
                                     allowExport={allowExport}
+                                    allowFeedback={allowFeedback}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
                                     onPreviewFile={onPreviewFile}
@@ -425,6 +434,7 @@ export default function AiChatMessages({
                                 onRegenerate={onRegenerate}
                                 knowledgeChatLayout={knowledgeChatLayout}
                                 allowExport={allowExport}
+                                allowFeedback={allowFeedback}
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 activeCitationMessageId={activeCitationMessageId}
                                 onPreviewFile={onPreviewFile}
