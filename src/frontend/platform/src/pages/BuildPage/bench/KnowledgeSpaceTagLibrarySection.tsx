@@ -365,7 +365,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                                 className={cname(newTagError && "border-red-500 focus-visible:ring-red-500")}
                                 value={newTag}
                                 maxLength={100}
-                                placeholder={t("build.tagNamePlaceholder", "新增标签名称")}
+                                placeholder={t("build.tagNamePlaceholder", "在此处输入标签名称")}
                                 onChange={(e) => {
                                     setNewTag(e.target.value);
                                     if (newTagError) {
@@ -385,7 +385,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                         </div>
                         <Button className="shrink-0" disabled={saving} onClick={handleAddTag}>
                             <Plus className="mr-1 size-4" />
-                            {t("build.addTag", "新增标签")}
+                            {t("build.addTag", "添加")}
                         </Button>
                     </div>
                     <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
