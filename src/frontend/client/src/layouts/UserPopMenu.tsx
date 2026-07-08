@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "r
 import { useRecoilState } from "recoil";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
 import { NotificationsDialog } from "~/components/NotificationsDialog";
+import { StorageQuotaBar } from "~/components/StorageQuotaBar";
 import { ApprovalCenterDialog } from "~/components/approval/ApprovalCenterDialog";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import {
@@ -173,6 +174,8 @@ function UserPopMenuDrawer() {
                             </span>
                         </button>
                     </div>
+
+                    <StorageQuotaBar />
 
                     <div className="mx-3 my-1 h-px bg-gray-100" />
 
@@ -442,6 +445,8 @@ function UserPopMenuRail() {
                         </Avatar>
                         <span className={cn(actionMenuLabelClassName, "font-medium")}>{displayName}</span>
                     </div>
+
+                    <StorageQuotaBar />
 
                     <ActionMenuDivider />
 
