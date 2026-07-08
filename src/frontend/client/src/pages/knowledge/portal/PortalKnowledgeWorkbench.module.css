@@ -2353,6 +2353,43 @@
   font-weight: 600;
 }
 
+.fileTableCategoryDropdown {
+  width: 100%;
+  min-width: 0;
+}
+
+.fileTableCategoryDropdownOpen {
+  z-index: 120;
+}
+
+.fileTableCategoryTrigger {
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border-color: #d8e1ee;
+  font-size: 14px;
+}
+
+.fileTableCategoryMenu {
+  z-index: 260;
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - 24px));
+  max-height: min(320px, calc(100vh - 24px));
+}
+
+.fileTableCategoryMenu .uploadCategoryGroupButton,
+.fileTableCategoryMenu .uploadCategoryChildButton {
+  width: 100%;
+  min-width: 0;
+}
+
+.fileTableCategoryMenu .uploadCategoryGroupButton span,
+.fileTableCategoryMenu .uploadCategoryChildButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .uploadMetadataGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
