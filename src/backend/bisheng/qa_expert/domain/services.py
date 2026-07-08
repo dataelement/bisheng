@@ -276,7 +276,7 @@ class QuestionService:
         content = [
             {
                 "type": "system_text",
-                "content": "qa_answer_adopted",
+                "content": "qa_answer_accepted",
             },
             {
                 "type": "business_url",
@@ -303,7 +303,7 @@ class QuestionService:
                 message_type=MessageTypeEnum.NOTIFY,
                 receiver=[answerer_id],
                 status=MessageStatusEnum.APPROVED,
-                action_code="qa_answer_adopted",
+                action_code="qa_answer_accepted",
             )
 
     
