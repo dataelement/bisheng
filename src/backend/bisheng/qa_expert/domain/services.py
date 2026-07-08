@@ -221,9 +221,8 @@ class QuestionService:
 
         # 发送采纳通知
         await self._send_adoption_notification(
-            question_id,
-            question.user_id,
-            answer.expert_id,
+            question,
+            answer
         )
 
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
@@ -258,13 +257,11 @@ class QuestionService:
 
     async def _send_adoption_notification(
         self,
-        question_id: int,
-        questioner_id: int,
-        answerer_id: int,
+        question: Question,
+        answer: Answer,
     ):
         """发送采纳通知到 inbox_message"""
-        question = await self.repository.get_by_id(question_id)
-        if not question:
+        if not question or not answer:
             return
 
         from bisheng.core.database import get_async_db_session
@@ -274,6 +271,11 @@ class QuestionService:
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [
+            {
+                "type": "user",
+                "content": f"@{question.created_by}",
+                "metadata": {"user_id": question.user_id},
+            },
             {
                 "type": "system_text",
                 "content": "qa_answer_accepted",
@@ -288,7 +290,7 @@ class QuestionService:
             },
             {
                 "type": "tooltip_text",
-                "content": (question.description or "")[:50],
+                "content": (answer.content or "")[:50],
             },
         ]
 
@@ -299,9 +301,9 @@ class QuestionService:
             )
             await service.send_message(
                 content=content,
-                sender=questioner_id,
+                sender=question.user_id,
                 message_type=MessageTypeEnum.NOTIFY,
-                receiver=[answerer_id],
+                receiver=[answer.expert_id],
                 status=MessageStatusEnum.APPROVED,
                 action_code="qa_answer_accepted",
             )
@@ -319,10 +321,10 @@ class QuestionService:
 
         update_data = request.model_dump(exclude_unset=True)
         new_question = await self.repository.update(question_id, **update_data)
-         # 发送邀请通知
-        await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
+        # 发送邀请通知
+        # await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
     
-        logger.info(f"Question updated: {new_question.id} by user {user_id}")
+        # logger.info(f"Question updated: {new_question.id} by user {user_id}")
         return new_question
     
     async def _send_expert_invitation_inbox_notice(
@@ -439,9 +441,8 @@ class AnswerService:
 
         # 发送回答通知给提问者
         await self._send_answer_notification(
-             question.id,
-             user_id,
-             question.user_id,
+             question,
+             answer
         )
 
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
@@ -499,12 +500,10 @@ class AnswerService:
 
     async def _send_answer_notification(
         self,
-        question_id: int,
-        answerer_id: int,
-        questioner_id: int,
+        question: Question,
+        answer: Answer
     ):
         """发送回答通知到 inbox_message"""
-        question = await self.question_repo.get_by_id(question_id)
         if not question:
             return
 
@@ -515,6 +514,11 @@ class AnswerService:
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [
+            {
+                "type": "user",
+                "content": f"@{answer.expert_name}",
+                "metadata": {"user_id": answer.expert_id},
+            },
             {
                 "type": "system_text",
                 "content": "qa_expert_answered",
@@ -529,7 +533,7 @@ class AnswerService:
             },
             {
                 "type": "tooltip_text",
-                "content": (question.description or "")[:50],
+                "content": (answer.content or "")[:50],
             },
         ]
 
@@ -540,9 +544,9 @@ class AnswerService:
             )
             await service.send_message(
                 content=content,
-                sender=answerer_id,
+                sender=answer.expert_id,
                 message_type=MessageTypeEnum.NOTIFY,
-                receiver=[questioner_id],
+                receiver=[question.user_id],
                 status=MessageStatusEnum.APPROVED,
                 action_code="qa_expert_answered",
             )
@@ -579,9 +583,8 @@ class CommentService:
 
             # 3. 发送评论通知 (按需开启)
             await self._send_comment_notification(
-                question_id=answer.question_id,
-                commenter_id=user_id,
-                answerer_id=answer.expert_id,
+                answer,
+                comment,
             )
         else:
             if not request.question_id:
@@ -616,12 +619,13 @@ class CommentService:
 
     async def _send_comment_notification(
         self,
-        question_id: int,
-        commenter_id: int,
-        answerer_id: int,
+        answer: Answer,
+        comment: Comment,
     ):
         """发送评论通知到 inbox_message"""
-        question = await self.question_repo.get_by_id(question_id)
+        if not answer or not comment:
+            return
+        question = await self.question_repo.get_by_id(answer.question_id)
         if not question:
             return
 
@@ -632,6 +636,11 @@ class CommentService:
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [
+            {
+                "type": "user",
+                "content": f"@{comment.user_name}",
+                "metadata": {"user_id": comment.user_id},
+            },
             {
                 "type": "system_text",
                 "content": "qa_answer_commented",
@@ -646,7 +655,7 @@ class CommentService:
             },
             {
                 "type": "tooltip_text",
-                "content": (question.description or "")[:50],
+                "content": (comment.content or "")[:50],
             },
         ]
 
@@ -657,9 +666,9 @@ class CommentService:
             )
             await service.send_message(
                 content=content,
-                sender=commenter_id,
+                sender=comment.user_id,
                 message_type=MessageTypeEnum.NOTIFY,
-                receiver=[answerer_id],
+                receiver=[answer.expert_id],
                 status=MessageStatusEnum.APPROVED,
                 action_code="qa_answer_commented",
             )
