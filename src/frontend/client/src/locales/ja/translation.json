@@ -1465,7 +1465,7 @@
     "sensitive_rejected_status": "安全チェック未通過",
     "approval_finalize_failed_status": "登録失敗",
     "auto_tag_generation": "自動タグ生成",
-    "auto_tag_generation_desc": "アップロードファイルの解析が成功すると、システムはファイル内容に基づいて関連するファイルタグを生成します。",
+    "auto_tag_generation_desc": "有効にすると、解析成功後にファイル内容から審査待ちタグを生成します。無効でも、紐づけたタグライブラリから承認済みタグは引き続き付与されます。",
     "auto_tag_library": "タグライブラリ",
     "auto_tag_library_required": "自動タグ生成を有効にするには、空でないタグライブラリを選択してください",
     "tag_library_required_on_create": "ナレッジスペースを作成する前にタグライブラリを選択してください",

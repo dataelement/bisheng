@@ -404,8 +404,16 @@ class TagLibraryTagService:
 
     @classmethod
     def _first_library_id_for_space(cls, space_id: int) -> int | None:
+        """Resolve the primary tag library for a space (same fallback chain as auto-tag)."""
         library_ids = KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(space_id)
-        return library_ids[0] if library_ids else None
+        if library_ids:
+            return library_ids[0]
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+        knowledge = KnowledgeDao.query_by_id(space_id)
+        if knowledge and knowledge.auto_tag_library_id:
+            return int(knowledge.auto_tag_library_id)
+        return 1
 
     @classmethod
     def _find_library_tag_in_session(

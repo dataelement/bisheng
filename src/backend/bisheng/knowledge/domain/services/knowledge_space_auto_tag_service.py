@@ -82,10 +82,12 @@ class KnowledgeSpaceAutoTagService:
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
             selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
             matched, ai_matched = cls._match_library_tags(selected, manual_tags, ai_tags)
-            if not matched:
+            if not matched and not ai_matched:
                 logger.info("auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
                 return
-            else:
+            # Write each resource type independently: an empty manual match must not
+            # prevent AI-tag matches (or vice versa) from being applied.
+            if matched:
                 cls._append_file_tags(
                     space_id=knowledge.id,
                     file_id=db_file.id,
@@ -94,10 +96,7 @@ class KnowledgeSpaceAutoTagService:
                     tenant_id=db_file.tenant_id,
                     resource_type=TagResourceTypeEnum.SYSTEM_TAG,
                 )
-            if not ai_matched:
-                logger.info("auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
-                return
-            else:
+            if ai_matched:
                 cls._append_file_tags(
                     space_id=knowledge.id,
                     file_id=db_file.id,
@@ -107,10 +106,11 @@ class KnowledgeSpaceAutoTagService:
                     resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
                 )
             logger.info(
-                "auto_tag_success space_id={} file_id={} tags={}",
+                "auto_tag_success space_id={} file_id={} matched={} ai_matched={}",
                 knowledge.id,
                 db_file.id,
                 matched,
+                ai_matched,
             )
         except Exception:
             logger.exception(
@@ -150,13 +150,15 @@ class KnowledgeSpaceAutoTagService:
 
     @staticmethod
     def _should_run(knowledge: Knowledge, db_file: KnowledgeFile) -> bool:
-        has_libraries = bool(
-            KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(int(knowledge.id)) or knowledge.auto_tag_library_id
-        )
+        if not knowledge or not db_file:
+            return False
+        # Align with _resolve_library_ids: an explicit binding OR the default
+        # library fallback both provide candidate tags. Link A (approved tags)
+        # must run whenever candidates are resolvable, independent of the
+        # space-level "auto tag generation" switch (that switch gates link B).
+        has_libraries = bool(KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge))
         return (
-            knowledge
-            and db_file
-            and knowledge.type == KnowledgeTypeEnum.SPACE.value
+            knowledge.type == KnowledgeTypeEnum.SPACE.value
             and has_libraries
             and db_file.file_type == FileType.FILE.value
             and db_file.status == KnowledgeFileStatus.SUCCESS.value
