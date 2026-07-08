@@ -100,7 +100,7 @@ function getPersonDisplay(name?: string | null) {
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
-    fileType: { minWidth: 100, initialWidth: 120 },
+    fileType: { minWidth: 180, initialWidth: 220 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
     businessDomain: { minWidth: 140, initialWidth: 170 },
@@ -1458,6 +1458,7 @@ function FileRow({
                                 value={encodingDraft?.fileSubcategoryCode ?? file.fileSubcategoryCode}
                                 fallbackParentCode={selectedFileCategoryCode}
                                 disabled={savingEncoding}
+                                variant="fileTable"
                                 ariaLabel={`修改${file.name}文件分类`}
                                 onClick={(event) => event.stopPropagation()}
                                 onChange={(option) => {

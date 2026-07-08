@@ -7,6 +7,7 @@ from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
+from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 
 
 class TagRepositoryImpl:

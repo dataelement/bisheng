@@ -104,6 +104,35 @@ class KnowledgeVersionService:
         if vmc is None or not vmc.enabled:
             raise VersionManagementDisabledError()
 
+    async def _notify_favorite_version_changed(
+        self, affected_files: list[tuple[int, str]]
+    ) -> None:
+        """版本关系变化 → 给收藏了『受影响文件』的用户发站内信。
+
+        affected_files: [(file_id, file_name_or_empty), ...]，按 file_id 去重。
+        message_service 缺失（如未注入）时静默跳过；notify_favorite_source_changed
+        内部 best-effort，绝不影响版本管理主流程。
+        """
+        if self.message_service is None:
+            return
+        seen: set[int] = set()
+        for file_id, file_name in affected_files:
+            try:
+                fid = int(file_id)
+            except (TypeError, ValueError):
+                continue
+            if fid <= 0 or fid in seen:
+                continue
+            seen.add(fid)
+            await notify_favorite_source_changed(
+                self.message_service,
+                source_file_id=fid,
+                file_name=file_name or "",
+                action_code=FAVORITE_SOURCE_VERSION_UPDATED,
+                actor_user_id=self.login_user.user_id,
+                actor_user_name=getattr(self.login_user, "user_name", None),
+            )
+
     async def list_versions_for_file(self, knowledge_file_id: int):
         """Return the entire version chain that contains the given physical file."""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
@@ -333,19 +362,10 @@ class KnowledgeVersionService:
 
         # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
         # 受影响文件：被关联为新版本的当前文件，以及被降级的旧 primary 文件。
-        # best-effort：notify 内部已吞异常，不影响版本关联主流程。
         affected_files: list[tuple[int, str]] = [(int(current_kf.id), current_kf.file_name or "")]
-        if old_primary is not None and int(old_primary.knowledge_file_id) != int(current_kf.id):
+        if old_primary is not None:
             affected_files.append((int(old_primary.knowledge_file_id), ""))
-        for affected_file_id, affected_file_name in affected_files:
-            await notify_favorite_source_changed(
-                self.message_service,
-                source_file_id=affected_file_id,
-                file_name=affected_file_name,
-                action_code=FAVORITE_SOURCE_VERSION_UPDATED,
-                actor_user_id=self.login_user.user_id,
-                actor_user_name=getattr(self.login_user, "user_name", None),
-            )
+        await self._notify_favorite_version_changed(affected_files)
 
         return LinkResponse(document_id=target_document_id, new_version_no=next_no)
 
@@ -383,6 +403,13 @@ class KnowledgeVersionService:
             if old_primary is not None and old_primary.id != target_version.id:
                 old_primary.is_primary = False
                 await self.version_repo.update(old_primary)
+
+            # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
+            # 受影响文件：被设为主版本的文件，以及被降级的旧 primary 文件。
+            affected_files: list[tuple[int, str]] = [(int(target_kf.id), target_kf.file_name or "")]
+            if old_primary is not None and int(old_primary.knowledge_file_id) != int(target_kf.id):
+                affected_files.append((int(old_primary.knowledge_file_id), ""))
+            await self._notify_favorite_version_changed(affected_files)
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
             self.login_user,
@@ -1330,6 +1357,13 @@ class KnowledgeVersionService:
             source_kf.file_name,
             next_no,
         )
+
+        # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
+        # 受影响文件：被吸收为新主版本的源文件，以及被降级的旧 primary 文件。
+        affected_files: list[tuple[int, str]] = [(int(source_kf.id), source_kf.file_name or "")]
+        if old_primary is not None:
+            affected_files.append((int(old_primary.knowledge_file_id), ""))
+        await self._notify_favorite_version_changed(affected_files)
 
         return LinkResponse(document_id=target_doc_id, new_version_no=next_no)
 

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type {
     PortalFileCategoryGroupOption,
@@ -14,6 +15,7 @@ interface PortalFileCategoryDropdownProps {
     placeholder?: string;
     disabled?: boolean;
     clearable?: boolean;
+    variant?: "default" | "fileTable";
     ariaLabel: string;
     onChange: (option: PortalFileSubcategoryOption | null) => void | Promise<void>;
     onClick?: (event: MouseEvent<HTMLDivElement>) => void;
@@ -55,12 +57,16 @@ export function PortalFileCategoryDropdown({
     placeholder = "--",
     disabled = false,
     clearable = false,
+    variant = "default",
     ariaLabel,
     onChange,
     onClick,
 }: PortalFileCategoryDropdownProps) {
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
     const [open, setOpen] = useState(false);
+    const [floatingMenuStyle, setFloatingMenuStyle] = useState<CSSProperties>();
     const selected = useMemo(() => findPortalFileSubcategory(groups, value), [groups, value]);
     const normalizedFallbackParentCode = normalizeEncodingCode(fallbackParentCode || "");
     const activeCategoryCode = selected?.parentCode ?? (normalizedFallbackParentCode || null);
@@ -68,28 +74,139 @@ export function PortalFileCategoryDropdown({
     const expandedCode = expandedCategoryCode ?? activeCategoryCode;
     const displayText = getPortalFileCategoryDisplayText(groups, value, fallbackParentCode, placeholder);
     const hasValue = Boolean(normalizeEncodingCode(value || ""));
+    const useFloatingMenu = variant === "fileTable";
+
+    const updateFloatingMenuStyle = useCallback(() => {
+        if (!useFloatingMenu || typeof window === "undefined") return;
+        const trigger = triggerRef.current;
+        if (!trigger) return;
+        const rect = trigger.getBoundingClientRect();
+        const viewportMargin = 12;
+        const gap = 4;
+        const minWidth = 280;
+        const maxWidth = Math.max(minWidth, window.innerWidth - viewportMargin * 2);
+        const width = Math.min(Math.max(rect.width, minWidth), maxWidth);
+        const left = Math.min(
+            Math.max(rect.left, viewportMargin),
+            Math.max(viewportMargin, window.innerWidth - viewportMargin - width),
+        );
+        const availableBelow = window.innerHeight - rect.bottom - viewportMargin - gap;
+        const availableAbove = rect.top - viewportMargin - gap;
+        const openAbove = availableBelow < 180 && availableAbove > availableBelow;
+        const availableHeight = Math.max(160, openAbove ? availableAbove : availableBelow);
+        const maxHeight = Math.min(320, availableHeight);
+        const top = openAbove
+            ? Math.max(viewportMargin, rect.top - gap - maxHeight)
+            : Math.min(rect.bottom + gap, window.innerHeight - viewportMargin - maxHeight);
+
+        setFloatingMenuStyle({
+            position: "fixed",
+            top,
+            left,
+            width,
+            maxHeight,
+        });
+    }, [useFloatingMenu]);
 
     useEffect(() => {
         if (!open) return undefined;
         const handlePointerDown = (event: PointerEvent) => {
             const root = rootRef.current;
-            if (!root || root.contains(event.target as Node)) return;
+            const menu = menuRef.current;
+            if (!root || root.contains(event.target as Node) || menu?.contains(event.target as Node)) return;
             setOpen(false);
         };
         document.addEventListener("pointerdown", handlePointerDown, true);
         return () => document.removeEventListener("pointerdown", handlePointerDown, true);
     }, [open]);
 
+    useEffect(() => {
+        if (!open || !useFloatingMenu) return undefined;
+        updateFloatingMenuStyle();
+        window.addEventListener("resize", updateFloatingMenuStyle);
+        window.addEventListener("scroll", updateFloatingMenuStyle, true);
+        return () => {
+            window.removeEventListener("resize", updateFloatingMenuStyle);
+            window.removeEventListener("scroll", updateFloatingMenuStyle, true);
+        };
+    }, [open, updateFloatingMenuStyle, useFloatingMenu]);
+
+    const rootClassName = [
+        s.uploadCategoryDropdown,
+        variant === "fileTable" ? s.fileTableCategoryDropdown : "",
+        open && variant === "fileTable" ? s.fileTableCategoryDropdownOpen : "",
+    ].filter(Boolean).join(" ");
+    const triggerClassName = [
+        s.uploadCategoryTrigger,
+        hasValue && clearable ? s.uploadCategoryTriggerClearable : "",
+        variant === "fileTable" ? s.fileTableCategoryTrigger : "",
+    ].filter(Boolean).join(" ");
+    const menuClassName = [
+        s.uploadCategoryMenu,
+        variant === "fileTable" ? s.fileTableCategoryMenu : "",
+    ].filter(Boolean).join(" ");
+
+    const menu = open ? (
+        <div
+            ref={menuRef}
+            className={menuClassName}
+            role="tree"
+            aria-label={ariaLabel}
+            style={useFloatingMenu ? floatingMenuStyle : undefined}
+        >
+            {groups.map((group) => {
+                const expanded = expandedCode === group.code;
+                return (
+                    <div key={group.code} className={s.uploadCategoryGroup}>
+                        <button
+                            type="button"
+                            className={s.uploadCategoryGroupButton}
+                            aria-expanded={expanded}
+                            disabled={disabled}
+                            onClick={() => setExpandedCategoryCode(expanded ? null : group.code)}
+                        >
+                            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            <span>{group.label}</span>
+                        </button>
+                        {expanded ? (
+                            <div className={s.uploadCategoryChildren} role="group">
+                                {group.children.map((child) => (
+                                    <button
+                                        key={child.code}
+                                        type="button"
+                                        className={`${s.uploadCategoryChildButton} ${selected?.code === child.code ? s.uploadCategoryChildButtonActive : ""}`}
+                                        disabled={disabled}
+                                        onClick={() => {
+                                            void onChange(child);
+                                            setExpandedCategoryCode(child.parentCode);
+                                            setOpen(false);
+                                        }}
+                                    >
+                                        <span>{child.parentLabel} / {child.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                );
+            })}
+        </div>
+    ) : null;
+
     return (
-        <div ref={rootRef} className={s.uploadCategoryDropdown} onClick={onClick}>
+        <div ref={rootRef} className={rootClassName} onClick={onClick}>
             <button
+                ref={triggerRef}
                 type="button"
-                className={`${s.uploadCategoryTrigger} ${hasValue && clearable ? s.uploadCategoryTriggerClearable : ""}`}
+                className={triggerClassName}
                 aria-label={`${ariaLabel} 当前选择：${displayText}`}
                 aria-haspopup="tree"
                 aria-expanded={open}
                 disabled={disabled}
-                onClick={() => setOpen((current) => !current)}
+                onClick={() => {
+                    if (!open) updateFloatingMenuStyle();
+                    setOpen((current) => !current);
+                }}
             >
                 <span>{displayText}</span>
                 <ChevronDown size={16} />
@@ -110,46 +227,7 @@ export function PortalFileCategoryDropdown({
                     <X size={14} />
                 </button>
             ) : null}
-            {open ? (
-                <div className={s.uploadCategoryMenu} role="tree" aria-label={ariaLabel}>
-                    {groups.map((group) => {
-                        const expanded = expandedCode === group.code;
-                        return (
-                            <div key={group.code} className={s.uploadCategoryGroup}>
-                                <button
-                                    type="button"
-                                    className={s.uploadCategoryGroupButton}
-                                    aria-expanded={expanded}
-                                    disabled={disabled}
-                                    onClick={() => setExpandedCategoryCode(expanded ? null : group.code)}
-                                >
-                                    {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                    <span>{group.label}</span>
-                                </button>
-                                {expanded ? (
-                                    <div className={s.uploadCategoryChildren} role="group">
-                                        {group.children.map((child) => (
-                                            <button
-                                                key={child.code}
-                                                type="button"
-                                                className={`${s.uploadCategoryChildButton} ${selected?.code === child.code ? s.uploadCategoryChildButtonActive : ""}`}
-                                                disabled={disabled}
-                                                onClick={() => {
-                                                    void onChange(child);
-                                                    setExpandedCategoryCode(child.parentCode);
-                                                    setOpen(false);
-                                                }}
-                                            >
-                                                {child.parentLabel} / {child.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : null}
-                            </div>
-                        );
-                    })}
-                </div>
-            ) : null}
+            {menu && useFloatingMenu && typeof document !== "undefined" ? createPortal(menu, document.body) : menu}
         </div>
     );
 }

@@ -220,11 +220,11 @@ class QuestionService:
         await self.answer_repo.update(answer_id, status=1,adopted=True)
 
         # 发送采纳通知
-        # await self._send_adoption_notification(
-        #     question.id,
-        #     question.user_id,
-        #     answer.user_id,
-        # )
+        await self._send_adoption_notification(
+            question_id,
+            question.user_id,
+            answer.user_id,
+        )
 
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question
@@ -262,16 +262,49 @@ class QuestionService:
         questioner_id: int,
         answerer_id: int,
     ):
-        """发送采纳通知"""
-        notification = QANotification(
-            recipient_id=answerer_id,
-            sender_id=questioner_id,
-            notification_type="adopted",
-            question_id=question_id,
-            content="Your answer was adopted as the best answer",
-            # tenant_id=tenant_id
-        )
-        await self.notification_repo.create(notification)
+        """发送采纳通知到 inbox_message"""
+        question = await self.repository.get_by_id(question_id)
+        if not question:
+            return
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.services.message_service import MessageService
+
+        content = [
+            {
+                "type": "system_text",
+                "content": "qa_answer_accepted",
+            },
+            {
+                "type": "business_url",
+                "content": f"--{question.title}",
+                "metadata": {
+                    "business_type": "qa_question",
+                    "data": {"question_id": str(question.id)},
+                },
+            },
+            {
+                "type": "tooltip_text",
+                "content": (question.description or "")[:50],
+            },
+        ]
+
+        async with get_async_db_session() as session:
+            service = MessageService(
+                message_repository=InboxMessageRepositoryImpl(session),
+                message_read_repository=InboxMessageReadRepositoryImpl(session),
+            )
+            await service.send_message(
+                content=content,
+                sender=questioner_id,
+                message_type=MessageTypeEnum.NOTIFY,
+                receiver=[answerer_id],
+                status=MessageStatusEnum.APPROVED,
+                action_code="qa_answer_accepted",
+            )
 
     
     async def delete_question(self, question_id: int) -> bool:
@@ -285,7 +318,12 @@ class QuestionService:
             raise ExpertNotFoundError()
 
         update_data = request.model_dump(exclude_unset=True)
-        return await self.repository.update(question_id, **update_data)
+        new_question = await self.repository.update(question_id, **update_data)
+         # 发送邀请通知
+        await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
+    
+        logger.info(f"Question updated: {new_question.id} by user {user_id}")
+        return new_question
     
     async def _send_expert_invitation_inbox_notice(
         self,
@@ -400,11 +438,11 @@ class AnswerService:
         await self.expert_repo.increment_answer_count(expert.id, count=1)
 
         # 发送回答通知给提问者
-        # await self._send_answer_notification(
-        #     question.id,
-        #     user_id,
-        #     question.user_id,
-        # )
+        await self._send_answer_notification(
+             question.id,
+             user_id,
+             question.user_id,
+        )
 
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
         return answer
@@ -465,16 +503,49 @@ class AnswerService:
         answerer_id: int,
         questioner_id: int,
     ):
-        """发送回答通知"""
-        notification = QANotification(
-            recipient_id=questioner_id,
-            sender_id=answerer_id,
-            notification_type="answered",
-            question_id=question_id,
-            content="Someone answered your question",
-            # tenant_id=tenant_id
-        )
-        await self.notification_repo.create(notification)
+        """发送回答通知到 inbox_message"""
+        question = await self.question_repo.get_by_id(question_id)
+        if not question:
+            return
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.services.message_service import MessageService
+
+        content = [
+            {
+                "type": "system_text",
+                "content": "qa_expert_answered",
+            },
+            {
+                "type": "business_url",
+                "content": f"--{question.title}",
+                "metadata": {
+                    "business_type": "qa_question",
+                    "data": {"question_id": str(question.id)},
+                },
+            },
+            {
+                "type": "tooltip_text",
+                "content": (question.description or "")[:50],
+            },
+        ]
+
+        async with get_async_db_session() as session:
+            service = MessageService(
+                message_repository=InboxMessageRepositoryImpl(session),
+                message_read_repository=InboxMessageReadRepositoryImpl(session),
+            )
+            await service.send_message(
+                content=content,
+                sender=answerer_id,
+                message_type=MessageTypeEnum.NOTIFY,
+                receiver=[questioner_id],
+                status=MessageStatusEnum.APPROVED,
+                action_code="qa_expert_answered",
+            )
 
 
 # ==================== 评论服务 ====================
@@ -527,7 +598,11 @@ class CommentService:
         comment = await self.repository.create(comment)
 
         # 3. 发送评论通知 (按需开启)
-        # await self._send_comment_notification(...)
+        await self._send_comment_notification(
+            question_id=question.question_id,
+            commenter_id=user_id,
+            answerer_id=answer.user_id,
+        )
 
         return comment
 
@@ -546,16 +621,49 @@ class CommentService:
         commenter_id: int,
         answerer_id: int,
     ):
-        """发送评论通知"""
-        notification = QANotification(
-            recipient_id=answerer_id,
-            sender_id=commenter_id,
-            notification_type="commented",
-            question_id=question_id,
-            content="Someone commented on your answer",
-            # tenant_id=tenant_id
-        )
-        await self.notification_repo.create(notification)
+        """发送评论通知到 inbox_message"""
+        question = await self.question_repo.get_by_id(question_id)
+        if not question:
+            return
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.services.message_service import MessageService
+
+        content = [
+            {
+                "type": "system_text",
+                "content": "qa_answer_commented",
+            },
+            {
+                "type": "business_url",
+                "content": f"--{question.title}",
+                "metadata": {
+                    "business_type": "qa_question",
+                    "data": {"question_id": str(question.id)},
+                },
+            },
+            {
+                "type": "tooltip_text",
+                "content": (question.description or "")[:50],
+            },
+        ]
+
+        async with get_async_db_session() as session:
+            service = MessageService(
+                message_repository=InboxMessageRepositoryImpl(session),
+                message_read_repository=InboxMessageReadRepositoryImpl(session),
+            )
+            await service.send_message(
+                content=content,
+                sender=commenter_id,
+                message_type=MessageTypeEnum.NOTIFY,
+                receiver=[answerer_id],
+                status=MessageStatusEnum.APPROVED,
+                action_code="qa_answer_commented",
+            )
 
 
 # ==================== 投票服务 ====================

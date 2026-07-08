@@ -16,7 +16,7 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 
 _LINK_DAO_PATCH = (
     "bisheng.knowledge.domain.services.knowledge_space_review_tag_service."
-    "KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge"
+    "KnowledgeSpaceAutoTagService._resolve_library_ids"
 )
 
 
@@ -87,8 +87,29 @@ def test_review_tag_should_run_only_when_space_auto_tag_enabled():
         status=KnowledgeFileStatus.SUCCESS.value,
     )
 
-    with patch(_LINK_DAO_PATCH, return_value=[]):
+    with patch(_LINK_DAO_PATCH, return_value=[10]):
         assert KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)
 
         knowledge.auto_tag_enabled = False
         assert not KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)
+
+
+def test_review_tag_should_run_with_default_library_when_no_explicit_binding():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=True,
+        auto_tag_library_id=None,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+
+    with patch(_LINK_DAO_PATCH, return_value=[1]):
+        assert KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)

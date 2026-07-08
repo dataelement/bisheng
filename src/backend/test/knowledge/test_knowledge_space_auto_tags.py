@@ -164,3 +164,66 @@ def test_auto_tag_should_run_even_when_space_auto_tag_disabled():
 
     with patch(_LINK_DAO_PATCH, return_value=[]):
         assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+
+
+def test_auto_tag_should_run_when_no_explicit_library_uses_default_fallback():
+    """Space with no bound library still runs link A via the default library fallback."""
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=False,
+        auto_tag_library_id=None,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+
+    with patch(_LINK_DAO_PATCH, return_value=[]):
+        assert KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge) == [1]
+        assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+
+
+def test_auto_tag_writes_ai_matches_even_when_manual_match_empty():
+    """Regression: an empty manual/system match must not skip AI-tag writes."""
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=False,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        user_id=7,
+        tenant_id=1,
+        abstract="ai only content",
+    )
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service"
+
+    with (
+        patch.object(KnowledgeSpaceAutoTagService, "_should_run", return_value=True),
+        patch.object(KnowledgeSpaceAutoTagService, "_resolve_library_ids", return_value=[10]),
+        patch.object(KnowledgeSpaceAutoTagService, "_collect_library_tags", return_value=([], ["AI-标签"])),
+        patch(
+            f"{module_path}.LLMService.get_knowledge_llm",
+            return_value=SimpleNamespace(auto_tag_enabled=True, extract_title_model_id=123, auto_tag_prompt=""),
+        ),
+        patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()),
+        patch.object(KnowledgeSpaceAutoTagService, "_invoke_llm", return_value=["AI-标签"]),
+        patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags") as append_file_tags,
+    ):
+        KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
+
+    append_file_tags.assert_called_once()
+    assert append_file_tags.call_args.kwargs["tag_names"] == ["AI-标签"]

@@ -241,7 +241,13 @@ class PortalDocumentTypeChildConfig(BaseModel):
 class PortalDocumentTypeConfig(BaseModel):
     code: str = ''
     label: str = ''
+    description_examples: str = ''
     children: list[PortalDocumentTypeChildConfig] = Field(default_factory=list)
+
+    @field_validator('description_examples', mode='before')
+    @classmethod
+    def normalize_description_examples(cls, value):
+        return _strip(value)
 
     @model_validator(mode='before')
     @classmethod
