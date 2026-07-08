@@ -317,6 +317,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                                             {/* Rename this folder */}
                                             <button
                                                 type="button"
+                                                disabled={savingFolder}
                                                 onClick={(e) => { e.stopPropagation(); handleStartRename(folder); }}
                                                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#165dff]/10 transition-opacity"
                                                 title={localize("com_knowledge.rename")}

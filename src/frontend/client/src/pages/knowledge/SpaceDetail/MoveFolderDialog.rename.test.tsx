@@ -137,4 +137,33 @@ describe("MoveFolderDialog inline folder rename", () => {
         // 同一时刻只有一个内联输入（此时是新建输入框）
         expect(screen.getAllByRole("textbox")).toHaveLength(1);
     });
+
+    it("在途重命名时禁用其他行的铅笔，避免并发重命名互相清空", async () => {
+        mockChildren([makeFolder("1", "文件夹A"), makeFolder("2", "文件夹B")]);
+        let resolveRename!: () => void;
+        jest.mocked(renameFolderApi).mockReturnValue(
+            new Promise<void>((res) => { resolveRename = () => res(); }) as any
+        );
+        renderDialog();
+        expect(await screen.findByText("文件夹A")).toBeInTheDocument();
+
+        // 开始重命名 A 并提交（进入在途状态）
+        const pencils = screen.getAllByTitle("com_knowledge.rename");
+        await userEvent.click(pencils[0]);
+        const input = screen.getByDisplayValue("文件夹A");
+        await userEvent.clear(input);
+        await userEvent.type(input, "A改{Enter}");
+
+        await waitFor(() => { expect(renameFolderApi).toHaveBeenCalled(); });
+
+        // 在途期间：A 行是输入框（无铅笔），剩下的 B 行铅笔应被禁用
+        const pencilsDuring = screen.getAllByTitle("com_knowledge.rename");
+        expect(pencilsDuring[0]).toBeDisabled();
+
+        // 结束在途请求：A 的编辑态正常关闭，无崩溃
+        resolveRename();
+        await waitFor(() => {
+            expect(screen.queryByDisplayValue("A改")).not.toBeInTheDocument();
+        });
+    });
 });
