@@ -165,13 +165,12 @@ export function KnowledgeAiBottomDock({
         await createSession();
     };
 
-    // Collapsed-state expand button — opens a fresh conversation. Existing history
-    // stays in `sessions` and is reachable via the toggle inside the expanded panel.
-    const handleExpandNew = async () => {
+    // Collapsed-state expand button — restores the conversation that was open before
+    // collapse. Collapsing only hides the panel (useFolderChat state persists), so
+    // expanding simply re-reveals it. Starting a new chat is a separate action
+    // (the MessagePlus button in the expanded header / history panel).
+    const handleExpand = () => {
         setShowHistory(false);
-        // Reuse the current view if it's already an empty new chat; otherwise spin up a
-        // fresh session so expanding never resurfaces the conversation last viewed.
-        if (messages.length > 0) await createSession();
         setOpen(true);
     };
 
@@ -363,15 +362,15 @@ export function KnowledgeAiBottomDock({
                     {/* Floating expand button — shown whenever any conversation exists.
                         Gate on `sessions`, not `messages`: starting a new chat clears
                         `messages` but the session history is still there, so the button must
-                        persist. Opens a fresh conversation. Shared by desktop + mobile-collapsed
-                        docks. History stays reachable via the toggle inside the expanded panel. */}
+                        persist. Restores the conversation open before collapse (does not start
+                        a new one). Shared by desktop + mobile-collapsed docks. */}
                     {!open && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <button
                                         type="button"
-                                        onClick={handleExpandNew}
+                                        onClick={handleExpand}
                                         aria-label={localize("com_ui_expand")}
                                         className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
                                     >

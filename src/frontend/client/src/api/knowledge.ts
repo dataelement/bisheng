@@ -141,14 +141,6 @@ export interface SpaceTag {
     name: string;
 }
 
-/** Space member entity used by member-management dialog */
-export interface SpaceMember {
-    user_id: number;
-    user_name: string;
-    user_avatar?: string | null;
-    role: "creator" | "admin" | "member";
-    groups?: string[];
-}
 
 /** File or folder item returned from the space children API */
 export interface FileTag {
@@ -183,8 +175,8 @@ export interface KnowledgeFile {
     sensitiveCheck?: KnowledgeFileSensitiveCheck;
     /** Number of successfully parsed files (folders only) */
     successFileNum?: number;
-    /** Total number of files (folders only) */
-    fileNum?: number;
+    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) */
+    hasFailedFiles?: boolean;
     /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
     processingFileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
@@ -645,7 +637,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         errorMessage: extractKnowledgeFileError(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
-        fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
+        hasFailedFiles: raw?.has_failed_files !== undefined ? Boolean(raw.has_failed_files) : undefined,
         processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
@@ -748,7 +740,6 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         errorMessage: extractKnowledgeFileError(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw.success_file_num,
-        fileNum: raw.file_num,
         processingFileNum: raw.processing_file_num,
     };
 }
@@ -1082,62 +1073,8 @@ export async function getSpaceInfoApi(space_id: string): Promise<KnowledgeSpace>
     return mapSpace(raw);
 }
 
-/**
- * Get members of a space
- */
-export async function getSpaceMembersApi(space_id: string): Promise<{ data: SpaceMember[]; total: number }> {
-    const res: any = await request.get(`/api/v1/knowledge/space/${space_id}/members`);
-    // Compatible response variants:
-    // 1) { status_code, data: { data: [...], total } }
-    // 2) { status_code, data: [...] }
-    // 3) { data: [...] }
-    // 4) [...]
-    const wrapper = res ?? {};
-    const payload = wrapper?.data ?? wrapper;
-    const list = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.data)
-            ? payload.data
-            : Array.isArray(payload?.members)
-                ? payload.members
-                : [];
 
-    const mapped: SpaceMember[] = list.map((m: any) => ({
-        user_id: Number(m?.user_id ?? 0),
-        user_name: String(m?.user_name ?? ""),
-        user_avatar: m?.user_avatar ?? m?.avatar ?? null,
-        role: String(m?.user_role ?? m?.role ?? "member") as SpaceMember["role"],
-        groups: asArray(m?.user_groups ?? m?.groups)
-            .map((g: any) => String(g?.name ?? g?.group_name ?? g))
-            .filter(Boolean),
-    }));
 
-    return {
-        data: mapped,
-        total: Number(payload?.total ?? wrapper?.total ?? mapped.length ?? 0),
-    };
-}
-
-/**
- * Update space member role
- * PUT /api/v1/knowledge/space/{space_id}/members/role
- */
-export async function updateSpaceMemberRoleApi(space_id: string, body: {
-    user_id: number;
-    role: "admin" | "member";
-}): Promise<void> {
-    await request.put(`/api/v1/knowledge/space/${space_id}/members/role`, body);
-}
-
-/**
- * Delete space member
- * DELETE /api/v1/knowledge/space/{space_id}/members
- */
-export async function removeSpaceMemberApi(space_id: string, user_id: number): Promise<void> {
-    await request.deleteWithOptions(`/api/v1/knowledge/space/${space_id}/members`, {
-        data: { user_id },
-    });
-}
 
 /**
  * Get tags for a knowledge space.

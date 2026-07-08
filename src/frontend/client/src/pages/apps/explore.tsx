@@ -157,12 +157,13 @@ export default function ExplorePlaza() {
         <div
             className={cn(
                 'flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
-                // Mobile explore renders in document-scroll mode (not innerScrollShell in
-                // MainLayout), so h-full/flex-1 collapse to content height and the region has
-                // no height for the empty/loading content to position against. In those states
-                // (no scrollable grid) pin the page to one viewport tall so the region below the
-                // header becomes a real, measurable area. Gated by state → has-content path untouched.
-                (loading || agents.length === 0) && 'max-[767px]:h-[100dvh]',
+                // Mobile explore is not innerScrollShell in MainLayout (h-auto shell) and
+                // html/body scrolling is globally disabled (WebView bottom-strip fix in
+                // index.html), so h-full/flex-1 collapse to content height and nothing can
+                // scroll. Pin the page to one viewport tall on mobile so <main>'s
+                // overflow-y-auto becomes the scroller (also gives empty/loading states a
+                // real height to center against).
+                'max-[767px]:h-[100dvh]',
             )}
         >
             {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}

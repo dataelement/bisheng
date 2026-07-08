@@ -1,6 +1,6 @@
 
 import { Loader2, X } from "lucide-react";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
 import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
@@ -49,6 +49,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         filename: f.name,
         file_name: f.name,
         parsing_status: f.parsingStatus || defaultParsingStatus,
+        // Local object URL for image chips so pinned images stay previewable in
+        // the input box before send (revoked on remove / clear / unmount).
+        previewUrl: f.previewUrl,
     }));
 
     const handleFileChange = (selectedFiles) => {
@@ -106,7 +109,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 isUploading: true,
                 progress: 0, // Set initial progress to 0
                 id, // Use the generated id
-                file // Keep original file object for later use
+                file, // Keep original file object for later use
+                // Preview URL from the local blob for images (docs get none).
+                previewUrl: file.type?.startsWith('image/') ? URL.createObjectURL(file) : undefined,
             };
         });
 
@@ -216,6 +221,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             fileInputRef.current?.click();
         },
         clear: () => {
+            filesRef.current.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
             setFiles([]);
             filesRef.current = [];
             onFilesStateChange?.([]);
@@ -223,7 +229,15 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         }
     }));
 
+    // Release any live object URLs when the component unmounts so pinned image
+    // previews don't leak blobs.
+    useEffect(() => () => {
+        filesRef.current.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+    }, []);
+
     const handleFileRemove = (fileName) => {
+        const removed = filesRef.current.find(file => file.name === fileName);
+        if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
         const res = filesRef.current.filter(file => file.name !== fileName);
         filesRef.current = res
         setFiles(res);

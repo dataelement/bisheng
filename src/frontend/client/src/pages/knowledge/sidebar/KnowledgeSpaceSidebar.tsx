@@ -177,6 +177,12 @@ export function KnowledgeSpaceSidebar({
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
     const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
     const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
+    // An empty created/joined section stretches over the remaining list height
+    // and centers its empty-state text (both empty → 50/50 split). Compact
+    // dropdown keeps natural heights — it is a popover sized to content.
+    const createdEmpty = !filteredCreatedSpaces.length;
+    const joinedEmpty = !filteredJoinedSpaces.length;
+    const stretchEmptySections = (createdEmpty || joinedEmpty) && !compactMode;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
             ...departmentSpaces.map(s => s.id),
@@ -418,7 +424,7 @@ export function KnowledgeSpaceSidebar({
                             scroll container's visible width — that lets sticky-left/top
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
-                        <div className="w-max min-w-full">
+                        <div className={cn("w-max min-w-full", stretchEmptySections && "flex min-h-full flex-col")}>
                             {compactMode ? (
                                 /* File-page title dropdown: same 3-section tree as the PC sidebar,
                                    ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
@@ -460,7 +466,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
                                                 {!filteredCreatedSpaces.length && (
-                                                    <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
+                                                    <div className="py-6 text-center text-sm text-[#999999]">{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -482,7 +488,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
                                                 {!filteredJoinedSpaces.length && (
-                                                    <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
+                                                    <div className="py-6 text-center text-sm text-[#999999]">{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -512,7 +518,7 @@ export function KnowledgeSpaceSidebar({
                             )}
 
                             {/* My created */}
-                            <div className="pb-4">
+                            <div className={cn("pb-4", stretchEmptySections && createdEmpty && !createdCollapsed && "flex min-h-0 flex-1 flex-col")}>
                                 <SectionHeader
                                     title={localize("com_knowledge.created_by_me")}
                                     collapsed={createdCollapsed}
@@ -526,15 +532,20 @@ export function KnowledgeSpaceSidebar({
                                     mobile={mobilePageMode}
                                 />
                                 {!createdCollapsed && (
-                                    <div className={listRowClassName}>
+                                    <div className={cn(listRowClassName, stretchEmptySections && createdEmpty && "flex min-h-0 flex-1 flex-col")}>
                                         {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
-                                        {!filteredCreatedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
+                                        {createdEmpty && (
+                                            <div className={cn(
+                                                "py-6 text-center text-sm text-[#999999]",
+                                                stretchEmptySections && "flex flex-1 items-center justify-center",
+                                            )}>{localize("com_knowledge.no_data")}</div>
+                                        )}
                                     </div>
                                 )}
                             </div>
 
                             {/* Joined */}
-                            <div className="pb-4">
+                            <div className={cn("pb-4", stretchEmptySections && joinedEmpty && !joinedCollapsed && "flex min-h-0 flex-1 flex-col")}>
                                 <SectionHeader
                                     title={localize("com_knowledge.joined_by_me")}
                                     collapsed={joinedCollapsed}
@@ -546,9 +557,14 @@ export function KnowledgeSpaceSidebar({
                                     mobile={mobilePageMode}
                                 />
                                 {!joinedCollapsed && (
-                                    <div className={listRowClassName}>
+                                    <div className={cn(listRowClassName, stretchEmptySections && joinedEmpty && "flex min-h-0 flex-1 flex-col")}>
                                         {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
-                                        {!filteredJoinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
+                                        {joinedEmpty && (
+                                            <div className={cn(
+                                                "py-6 text-center text-sm text-[#999999]",
+                                                stretchEmptySections && "flex flex-1 items-center justify-center",
+                                            )}>{localize("com_knowledge.no_data")}</div>
+                                        )}
                                     </div>
                                 )}
                             </div>

@@ -25,6 +25,16 @@ import useStreamChatSSE, {
 } from "~/hooks/useStreamChatSSE";
 import store from "~/store";
 
+/**
+ * Remembers the last active chat id per (space, folder), surviving unmount within
+ * the app session. Lets the dock restore the conversation the user was viewing
+ * before collapsing (which unmounts/re-inits this hook) instead of blindly
+ * re-selecting the most recent session or showing an empty new chat.
+ */
+const lastActiveChatByKey = new Map<string, string>();
+const chatMemoKey = (spaceId: string, folderId?: string) =>
+    `${spaceId}::${folderId ?? ""}`;
+
 /** Tag object passed with folder chat messages */
 export interface FolderChatTag {
     id: number;
@@ -75,7 +85,15 @@ export default function useFolderChat(
             .then((list) => {
                 setSessions(list);
                 if (list.length > 0) {
-                    setActiveChatId(list[0].chat_id);
+                    // Restore the last-viewed session for this space/folder if it still
+                    // exists (e.g. after collapsing then re-expanding the dock); otherwise
+                    // fall back to the most recent one.
+                    const remembered = lastActiveChatByKey.get(chatMemoKey(spaceId, folderId));
+                    const restore =
+                        remembered && list.some((s) => s.chat_id === remembered)
+                            ? remembered
+                            : list[0].chat_id;
+                    setActiveChatId(restore);
                 }
                 // list.length === 0 → activeChatId stays "", handled above
             })
@@ -84,6 +102,13 @@ export default function useFolderChat(
             )
             .finally(() => setIsSessionsLoading(false));
     }, [spaceId, folderId, enabled]);
+
+    // Remember the active chat per space/folder so a later remount can restore it.
+    useEffect(() => {
+        if (enabled && activeChatId) {
+            lastActiveChatByKey.set(chatMemoKey(spaceId, folderId), activeChatId);
+        }
+    }, [enabled, spaceId, folderId, activeChatId]);
 
     // --- Load history when activeChatId changes ---
     useEffect(() => {

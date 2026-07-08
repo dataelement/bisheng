@@ -511,6 +511,60 @@ class TestPseudoToolCallFilter:
 
 
 # --------------------------------------------------------------------------
+# reasoning-model <think>/</think> boundary markers leaking into the narration
+# (qwen3.5 & co.). The markers must be stripped, the reasoning kept, and a
+# marker-only chunk must NOT emit an (empty) thinking row.
+# --------------------------------------------------------------------------
+
+
+class TestThinkTagStripping:
+    def test_think_markers_stripped_keeping_reasoning(self, mapper: StreamEventMapper):
+        msg = AIMessage(
+            content="",
+            additional_kwargs={"reasoning_content": "<think>\n先梳理两个知识库\n</think>"},
+        )
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.step_type == "thinking"
+        assert "先梳理两个知识库" in ev.output
+        assert "<think" not in ev.output
+        assert "</think" not in ev.output
+
+    def test_marker_only_chunk_emits_no_thinking_step(self, mapper: StreamEventMapper):
+        # A lone opening marker (its own streamed delta) reduces to whitespace and
+        # must not surface as a bare "<think>" narration row (the reported bug).
+        chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "<think>"})
+        steps = [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)]
+        assert steps == []
+
+    def test_stream_truncated_open_marker_emits_no_step(self, mapper: StreamEventMapper):
+        # The screenshot showed a half tag "<think" (closing ">" split off across
+        # chunks). It too must be swallowed, not shown.
+        chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "<think"})
+        steps = [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)]
+        assert steps == []
+
+    def test_reasoning_delta_carrying_trailing_close_marker_is_cleaned(self, mapper: StreamEventMapper):
+        chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "得出结论</think>"})
+        ev = [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)][0]
+        assert ev.output == "得出结论"
+
+    def test_marker_only_chunk_does_not_break_segment_continuity(self, mapper: StreamEventMapper):
+        # <think> arrives as its own delta (no step), then the reasoning streams:
+        # the reasoning still gets a single thinking row (the swallowed marker must
+        # not have reset/closed the not-yet-open segment in a harmful way).
+        open_marker = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "<think>"})
+        assert [e for e in mapper.normalize("messages", (open_marker, {})) if isinstance(e, ExecStep)] == []
+
+        body = ["分析", "问题"]
+        call_ids = []
+        for d in body:
+            chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": d})
+            step = [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)][0]
+            call_ids.append(step.call_id)
+        assert len(set(call_ids)) == 1, f"reasoning after a swallowed marker must share one row, got {call_ids}"
+
+
+# --------------------------------------------------------------------------
 # subagent delegation: only the `task` tool is a delegation; namespaced
 # internal tools keep their real type (regression: ls/glob shown as 子智能体)
 # --------------------------------------------------------------------------

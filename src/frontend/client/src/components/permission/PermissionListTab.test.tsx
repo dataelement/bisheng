@@ -440,4 +440,41 @@ describe("Client PermissionListTab", () => {
     expect(mockedGetResourcePermissions).not.toHaveBeenCalled();
     expect(mockedGetGrantableRelationModels).not.toHaveBeenCalled();
   });
+
+  it("locks the current user's own row so they cannot change their own permission", async () => {
+    // Two user owners → both rows would normally expose action buttons.
+    mockedGetResourcePermissions.mockResolvedValue([
+      { subject_type: "user", subject_id: 2, subject_name: "Alice", relation: "owner", model_id: "owner", model_name: "Owner" },
+      { subject_type: "user", subject_id: 5, subject_name: "Me", relation: "owner", model_id: "owner", model_name: "Owner" },
+    ] as any);
+
+    const { unmount } = render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="s1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+    await waitFor(() => expect(screen.getAllByText("Alice").length).toBeGreaterThan(0));
+    const withoutSelfLock = screen.queryAllByRole("button").length;
+    unmount();
+
+    // With currentUserId=5 (Me): the current user's own row is locked, so it
+    // exposes no modify/remove buttons — fewer buttons than the unlocked render.
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="s1"
+        refreshKey={0}
+        fixedSubjectType="user"
+        currentUserId={5}
+      />,
+    );
+    await waitFor(() => expect(screen.getAllByText("Me").length).toBeGreaterThan(0));
+    const withSelfLock = screen.queryAllByRole("button").length;
+
+    expect(withoutSelfLock).toBeGreaterThan(0);
+    expect(withSelfLock).toBeLessThan(withoutSelfLock);
+  });
 });

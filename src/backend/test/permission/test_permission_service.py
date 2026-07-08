@@ -143,6 +143,103 @@ class TestPermissionServiceCheck:
         assert result is True
 
     @pytest.mark.asyncio
+    async def test_owner_fallback_suppressed_when_another_owner_exists(self, mock_fga, mock_login_user_normal):
+        """Owner/creator decoupled: when FGA denies the creator but ANOTHER owner
+        tuple exists, the creator is NOT resurrected as owner — an explicit owner
+        revoke on the creator actually takes effect."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        # Another user (9) owns the resource; the creator (2) has no owner tuple.
+        await mock_fga.write_tuples(writes=[{"user": "user:9", "relation": "owner", "object": "workflow:abc"}])
+        with (
+            patch.object(PermissionService, "_get_fga", return_value=mock_fga),
+            patch.object(PermissionService, "_get_resource_creator", new_callable=AsyncMock, return_value=2),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.get_check",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.set_check",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await PermissionService.check(
+                user_id=2,
+                relation="owner",
+                object_type="workflow",
+                object_id="abc",
+                login_user=mock_login_user_normal,
+            )
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_owner_fallback_holds_when_creator_is_only_owner(self, mock_fga, mock_login_user_normal):
+        """Owner/creator decoupled: with no other owner tuple the creator remains
+        the safety-net owner (INV-2) so the resource is never left ownerless."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        # No owner tuple at all; the creator (2) must still resolve as owner.
+        with (
+            patch.object(PermissionService, "_get_fga", return_value=mock_fga),
+            patch.object(PermissionService, "_get_resource_creator", new_callable=AsyncMock, return_value=2),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.get_check",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.set_check",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await PermissionService.check(
+                user_id=2,
+                relation="owner",
+                object_type="workflow",
+                object_id="abc",
+                login_user=mock_login_user_normal,
+            )
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_knowledge_space_creator_is_permanent_owner_despite_other_owner(
+        self, mock_fga, mock_login_user_normal
+    ):
+        """knowledge_space creator is a PERMANENT owner (SpaceChannelMember CREATOR
+        authority backs list + file access regardless of FGA tuples): unlike
+        decoupled types, the creator resolves as owner even when another owner
+        tuple exists. Contrast test_owner_fallback_suppressed_when_another_owner."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        # Another user (9) owns the space; the creator (2) has no owner tuple.
+        await mock_fga.write_tuples(writes=[{"user": "user:9", "relation": "owner", "object": "knowledge_space:101"}])
+        with (
+            patch.object(PermissionService, "_get_fga", return_value=mock_fga),
+            patch.object(
+                PermissionService, "_evaluate_tenant_gate", new_callable=AsyncMock, return_value=(False, None)
+            ),
+            patch.object(PermissionService, "_get_resource_creator", new_callable=AsyncMock, return_value=2),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.get_check",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.set_check",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await PermissionService.check(
+                user_id=2,
+                relation="owner",
+                object_type="knowledge_space",
+                object_id="101",
+                login_user=mock_login_user_normal,
+            )
+        assert result is True
+
+    @pytest.mark.asyncio
     async def test_department_space_member_fallback_allows_read(self, mock_fga, mock_login_user_normal):
         """Department-bound knowledge spaces grant implicit read to exact department members."""
         from bisheng.permission.domain.services.permission_service import PermissionService

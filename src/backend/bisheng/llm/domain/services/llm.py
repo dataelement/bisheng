@@ -133,6 +133,25 @@ class LLMService:
             return None
         return model_id if model_id > 0 else None
 
+    # Credential and endpoint fields in the server config. Users pasting values with
+    # leading/trailing whitespace break the http request header(e.g. "Bearer sk-xxx ")
+    STRIP_CONFIG_KEY_SUFFIXES = ('_key', '_secret', '_base', '_url', '_endpoint', '_proxy', '_version')
+
+    @classmethod
+    def strip_config_whitespace(cls, config: Optional[dict]) -> Optional[dict]:
+        """ Strip leading/trailing whitespace from credential and endpoint fields in the server config """
+        if not isinstance(config, dict):
+            return config
+        result = {}
+        for key, value in config.items():
+            if isinstance(value, dict):
+                result[key] = cls.strip_config_whitespace(value)
+            elif isinstance(value, str) and key.endswith(cls.STRIP_CONFIG_KEY_SUFFIXES):
+                result[key] = value.strip()
+            else:
+                result[key] = value
+        return result
+
     @classmethod
     async def _aget_inherited_system_default_server_ids_for_leaf(
         cls,
@@ -486,6 +505,7 @@ class LLMService:
                 raise ModelNameRepeatError.http_exception()
 
         db_server = LLMServer(**server.model_dump(exclude={"models", "share_to_children"}))
+        db_server.config = cls.strip_config_whitespace(db_server.config)
         db_server.user_id = login_user.user_id
 
         db_server = await LLMDao.ainsert_server_with_models(
@@ -711,7 +731,8 @@ class LLMService:
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
         mask_maker = JsonFieldMasker()
-        exist_server.config = mask_maker.update_json_with_masked(exist_server.config, server.config)
+        exist_server.config = cls.strip_config_whitespace(
+            mask_maker.update_json_with_masked(exist_server.config, server.config))
 
         # Route share_to_children flips through the dedicated DAO helper
         # so super-admin / Root-only invariants are enforced via FGA.

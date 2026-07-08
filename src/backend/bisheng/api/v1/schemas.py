@@ -399,6 +399,9 @@ class WSModel(BaseModel):
     id: str
     name: str | None = None
     displayName: str | None = None
+    # Optional one-line intro shown under the model name in the workspace
+    # model picker; hidden when empty. Length capped to keep the dropdown tidy.
+    description: str | None = Field(default=None, max_length=50)
     visual: bool | None = False
 
 

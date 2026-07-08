@@ -136,7 +136,13 @@ const SelectItem = React.forwardRef<
         </SelectPrimitive.ItemIndicator>
       </span>
     )}
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    {/* Radix ItemText silently drops className/style, so the shrink constraint
+        lives on this wrapper: as a flex child it must be allowed to go below
+        its content width, otherwise long content overflows past the pr-8
+        indicator area instead of truncating before the check mark. */}
+    <div className="min-w-0 flex-1">
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    </div>
   </SelectPrimitive.Item>
 ))
 SelectItem.displayName = SelectPrimitive.Item.displayName

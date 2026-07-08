@@ -404,6 +404,7 @@
   "com_linsight_clarify_single": "単一選択",
   "com_linsight_clarify_multi": "複数選択",
   "com_linsight_clarify_custom": "自由入力",
+  "com_linsight_clarify_custom_active": "自由入力（Shift + Enter で改行）",
   "com_linsight_clarify_input_placeholder": "入力してください…",
   "com_linsight_clarify_skip": "スキップ",
   "com_linsight_clarify_skipped": "スキップ",
@@ -1446,8 +1447,8 @@
     "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
     "explore_more": "さらにアプリを探す",
     "recent_apps_hint": "最近使用したアプリはすべてここにあります～",
-    "service_maintenance_title": "システムメンテナンス中",
-    "service_maintenance": "緊急メンテナンスを実施中です。まもなく復旧します。",
+    "service_maintenance_title": "おっと、システムに少し問題が発生しました",
+    "service_maintenance": "少々お待ちください。まもなく通常どおりご利用いただけます。",
     "refresh": "再読み込み"
   },
   "com_knowledge": {
