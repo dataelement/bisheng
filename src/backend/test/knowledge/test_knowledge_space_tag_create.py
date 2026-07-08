@@ -461,6 +461,7 @@ async def test_add_space_tag_creates_review_tag_with_tenant_id(service):
         session = AsyncMock()
         session.exec = AsyncMock(
             side_effect=[
+                SimpleNamespace(all=lambda: [1]),
                 SimpleNamespace(all=lambda: [20]),
             ]
         )
@@ -471,6 +472,50 @@ async def test_add_space_tag_creates_review_tag_with_tenant_id(service):
 
     mock_update_tags.assert_awaited_once_with([1], "10", ResourceTypeEnum.SPACE_FILE, 1)
     mock_update_review_tags.assert_awaited_once_with([20], "10", ResourceTypeEnum.SPACE_FILE, 1, tenant_id=1)
+
+
+@pytest.mark.asyncio
+async def test_partition_keeps_approved_tag_id_colliding_with_review_id(service):
+    """A real Tag id must stay in tag_ids even if a ReviewTag shares the same id."""
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+    ) as mock_session_ctx:
+        session = AsyncMock()
+        session.exec = AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: [5]),  # Tag.id in (5) -> 5 is a real Tag
+                SimpleNamespace(all=lambda: [5]),  # ReviewTag.id in (5) -> collision
+            ]
+        )
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        tags, review = await service._partition_file_tag_ids_for_update([5], [])
+
+    assert tags == [5]
+    assert review == []
+
+
+@pytest.mark.asyncio
+async def test_partition_reroutes_review_id_only_when_not_a_tag(service):
+    """A pending id sent in tag_ids moves to review only when it is not a Tag."""
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+    ) as mock_session_ctx:
+        session = AsyncMock()
+        session.exec = AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: []),  # Tag.id in (7) -> not a Tag
+                SimpleNamespace(all=lambda: [7]),  # ReviewTag.id in (7) -> genuine review tag
+            ]
+        )
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        tags, review = await service._partition_file_tag_ids_for_update([7], [])
+
+    assert tags == []
+    assert review == [7]
 
 
 @pytest.mark.asyncio
@@ -509,7 +554,12 @@ async def test_update_file_tags_saves_both_approved_and_pending_tags(service):
         ),
     ):
         session = AsyncMock()
-        session.exec = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
+        session.exec = AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: [12]),
+                SimpleNamespace(all=lambda: [2]),
+            ]
+        )
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
         mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -517,6 +567,57 @@ async def test_update_file_tags_saves_both_approved_and_pending_tags(service):
 
     mock_update_tags.assert_awaited_once_with([12], "10", ResourceTypeEnum.SPACE_FILE, 1)
     mock_update_review_tags.assert_awaited_once_with([2], "10", ResourceTypeEnum.SPACE_FILE, 1, tenant_id=1)
+
+
+@pytest.mark.asyncio
+async def test_update_file_tags_moves_misclassified_tag_ids_out_of_review_tag_ids(service):
+    file_record = SimpleNamespace(id=10, knowledge_id=137, file_name="demo.pdf")
+
+    with (
+        patch.object(service, "_get_file_for_action", new_callable=AsyncMock, return_value=file_record),
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(service, "_notify_favorite_source_changed", new_callable=AsyncMock),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+        ) as mock_session_ctx,
+        patch.object(
+            service,
+            "_require_review_tag_feature_enabled",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags",
+            new_callable=AsyncMock,
+        ) as mock_update_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.aupdate_resource_tags",
+            new_callable=AsyncMock,
+        ) as mock_update_review_tags,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "_promote_review_tags_existing_in_libraries",
+            new_callable=AsyncMock,
+            side_effect=lambda tag_ids, review_tag_ids: (tag_ids, review_tag_ids),
+        ),
+    ):
+        session = AsyncMock()
+        session.exec = AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: [12]),
+                SimpleNamespace(all=lambda: []),
+            ]
+        )
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await service.update_file_tags(137, 10, [], [12])
+
+    mock_update_tags.assert_awaited_once_with([12], "10", ResourceTypeEnum.SPACE_FILE, 1)
+    mock_update_review_tags.assert_awaited_once_with([], "10", ResourceTypeEnum.SPACE_FILE, 1, tenant_id=1)
 
 
 @pytest.mark.asyncio
@@ -751,12 +852,18 @@ async def test_batch_add_file_tags_allows_tag_ids_only(service):
 
 
 @pytest.mark.asyncio
-async def test_partition_file_tag_ids_routes_review_ids_even_when_tag_table_has_same_numeric_id(service):
+async def test_partition_file_tag_ids_routes_review_ids_when_not_present_in_tag_table(service):
+    """Pending ids misclassified into tag_ids move to review only when they are not Tags."""
     with patch(
         "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
     ) as mock_session_ctx:
         session = AsyncMock()
-        session.exec = AsyncMock(return_value=SimpleNamespace(all=lambda: [101, 102, 103]))
+        session.exec = AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: []),  # Tag.id in (...) -> none are Tags
+                SimpleNamespace(all=lambda: [101, 102, 103]),  # ReviewTag.id in (...) -> genuine review tags
+            ]
+        )
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
         mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 

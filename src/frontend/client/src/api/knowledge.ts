@@ -387,6 +387,7 @@ export interface FileTag {
     resource_type?: string;
     /** 0 = pending review; 1 = approved */
     review_status?: number;
+    business_type?: string;
 }
 
 export function isPendingReviewTagStatus(reviewStatus?: number | null): boolean {

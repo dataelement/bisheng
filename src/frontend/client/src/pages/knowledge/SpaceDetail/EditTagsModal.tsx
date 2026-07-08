@@ -143,24 +143,32 @@ function normalizeCreatedSpaceTag(tag: SpaceTag, reviewTagEnabled: boolean): Spa
     if (!reviewTagEnabled) {
         return tag;
     }
-    if (isLibrarySpaceTag(tag)) {
-        if (tag.review_status === 1 || tag.review_status === 2) {
-            return tag;
-        }
-        return {
-            ...tag,
-            review_status: 0,
-            resource_type: tag.resource_type || "manual_tag",
-        };
+    // add_space_tag always creates a pending ReviewTag row (business_type may be
+    // tag_library), so a freshly created tag without an approved status is pending.
+    if (tag.review_status === 1 || tag.review_status === 2) {
+        return tag;
     }
     if (tag.review_status === 0) {
         return tag;
     }
-    // add_space_tag creates ReviewTag rows; API may omit review_status in the payload.
-    if (tag.review_status === undefined || tag.review_status === null) {
-        return { ...tag, review_status: 0, resource_type: tag.resource_type || "manual_tag" };
+    // API may omit review_status in the create payload; treat as pending review.
+    return { ...tag, review_status: 0, resource_type: tag.resource_type || "manual_tag" };
+}
+
+function shouldSaveTagAsReview(
+    tag: SpaceTag | undefined,
+    id: number,
+    reviewTagIds: Set<number>,
+): boolean {
+    if (tag) {
+        if (tag.review_status === 0) {
+            return true;
+        }
+        if (tag.review_status === undefined || tag.review_status === null || tag.review_status === 1) {
+            return false;
+        }
     }
-    return tag;
+    return reviewTagIds.has(id);
 }
 
 function splitSelectedTagIds(
@@ -173,7 +181,7 @@ function splitSelectedTagIds(
     const review: number[] = [];
     for (const id of selectedTagIds) {
         const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
-        if ((tag && isPendingReviewSpaceTag(tag)) || reviewTagIds.has(id)) {
+        if (shouldSaveTagAsReview(tag, id, reviewTagIds)) {
             review.push(id);
         } else {
             approved.push(id);
@@ -232,7 +240,7 @@ function buildSavedFileTags(
         const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
         if (!tag?.name) continue;
         seen.add(id);
-        const pending = isPendingReviewSpaceTag(tag) || reviewTagIds.has(id);
+        const pending = isPendingReviewSpaceTag(tag) || shouldSaveTagAsReview(tag, id, reviewTagIds);
         saved.push({
             id: tag.id,
             name: tag.name,
@@ -621,7 +629,7 @@ export function EditTagsModal({
         const reviewIds = new Set<number>();
         for (const id of resolvedIds) {
             const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
-            if ((tag && isPendingReviewSpaceTag(tag)) || selectedReviewTagIdsRef.current.has(id)) {
+            if (shouldSaveTagAsReview(tag, id, selectedReviewTagIdsRef.current)) {
                 reviewIds.add(id);
             }
         }

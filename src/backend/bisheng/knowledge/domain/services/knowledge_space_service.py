@@ -9257,25 +9257,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _partition_file_tag_ids_for_update(
         self, tag_ids: list[int], review_tag_ids: list[int]
     ) -> tuple[list[int], list[int]]:
-        """Route ReviewTag ids into review_tag_ids even when the client misclassified them."""
+        """Split ids into approved Tag ids and pending ReviewTag ids.
+
+        Tag.id and ReviewTag.id come from independent sequences, so the same
+        numeric id can exist in both tables. We therefore trust the client's
+        declared bucket whenever the id actually exists in the table for that
+        bucket, and only reroute an id when it is missing from its declared
+        table but present in the other one.
+        """
         normalized_tags = list(dict.fromkeys(tag_ids or []))
         normalized_review = list(dict.fromkeys(review_tag_ids or []))
-        if not normalized_tags:
+        if not normalized_tags and not normalized_review:
             return normalized_tags, normalized_review
 
+        all_ids = list(dict.fromkeys(normalized_tags + normalized_review))
         async with get_async_db_session() as session:
-            review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(normalized_tags)))).all()
+            tag_rows = (await session.exec(select(Tag.id).where(Tag.id.in_(all_ids)))).all()
+            review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(all_ids)))).all()
+        tag_id_set = {int(row) for row in tag_rows}
         review_id_set = {int(row) for row in review_rows}
-        if not review_id_set:
-            return normalized_tags, normalized_review
 
-        # ReviewTag and Tag use separate sequences; numeric id collisions are possible.
-        # Membership in review_tag must win over accidental Tag.id overlap.
-        normalized_review = list(
-            dict.fromkeys(normalized_review + [tag_id for tag_id in normalized_tags if tag_id in review_id_set])
-        )
-        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in review_id_set]
-        return normalized_tags, normalized_review
+        resolved_tags: list[int] = []
+        resolved_review: list[int] = []
+
+        for tag_id in normalized_tags:
+            # Keep as approved when it is a real Tag; only reroute when it is
+            # not a Tag but is a genuine ReviewTag.
+            if tag_id in tag_id_set or tag_id not in review_id_set:
+                resolved_tags.append(tag_id)
+            else:
+                resolved_review.append(tag_id)
+
+        for review_id in normalized_review:
+            # Keep as pending when it is a real ReviewTag; only reroute when it
+            # is not a ReviewTag but is a genuine Tag.
+            if review_id in review_id_set or review_id not in tag_id_set:
+                resolved_review.append(review_id)
+            else:
+                resolved_tags.append(review_id)
+
+        return list(dict.fromkeys(resolved_tags)), list(dict.fromkeys(resolved_review))
 
     async def _promote_review_tags_existing_in_libraries(
         self, tag_ids: list[int], review_tag_ids: list[int]

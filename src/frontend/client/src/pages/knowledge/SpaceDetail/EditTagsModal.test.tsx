@@ -279,6 +279,31 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
+    it("saves approved library tags into tag_ids", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[12]}
+                initialTags={[{ id: 12, name: "人工C", resource_type: "manual_tag" }]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText("人工C")).toBeInTheDocument());
+        await user.click(screen.getByText("com_knowledge.confirm"));
+
+        await waitFor(() => {
+            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [12], []);
+        });
+    });
+
     it("saves selected tags for a single file", async () => {
         const user = userEvent.setup();
         const onClose = jest.fn();
