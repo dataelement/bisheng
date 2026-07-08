@@ -1,5 +1,5 @@
 import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Send, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { Card, CardContent } from "~/components/ui/Card";
@@ -34,6 +34,8 @@ interface FileCardProps {
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     onManagePermission?: () => void;
+    /** 懒查询：卡片被悬停时回调，触发按需查询该文件的操作权限 */
+    onRequestPermissions?: () => void;
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
@@ -69,6 +71,7 @@ export function FileCard({
     onValidateName,
     onCancelCreate,
     onManagePermission,
+    onRequestPermissions,
     canRename = false,
     canDelete = false,
     canDownload = false,
@@ -93,6 +96,11 @@ export function FileCard({
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    // 触屏/无 hover 设备上操作按钮常驻显示、不会触发 hover，需在挂载时即请求该文件权限，
+    // 否则懒查询下按钮永远拿不到权限。桌面(hover)则维持“悬停才查”。
+    useEffect(() => {
+        if (!revealCardActionsOnHoverOnly) onRequestPermissions?.();
+    }, [revealCardActionsOnHoverOnly, onRequestPermissions]);
     const failureMessage = (
         file.status === FileStatus.FAILED ||
         file.status === FileStatus.TIMEOUT ||
@@ -326,7 +334,7 @@ export function FileCard({
                 transitionDuration: '350ms',
                 transitionTimingFunction: 'ease-in-out'
             }}
-            onMouseEnter={() => setHovered(true)}
+            onMouseEnter={() => { setHovered(true); onRequestPermissions?.(); }}
             onMouseLeave={() => setHovered(false)}
             onClick={handleCardClick}
         >
