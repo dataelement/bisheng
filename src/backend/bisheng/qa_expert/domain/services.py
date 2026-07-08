@@ -223,7 +223,7 @@ class QuestionService:
         await self._send_adoption_notification(
             question_id,
             question.user_id,
-            answer.user_id,
+            answer.expert_id,
         )
 
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
@@ -577,6 +577,12 @@ class CommentService:
             answer.comment_count += 1
             await self.answer_repo.update(request.answer_id, comment_count=answer.comment_count)
 
+            # 3. 发送评论通知 (按需开启)
+            await self._send_comment_notification(
+                question_id=answer.question_id,
+                commenter_id=user_id,
+                answerer_id=answer.expert_id,
+            )
         else:
             if not request.question_id:
                 raise ValueError("缺少问题ID，无法创建追问")
@@ -596,13 +602,6 @@ class CommentService:
             await self.question_repo.update(request.question_id, comment_count=question.comment_count)
         # 2. 统一执行创建操作
         comment = await self.repository.create(comment)
-
-        # 3. 发送评论通知 (按需开启)
-        await self._send_comment_notification(
-            question_id=question.question_id,
-            commenter_id=user_id,
-            answerer_id=answer.user_id,
-        )
 
         return comment
 
