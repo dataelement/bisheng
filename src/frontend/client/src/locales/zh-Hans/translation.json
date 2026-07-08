@@ -2139,5 +2139,5 @@
   "com_notifications_action_qa_expert_invited": "邀请你回答专家问答问题「{{target}}」",
   "com_notifications_action_qa_expert_answered": "回答了你在专家问答提出的「{{target}}」",
   "com_notifications_action_qa_answer_commented": "评论了你在专家问答「{{target}}」问题中做出的回答",
-  "com_notifications_action_qa_answer_accepted": "采纳了你在专家问答「{{target}}」问题中做出的回答",
+  "com_notifications_action_qa_answer_accepted": "采纳了你在专家问答「{{target}}」问题中做出的回答"
 }
