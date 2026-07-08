@@ -792,7 +792,7 @@ export function ArticleList({
                             <LoadingIcon className="size-20 text-primary" />
                         </div>
                     ) : articles.length === 0 ? (
-                        <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">
+                        <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
                             {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
                                 <>
                                     <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />

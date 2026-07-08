@@ -1520,8 +1520,8 @@
     "empty_go_explore": "No apps used yet. Head to the app marketplace",
     "explore_more": "Explore more apps",
     "recent_apps_hint": "Your recently used apps are all here～",
-    "service_maintenance_title": "System under maintenance",
-    "service_maintenance": "We're performing emergency maintenance; service will be back soon.",
+    "service_maintenance_title": "Oops, we hit a small hiccup",
+    "service_maintenance": "Hang tight for a moment — we'll be back to normal shortly.",
     "refresh": "Refresh to retry"
   },
   "com_knowledge": {
