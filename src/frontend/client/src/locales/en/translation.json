@@ -2206,6 +2206,6 @@
   "com_approval_search_placeholder": "Search applicant, scenario or file",
   "com_notifications_action_qa_expert_invited": "Invited you to answer expert question \"{{target}}\"",
   "com_notifications_action_qa_expert_answered": "Answered expert question \"{{target}}\"",
-  "com_notifications_action_qa_expert_commented": "Commented on expert question \"{{target}}\"",
-  "com_notifications_action_qa_expert_accepted": "Accepted expert question \"{{target}}\"",
+  "com_notifications_action_qa_answer_commented": "Commented on expert question \"{{target}}\"",
+  "com_notifications_action_qa_answer_accepted": "Accepted expert question \"{{target}}\"",
 }

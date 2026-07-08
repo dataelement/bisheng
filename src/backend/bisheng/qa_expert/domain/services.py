@@ -517,7 +517,7 @@ class AnswerService:
         content = [
             {
                 "type": "system_text",
-                "content": "qa_question_answered",
+                "content": "qa_expert_answered",
             },
             {
                 "type": "business_url",
@@ -544,7 +544,7 @@ class AnswerService:
                 message_type=MessageTypeEnum.NOTIFY,
                 receiver=[questioner_id],
                 status=MessageStatusEnum.APPROVED,
-                action_code="qa_question_answered",
+                action_code="qa_expert_answered",
             )
 
 
