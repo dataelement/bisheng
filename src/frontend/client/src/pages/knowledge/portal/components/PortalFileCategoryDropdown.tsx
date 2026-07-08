@@ -41,10 +41,10 @@ export function getPortalFileCategoryDisplayText(
     const selected = findPortalFileSubcategory(groups, code);
     if (selected) return `${selected.parentLabel} / ${selected.label}`;
     const normalizedCode = normalizeEncodingCode(code || "");
-    if (normalizedCode) return normalizedCode;
     const normalizedParent = normalizeEncodingCode(fallbackParentCode || "");
     const parent = groups.find((group) => group.code === normalizedParent);
     if (parent) return `${parent.label} / ${placeholder}`;
+    if (normalizedCode) return placeholder;
     return placeholder;
 }
 
@@ -124,7 +124,7 @@ export function PortalFileCategoryDropdown({
                                     onClick={() => setExpandedCategoryCode(expanded ? null : group.code)}
                                 >
                                     {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                    <span>{group.code} / {group.label}</span>
+                                    <span>{group.label}</span>
                                 </button>
                                 {expanded ? (
                                     <div className={s.uploadCategoryChildren} role="group">
@@ -140,7 +140,7 @@ export function PortalFileCategoryDropdown({
                                                     setOpen(false);
                                                 }}
                                             >
-                                                {child.code} / {child.label}
+                                                {child.parentLabel} / {child.label}
                                             </button>
                                         ))}
                                     </div>

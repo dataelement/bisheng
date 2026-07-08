@@ -75,6 +75,12 @@ const permissionCheckCache = new Map<string, {
 const permissionCheckInFlight = new Map<string, Promise<{ allowed: boolean }>>();
 let permissionCheckCacheRevision = 0;
 
+// grantable（relation-models/grantable）短缓存 + in-flight 去重：文件列表逐行判断“权限管理”
+// 入口时会对同一 object 触发多次（effect 重跑），缓存避免重复请求。
+const GRANTABLE_CACHE_TTL_MS = 5_000;
+const grantableCache = new Map<string, { expiresAt: number; result: RelationModel[] }>();
+const grantableInFlight = new Map<string, Promise<RelationModel[]>>();
+
 // ── Helpers ──────────────────────────────────────────
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
@@ -243,11 +249,35 @@ export async function getGrantableRelationModels(
   objectId: string,
   config?: PermissionRequestConfig
 ): Promise<RelationModel[]> {
-  const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
-    params: { object_type: objectType, object_id: objectId },
-    ...withPermissionRequestOptions(config),
-  });
-  return unwrapArray<RelationModel>(res);
+  const key = `${objectType}:${objectId}`;
+  const cached = grantableCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return withCallerAbort(Promise.resolve(cached.result), config?.signal);
+  }
+  if (cached) grantableCache.delete(key);
+
+  let requestPromise = grantableInFlight.get(key);
+  if (!requestPromise) {
+    // 共享请求不带调用方 signal，避免某个调用方 abort 影响其它复用者；各调用方用 withCallerAbort 隔离。
+    requestPromise = request
+      .get(`/api/v1/permissions/relation-models/grantable`, {
+        params: { object_type: objectType, object_id: objectId },
+        ...withPermissionRequestOptions(),
+      })
+      .then((res) => {
+        const models = unwrapArray<RelationModel>(res);
+        grantableCache.set(key, { expiresAt: Date.now() + GRANTABLE_CACHE_TTL_MS, result: models });
+        return models;
+      })
+      .finally(() => {
+        if (grantableInFlight.get(key) === requestPromise) {
+          grantableInFlight.delete(key);
+        }
+      });
+    grantableInFlight.set(key, requestPromise);
+  }
+
+  return withCallerAbort(requestPromise, config?.signal);
 }
 
 export async function canOpenPermissionDialog(

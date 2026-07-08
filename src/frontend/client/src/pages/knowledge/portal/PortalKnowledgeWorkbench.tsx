@@ -300,6 +300,7 @@ export default function PortalKnowledgeWorkbench() {
         spaceLoading,
         activeGroup,
         getSpacePermissions,
+        requestSpacePermissions,
     } = usePortalSpaces({
         activeSpace,
         setActiveSpace,
@@ -2094,7 +2095,11 @@ export default function PortalKnowledgeWorkbench() {
                         onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
                         onOpenCreateSpace={handleOpenCreateSpace}
                         onSelectSpace={setActiveSpace}
-                        onSpaceMenuOpenChange={(spaceId, open) => setSpaceMenuOpenId(open ? spaceId : null)}
+                        onSpaceMenuOpenChange={(spaceId, open) => {
+                            setSpaceMenuOpenId(open ? spaceId : null);
+                            // 打开菜单时才按需查询该空间的操作权限（懒查询）
+                            if (open) requestSpacePermissions(spaceId);
+                        }}
                         onOpenSpaceSettings={(space) => void handleOpenSpaceSettings(space)}
                         onOpenSpaceMembers={handleOpenSpaceMembers}
                         onPinSpace={(space, pinned, group) => void handlePinSpace(space, pinned, group)}

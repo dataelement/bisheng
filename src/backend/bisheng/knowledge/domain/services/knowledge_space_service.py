@@ -1091,8 +1091,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _logger.info(
             "grouped_spaces_perf user_id=%s n_spaces=%s levels_ms=%.1f effective_ms=%.1f "
             "file_count_ms=%.1f decorate_ms=%.1f total_ms=%.1f",
-            self.login_user.user_id, len(spaces),
-            levels_ms, effective_ms, file_count_ms, decorate_ms,
+            self.login_user.user_id,
+            len(spaces),
+            levels_ms,
+            effective_ms,
+            file_count_ms,
+            decorate_ms,
             (time.perf_counter() - t0) * 1000,
         )
         return result
@@ -5707,7 +5711,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if cached is not None:
             _logger.info(
                 "list_accessible_spaces cache_hit=1 user_id=%s n=%s",
-                self.login_user.user_id, len(cached),
+                self.login_user.user_id,
+                len(cached),
             )
             return cached
 
@@ -5738,7 +5743,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         collect_ms = (time.perf_counter() - _t) * 1000
         _logger.info(
             "list_accessible_spaces cache_hit=0 user_id=%s collect_ms=%.1f",
-            self.login_user.user_id, collect_ms,
+            self.login_user.user_id,
+            collect_ms,
         )
 
         formatted = await self._format_accessible_spaces(
@@ -6681,6 +6687,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return folder_counts
 
+    async def _load_folder_direct_counts(self, folders: list[KnowledgeFile]) -> dict[int, dict[str, int | bool]]:
+        """Shallow folder stats: DIRECT-child SUCCESS file count + has_children.
+
+        One batched query per space. NO recursion, NO permission (OpenFGA) checks.
+        A direct child of a folder has ``file_level_path == f"{folder.file_level_path}/{folder.id}"``.
+        ``visible_success_file_num`` here means direct SUCCESS files (not deep, not visibility-filtered);
+        precise <=20 enforcement stays in ``resolve_qa_scope_file_ids`` at QA time.
+        """
+        from sqlmodel import col
+
+        folder_counts: dict[int, dict[str, int | bool]] = {}
+        if not folders:
+            return folder_counts
+
+        prefix_to_folder: dict[str, int] = {}
+        prefixes_by_space: dict[int, list[str]] = {}
+        for folder in folders:
+            prefix = f"{folder.file_level_path or ''}/{folder.id}"
+            prefix_to_folder[prefix] = int(folder.id)
+            prefixes_by_space.setdefault(int(folder.knowledge_id), []).append(prefix)
+            folder_counts[int(folder.id)] = {
+                "file_num": 0,
+                "success_file_num": 0,
+                "visible_success_file_num": 0,
+                "processing_file_num": 0,
+                "has_children": False,
+            }
+
+        in_progress_statuses = {
+            KnowledgeFileStatus.PROCESSING.value,
+            KnowledgeFileStatus.WAITING.value,
+            KnowledgeFileStatus.REBUILDING.value,
+        }
+        for space_id, prefixes in prefixes_by_space.items():
+            stmt = (
+                select(
+                    KnowledgeFile.file_level_path,
+                    KnowledgeFile.file_type,
+                    KnowledgeFile.status,
+                    func.count(KnowledgeFile.id),
+                )
+                .where(
+                    KnowledgeFile.knowledge_id == space_id,
+                    col(KnowledgeFile.file_level_path).in_(prefixes),
+                )
+                .group_by(
+                    KnowledgeFile.file_level_path,
+                    KnowledgeFile.file_type,
+                    KnowledgeFile.status,
+                )
+            )
+            async with get_async_db_session() as session:
+                rows = (await session.exec(stmt)).all()
+            for level_path, file_type, status, count in rows:
+                folder_id = prefix_to_folder.get(level_path)
+                if folder_id is None:
+                    continue
+                entry = folder_counts[folder_id]
+                entry["has_children"] = True
+                if file_type == FileType.FILE.value:
+                    entry["file_num"] += count
+                    if status == KnowledgeFileStatus.SUCCESS.value:
+                        entry["success_file_num"] += count
+                        entry["visible_success_file_num"] += count
+                    elif status in in_progress_statuses:
+                        entry["processing_file_num"] += count
+        return folder_counts
+
     @staticmethod
     def _has_folder_stats_filters(
         *,
@@ -6943,6 +7017,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         include_folder_counts: bool = True,
         folder_counts_override: dict[int, dict[str, int]] | None = None,
+        enrich_files: bool = True,
+        folder_count_mode: str = "deep",
     ) -> list[dict]:
         folder_ids = []
         file_ids = []
@@ -6958,10 +7034,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_counts = folder_counts_override
             else:
                 folders = [f for f in res if f.file_type == FileType.DIR]
-                folder_counts = await self._load_folder_stat_counts(folders)
+                if folder_count_mode == "shallow":
+                    folder_counts = await self._load_folder_direct_counts(folders)
+                else:
+                    folder_counts = await self._load_folder_stat_counts(folders)
 
-        # file need find all tags
-        file_tags = await self._load_file_tags_batch(file_ids) if file_ids else {}
+        # file need find all tags (skip when caller does not consume enrichment, e.g. QA tree)
+        file_tags = await self._load_file_tags_batch(file_ids) if (enrich_files and file_ids) else {}
 
         result = []
         for one in res:
@@ -6980,13 +7059,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     item.update(counts)
                 item["summary"] = ""
             else:
-                item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
-                item["tags"] = file_tags.get(one.id, [])
-                item["summary"] = one.abstract or ""
-                # Version enrichment fields set by _enrich_with_version_info (if version_repo is set).
-                item["version_no"] = getattr(one, "_version_no", None)
-                item["is_multi_version"] = getattr(one, "_is_multi_version", False)
-                item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
+                if enrich_files:
+                    item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
+                    item["tags"] = file_tags.get(one.id, [])
+                    item["summary"] = one.abstract or ""
+                    # Version enrichment fields set by _enrich_with_version_info (if version_repo is set).
+                    item["version_no"] = getattr(one, "_version_no", None)
+                    item["is_multi_version"] = getattr(one, "_is_multi_version", False)
+                    item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
             result.append(item)
 
         return result
@@ -7117,16 +7197,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not batch_items:
                 break
 
-            visible_batch = await self._filter_visible_child_items(
-                batch_items,
-                space_id=space_id,
-                context=permission_context,
-            )
-            for item in visible_batch:
-                visible_page_items.append(item)
-                if len(visible_page_items) > page_size:
-                    # Got the +1 probe — done scanning.
-                    return visible_page_items[:page_size], True
+            # Permission-check the fetched batch in chunks, stopping as soon as we
+            # have page_size + 1 visible items. Each ReBAC check is an OpenFGA
+            # round-trip, so filtering the whole batch (up to
+            # _CHILD_PERMISSION_SCAN_BATCH_SIZE) just to return page_size items
+            # wastes checks — early-stop bounds them to roughly what the page needs.
+            # Chunk size page_size + 1 fills-and-probes a page in a single chunk
+            # when items are visible; sparser visibility simply consumes more chunks.
+            chunk_size = page_size + 1
+            for chunk_start in range(0, len(batch_items), chunk_size):
+                chunk = batch_items[chunk_start : chunk_start + chunk_size]
+                visible_chunk = await self._filter_visible_child_items(
+                    chunk,
+                    space_id=space_id,
+                    context=permission_context,
+                )
+                for item in visible_chunk:
+                    visible_page_items.append(item)
+                    if len(visible_page_items) > page_size:
+                        # Got the +1 probe — done scanning.
+                        return visible_page_items[:page_size], True
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
             # visible) so the next batch picks up strictly after; if we used
@@ -7151,6 +7241,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cursor: str | None = None,
         page_size: int = 20,
         file_type: int | None = None,
+        enrich_files: bool = True,
+        folder_count_mode: str = "deep",
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
@@ -7204,11 +7296,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
-        await self._enrich_with_version_info(visible_page_items)
+        if enrich_files:
+            await self._enrich_with_version_info(visible_page_items)
 
         data = await self._handle_file_folder_extra_info(
             visible_page_items,
             include_folder_counts=True,
+            enrich_files=enrich_files,
+            folder_count_mode=folder_count_mode,
         )
 
         next_cursor: str | None = None
@@ -9162,24 +9257,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _partition_file_tag_ids_for_update(
         self, tag_ids: list[int], review_tag_ids: list[int]
     ) -> tuple[list[int], list[int]]:
-        """Route ReviewTag ids into review_tag_ids even when the client misclassified them."""
+        """Split ids into approved Tag ids and pending ReviewTag ids.
+
+        Tag.id and ReviewTag.id come from independent sequences, so the same
+        numeric id can exist in both tables. We therefore trust the client's
+        declared bucket whenever the id actually exists in the table for that
+        bucket, and only reroute an id when it is missing from its declared
+        table but present in the other one.
+        """
         normalized_tags = list(dict.fromkeys(tag_ids or []))
         normalized_review = list(dict.fromkeys(review_tag_ids or []))
-        if not normalized_tags:
+        if not normalized_tags and not normalized_review:
             return normalized_tags, normalized_review
 
+        all_ids = list(dict.fromkeys(normalized_tags + normalized_review))
         async with get_async_db_session() as session:
-            tag_rows = (await session.exec(select(Tag.id).where(Tag.id.in_(normalized_tags)))).all()
-            review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(normalized_tags)))).all()
+            tag_rows = (await session.exec(select(Tag.id).where(Tag.id.in_(all_ids)))).all()
+            review_rows = (await session.exec(select(ReviewTag.id).where(ReviewTag.id.in_(all_ids)))).all()
         tag_id_set = {int(row) for row in tag_rows}
         review_id_set = {int(row) for row in review_rows}
-        misclassified_review = review_id_set - tag_id_set
-        if not misclassified_review:
-            return normalized_tags, normalized_review
 
-        normalized_review = list(dict.fromkeys(normalized_review + list(misclassified_review)))
-        normalized_tags = [tag_id for tag_id in normalized_tags if tag_id not in misclassified_review]
-        return normalized_tags, normalized_review
+        resolved_tags: list[int] = []
+        resolved_review: list[int] = []
+
+        for tag_id in normalized_tags:
+            # Keep as approved when it is a real Tag; only reroute when it is
+            # not a Tag but is a genuine ReviewTag.
+            if tag_id in tag_id_set or tag_id not in review_id_set:
+                resolved_tags.append(tag_id)
+            else:
+                resolved_review.append(tag_id)
+
+        for review_id in normalized_review:
+            # Keep as pending when it is a real ReviewTag; only reroute when it
+            # is not a ReviewTag but is a genuine Tag.
+            if review_id in review_id_set or review_id not in tag_id_set:
+                resolved_review.append(review_id)
+            else:
+                resolved_tags.append(review_id)
+
+        return list(dict.fromkeys(resolved_tags)), list(dict.fromkeys(resolved_review))
 
     async def _promote_review_tags_existing_in_libraries(
         self, tag_ids: list[int], review_tag_ids: list[int]

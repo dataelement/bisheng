@@ -34,6 +34,11 @@ export function hasKnowledgeSpacePermission(
 
 interface KnowledgeSpaceActionPermissionsOptions {
     fullAccessSpaceIds?: Array<string | number>;
+    /**
+     * 仅查询这些操作权限（默认查全部 4 个）。调用方只消费部分权限时传入以减少请求，
+     * 例如空间详情页只需要 share_space。
+     */
+    permissionIds?: readonly KnowledgeSpaceActionPermission[];
 }
 
 export function useKnowledgeSpaceActionPermissions(
@@ -41,6 +46,8 @@ export function useKnowledgeSpaceActionPermissions(
     options: KnowledgeSpaceActionPermissionsOptions = {},
 ) {
     const { user } = useAuthContext();
+    const permissionIds = options.permissionIds ?? KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS;
+    const permissionIdsKey = permissionIds.join(",");
     const [permissions, setPermissions] = useState<Record<string, KnowledgeSpaceActionPermission[]>>({});
     const [loading, setLoading] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
@@ -65,7 +72,7 @@ export function useKnowledgeSpaceActionPermissions(
         if (isSystemAdmin(user?.role)) {
             const nextPermissions: Record<string, KnowledgeSpaceActionPermission[]> = {};
             for (const id of stableSpaceIds) {
-                nextPermissions[id] = [...KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS];
+                nextPermissions[id] = [...permissionIds];
             }
             setPermissions(nextPermissions);
             setLoading(false);
@@ -81,11 +88,11 @@ export function useKnowledgeSpaceActionPermissions(
             spaceId: string,
         ): Promise<[string, KnowledgeSpaceActionPermission[]]> => {
             if (fullAccessSpaceIdSet.has(spaceId)) {
-                return [spaceId, [...KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS]];
+                return [spaceId, [...permissionIds]];
             }
 
             const allowedPermissions: KnowledgeSpaceActionPermission[] = [];
-            for (const permissionId of KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS) {
+            for (const permissionId of permissionIds) {
                 if (controller.signal.aborted) return [spaceId, allowedPermissions];
                 try {
                     const res = await checkPermission(
@@ -119,7 +126,7 @@ export function useKnowledgeSpaceActionPermissions(
         return () => {
             controller.abort();
         };
-    }, [fullAccessSpaceIdSet, stableSpaceIds.join(","), user?.role]);
+    }, [fullAccessSpaceIdSet, permissionIdsKey, stableSpaceIds.join(","), user?.role]);
 
     return { permissions, loading };
 }

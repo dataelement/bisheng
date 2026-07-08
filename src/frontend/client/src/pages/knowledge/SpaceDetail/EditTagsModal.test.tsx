@@ -175,6 +175,135 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
+    it("saves multiple manually created tags into review_tag_ids", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(addSpaceTagApi)
+            .mockResolvedValueOnce({ id: 101, name: "标签A", business_type: "tag_library" })
+            .mockResolvedValueOnce({ id: 102, name: "标签B", business_type: "tag_library" })
+            .mockResolvedValueOnce({ id: 103, name: "标签C", business_type: "tag_library" });
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+
+        const input = screen.getByRole("textbox");
+        await user.type(input, "标签A");
+        await user.keyboard("{Enter}");
+        await user.type(input, "标签B");
+        await user.keyboard("{Enter}");
+        await user.type(input, "标签C");
+        await user.keyboard("{Enter}");
+        await user.click(screen.getByText("com_knowledge.confirm"));
+
+        await waitFor(() => {
+            expect(addSpaceTagApi).toHaveBeenCalledTimes(3);
+            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [], [101, 102, 103]);
+        });
+    });
+
+    it("saves both approved and pending tags when both are selected", async () => {
+        const user = userEvent.setup();
+        const onSaved = jest.fn();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag", business_type: "tag_library" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                onSaved={onSaved}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[12, 2]}
+                initialTags={[
+                    { id: 12, name: "人工C", resource_type: "manual_tag" },
+                    { id: 2, name: "待审核", resource_type: "manual_tag", review_status: 0 },
+                ]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("人工C")).toBeInTheDocument();
+            expect(screen.getAllByText("待审核").length).toBeGreaterThan(0);
+        });
+
+        await user.click(screen.getByText("com_knowledge.confirm"));
+
+        await waitFor(() => {
+            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [12], [2]);
+            expect(onSaved).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ id: 12, name: "人工C" }),
+                    expect.objectContaining({ id: 2, name: "待审核", review_status: 0 }),
+                ]),
+            );
+        });
+    });
+
+    it("keeps pending file tags without space tag metadata on save", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[12, 2]}
+                initialTags={[
+                    { id: 12, name: "人工C", resource_type: "manual_tag" },
+                    { id: 2, name: "仅文件待审核", resource_type: "manual_tag", review_status: 0 },
+                ]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText("人工C")).toBeInTheDocument());
+        await user.click(screen.getByText("com_knowledge.confirm"));
+
+        await waitFor(() => {
+            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [12], [2]);
+        });
+    });
+
+    it("saves approved library tags into tag_ids", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[12]}
+                initialTags={[{ id: 12, name: "人工C", resource_type: "manual_tag" }]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText("人工C")).toBeInTheDocument());
+        await user.click(screen.getByText("com_knowledge.confirm"));
+
+        await waitFor(() => {
+            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [12], []);
+        });
+    });
+
     it("saves selected tags for a single file", async () => {
         const user = userEvent.setup();
         const onClose = jest.fn();

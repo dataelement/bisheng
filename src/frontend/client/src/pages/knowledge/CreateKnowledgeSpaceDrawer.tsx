@@ -732,8 +732,8 @@ export function CreateKnowledgeSpaceDrawer({
                             </div>
 
                             <div className="space-y-2">
-                                <Label className="text-[14px] font-medium text-[#1D2129]">
-                                    {mode === "create" ? <span className="text-[#F53F3F]">*</span> : null}
+                                <Label className="text-sm text-[#1D2129] font-medium">
+                                    <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_knowledge.auto_tag_library")}
                                 </Label>
                                 <MultiSelect

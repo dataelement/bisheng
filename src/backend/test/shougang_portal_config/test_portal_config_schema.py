@@ -1,3 +1,5 @@
+import re
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -91,6 +93,32 @@ def test_redact_portal_admin_config_hides_plaintext_secrets():
     assert 'client_secret' not in view_data['unified_auth']
     assert 'state_secret' not in view_data['unified_auth']
     assert 'login_sync_hmac_secret' not in view_data['unified_auth']
+
+
+def test_portal_document_type_generates_missing_child_codes():
+    raw_config = _minimal_portal_config()
+    raw_config['document_types'] = [
+        {
+            'code': 'pol',
+            'label': '政策制度',
+            'children': [
+                {'label': '制度文件'},
+                {'code': 'POL-OLD', 'label': '历史分类'},
+            ],
+        },
+    ]
+
+    config = ShougangPortalAdminConfig(
+        portal=raw_config,
+        bisheng={'base_url': 'http://bisheng.example.com'},
+        unified_auth={},
+    )
+    children = config.portal.document_types[0].children
+
+    assert re.fullmatch(r'POL-[A-Z0-9]{4}', children[0].code)
+    assert children[0].label == '制度文件'
+    assert children[1].code == 'POL-OLD'
+    assert children[1].label == '历史分类'
 
 
 def test_internal_config_endpoint_returns_full_config_without_auth(monkeypatch):

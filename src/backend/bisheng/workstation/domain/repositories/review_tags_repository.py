@@ -355,6 +355,7 @@ class ReviewTagsRepositoryImpl:
             ReviewTag.name == tag_name,
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
+            ReviewTag.review_status == 0,
             ReviewTag.resource_type == resource_type,
         )
         review_tag_list = await self.session.exec(statement)

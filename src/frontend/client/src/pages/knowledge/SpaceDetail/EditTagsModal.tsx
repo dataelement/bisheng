@@ -140,29 +140,48 @@ function isPendingReviewSpaceTag(tag: SpaceTag): boolean {
 }
 
 function normalizeCreatedSpaceTag(tag: SpaceTag, reviewTagEnabled: boolean): SpaceTag {
-    if (!reviewTagEnabled || isLibrarySpaceTag(tag)) {
+    if (!reviewTagEnabled) {
+        return tag;
+    }
+    // add_space_tag always creates a pending ReviewTag row (business_type may be
+    // tag_library), so a freshly created tag without an approved status is pending.
+    if (tag.review_status === 1 || tag.review_status === 2) {
         return tag;
     }
     if (tag.review_status === 0) {
         return tag;
     }
-    // add_space_tag creates ReviewTag rows; API may omit review_status in the payload.
-    if (tag.review_status === undefined || tag.review_status === null) {
-        return { ...tag, review_status: 0, resource_type: tag.resource_type || "manual_tag" };
+    // API may omit review_status in the create payload; treat as pending review.
+    return { ...tag, review_status: 0, resource_type: tag.resource_type || "manual_tag" };
+}
+
+function shouldSaveTagAsReview(
+    tag: SpaceTag | undefined,
+    id: number,
+    reviewTagIds: Set<number>,
+): boolean {
+    if (tag) {
+        if (tag.review_status === 0) {
+            return true;
+        }
+        if (tag.review_status === undefined || tag.review_status === null || tag.review_status === 1) {
+            return false;
+        }
     }
-    return tag;
+    return reviewTagIds.has(id);
 }
 
 function splitSelectedTagIds(
     selectedTagIds: Set<number>,
     spaceTags: SpaceTag[],
     tagMetaRef: React.MutableRefObject<Map<number, SpaceTag>>,
+    reviewTagIds: Set<number> = new Set(),
 ): { approvedTagIds: number[]; reviewTagIds: number[] } {
     const approved: number[] = [];
     const review: number[] = [];
     for (const id of selectedTagIds) {
-        const tag = tagMetaRef.current.get(id) ?? spaceTags.find((item) => item.id === id);
-        if (tag && isPendingReviewSpaceTag(tag)) {
+        const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
+        if (shouldSaveTagAsReview(tag, id, reviewTagIds)) {
             review.push(id);
         } else {
             approved.push(id);
@@ -212,18 +231,21 @@ function buildSavedFileTags(
     selectedIds: Set<number>,
     spaceTags: SpaceTag[],
     tagMetaRef: React.MutableRefObject<Map<number, SpaceTag>>,
+    reviewTagIds: Set<number> = new Set(),
 ): FileTag[] {
     const saved: FileTag[] = [];
     const seen = new Set<number>();
     for (const id of selectedIds) {
         if (seen.has(id)) continue;
-        const tag = tagMetaRef.current.get(id) ?? spaceTags.find((item) => item.id === id);
-        if (!tag?.name || isPendingReviewSpaceTag(tag)) continue;
+        const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
+        if (!tag?.name) continue;
         seen.add(id);
+        const pending = isPendingReviewSpaceTag(tag) || shouldSaveTagAsReview(tag, id, reviewTagIds);
         saved.push({
             id: tag.id,
             name: tag.name,
             resource_type: tag.resource_type,
+            ...(pending ? { review_status: tag.review_status ?? 0 } : {}),
         });
     }
     return saved;
@@ -556,12 +578,12 @@ export function EditTagsModal({
     const persistDraftTagsBeforeSave = async (): Promise<Set<number>> => {
         const resolvedIds = new Set<number>();
         for (const selectedId of selectedTagIdsRef.current) {
-            const tag = resolveSpaceTag(selectedId, spaceTags, tagMetaRef);
-            if (!tag?.name) continue;
             if (!isDraftSpaceTagId(selectedId)) {
                 resolvedIds.add(selectedId);
                 continue;
             }
+            const tag = resolveSpaceTag(selectedId, spaceTags, tagMetaRef);
+            if (!tag?.name) continue;
 
             try {
                 const created = await addSpaceTagApi(spaceId, tag.name);
@@ -606,8 +628,8 @@ export function EditTagsModal({
         syncSelectedTagIds(resolvedIds);
         const reviewIds = new Set<number>();
         for (const id of resolvedIds) {
-            const tag = tagMetaRef.current.get(id);
-            if (tag && isPendingReviewSpaceTag(tag)) {
+            const tag = resolveSpaceTag(id, spaceTags, tagMetaRef);
+            if (shouldSaveTagAsReview(tag, id, selectedReviewTagIdsRef.current)) {
                 reviewIds.add(id);
             }
         }
@@ -655,6 +677,7 @@ export function EditTagsModal({
                 resolvedIds,
                 spaceTags,
                 tagMetaRef,
+                selectedReviewTagIdsRef.current,
             );
             if (isBatchMode && fileIds) {
                 await batchUpdateTagsApi(spaceId, {
@@ -663,12 +686,22 @@ export function EditTagsModal({
                     review_tag_ids: reviewTagIds,
                 });
                 showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
-                const addedTags = buildSavedFileTags(resolvedIds, spaceTags, tagMetaRef);
+                const addedTags = buildSavedFileTags(
+                    resolvedIds,
+                    spaceTags,
+                    tagMetaRef,
+                    selectedReviewTagIdsRef.current,
+                );
                 onSaved?.(addedTags, { fileIds });
             } else if (fileId) {
                 await updateFileTagsApi(spaceId, fileId, approvedTagIds, reviewTagIds);
                 showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
-                const savedTags = buildSavedFileTags(resolvedIds, spaceTags, tagMetaRef);
+                const savedTags = buildSavedFileTags(
+                    resolvedIds,
+                    spaceTags,
+                    tagMetaRef,
+                    selectedReviewTagIdsRef.current,
+                );
                 onSaved?.(savedTags);
             }
             queryClient.invalidateQueries({ queryKey: ["spaceTags", spaceId] });

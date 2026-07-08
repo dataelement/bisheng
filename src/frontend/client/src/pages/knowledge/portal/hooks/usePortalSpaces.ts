@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     getCreateSpaceOptionsApi,
@@ -173,18 +173,22 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
             || teamSpacesQuery.isFetching
         ),
     );
-    const spaceIds = useMemo(
-        () => selectableSpaces.map((space) => space.id),
-        [selectableSpaces],
-    );
     const fullAccessSpaceIds = useMemo(
         () => selectableSpaces
             .filter((space) => space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN)
             .map((space) => space.id),
         [selectableSpaces],
     );
+    // 懒查询：打开知识库界面时不再批量查询所有空间的操作权限；只有当用户打开某个空间的
+    // 更多菜单（需要展示 空间设置/成员管理/删除 等编辑操作）时，才把该空间加入按需查询集合。
+    // creator/admin（fullAccessSpaceIds）与系统管理员由 role 直接判定，无需真正发请求。
+    const [requestedPermissionSpaceIds, setRequestedPermissionSpaceIds] = useState<string[]>([]);
+    const requestSpacePermissions = useCallback((spaceId: string | number) => {
+        const key = String(spaceId);
+        setRequestedPermissionSpaceIds((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    }, []);
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
-        spaceIds,
+        requestedPermissionSpaceIds,
         { fullAccessSpaceIds },
     );
     const activeGroup = useMemo(
@@ -227,5 +231,6 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         spaceLoading: personalSpacesQuery.isLoading || preferredSpacePending,
         activeGroup,
         getSpacePermissions,
+        requestSpacePermissions,
     };
 }

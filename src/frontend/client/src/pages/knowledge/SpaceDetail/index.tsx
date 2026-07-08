@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, type MouseEvent, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, type MouseEvent, type ReactNode } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
@@ -277,9 +277,11 @@ export function KnowledgeSpaceContent({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
 
+    // 详情页只消费 share_space（分享按钮），按需只查这一项而非全部 4 个操作权限；
+    // creator/admin 由 fullAccessSpaceIds 直接放行，不发请求。
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
         [space.id],
-        { fullAccessSpaceIds: isAdmin ? [space.id] : [] },
+        { fullAccessSpaceIds: isAdmin ? [space.id] : [], permissionIds: ["share_space"] },
     );
     // Version-management write entries (process-similar button, list "similar"
     // pill) gate on the user's OpenFGA relation to this space: creator (owner)
@@ -287,10 +289,12 @@ export function KnowledgeSpaceContent({
     // spaces can return a stale SpaceChannelMember.user_role for users whose
     // real grant lives only in OpenFGA. checkPermission(..., "manager") covers
     // both owner and manager — OpenFGA's owner ⊃ manager makes owners allowed too.
+    // creator 本就是 owner（OpenFGA owner ⊃ manager），无需再发 manager 检查 —— 懒查询：
+    // 只有非 creator（可能是 manager/普通成员，role 可能过期不可信）才真正发请求核实。
     const { data: spaceManageCheck } = useQuery({
         queryKey: ["space-manage-check", space.id],
         queryFn: () => checkPermission("knowledge_space", space.id, "manager"),
-        enabled: !!space.id,
+        enabled: !!space.id && space.role !== SpaceRole.CREATOR,
     });
     const canManageMembers = space.role === SpaceRole.CREATOR
         || Boolean(spaceManageCheck?.allowed);
@@ -354,6 +358,13 @@ export function KnowledgeSpaceContent({
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
+    // 懒查询：加载时不再对所有文件逐项预检操作权限；仅当用户悬停/交互某一行（真正可能用到
+    // 该行的编辑操作）时，才把该文件加入按需集合，触发查询它的 重命名/删除/移动/下载/权限管理 权限。
+    const [requestedFilePermIds, setRequestedFilePermIds] = useState<Set<string>>(new Set());
+    const requestFilePermissions = useCallback((fileId: string | number) => {
+        const key = String(fileId);
+        setRequestedFilePermIds((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    }, []);
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
     const [movingFile, setMovingFile] = useState<KnowledgeFile | null>(null);
     const permissionEntryProbeKey = displayFiles
@@ -423,6 +434,8 @@ export function KnowledgeSpaceContent({
         const controller = new AbortController();
         const candidates = displayFiles.filter(
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+                // 懒查询：非 admin 只查用户已交互（悬停）过的文件行；admin 由 role 直接放行
+                && (isAdmin || requestedFilePermIds.has(String(file.id)))
         );
 
         if (hideFilePermissionActions) {
@@ -471,6 +484,7 @@ export function KnowledgeSpaceContent({
         hideFilePermissionActions,
         isAdmin,
         permissionEntryProbeKey,
+        requestedFilePermIds,
     ]);
 
     useEffect(() => {
@@ -478,6 +492,8 @@ export function KnowledgeSpaceContent({
         const controller = new AbortController();
         const candidates = displayFiles.filter(
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+                // 懒查询：非 admin 只查用户已交互（悬停）过的文件行；admin 由 role 直接放行
+                && (isAdmin || requestedFilePermIds.has(String(file.id)))
         );
 
         if (isAdmin) {
@@ -518,13 +534,15 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+                // 懒查询：非 admin 只查用户已交互（悬停）过的文件行；admin 由 role 直接放行
+                && (isAdmin || requestedFilePermIds.has(String(file.id)))
         );
 
         if (isAdmin) {
@@ -565,13 +583,15 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+                // 懒查询：非 admin 只查用户已交互（悬停）过的文件行；admin 由 role 直接放行
+                && (isAdmin || requestedFilePermIds.has(String(file.id)))
         );
 
         if (isAdmin) {
@@ -612,13 +632,15 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+                // 懒查询：非 admin 只查用户已交互（悬停）过的文件行；admin 由 role 直接放行
+                && (isAdmin || requestedFilePermIds.has(String(file.id)))
         );
 
         if (isAdmin) {
@@ -659,7 +681,7 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
         const eligibleSourceSpace = space.spaceLevel !== SpaceLevel.PUBLIC;
@@ -1371,6 +1393,7 @@ export function KnowledgeSpaceContent({
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
                                             onManagePermission={visiblePermissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                            onRequestPermissions={() => requestFilePermissions(file.id)}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
@@ -1413,6 +1436,7 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={visiblePermissionEntryIds}
+                                    onRequestPermissions={requestFilePermissions}
                                     renameEntryIds={renameEntryIds}
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}

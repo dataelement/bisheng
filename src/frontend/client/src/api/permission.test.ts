@@ -1,5 +1,5 @@
 import request from "~/api/request";
-import { authorizeResource, checkPermission } from "./permission";
+import { authorizeResource, checkPermission, getGrantableRelationModels } from "./permission";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -10,10 +10,12 @@ jest.mock("~/api/request", () => ({
 }));
 
 const mockPost = request.post as jest.Mock;
+const mockGet = request.get as jest.Mock;
 
 describe("permission API", () => {
   beforeEach(() => {
     mockPost.mockReset();
+    mockGet.mockReset();
   });
 
   it("rejects business error envelopes from authorizeResource", async () => {
@@ -44,5 +46,20 @@ describe("permission API", () => {
       expect.objectContaining({ object_id: "162", object_type: "knowledge_space", relation: "manager" }),
       expect.anything(),
     );
+  });
+
+  it("dedupes/caches grantable requests for the same object (文件列表逐行不重复请求)", async () => {
+    mockGet.mockResolvedValue({ status_code: 200, data: [{ id: 1, relation: "manager" }] });
+
+    // 并发两次 + 之后再一次：应只发一个真实请求（in-flight 去重 + 短缓存）
+    const [a, b] = await Promise.all([
+      getGrantableRelationModels("folder", "dedupe-1"),
+      getGrantableRelationModels("folder", "dedupe-1"),
+    ]);
+    const c = await getGrantableRelationModels("folder", "dedupe-1");
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+    expect(c).toEqual(a);
   });
 });

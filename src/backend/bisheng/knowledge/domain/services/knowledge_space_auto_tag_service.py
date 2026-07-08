@@ -157,7 +157,6 @@ class KnowledgeSpaceAutoTagService:
             knowledge
             and db_file
             and knowledge.type == KnowledgeTypeEnum.SPACE.value
-            and knowledge.auto_tag_enabled
             and has_libraries
             and db_file.file_type == FileType.FILE.value
             and db_file.status == KnowledgeFileStatus.SUCCESS.value

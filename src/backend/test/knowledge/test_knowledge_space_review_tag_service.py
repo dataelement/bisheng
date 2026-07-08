@@ -2,10 +2,22 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from bisheng.database.models.tag import TagResourceTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileSource,
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileStatus,
+)
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import (
     KnowledgeSpaceReviewTagService,
 )
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+
+_LINK_DAO_PATCH = (
+    "bisheng.knowledge.domain.services.knowledge_space_review_tag_service."
+    "KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge"
+)
 
 
 def test_append_file_tags_delegates_to_tag_library_review_sync():
@@ -56,3 +68,27 @@ def test_review_tag_llm_uses_zero_temperature():
 
     assert get_llm.call_args.kwargs["temperature"] == 0
     append_file_tags.assert_called_once()
+
+
+def test_review_tag_should_run_only_when_space_auto_tag_enabled():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=True,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+
+    with patch(_LINK_DAO_PATCH, return_value=[]):
+        assert KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)
+
+        knowledge.auto_tag_enabled = False
+        assert not KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)

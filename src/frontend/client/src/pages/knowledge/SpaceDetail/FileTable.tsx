@@ -680,6 +680,8 @@ interface FileTableProps {
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
     permissionEntryIds?: Set<string>;
+    /** 懒查询：某行被悬停/交互时回调，触发按需查询该文件的操作权限 */
+    onRequestPermissions?: (fileId: string) => void;
     renameEntryIds?: Set<string>;
     deleteEntryIds?: Set<string>;
     downloadEntryIds?: Set<string>;
@@ -707,7 +709,7 @@ interface FileTableProps {
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -921,6 +923,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
+                                onRequestPermissions={onRequestPermissions ? () => onRequestPermissions(file.id) : undefined}
                                 onManagePermission={
                                     onManagePermission && permissionEntryIds?.has(file.id)
                                         ? () => onManagePermission(file.id)
@@ -1007,6 +1010,7 @@ function FileRow({
     onPreview,
     onValidateName,
     onCancelCreate,
+    onRequestPermissions,
     onManagePermission,
     canRename = false,
     canDelete = false,
@@ -1050,6 +1054,7 @@ function FileRow({
     onNavigateFolder?: () => void;
     onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
+    onRequestPermissions?: () => void;
     onCancelCreate?: () => void;
     onManagePermission?: () => void;
     canRename?: boolean;
@@ -1294,7 +1299,7 @@ function FileRow({
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent"
             )}
-            onMouseEnter={() => setRowHovered(true)}
+            onMouseEnter={() => { setRowHovered(true); onRequestPermissions?.(); }}
             onMouseLeave={() => setRowHovered(false)}
         >
             {/* 复选框 — 左侧固定 */}
