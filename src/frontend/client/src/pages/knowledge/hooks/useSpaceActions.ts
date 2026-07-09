@@ -11,6 +11,7 @@ import {
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { extractKnowledgeActionErrorMessage } from "../errorUtils";
 
 interface UseSpaceActionsOptions {
     activeSpaceId?: string;
@@ -97,9 +98,12 @@ export function useSpaceActions({
             await deleteSpaceApi(spaceId);
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
-        } catch {
+        } catch (error) {
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.ERROR });
+            showToast({
+                message: extractKnowledgeActionErrorMessage(error) || localize("com_knowledge.delete_space_failed"),
+                severity: NotificationSeverity.ERROR,
+            });
         }
     };
 
