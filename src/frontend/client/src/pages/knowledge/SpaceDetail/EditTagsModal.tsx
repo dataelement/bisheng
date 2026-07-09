@@ -777,9 +777,10 @@ export function EditTagsModal({
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
             <DialogContent
+                data-testid="edit-tags-dialog"
                 onPointerDownOutside={(e) => e.preventDefault()}
                 onInteractOutside={(e) => e.preventDefault()}
-                className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
+                className="!flex max-h-[calc(100dvh-48px)] w-[600px] max-w-[calc(100vw-48px)] flex-col items-stretch gap-0 overflow-hidden rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:max-h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
             >
                 <DialogHeader className="h-auto shrink-0 space-y-0 border-b border-[#EBECF0] px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
@@ -794,7 +795,10 @@ export function EditTagsModal({
                         <X className="size-4" />
                     </button>
                 </DialogHeader>
-                <div className="flex flex-1 flex-col gap-2 px-6 pt-5 pb-5 touch-mobile:px-4 touch-mobile:pt-5 touch-mobile:pb-5">
+                <div
+                    data-testid="edit-tags-dialog-body"
+                    className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-6 pt-5 pb-5 touch-mobile:px-4 touch-mobile:pt-5 touch-mobile:pb-5"
+                >
                 {reviewTagEnabled && (
                     <div className="flex items-start gap-0.5 text-[12px] leading-5 text-[#F53F3F]">
                         <span className="shrink-0">***</span>
@@ -809,7 +813,7 @@ export function EditTagsModal({
                 <div className="flex flex-1 flex-col gap-0.5">
                     {/* Tags Input Box */}
                     <div
-                        className={`relative flex min-h-8 flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors ${isTagInputDisabled ? "cursor-not-allowed bg-[#f7f8fa]" : "cursor-text focus-within:border-primary"}`}
+                        className={`relative flex max-h-[120px] min-h-8 flex-wrap items-center gap-1 overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors ${isTagInputDisabled ? "cursor-not-allowed bg-[#f7f8fa]" : "cursor-text focus-within:border-primary"}`}
                         onClick={() => {
                             if (isTagInputDisabled) return;
                             document.getElementById("tag-input")?.focus();

@@ -843,3 +843,37 @@ describe("EditTagsModal recommended tags", () => {
         expect(input).toHaveValue("第11个");
     });
 });
+
+describe("EditTagsModal layout", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.mocked(useToastContext).mockReturnValue({ showToast: mockShowToast });
+        jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: true });
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 1, name: "技术文档", business_type: "tag_library", resource_type: "system_tag" },
+        ]);
+    });
+
+    it("keeps footer visible with a scrollable body when content overflows", async () => {
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[1]}
+                initialTags={[{ id: 1, name: "技术文档", resource_type: "system_tag" }]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByTestId("edit-tags-dialog")).toBeInTheDocument());
+
+        const dialog = screen.getByTestId("edit-tags-dialog");
+        const body = screen.getByTestId("edit-tags-dialog-body");
+
+        expect(dialog).toHaveClass("!flex", "max-h-[calc(100dvh-48px)]", "overflow-hidden");
+        expect(body).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
+        expect(screen.getByRole("button", { name: "com_knowledge.confirm" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "com_knowledge.cancel" })).toBeInTheDocument();
+    });
+});
