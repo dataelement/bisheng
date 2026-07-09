@@ -1956,6 +1956,54 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace, clearBatchSelection, confirm, loadRootTree, selectedDeletable, selectedFiles, showToast]);
 
+    const handleDeleteFile = useCallback(async (fileId: string) => {
+        if (!activeSpace) return;
+        if (!searchMode) {
+            await fileUpload.handleDeleteFile(fileId);
+            return;
+        }
+
+        if (!fileId) return;
+
+        const target = searchResults.find((file) => file.id === fileId);
+        if (!target) return;
+        if (!deleteEntryIds.has(fileId)) {
+            showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
+            return;
+        }
+
+        try {
+            await batchDeleteApi(activeSpace.id, {
+                file_ids: isFolder(target) ? undefined : toNumericIds([target]),
+                folder_ids: isFolder(target) ? toNumericIds([target]) : undefined,
+            });
+            setSearchResults((prev) => prev.filter((file) => file.id !== fileId));
+            setSelectedFileIds((prev) => {
+                const next = new Set(prev);
+                next.delete(fileId);
+                return next;
+            });
+            setSelectedFolderIds((prev) => {
+                const next = new Set(prev);
+                next.delete(fileId);
+                return next;
+            });
+            setSelectedFile((prev) => prev?.id === fileId ? null : prev);
+            await loadRootTree();
+            showToast({ message: "删除成功", severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
+        }
+    }, [
+        activeSpace,
+        deleteEntryIds,
+        fileUpload,
+        loadRootTree,
+        searchMode,
+        searchResults,
+        showToast,
+    ]);
+
     const handleBatchRetry = useCallback(async () => {
         if (!activeSpace || retryableSelectedFiles.length === 0) return;
         try {
@@ -2191,7 +2239,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onCreateFolder={() => fileUpload.handleCreateFolder()}
                                                     onDownloadFile={() => undefined}
                                                     onRenameFile={(fileId, newName) => void fileUpload.handleRenameFile(fileId, newName)}
-                                                    onDeleteFile={(fileId) => void fileUpload.handleDeleteFile(fileId)}
+                                                    onDeleteFile={(fileId) => void handleDeleteFile(fileId)}
                                                     onMoveFile={async (fileId, targetFolderId) => {
                                                         await fileUpload.handleMoveFile(fileId, targetFolderId);
                                                         // Refresh so the target folder's file-count stats update (move alone doesn't reload stats here).
