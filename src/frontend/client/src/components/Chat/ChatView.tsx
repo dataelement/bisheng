@@ -321,11 +321,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     landingResizeObserverRef.current = ro;
   }, []);
 
-  // Mobile only: the landing parent is `h-full` (= the visible scroll-area
-  // height, header/banner already excluded). We center the welcome block at
-  // its 50% mark and place the apps `parentH/2 + blockH/2 + 40px` from the top
-  // — i.e. exactly 40px below the centered input — instead of `vh`, which on
-  // mobile resolves below the visual center (layout-viewport relative).
+  // H5 shell (≤767) only: the landing parent is a definite `h-full` box (= the
+  // visible scroll-area height; MobileNav + Banner already excluded). We can't
+  // use `vh` here, and a `%` paddingTop resolves against WIDTH, so the apps
+  // offset is computed in px from this measured height: apps sit 40px below the
+  // welcome block, whose center is pinned at 40% of the region.
   const landingParentObserverRef = useRef<ResizeObserver | null>(null);
   const [landingParentHeight, setLandingParentHeight] = useState(0);
   const landingParentRef = useCallback((el: HTMLDivElement | null) => {
@@ -340,6 +340,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     ro.observe(el);
     landingParentObserverRef.current = ro;
   }, []);
+
 
   // F035: task mode is a ROLE permission. The backend folds each role's
   // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
@@ -586,11 +587,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             return (
               <div className={cn(
                 'flex flex-col relative',
-                // Landing (non-messages) layout keeps auto height on desktop so the
-                // vh-positioned welcome block + apps flow naturally. On mobile it
-                // needs a definite height so the landing block's `min-h-full`
-                // centering resolves against the visible scroll-area height.
-                useMessagesLayout ? 'h-full' : 'touch-mobile:h-full'
+                // Landing (non-messages) layout keeps auto height on the desktop
+                // shell (≥768) so the vh-positioned welcome block + apps flow
+                // naturally. The H5 shell (≤767) needs a definite height so the
+                // landing block's `min-h-full` centering resolves against the
+                // visible scroll-area height.
+                useMessagesLayout ? 'h-full' : 'max-md:h-full'
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
@@ -796,33 +798,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {citationPanelElement}
                   </div>
                 ) : (
-                  /* Landing page branch — welcome + input are pinned to viewport
-                     vertical center via absolute positioning (top:50% + translateY).
-                     Recommended apps sit exactly 40px below the input by using
-                     `paddingTop: calc(50vh + landingHalfHeight + 40px)`, where
-                     `landingBlockHeight` is measured live with a ResizeObserver.
-                     When total content exceeds viewport, the parent's
-                     overflow-y-auto handles scrolling — the centered block scrolls
-                     up with the document as expected.
+                  /* Landing page branch — the welcome block is pinned to the
+                     region's vertical center via absolute positioning, so its
+                     position is INDEPENDENT of whether recommended apps exist
+                     (apps just flow below it and scroll if they overflow).
 
-                     Mobile (touch-mobile, ≤1023px) can NOT use `vh`: the MobileNav
-                     header + Banner sit above this scroll container, so `45vh`
-                     (layout-viewport relative) resolves below the visible center.
-                     Instead the parent gets a definite `h-full` (= the visible
-                     scroll-area height) so the welcome block sits at 45% of it
-                     (`top-[45%]`, slightly above true center — looks more
-                     balanced than dead-center), and the apps sit 40px below the
-                     input via a JS-measured offset (see landingParentHeight). */
-                  <div ref={landingParentRef} className="relative min-h-full touch-mobile:h-full">
-                    {/* Centered: welcome message + input. `top: 50vh` (viewport
-                        height), NOT `top: 50%` — the parent's effective height
-                        gets stretched by the apps' paddingTop below, so a
-                        percentage would resolve to a non-viewport midpoint.
-                        On mobile the parent is a fixed `h-full` box, so `top-[45%]`
-                        resolves against the visible height (45vh-equivalent). */}
+                     ≥768 (desktop): center at 45vh; apps sit 40px below via
+                     `paddingTop: calc(45vh + halfBlock + 40px)`.
+
+                     ≤767 (H5 shell): can't use `vh` (MobileNav + Banner sit above
+                     this scroll container). The parent is a definite `h-full` box,
+                     so the block centers at 35% of it (`top-[35%]`) and the apps
+                     offset is computed in px from the measured region height
+                     (landingParentHeight) — a `%` paddingTop would resolve against
+                     width, not height. */
+                  <div ref={landingParentRef} className="relative min-h-full max-md:h-full">
+                    {/* Welcome message + input, absolutely centered. ≥768 at 45vh,
+                        ≤767 at 40% of the definite-height region. */}
                     <div
                       ref={landingBlockRef}
-                      className="absolute inset-x-0 top-[45vh] -translate-y-1/2 touch-mobile:top-[45%]"
+                      className="absolute inset-x-0 top-[45vh] -translate-y-1/2 max-md:top-[35%]"
                     >
                       {/* F035 Track H (P5): daily/task mode switch removed —
                           task mode is reached via the sidebar "new task" entry
@@ -831,7 +826,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                       {/* Input area for landing page */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto px-4 mt-10 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
+                        <div className="w-full max-w-[800px] mx-auto px-4 mt-10 max-md:max-w-full pb-3">
                           <AiChatInput
                             elevated
                             disabled={!bsConfig?.models?.length || !!shareToken}
@@ -867,16 +862,15 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       )}
                     </div>
 
-                    {/* Recommended apps: 40px below the centered block. The
-                        paddingTop pushes apps to (viewport midpoint) + (landing
-                        half-height) + 40px = (landing block bottom) + 40px.
-                        On mobile `vh` is replaced by the measured visible height
-                        (landingParentHeight) so the gap stays exactly 40px below
-                        the centered input rather than landing on the next screen. */}
+                    {/* Recommended apps: 40px below the centered block, so the
+                        block's own position never shifts when apps appear.
+                        offset = (block center) + (half block height) + 40px.
+                        ≥768 block center = 45vh; ≤767 = 40% of the measured region
+                        height (px, since `vh`/`%`-padding don't work here). */}
                     <div
                       style={{
-                        paddingTop: isTouchLayout
-                          ? `${landingParentHeight * 0.45 + landingBlockHeight / 2 + 40}px`
+                        paddingTop: isH5
+                          ? `${landingParentHeight * 0.35 + landingBlockHeight / 2 + 40}px`
                           : `calc(45vh + ${landingBlockHeight / 2 + 40}px)`,
                       }}
                     >

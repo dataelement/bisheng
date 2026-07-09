@@ -29,7 +29,7 @@ import {
     AlertDialogTitle,
 } from '~/components/ui/AlertDialog';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { useLocalize } from '~/hooks';
+import { useContainerCompact, useLocalize, TOOLBAR_COMPACT_THRESHOLD } from '~/hooks';
 import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import InputFiles from '~/pages/appChat/components/InputFiles';
 import { useFileDropAndPaste } from '~/pages/appChat/useFileDropAndPaste';
@@ -73,6 +73,9 @@ interface TaskModeInputProps {
 
 export function TaskModeInput({ conversationId = 'new', disabled = false, onFollowUp, running = false, onStop }: TaskModeInputProps) {
     const localize = useLocalize();
+    // Collapse toolbar labels to icons when the toolbar's own width (not the
+    // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
+    const { ref: toolbarRef, compact: toolbarCompact } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
     const navigate = useNavigate();
     const location = useLocation();
     const { showToast } = useToastContext();
@@ -339,7 +342,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
                 {/* Toolbar */}
                 <div className="flex h-8 min-h-8 w-full min-w-0 items-center justify-between gap-1">
-                    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+                    <div ref={toolbarRef} className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
                         <PlusMenu
                             disabled={disabled}
                             onUploadFile={() => inputFilesRef.current?.openPicker?.()}
@@ -353,14 +356,16 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                         <KnowledgeSpaceSelect
                             value={context.knowledge}
                             disabled={disabled}
+                            compact={toolbarCompact}
                             onChange={(knowledge) => setContext((prev) => ({ ...prev, knowledge }))}
                         />
                         <ToolsSelect
                             tools={context.tools}
                             disabled={disabled}
+                            compact={toolbarCompact}
                             onChange={(tools) => setContext((prev) => ({ ...prev, tools }))}
                         />
-                        <TaskModeToggle active disabled={disabled} onClick={handleExitTaskMode} />
+                        <TaskModeToggle active disabled={disabled} compact={toolbarCompact} onClick={handleExitTaskMode} />
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1.5">

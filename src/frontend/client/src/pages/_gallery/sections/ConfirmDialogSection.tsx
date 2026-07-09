@@ -109,8 +109,9 @@ export function ConfirmDialogSection() {
       subtitle={
         <>
           删除/危险操作时的「确认 / 取消」小弹窗。两套体系：旧页面走{' '}
-          <code>OGDialogTemplate selection</code>（剩 14 文件），新页面走 <code>useConfirm()</code>
-          （24 文件，含已迁入的 8 处）。<b>收敛第一步已完成</b>：B 套壳与按钮已对齐 C 套，历史 9 种 selectClasses
+          <code>OGDialogTemplate selection</code>（剩 13 文件：7 处死 UI 确认 + 6 处表单弹窗），新页面走{' '}
+          <code>useConfirm()</code>（26 文件，含已迁入的 10 处）。
+          <b>用户可见的真确认已全部迁完</b>；死 UI（被注释的 SidePanel 树 + 无人引用的 Chat/Header 树）待死代码清理，表单弹窗归 Modal 期。<b>收敛第一步已完成</b>：B 套壳与按钮已对齐 C 套，历史 9 种 selectClasses
           被自动折叠为 danger / primary 两档 —— 下方旧写法卡片现在应呈现统一外观，逐个打开即是验收。
           （另有 9 个文件手拼 <code>AlertDialog</code> —— 属于普通弹窗，归 Modal 改造范围，本期不动。）
         </>
@@ -126,7 +127,7 @@ export function ConfirmDialogSection() {
               <>
                 <code>OGDialogTemplate</code> + <code>selection</code>
               </>,
-              '14（原 21，迁移中）',
+              '13（原 21；剩余全是死 UI 或表单）',
               '旧页面（会话/书签/Agent/设置/Prompt…LibreChat 血统）',
               '差 · 确认按钮 9 种写法',
             ],
@@ -135,7 +136,7 @@ export function ConfirmDialogSection() {
               <>
                 <code>useConfirm()</code>（ConfirmContext + AlertDialog）
               </>,
-              '24（收敛目标，含已迁入 8 处）',
+              '26（收敛完成，含已迁入 10 处）',
               '新页面（知识空间 / 订阅频道 / 权限）',
               '好 · 样式集中在一个文件，destructive/default 两档',
             ],
@@ -151,20 +152,20 @@ export function ConfirmDialogSection() {
             [
               '1',
               <code key="c">bg-red-700 dark:bg-red-600 hover:bg-red-800 …</code>,
-              '删除（书签/工具/分享链接…）· 删会话 2 处已迁 C',
-              '6（原 8）',
+              '可达的 4 处已迁 C；剩 4 处全是死 UI（书签/分享弹窗/两个工具移除）',
+              '4（原 8）· 全死 UI',
             ],
             [
               '2',
               <code key="c">bg-red-600 hover:bg-red-700 dark:hover:bg-red-800</code>,
-              '删除（Agent / Assistant）· Prompt 组已迁 C',
-              '2（原 3）',
+              '删除 Agent / Assistant —— 死 UI（SidePanel 被注释）',
+              '2（原 3）· 全死 UI',
             ],
             [
               '3',
               <code key="c">bg-red-600 hover:bg-red-700 dark:hover:bg-red-600</code>,
-              '清空预设',
-              '1',
+              '清空预设 —— 死 UI（Chat/Header 无人引用）',
+              '1 · 死 UI',
             ],
             [
               '4',
@@ -292,7 +293,7 @@ export function ConfirmDialogSection() {
         />
         <ConfirmDemo
           label="Loading 态（isLoading: true）"
-          note="模板内置 Spinner · 自塞 Spinner 的只剩 SharedLinks 1 处（原 4 处，3 处已迁 C）"
+          note="模板内置 Spinner · 各页自塞 Spinner 的写法已随迁移清零（原 4 处）"
           title="删除会话"
           body="确认按钮处于加载中。"
           selectText="删除"

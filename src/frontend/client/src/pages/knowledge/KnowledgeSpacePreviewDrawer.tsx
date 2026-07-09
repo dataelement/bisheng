@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NoPermissionIllustration } from "~/components/illustrations";
+import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -21,6 +21,7 @@ import {
 } from "~/api/knowledge";
 import { checkPermission } from "~/api/permission";
 import { cn } from "~/utils";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
@@ -58,6 +59,12 @@ export function KnowledgeSpacePreviewDrawer({
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
+    // True while the FIRST page of the file list is in flight, so the empty
+    // state is not flashed before data arrives.
+    const [loadingFiles, setLoadingFiles] = useState(false);
+    // Guards against out-of-order responses when the effect re-fires (space /
+    // folder switch) while a previous first-page request is still pending.
+    const filesRequestSeqRef = useRef(0);
     // F027: cursor for the next page of `getSpaceChildrenApi`. null on first
     // page (and after a parent/space switch). Backend `next_cursor` advances
     // it as the user scrolls.
@@ -197,17 +204,21 @@ export function KnowledgeSpacePreviewDrawer({
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
         if (!space || !canViewFiles) {
+            filesRequestSeqRef.current += 1;
             setFilesPreview([]);
             setChildrenTotal(0);
             setChildrenPage(1);
+            setLoadingFiles(false);
             return;
         }
 
         // Reset + initial load
+        const requestSeq = ++filesRequestSeqRef.current;
         setFilesPreview([]);
         setChildrenPage(1);
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
+        setLoadingFiles(true);
         // F027: reset cursor so the first request after a parent/space switch
         // fetches page 1 (cursor=null) instead of inheriting a stale token.
         preview_next_cursor_ref.current = null;
@@ -221,6 +232,7 @@ export function KnowledgeSpacePreviewDrawer({
             ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
         })
             .then(res => {
+                if (requestSeq !== filesRequestSeqRef.current) return;
                 setFilesPreview(res.data);
                 // F027: derive a count surrogate from `has_more` since `total`
                 // is gone (used only to decide "load more" visibility).
@@ -228,8 +240,13 @@ export function KnowledgeSpacePreviewDrawer({
                 preview_next_cursor_ref.current = res.next_cursor ?? null;
             })
             .catch(() => {
+                if (requestSeq !== filesRequestSeqRef.current) return;
                 setFilesPreview([]);
                 setChildrenTotal(0);
+            })
+            .finally(() => {
+                if (requestSeq !== filesRequestSeqRef.current) return;
+                setLoadingFiles(false);
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
         // canViewApprovalContent is resolved asynchronously (checkPermission) for APPROVAL spaces; without it as a
@@ -511,7 +528,7 @@ export function KnowledgeSpacePreviewDrawer({
                             }}
                         >
                             {canViewFiles ? (
-                                <div className="space-y-2">
+                                <div className="flex min-h-full flex-col space-y-2">
                                     <div className="mb-1 text-sm text-[#4E5969] flex items-center gap-2 flex-wrap">
                                         <button
                                             type="button"
@@ -536,9 +553,17 @@ export function KnowledgeSpacePreviewDrawer({
                                             );
                                         })}
                                     </div>
-                                    {filesPreview.length === 0 ? (
-                                        <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">
-                                            {localize("com_knowledge.no_files")}</div>
+                                    {loadingFiles ? (
+                                        <div className="flex flex-1 items-center justify-center">
+                                            <LoadingIcon className="size-20 text-primary" />
+                                        </div>
+                                    ) : filesPreview.length === 0 ? (
+                                        <div className="flex flex-1 flex-col items-center justify-center text-center">
+                                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                            <p className="text-[14px] font-normal text-[#999999]">
+                                                {localize("com_knowledge.no_files")}
+                                            </p>
+                                        </div>
                                     ) : (
                                         <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
                                             {filesPreview.map((f) => (
@@ -595,7 +620,11 @@ export function KnowledgeSpacePreviewDrawer({
                     </>
                 ) : (
                     <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-[#86909c] touch-mobile:px-0">
-                        {loadingSpace ? localize("com_knowledge.loading") : localize("com_knowledge.space_invalid_or_deleted")}
+                        {loadingSpace ? (
+                            <LoadingIcon className="size-20 text-primary" />
+                        ) : (
+                            localize("com_knowledge.space_invalid_or_deleted")
+                        )}
                     </div>
                 )}
             </SheetContent>

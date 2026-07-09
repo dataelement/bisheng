@@ -14,6 +14,7 @@ The helpers must:
     so callers see a deterministic "deleted" error rather than a leaked
     cross-tenant row
 """
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -352,6 +353,46 @@ async def test_validate_accepts_string_model_ids_from_ws_model():
         new=AsyncMock(return_value=[row]),
     ):
         await avalidate_system_model_refs(['7', None, ''], target_tenant_id=ROOT_TENANT_ID)
+
+
+@pytest.mark.asyncio
+async def test_workbench_getter_sanitizes_inherited_stale_model_refs():
+    """Inherited Root workbench config must not echo deleted or Child-owned
+    model ids back to the UI; otherwise the next POST repeats the stale
+    payload and fails write-side validation."""
+    from bisheng.llm.domain.schemas import WSModel
+    from bisheng.llm.domain.services.llm import LLMService
+
+    payload = {
+        "models": [
+            WSModel(id="10", name="root-model").model_dump(),
+            WSModel(id="20", name="child-model").model_dump(),
+            WSModel(id="30", name="deleted-model").model_dump(),
+        ],
+        "linsight_default_model_id": "20",
+        "embedding_model": WSModel(id="10", name="root-embedding").model_dump(),
+        "asr_model": WSModel(id="30", name="deleted-asr").model_dump(),
+        "tts_model": WSModel(id="20", name="child-tts").model_dump(),
+    }
+    root_row = MagicMock(id=10, tenant_id=ROOT_TENANT_ID)
+    child_row = MagicMock(id=20, tenant_id=5)
+
+    with patch(
+        'bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve',
+        new=AsyncMock(return_value=(json.dumps(payload), True, False)),
+    ), patch(
+        'bisheng.llm.domain.services.llm.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[root_row, child_row]),
+    ):
+        config, inherited, blocked = await LLMService.aget_workbench_llm_with_meta(tenant_id=5)
+
+    assert inherited is True
+    assert blocked is False
+    assert [one.id for one in (config.models or [])] == ["10"]
+    assert config.linsight_default_model_id is None
+    assert config.embedding_model and config.embedding_model.id == "10"
+    assert config.asr_model is None
+    assert config.tts_model is None
 
 
 # --- LLMService.update_*_llm setter integration -----------------------------

@@ -40,6 +40,8 @@ export interface AvailableToolGroup {
 interface Props {
   availableTools: AvailableToolGroup[];
   disabled?: boolean;
+  /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
+  compact?: boolean;
 }
 
 function iconForGroup(group: AvailableToolGroup) {
@@ -48,7 +50,7 @@ function iconForGroup(group: AvailableToolGroup) {
   return <Outlined.Hammer className="size-4 text-[#999]" />;
 }
 
-export default function AgentToolSelector({ availableTools, disabled }: Props) {
+export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
   const localize = useLocalize();
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
@@ -129,11 +131,12 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           <div className="relative shrink-0">
             <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-[#999999]")} strokeWidth={1.5} />
           </div>
-          {/* Mobile: collapse to icon + chevron only to save horizontal space. */}
-          <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)] touch-mobile:hidden">
-            {localize("com_tools_title")}
-            {/* {isActive ? ` (${activeCount})` : ""} */}
-          </span>
+          {/* Compact: collapse to icon + chevron only to save horizontal space. */}
+          {!compact && (
+            <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)]">
+              {localize("com_tools_title")}
+            </span>
+          )}
         </div>
       </SelectTrigger>
       <SelectContent className="bg-white rounded-[8px] w-[200px] max-h-[320px] overflow-y-auto">

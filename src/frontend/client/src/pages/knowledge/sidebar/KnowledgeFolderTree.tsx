@@ -60,6 +60,19 @@ function collectExpandedIds(nodes: TreeNode[], acc: Set<number>): Set<number> {
     return acc;
 }
 
+/** Find a node anywhere in the tree by id, searching into loaded (but possibly
+ *  collapsed) children too — a node's `children` array persists after collapse. */
+function findNode(nodes: TreeNode[], id: number): TreeNode | undefined {
+    for (const n of nodes) {
+        if (n.id === id) return n;
+        if (Array.isArray(n.children)) {
+            const found = findNode(n.children, id);
+            if (found) return found;
+        }
+    }
+    return undefined;
+}
+
 // ─── Single node row ──────────────────────────────────────────────────────────
 
 interface TreeNodeRowProps {
@@ -166,6 +179,11 @@ export function KnowledgeFolderTree({
 }: KnowledgeFolderTreeProps) {
     const [roots, setRoots] = useState<TreeNode[]>([]);
     const [rootLoading, setRootLoading] = useState(false);
+    // True once the root list for the current (knowledgeId, fileStatus) has
+    // finished loading. Gates the deep-link effect below — unlike rootLoading
+    // (whose initial `false` would let that effect run against an empty tree
+    // on mount), this only flips true after real data is in.
+    const [rootsReady, setRootsReady] = useState(false);
 
     // Mirror the latest tree into a ref so refreshTree can read it without
     // becoming a new function on every state change.
@@ -175,59 +193,31 @@ export function KnowledgeFolderTree({
     }, [roots]);
 
     // Load root folders on mount or when knowledgeId / fileStatus changes.
-    // If a folder is currently selected (currentFolderId set), also fetch its
-    // ancestor chain and pre-expand every ancestor so the selected folder is
-    // visible without the user having to re-expand the tree manually after
-    // collapse → expand of the parent space.
+    // Deliberately independent of currentFolderId: selecting a folder (click or
+    // route change) must never rebuild the tree. The deep-link effect below
+    // handles the one case where the selected folder isn't in the tree yet.
     useEffect(() => {
         if (!knowledgeId) return;
         let cancelled = false;
         setRootLoading(true);
+        setRootsReady(false);
         (async () => {
             try {
                 const { items } = await listKnowledgeFolders({
                     space_id: knowledgeId, parent_id: null, file_status: fileStatus,
                 });
-                if (cancelled) return;
-                let tree = mapToTree(items);
-
-                if (currentFolderId) {
-                    try {
-                        const parentPath = await getFolderParentPathApi(String(knowledgeId), currentFolderId);
-                        if (!cancelled && parentPath?.length > 0) {
-                            const ancestorIds = new Set(parentPath.map(p => Number(p.id)));
-                            // Walk the tree; for each ancestor, fetch its children
-                            // and recurse so deeper ancestors also get expanded.
-                            const expandChain = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
-                                return Promise.all(nodes.map(async (n) => {
-                                    if (!ancestorIds.has(n.id)) return n;
-                                    try {
-                                        const { items: kids } = await listKnowledgeFolders({
-                                            space_id: knowledgeId, parent_id: n.id, file_status: fileStatus,
-                                        });
-                                        const children = await expandChain(mapToTree(kids));
-                                        return { ...n, expanded: true, loading: false, children };
-                                    } catch {
-                                        return { ...n, expanded: true, loading: false, children: [] };
-                                    }
-                                }));
-                            };
-                            tree = await expandChain(tree);
-                        }
-                    } catch {
-                        // ignore — fall through with collapsed tree
-                    }
-                }
-
-                if (!cancelled) setRoots(tree);
+                if (!cancelled) setRoots(mapToTree(items));
             } catch {
                 if (!cancelled) setRoots([]);
             } finally {
-                if (!cancelled) setRootLoading(false);
+                if (!cancelled) {
+                    setRootLoading(false);
+                    setRootsReady(true);
+                }
             }
         })();
         return () => { cancelled = true; };
-    }, [knowledgeId, fileStatus, currentFolderId]);
+    }, [knowledgeId, fileStatus]);
 
     /** Immutably update a node anywhere in the tree by id. */
     const updateNode = useCallback((
@@ -244,12 +234,14 @@ export function KnowledgeFolderTree({
         });
     }, []);
 
-    const handleExpand = useCallback((node: TreeNode) => {
-        // Toggle collapse if already expanded
-        if (node.expanded) {
-            setRoots((prev) => updateNode(prev, node.id, (n) => ({ ...n, expanded: false })));
-            return;
-        }
+    /**
+     * Expand a node without ever collapsing it. If its children were loaded
+     * before (even while collapsed) this is a pure state toggle — no request;
+     * only a never-loaded node fetches its own children (one level, same as
+     * the expand arrow). Shared by the arrow and by folder-row clicks.
+     */
+    const ensureExpanded = useCallback((node: TreeNode) => {
+        if (node.expanded) return;
 
         // If children already loaded, just toggle open
         if (Array.isArray(node.children)) {
@@ -282,9 +274,83 @@ export function KnowledgeFolderTree({
             });
     }, [knowledgeId, fileStatus, updateNode]);
 
+    const handleExpand = useCallback((node: TreeNode) => {
+        // Arrow keeps toggle semantics: collapse if already expanded.
+        if (node.expanded) {
+            setRoots((prev) => updateNode(prev, node.id, (n) => ({ ...n, expanded: false })));
+            return;
+        }
+        ensureExpanded(node);
+    }, [ensureExpanded, updateNode]);
+
+    // Clicking a folder row only selects it (route + highlight) — it never
+    // expands/collapses children; that is exclusively the arrow's job. No tree
+    // reload either: the row is already rendered, so its data is already local,
+    // and the highlight follows the currentFolderId prop on re-render.
     const handleSelect = useCallback((node: TreeNode) => {
         onSelectFolder({ id: String(node.id), name: node.name });
     }, [onSelectFolder]);
+
+    // Deep-link catch-up: when currentFolderId points at a folder that is NOT in
+    // the local tree (direct URL visit, breadcrumb jump into a never-expanded
+    // branch), fetch its ancestor chain and expand just the missing levels.
+    // Folder-row clicks never enter here — a clickable row is already in the tree,
+    // so findNode succeeds and this effect exits with zero requests.
+    const handledDeepLinkRef = useRef<string | null>(null);
+    useEffect(() => {
+        // Wait for the root list to be genuinely loaded — rootLoading's initial
+        // `false` on mount would otherwise let this run against an empty tree.
+        if (!knowledgeId || !currentFolderId || !rootsReady) return;
+        if (findNode(rootsRef.current, Number(currentFolderId))) return;
+        // One attempt per folder id — if the chain fetch fails (or the id is
+        // stale/deleted), don't refetch on every roots change.
+        if (handledDeepLinkRef.current === currentFolderId) return;
+        handledDeepLinkRef.current = currentFolderId;
+
+        let cancelled = false;
+        let completed = false;
+        (async () => {
+            try {
+                const parentPath = await getFolderParentPathApi(String(knowledgeId), currentFolderId);
+                if (cancelled || !parentPath?.length) return;
+                const ancestorIds = new Set(parentPath.map((p) => Number(p.id)));
+                // Walk the current tree along the ancestor chain, reusing children
+                // that are already loaded and fetching only the missing levels.
+                const expandChain = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
+                    return Promise.all(nodes.map(async (n) => {
+                        if (!ancestorIds.has(n.id)) return n;
+                        try {
+                            let children = n.children;
+                            if (!Array.isArray(children)) {
+                                const { items } = await listKnowledgeFolders({
+                                    space_id: knowledgeId, parent_id: n.id, file_status: fileStatus,
+                                });
+                                children = mapToTree(items);
+                            }
+                            return { ...n, expanded: true, loading: false, children: await expandChain(children) };
+                        } catch {
+                            return { ...n, expanded: true, loading: false, children: n.children ?? [] };
+                        }
+                    }));
+                };
+                const fresh = await expandChain(rootsRef.current);
+                if (!cancelled) setRoots(fresh);
+            } catch {
+                // ignore — leave the tree as is; the user can expand manually.
+            } finally {
+                completed = true;
+            }
+        })();
+        return () => {
+            cancelled = true;
+            // A run cancelled mid-flight (deps changed, StrictMode double-mount)
+            // didn't actually expand anything — release the once-per-id mark so
+            // the next run for this folder id can try again.
+            if (!completed && handledDeepLinkRef.current === currentFolderId) {
+                handledDeepLinkRef.current = null;
+            }
+        };
+    }, [knowledgeId, fileStatus, currentFolderId, rootsReady]);
 
     // Re-fetch a freshly-loaded subtree, re-expanding nodes that were open before.
     const rebuildWithExpansion = useCallback(async (

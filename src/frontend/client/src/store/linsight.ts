@@ -52,6 +52,8 @@ export type LinsightInfo = {
     }[];
     output_result: null | any;
     score: null | number;
+    // 点赞/点踩 verdict on the task result: 0 none / 1 up / 2 down.
+    liked?: null | number;
     has_reexecute: boolean;
     id: string;
     update_time: string;

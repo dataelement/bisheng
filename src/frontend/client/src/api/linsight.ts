@@ -48,6 +48,23 @@ export function startLinsight(versionId: string): Promise<any> {
     });
 }
 
+// 灵思任务结果点赞/点踩（liked: 0 未评 / 1 赞 / 2 踩）。
+// 落库到 linsight_session_version.liked，并汇总进 message_session（后端待接入，见 PRD）。
+export function likeLinsightVersion(versionId: string, liked: number): Promise<any> {
+    return request.post('/api/v1/linsight/workbench/feedback', {
+        session_version_id: versionId,
+        liked
+    });
+}
+
+// 灵思点踩原因，落库到 linsight_session_version.execute_feedback（后端待接入）。
+export function commentLinsightVersion(versionId: string, comment: string): Promise<any> {
+    return request.post('/api/v1/linsight/workbench/feedback', {
+        session_version_id: versionId,
+        comment
+    });
+}
+
 // F035 多轮对话：在已完成的同一会话里追加新一轮（复用同一 session_version + agent thread，保留上下文）
 export function continueLinsight(session_version_id: string, question: string): Promise<any> {
     return request.post('/api/v1/linsight/workbench/continue', {
