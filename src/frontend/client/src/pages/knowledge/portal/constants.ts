@@ -10,7 +10,7 @@ export const EMPTY_GROUPED_SPACES: GroupedKnowledgeSpaces = {
     personalSpaces: [],
 };
 
-export const TREE_PAGE_SIZE = 100;
+export const TREE_PAGE_SIZE = 20;
 
 export const DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS: PortalFileCategoryOption[] = [
     { code: "POL", label: "政策制度" },

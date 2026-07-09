@@ -1356,7 +1356,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
                 space_id: "personal-1",
-                page_size: 100,
+                page_size: 20,
             }));
         });
 
@@ -2209,7 +2209,7 @@ describe("PortalKnowledgeWorkbench", () => {
             space_id: "personal-1",
             parent_id: "101",
             page: 1,
-            page_size: 100,
+            page_size: 20,
         }));
         expect(within(childRow).getByText("前端开发.md")).toBeInTheDocument();
         expect(within(childRow).getByText("上传中")).toBeInTheDocument();
@@ -4104,7 +4104,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
                 space_id: "personal-1",
                 page: 1,
-                page_size: 100,
+                page_size: 20,
             }));
         });
 
@@ -4115,7 +4115,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
                 space_id: "personal-1",
                 page: 1,
-                page_size: 100,
+                page_size: 20,
                 file_status: [2],
             }));
         });
@@ -4154,7 +4154,7 @@ describe("PortalKnowledgeWorkbench", () => {
                 space_id: "personal-1",
                 keyword: "后端",
                 page: 1,
-                page_size: 100,
+                page_size: 20,
                 file_status: [3],
             }));
         });
