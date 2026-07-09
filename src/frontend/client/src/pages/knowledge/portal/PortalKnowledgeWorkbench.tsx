@@ -43,6 +43,7 @@ import { useConfirm, useToastContext } from "~/Providers";
 import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
+import { extractKnowledgeActionErrorMessage } from "../errorUtils";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, triggerUrlDownload, type UploadSizeEnvConfig } from "../knowledgeUtils";
@@ -440,8 +441,11 @@ export default function PortalKnowledgeWorkbench() {
             }
             await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: "知识库已删除", severity: NotificationSeverity.SUCCESS });
-        } catch {
-            showToast({ message: "删除知识库失败", severity: NotificationSeverity.ERROR });
+        } catch (error) {
+            showToast({
+                message: extractKnowledgeActionErrorMessage(error) || "删除知识库失败",
+                severity: NotificationSeverity.ERROR,
+            });
         }
     }, [activeSpace?.id, confirm, getNextActiveSpace, queryClient, showToast]);
 
