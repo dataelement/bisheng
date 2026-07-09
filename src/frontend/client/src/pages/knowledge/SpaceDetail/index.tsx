@@ -109,6 +109,8 @@ interface KnowledgeSpaceContentProps {
     fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
     encodingPrefix?: string;
+    /** Override encoding update handler (e.g. portal search mode must patch searchResults too). */
+    onFileEncodingUpdated?: (fileId: string, newEncoding: string, fileSubcategoryCode?: string | null) => void;
     markPendingDeletion: (ids: Array<string | number>) => void;
     clearPendingDeletion: (ids: Array<string | number>) => void;
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
@@ -161,6 +163,7 @@ export function KnowledgeSpaceContent({
     fileCategoryGroups,
     businessDomainOptions = [],
     encodingPrefix,
+    onFileEncodingUpdated: onFileEncodingUpdatedProp,
     markPendingDeletion,
     clearPendingDeletion,
     setFiles,
@@ -276,6 +279,24 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+
+    const handleFileEncodingUpdated = useCallback((
+        fileId: string,
+        newEncoding: string,
+        fileSubcategoryCode?: string | null,
+    ) => {
+        if (onFileEncodingUpdatedProp) {
+            onFileEncodingUpdatedProp(fileId, newEncoding, fileSubcategoryCode);
+            return;
+        }
+        setFiles((prev) => prev.map((file) => (
+            file.id === fileId ? {
+                ...file,
+                fileEncoding: newEncoding,
+                ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
+            } : file
+        )));
+    }, [onFileEncodingUpdatedProp, setFiles]);
 
     // 详情页只消费 share_space（分享按钮），按需只查这一项而非全部 4 个操作权限；
     // creator/admin 由 fullAccessSpaceIds 直接放行，不发请求。
@@ -1459,15 +1480,7 @@ export function KnowledgeSpaceContent({
                                     fileCategoryGroups={fileCategoryGroups}
                                     businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
-                                    onFileEncodingUpdated={(fileId, newEncoding, fileSubcategoryCode) => {
-                                        setFiles((prev) => prev.map((file) => (
-                                            file.id === fileId ? {
-                                                ...file,
-                                                fileEncoding: newEncoding,
-                                                ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
-                                            } : file
-                                        )));
-                                    }}
+                                    onFileEncodingUpdated={handleFileEncodingUpdated}
                                 />
                                 {hasMore && (
                                     <LoadMore
