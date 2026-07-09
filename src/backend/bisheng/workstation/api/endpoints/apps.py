@@ -20,6 +20,7 @@ from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.shougang_portal_config.domain.services.portal_config_service import ShougangPortalConfigService
 from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
 from bisheng.workstation.domain.services.constants import PORTAL_AGENT_FAVORITE_TYPE, USED_APP_PIN_TYPE
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
@@ -268,6 +269,80 @@ async def list_portal_agent_workflows(login_user=LoginUserDep, data: PortalAgent
     apps.sort(key=lambda app: app_order.get(str(app.get('id')), len(workflow_ids)))
     apps = WorkFlowService.add_extra_field(login_user, apps)
     return resp_200(data={'workflows': apps})
+
+
+@router.get('/app/portal-agent-conversations')
+async def list_portal_agent_conversations(page: int = 1, limit: int = 20, login_user=LoginUserDep):
+    page = max(1, page)
+    limit = min(max(1, limit), 100)
+
+    config = await ShougangPortalConfigService.get_config()
+    portal = getattr(config, 'portal', None) if config else None
+    agent_config = getattr(portal, 'agent_config', None)
+    configured_agents = list(getattr(agent_config, 'agents', None) or [])
+    enabled_agents = []
+    seen_workflow_ids = set()
+    for agent in configured_agents:
+        workflow_id = str(getattr(agent, 'workflow_id', '') or '').strip()
+        if not getattr(agent, 'enabled', False) or not workflow_id or workflow_id in seen_workflow_ids:
+            continue
+        seen_workflow_ids.add(workflow_id)
+        enabled_agents.append(agent)
+    if not enabled_agents:
+        return resp_200(data=[])
+
+    workflow_ids = [agent.workflow_id for agent in enabled_agents]
+    apps, _ = await FlowDao.aget_all_apps(
+        id_list=workflow_ids,
+        status=FlowStatus.ONLINE.value,
+        flow_type=FlowType.WORKFLOW.value,
+        page=0,
+        limit=0,
+    )
+    apps = await _filter_portal_agent_workflows_by_use_app(login_user, apps)
+    visible_workflow_ids = {str(app.get('id')) for app in apps}
+    visible_agents = [
+        agent for agent in enabled_agents
+        if str(agent.workflow_id) in visible_workflow_ids
+    ]
+    if not visible_agents:
+        return resp_200(data=[])
+
+    agent_by_workflow_id = {str(agent.workflow_id): agent for agent in visible_agents}
+    visible_flow_ids = list(agent_by_workflow_id.keys())
+    sessions = await MessageSessionDao.afilter_session(
+        flow_ids=visible_flow_ids,
+        user_ids=[login_user.user_id],
+        page=page,
+        limit=limit,
+        include_delete=False,
+        order_by_update_time=True,
+    )
+    if not sessions:
+        return resp_200(data=[])
+
+    latest_messages = await ChatMessageDao.aget_latest_message_by_chat_ids([one.chat_id for one in sessions])
+    latest_messages = {one.chat_id: one for one in latest_messages}
+    result = []
+    for session in sessions:
+        agent = agent_by_workflow_id.get(str(session.flow_id))
+        if not agent:
+            continue
+        result.append({
+            'agent_id': agent.id,
+            'agent_name': agent.name,
+            'workflow_id': agent.workflow_id,
+            'chat_id': session.chat_id,
+            'name': session.name or agent.name,
+            'flow_id': session.flow_id,
+            'flow_name': session.flow_name or agent.name,
+            'flow_type': session.flow_type,
+            'logo': WorkFlowService.get_logo_share_link(session.flow_logo) if session.flow_logo else '',
+            'latest_message': latest_messages.get(session.chat_id),
+            'create_time': session.create_time,
+            'update_time': session.update_time or session.create_time,
+        })
+    return resp_200(data=result)
 
 
 @router.post('/app/portal-agent-favorites')
