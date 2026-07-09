@@ -128,6 +128,15 @@ export function CreateChannelDrawer({
     // never "pristine", so that second pass would re-open the confirm — the
     // visible flash. This flag swallows the duplicate close while one is in flight.
     const closingRef = useRef(false);
+    // Guards the Sheet's outside-dismiss while a confirm dialog is stacked over
+    // it. The confirm (useConfirm -> global AlertDialog) is a separate Radix
+    // overlay; on touch (企微 WebView) the tap that dismisses the confirm is
+    // deferred by Radix into a trailing "click" evaluated against this Sheet as
+    // an outside interaction, racing the intended close. When raised, the Sheet
+    // ignores outside-dismiss; released on the next macrotask so genuine overlay
+    // taps still close the drawer. Mirrors CreateKnowledgeSpaceDrawer.
+    const suppressOutsideCloseRef = useRef(false);
+    const suppressReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     /** H5：「选择知识空间」下钻层挂载在此容器内，避免与抽屉叠加第二层全屏 Dialog */
     const knowledgePickerHostRef = useRef<HTMLDivElement>(null);
     // v2.5 Module D — owned here so the draft survives across renders of the
@@ -165,6 +174,12 @@ export function CreateChannelDrawer({
             setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
             // Release the close guard so a freshly reopened drawer can close again.
             closingRef.current = false;
+            // Drop any pending outside-dismiss suppression from a confirm in flight.
+            if (suppressReleaseTimerRef.current) {
+                clearTimeout(suppressReleaseTimerRef.current);
+                suppressReleaseTimerRef.current = null;
+            }
+            suppressOutsideCloseRef.current = false;
         }
     }, [open]);
 
@@ -232,6 +247,23 @@ export function CreateChannelDrawer({
         form.setSources
     ]);
 
+    // Run a confirm with the Sheet's outside-dismiss suppressed for the whole
+    // interaction, including the trailing click Radix defers on touch. The guard
+    // is released on the next macrotask so later genuine overlay taps still close
+    // the drawer. See suppressOutsideCloseRef.
+    const confirmGuarded = async (opts: Parameters<typeof confirm>[0]) => {
+        suppressOutsideCloseRef.current = true;
+        try {
+            return await confirm(opts);
+        } finally {
+            if (suppressReleaseTimerRef.current) clearTimeout(suppressReleaseTimerRef.current);
+            suppressReleaseTimerRef.current = setTimeout(() => {
+                suppressOutsideCloseRef.current = false;
+                suppressReleaseTimerRef.current = null;
+            }, 0);
+        }
+    };
+
     const handleClose = async (nextOpen: boolean) => {
         if (!nextOpen) {
             // A close is already being handled (e.g. confirm dialog is open) —
@@ -256,7 +288,7 @@ export function CreateChannelDrawer({
                 return;
             }
             closingRef.current = true;
-            const confirmed = await confirm({
+            const confirmed = await confirmGuarded({
                 variant: "destructive",
                 icon: <XIcon className="size-5 shrink-0 text-[#f53f3f]" strokeWidth={2.5} />,
                 title: localize("com_subscription.operation_confirm"),
@@ -291,6 +323,11 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
+                    // Suppress outside-dismiss only while a confirm dialog is open
+                    // (see suppressOutsideCloseRef). Inert otherwise, so tapping
+                    // the overlay still closes the drawer.
+                    onPointerDownOutside={(e) => { if (suppressOutsideCloseRef.current) e.preventDefault(); }}
+                    onInteractOutside={(e) => { if (suppressOutsideCloseRef.current) e.preventDefault(); }}
                     className={cn(
                         "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                     )}
@@ -489,7 +526,7 @@ export function CreateChannelDrawer({
                                             onValueChange={async (v) => {
                                                 // In edit mode, show confirmation when switching to private
                                                 if (isEditMode && v === "private" && form.visibility !== "private") {
-                                                    const confirmed = await confirm({
+                                                    const confirmed = await confirmGuarded({
                                                         description: localize("com_subscription.confirm_change_to_private"),
                                                         confirmText: localize("com_subscription.change_to_private"),
                                                         cancelText: localize("com_subscription.cancel"),
