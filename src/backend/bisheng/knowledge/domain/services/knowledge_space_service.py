@@ -3558,6 +3558,63 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return ""
         return cls._normalize_shougang_portal_business_domain_code(parts[2])
 
+    @staticmethod
+    def _parse_shougang_file_encoding_parts(
+        encoding: str,
+    ) -> tuple[str, str, str, str, int] | None:
+        """Parse SGGF-{category}-{domain}-{YYYYMM}{seq} into structured parts."""
+        parts = [part.strip() for part in (encoding or "").split("-") if part.strip()]
+        if len(parts) < 4:
+            return None
+        serial = parts[3]
+        if len(serial) < 8:
+            return None
+        year_month = serial[:6]
+        if not year_month.isdigit():
+            return None
+        try:
+            seq = int(serial[6:])
+        except ValueError:
+            return None
+        return parts[0], parts[1], parts[2], year_month, seq
+
+    @staticmethod
+    def _compose_shougang_file_encoding(
+        prefix: str,
+        file_category_code: str,
+        business_domain_code: str,
+        year_month: str,
+        seq: int,
+    ) -> str:
+        return f"{prefix}-{file_category_code}-{business_domain_code}-{year_month}{seq:08d}"
+
+    async def _ensure_unique_file_encoding(self, encoding: str, file_id: int) -> str:
+        """Return a globally-unique encoding, bumping the serial suffix when needed."""
+        cleaned = (encoding or "").strip()
+        if not cleaned:
+            return cleaned
+        if await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) == 0:
+            return cleaned
+
+        parsed = self._parse_shougang_file_encoding_parts(cleaned)
+        if parsed is None:
+            raise SpaceFileEncodingDuplicateError()
+
+        prefix, file_category_code, business_domain_code, year_month, seq = parsed
+        from bisheng.knowledge.rag.pipeline.transformer.file_encoding import SEQ_CAP
+
+        for candidate_seq in range(seq + 1, SEQ_CAP + 1):
+            candidate = self._compose_shougang_file_encoding(
+                prefix,
+                file_category_code,
+                business_domain_code,
+                year_month,
+                candidate_seq,
+            )
+            if await KnowledgeFileDao.acount_by_file_encoding(candidate, exclude_id=file_id) == 0:
+                return candidate
+        raise SpaceFileEncodingDuplicateError()
+
     async def sync_shougang_portal_space_business_domain_codes(
         self,
         req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
@@ -8818,8 +8875,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             getattr(file_record, "file_subcategory_code", None),
         )
         encoding_changed = (old_encoding or "") != cleaned
-        if encoding_changed and await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
-            raise SpaceFileEncodingDuplicateError()
+        if encoding_changed:
+            cleaned = await self._ensure_unique_file_encoding(cleaned, file_id)
 
         file_record.file_encoding = cleaned
         normalized_file_subcategory_code = self.normalize_file_category_code(file_subcategory_code)

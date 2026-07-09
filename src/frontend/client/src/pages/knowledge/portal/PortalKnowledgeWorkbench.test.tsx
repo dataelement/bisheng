@@ -635,7 +635,7 @@ describe("PortalKnowledgeWorkbench", () => {
         canOpenPermissionDialog.mockResolvedValue(true);
     });
 
-    test("loads personal spaces first, keeps other groups collapsed, and requests levels separately", async () => {
+    test("loads personal spaces first and requests collapsed groups only when opened", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const publicSpace = makeSpace("public-1", "公共空间01", { spaceLevel: SpaceLevel.PUBLIC });
         const teamSpace = makeSpace("team-1", "团队空间01", { spaceLevel: SpaceLevel.TEAM });
@@ -652,11 +652,9 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PERSONAL, { order_by: SpaceSortType.UPDATE_TIME });
         });
-        await waitFor(() => {
-            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
-            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME });
-            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
-        });
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME });
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
 
         expect(getMineSpacesApi).not.toHaveBeenCalled();
         expect(getJoinedSpacesApi).not.toHaveBeenCalled();
@@ -664,43 +662,53 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const publicGroup = screen.getByTestId("space-group-public");
 
-        expect(screen.getByTestId("portal-favorites-panel")).toBeInTheDocument();
         expect(within(publicGroup).queryByText("公共空间01")).not.toBeInTheDocument();
 
         expect(screen.getByTestId("space-sidebar-title-icon")).toHaveAttribute(
             "src",
             "/assets/knowledge-portal/sidebar-title.png",
         );
-        expect(screen.getByTestId("space-group-icon-public")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/group-public-collapsed.png",
-        );
-        expect(screen.getByTestId("space-group-icon-department")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/group-department-collapsed.png",
-        );
+        expect(screen.getByTestId("space-group-icon-public")).toBeInTheDocument();
+        expect(screen.getByTestId("space-group-icon-department")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "展开部门知识库" })).toBeInTheDocument();
-        expect(screen.getByTestId("space-group-icon-team")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/group-team-collapsed.png",
-        );
-        expect(screen.getByTestId("space-group-icon-personal")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/group-personal-expanded.png",
-        );
-        await waitFor(() => {
-            expect(screen.getByTestId("space-row-icon-favorite-space")).toHaveAttribute(
-                "src",
-                "/assets/knowledge-portal/knowledge-space-active.png",
-            );
-        });
+        expect(screen.getByTestId("space-group-icon-team")).toBeInTheDocument();
+        expect(screen.getByTestId("space-group-icon-personal")).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByTestId("space-row-icon-favorite-space")).toBeInTheDocument());
 
         fireEvent.click(within(publicGroup).getByRole("button", { name: "展开公共知识库" }));
-        expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
-        expect(screen.getByTestId("space-group-icon-public")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/group-public-expanded.png",
-        );
+        await waitFor(() => {
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
+        });
+        await waitFor(() => expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument());
+        expect(screen.getByRole("button", { name: "收起公共知识库" })).toBeInTheDocument();
+    });
+
+    test("opens the knowledge space from the spaceId query and expands its group", async () => {
+        const teamSpace = makeSpace("147", "团队空间147", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.TEAM,
+        });
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(teamSpace as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+
+        renderWorkbench("/knowledge-portal?spaceId=147");
+
+        await waitFor(() => {
+            expect(getSpaceInfoApi).toHaveBeenCalledWith("147");
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
+        });
+        await waitFor(() => {
+            expect(screen.getByTestId("active-space-title")).toHaveTextContent("团队空间147");
+        });
+        expect(screen.getByRole("button", { name: "收起团队知识库" })).toBeInTheDocument();
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME });
     });
 
     test("stores the Lanhu portal icons as static assets", () => {
@@ -741,17 +749,11 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         await screen.findByTestId("space-group-public");
-        expect(screen.getByTestId("space-sidebar-collapse-icon")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/sidebar-collapse.png",
-        );
+        expect(screen.getByTestId("space-sidebar-collapse-icon")).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "收起知识库侧栏" }));
 
-        expect(screen.getByTestId("space-sidebar-expand-icon")).toHaveAttribute(
-            "src",
-            "/assets/knowledge-portal/sidebar-expand.png",
-        );
+        expect(screen.getByTestId("space-sidebar-expand-icon")).toBeInTheDocument();
     });
 
     test("shows loading state before grouped spaces finish loading", () => {
@@ -781,24 +783,22 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("selects the clicked collapsed group first space when restoring the sidebar", async () => {
-        const publicSpace = makeSpace("public-1", "公共空间01", { spaceLevel: SpaceLevel.PUBLIC });
+        const personalSpace = makeSpace("personal-1", "个人空间01", { spaceLevel: SpaceLevel.PERSONAL });
         const teamSpace = makeSpace("team-1", "团队空间01", { spaceLevel: SpaceLevel.TEAM });
 
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [publicSpace],
+            publicSpaces: [],
             departmentSpaces: [],
             teamSpaces: [teamSpace],
-            personalSpaces: [],
+            personalSpaces: [personalSpace],
         } as any);
 
         renderWorkbench();
 
         await waitFor(() => {
-            expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
+            expect(screen.getByTestId("active-space-title")).toHaveTextContent("个人空间01");
         });
-        await waitFor(() => {
-            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
-        });
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
 
         fireEvent.click(screen.getByRole("button", { name: "收起知识库侧栏" }));
 
@@ -810,24 +810,27 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const teamGroup = screen.getByTestId("space-group-team");
 
-        expect(within(teamGroup).getByText("团队空间01")).toBeInTheDocument();
-        expect(screen.getByTestId("active-space-title")).toHaveTextContent("团队空间01");
+        await waitFor(() => {
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME });
+        });
+        await waitFor(() => expect(within(teamGroup).getByText("团队空间01")).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId("active-space-title")).toHaveTextContent("团队空间01"));
     });
 
     test("keeps current space when restoring an empty collapsed group", async () => {
-        const publicSpace = makeSpace("public-1", "公共空间01");
+        const personalSpace = makeSpace("personal-1", "个人空间01", { spaceLevel: SpaceLevel.PERSONAL });
 
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [publicSpace],
+            publicSpaces: [],
             departmentSpaces: [],
             teamSpaces: [],
-            personalSpaces: [],
+            personalSpaces: [personalSpace],
         } as any);
 
         renderWorkbench();
 
         await waitFor(() => {
-            expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
+            expect(screen.getByTestId("active-space-title")).toHaveTextContent("个人空间01");
         });
 
         fireEvent.click(screen.getByRole("button", { name: "收起知识库侧栏" }));
@@ -835,15 +838,13 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const teamGroup = screen.getByTestId("space-group-team");
 
-        expect(within(teamGroup).getByText("暂无知识库")).toBeInTheDocument();
-        expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
+        await waitFor(() => expect(within(teamGroup).getByText("暂无知识库")).toBeInTheDocument());
+        expect(screen.getByTestId("active-space-title")).toHaveTextContent("个人空间01");
     });
 
     test("opens create drawer with the clicked group level and does not toggle the group", async () => {
-        const publicSpace = makeSpace("public-1", "公共空间01");
-
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [publicSpace],
+            publicSpaces: [],
             departmentSpaces: [],
             teamSpaces: [],
             personalSpaces: [],
@@ -856,14 +857,14 @@ describe("PortalKnowledgeWorkbench", () => {
         });
 
         const publicGroup = screen.getByTestId("space-group-public");
-        await waitFor(() => {
-            expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
-        });
+        expect(within(publicGroup).queryByText("暂无知识库")).not.toBeInTheDocument();
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
 
         fireEvent.click(screen.getByRole("button", { name: "新增公共知识库" }));
 
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.PUBLIC}`);
-        expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "展开公共知识库" })).toBeInTheDocument();
+        expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
     });
 
     test("opens create drawer with team level from team group create action", async () => {

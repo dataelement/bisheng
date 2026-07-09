@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Link2, Search, Check } from "lucide-react";
+import { Loader2, Link2, Search, Check, Eye } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -18,6 +18,7 @@ import {
     type LinkAsNewVersionResponse,
 } from "~/api/knowledge";
 import { type KnowledgeFile } from "~/api/knowledge";
+import { VersionComparePreviewDialog } from "./VersionComparePreviewDialog";
 import { cn } from "~/utils";
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
@@ -43,9 +44,10 @@ interface RecommendationCardProps {
     entry: SimilarCandidateEntry;
     disabled: boolean;
     onLink: (doc: LinkTarget) => void;
+    onView: (fileId: number, fileName: string) => void;
 }
 
-function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps) {
+function RecommendationCard({ entry, disabled, onLink, onView }: RecommendationCardProps) {
     const localize = useLocalize();
 
     const uploadTimeDisplay = entry.primary_upload_time
@@ -83,18 +85,30 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
                     <p className="text-[12px] text-[#86909c]">{entry.title} · {uploadTimeDisplay}</p>
                 )}
             </div>
-            <Button
-                type="button"
-                size="sm"
-                disabled={disabled}
-                onClick={() =>
-                    onLink({ document_id: entry.target_document_id, title: entry.title })
-                }
-                className="h-8 shrink-0 rounded-[6px] bg-[#165DFF] px-4 text-[12px] text-white hover:bg-[#4080FF]"
-            >
-                <Link2 className="mr-1.5 size-4" />
-                {localize("com_knowledge.version.btn_link_as_new_version")}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onView(entry.primary_knowledge_file_id, entry.title)}
+                    className="h-8 rounded-[6px] px-3 text-[12px] text-[#4e5969]"
+                >
+                    <Eye className="mr-1.5 size-4" />
+                    {localize("com_knowledge.version.btn_view")}
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    disabled={disabled}
+                    onClick={() =>
+                        onLink({ document_id: entry.target_document_id, title: entry.title })
+                    }
+                    className="h-8 rounded-[6px] bg-[#165DFF] px-4 text-[12px] text-white hover:bg-[#4080FF]"
+                >
+                    <Link2 className="mr-1.5 size-4" />
+                    {localize("com_knowledge.version.btn_link_as_new_version")}
+                </Button>
+            </div>
         </div>
     );
 }
@@ -105,9 +119,10 @@ interface SearchResultRowProps {
     entry: SearchableDocumentEntry;
     disabled: boolean;
     onLink: (doc: LinkTarget) => void;
+    onView: (fileId: number, fileName: string) => void;
 }
 
-function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
+function SearchResultRow({ entry, disabled, onLink, onView }: SearchResultRowProps) {
     const localize = useLocalize();
     return (
         <div className="flex items-center justify-between gap-3 border-b border-[#F2F3F5] px-3 py-2.5 last:border-b-0 hover:bg-[#FAFAFA]">
@@ -119,16 +134,28 @@ function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
                     {entry.primary_uploader_name && <span>{entry.primary_uploader_name}</span>}
                 </div>
             </div>
-            <Button
-                type="button"
-                size="sm"
-                disabled={disabled}
-                onClick={() => onLink({ document_id: entry.document_id, title: entry.title, force: true })}
-                className="h-8 shrink-0 rounded-[6px] bg-[#165DFF] px-4 text-[12px] text-white hover:bg-[#4080FF]"
-            >
-                <Link2 className="mr-1.5 size-4" />
-                {localize("com_knowledge.version.btn_link_as_new_version")}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onView(entry.primary_knowledge_file_id, entry.title)}
+                    className="h-8 rounded-[6px] px-3 text-[12px] text-[#4e5969]"
+                >
+                    <Eye className="mr-1.5 size-4" />
+                    {localize("com_knowledge.version.btn_view")}
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    disabled={disabled}
+                    onClick={() => onLink({ document_id: entry.document_id, title: entry.title, force: true })}
+                    className="h-8 rounded-[6px] bg-[#165DFF] px-4 text-[12px] text-white hover:bg-[#4080FF]"
+                >
+                    <Link2 className="mr-1.5 size-4" />
+                    {localize("com_knowledge.version.btn_link_as_new_version")}
+                </Button>
+            </div>
         </div>
     );
 }
@@ -148,6 +175,12 @@ export function RelateDocumentPanel({
     const confirm = useConfirm();
     const [keyword, setKeyword] = useState("");
     const debouncedKeyword = useDebounce(keyword, 300);
+    // Right side of the compare-preview: the clicked associated file. The left
+    // side is always the current file. Null when the dialog is closed.
+    const [comparePreview, setComparePreview] = useState<{ fileId: number; fileName: string } | null>(null);
+    const handleView = (candidateFileId: number, candidateFileName: string) => {
+        setComparePreview({ fileId: candidateFileId, fileName: candidateFileName });
+    };
 
     // Fetch single-version similarity recommendations (merge-source eligible)
     const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
@@ -277,6 +310,7 @@ export function RelateDocumentPanel({
                                     entry={entry}
                                     disabled={isLinking}
                                     onLink={handleLink}
+                                    onView={handleView}
                                 />
                             ))}
                         </div>
@@ -337,6 +371,7 @@ export function RelateDocumentPanel({
                                             entry={entry}
                                             disabled={isLinking}
                                             onLink={handleLink}
+                                            onView={handleView}
                                         />
                                     ))}
                                 </div>
@@ -372,6 +407,15 @@ export function RelateDocumentPanel({
                     {localize("com_knowledge.version.btn_dismiss")}
                 </Button>
             </section>
+
+            {/* Side-by-side preview: current file (left) vs clicked associated file (right) */}
+            <VersionComparePreviewDialog
+                open={comparePreview !== null}
+                onOpenChange={(o) => { if (!o) setComparePreview(null); }}
+                spaceId={spaceId}
+                left={{ fileId, fileName: file.name }}
+                right={comparePreview}
+            />
         </div>
     );
 }
