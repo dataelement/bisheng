@@ -133,9 +133,16 @@ class ExpertService:
         return await self.repository.delete(expert_id)
     
     
-    async def get_expertinfo(self, expert_name: str) -> bool:
+    async def get_expertinfo(self, expert_name: str) -> Optional[Expert]:
         """获取专家信息"""
-        return await self.repository.get_expertinfo(expert_name)
+        expert = await self.repository.get_expertinfo(expert_name)
+        if expert:
+            department = DepartmentDao.get_by_id(expert.depart_ment)
+            if department:
+                expert.depart_ment = department.name
+            else:
+                expert.depart_ment = None
+        return expert
     
         
     async def get_expertinfobyid(self, user_id: int) -> bool:
