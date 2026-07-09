@@ -573,6 +573,11 @@ export type BsConfig = {
      */
     tree_structured_directory_display?: boolean;
     /**
+     * Show the knowledge-space upload-quota meter in the account menu.
+     * Default: false (opt-in). Admins enable it via the system-config editor.
+     */
+    storage_quota_display?: boolean;
+    /**
      * Custom display name for the knowledge-space AI assistant panel header.
      * Empty/absent → fall back to the localized default ("AI 助手").
      */

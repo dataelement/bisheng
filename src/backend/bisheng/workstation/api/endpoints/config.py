@@ -44,11 +44,18 @@ async def get_config(request: Request, login_user=LoginUserDep):
         ret["shougang"] = None
     # 知识空间目录树展示开关：透传给前端 sidebar (KnowledgeSpaceItem) 做门控。
     # 缺省视为 true；中粮场内部署设 false 时只展示空间、不展开文件夹树。
+    # Storage-quota meter in the account menu is opt-in (default off); admins flip it
+    # on via the system-config editor when they want users to see their upload budget.
     ks_raw = (await bisheng_settings.aget_all_config()).get("knowledge_space", None)
     tree_display = True
+    storage_quota_display = False
     if isinstance(ks_raw, dict):
         tree_display = bool(ks_raw.get("tree_structured_directory_display", True))
-    ret["knowledge_space"] = {"tree_structured_directory_display": tree_display}
+        storage_quota_display = bool(ks_raw.get("storage_quota_display", False))
+    ret["knowledge_space"] = {
+        "tree_structured_directory_display": tree_display,
+        "storage_quota_display": storage_quota_display,
+    }
     # Workbench AI assistant custom name, forwarded to the client chat panel header.
     # Sourced from tenant-level config (WORKSTATION_KNOWLEDGE_SPACE / WORKSTATION_SUBSCRIPTION),
     # a different source than the YAML-derived tree_structured_directory_display above.

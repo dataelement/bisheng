@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Progress } from "~/components/ui/Progress";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -29,8 +30,12 @@ interface StorageQuotaBarProps {
  */
 export function StorageQuotaBar({ className }: StorageQuotaBarProps) {
     const localize = useLocalize();
+    const { data: bsConfig } = useGetBsConfig();
     const { quotas, loading } = useEffectiveQuota();
     const item = quotas["knowledge_space_file"];
+
+    // Opt-in via system config (knowledge_space.storage_quota_display); default off.
+    const enabled = bsConfig?.knowledge_space?.storage_quota_display === true;
 
     const used = Number(item?.user_used) || 0;
     const total = Number(item?.effective);
@@ -43,8 +48,8 @@ export function StorageQuotaBar({ className }: StorageQuotaBarProps) {
         return used > 0 ? 100 : 0;
     }, [used, total, unlimited]);
 
-    // Don't flash an empty bar before the first fetch resolves.
-    if (loading || !item) return null;
+    // Hidden unless the admin enabled the meter, and until the first fetch resolves.
+    if (!enabled || loading || !item) return null;
 
     // Static class strings (not interpolated) so Tailwind's JIT keeps them.
     // `[&>div]` targets the Radix Progress indicator, overriding its bg-primary.
