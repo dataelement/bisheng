@@ -1640,11 +1640,47 @@ export default function PortalKnowledgeWorkbench() {
                 spaceId: String(sourceSpaceId),
                 createdAt: "",
                 updatedAt: "",
+                sourceSpaceName: "",
+                sourcePath: "",
             };
             setActivePanel(null);
             setAiDrawerOpen(false);
             setSummaryExpanded(false);
             setSelectedFile(syntheticFile);
+            void Promise.all([
+                getSpaceChildrenApi({
+                    space_id: String(sourceSpaceId),
+                    file_ids: [sourceFileId],
+                    page_size: 1,
+                    order_field: "update_time",
+                    order_sort: "desc",
+                }),
+                getSpaceInfoApi(String(sourceSpaceId)).catch(() => null),
+            ]).then(([fileResult, sourceSpace]) => {
+                const sourceFile = fileResult.data[0];
+                if (!sourceFile) return;
+                const resolvedSourceSpaceName = sourceFile.sourceSpaceName || sourceSpace?.name || "";
+                const sourcePathTail = sourceFile.sourcePath || sourceFile.folderPath || sourceFile.path || sourceFile.name;
+                const resolvedSourcePath = resolvedSourceSpaceName
+                    && sourcePathTail
+                    && !String(sourcePathTail).includes(resolvedSourceSpaceName)
+                    ? `${resolvedSourceSpaceName}/${sourcePathTail}`
+                    : sourcePathTail;
+                const enrichedFile: KnowledgeFile = {
+                    ...sourceFile,
+                    sourceSpaceName: resolvedSourceSpaceName,
+                    sourcePath: resolvedSourcePath,
+                };
+                setSelectedFile((current) => (
+                    current
+                    && String(current.id) === String(sourceFileId)
+                    && String(current.spaceId) === String(sourceSpaceId)
+                        ? enrichedFile
+                        : current
+                ));
+            }).catch(() => {
+                // Keep the synthetic file so preview still works even if metadata enrichment fails.
+            });
         },
         [],
     );
