@@ -323,6 +323,7 @@ export const ChatKnowledge = ({
   renderSkillSubmenu,
   taskModeActive = false,
   skillSelected = false,
+  compact = false,
 }: {
   /** Controls the trigger button and which menu sections render:
    *  - 'plus'      → "+" trigger; file-upload + task-mode (+ optional add-skill) sections.
@@ -347,6 +348,8 @@ export const ChatKnowledge = ({
   taskModeActive?: boolean;
   /** F035: tint the "添加技能" icon brand-blue once at least one skill is picked. */
   skillSelected?: boolean;
+  /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
+  compact?: boolean;
 }) => {
   const localize = useLocalize();
   const PAGE_SIZE = 20;
@@ -654,9 +657,9 @@ export const ChatKnowledge = ({
                       }}
                     />
                   </div>
-                  {/* Mobile: collapse to icon + chevron only to save horizontal
-                      space in the input toolbar. */}
-                  <span className="touch-mobile:hidden">{localize('com_ui_knowledge_space')}</span>
+                  {/* Compact: collapse to icon + chevron only to save
+                      horizontal space in the input toolbar. */}
+                  {!compact && <span>{localize('com_ui_knowledge_space')}</span>}
                   <Outlined.Down size={16} className={cn("text-[#999] transition-transform duration-200", rootOpen && "rotate-180")} />
                 </button>
               ) : (

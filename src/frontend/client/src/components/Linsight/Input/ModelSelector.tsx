@@ -65,7 +65,7 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
 
     return (
         <Select value={String(value)} disabled={disabled} onValueChange={onChange}>
-            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] touch-mobile:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#334155] shadow-none outline-none hover:bg-black/5 focus:ring-0">
+            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#334155] shadow-none outline-none hover:bg-black/5 focus:ring-0">
                 <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-normal">
                     {label}
                 </span>

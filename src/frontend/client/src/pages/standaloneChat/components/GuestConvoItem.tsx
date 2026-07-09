@@ -7,8 +7,8 @@ import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import type { AppConversation } from '~/@types/app';
 
-import { DropdownPopup, OGDialog, Label } from '~/components';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import { DropdownPopup } from '~/components';
+import { useConfirm } from '~/Providers';
 import TodayItemIcon from '~/components/ui/icon/TodayItem';
 
 type GuestConvoItemProps = {
@@ -29,7 +29,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
   const [isPopoverActive, setIsPopoverActive] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [titleInput, setTitleInput] = useState(conv.title);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const confirm = useConfirm();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const menuId = useId();
@@ -83,10 +83,18 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
     [conv.title],
   );
 
-  const confirmDelete = useCallback(() => {
+  const handleDeleteClick = useCallback(async () => {
+    const ok = await confirm({
+      variant: 'destructive',
+      title: localize('com_ui_delete_conversation'),
+      description: `${localize('com_ui_delete_confirm')} "${conv.title}"`,
+      confirmText: localize('com_ui_delete'),
+    });
+    if (!ok) {
+      return;
+    }
     onDelete(conv.id);
-    setShowDeleteDialog(false);
-  }, [conv.id, onDelete]);
+  }, [confirm, localize, conv.title, conv.id, onDelete]);
 
   return (
     <div
@@ -96,7 +104,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
         renaming ? 'bg-[#EEE]' : '',
       )}
       onClick={(e) => {
-        if (renaming || isPopoverActive || showDeleteDialog) return;
+        if (renaming || isPopoverActive) return;
         onClick();
       }}
     >
@@ -174,7 +182,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
                   label: localize('com_ui_delete'),
                   onClick: () => {
                     setIsPopoverActive(false);
-                    setShowDeleteDialog(true);
+                    handleDeleteClick();
                   },
                   icon: <Trash className="icon-sm mr-2 text-text-primary" />,
                   hideOnClick: false,
@@ -184,31 +192,6 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
               ]}
               menuId={menuId}
             />
-
-            {/* Delete confirmation dialog */}
-            {showDeleteDialog && (
-              <OGDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog} triggerRef={deleteButtonRef}>
-                <OGDialogTemplate
-                  showCloseButton={false}
-                  title={localize('com_ui_delete_conversation')}
-                  className="max-w-[450px]"
-                  main={
-                    <div className="flex w-full flex-col items-center gap-2">
-                      <div className="grid w-full items-center gap-2">
-                        <Label className="text-left text-sm font-medium">
-                          {localize('com_ui_delete_confirm')} <strong>{conv.title}</strong>
-                        </Label>
-                      </div>
-                    </div>
-                  }
-                  selection={{
-                    selectHandler: confirmDelete,
-                    selectClasses: 'bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white',
-                    selectText: localize('com_ui_delete'),
-                  }}
-                />
-              </OGDialog>
-            )}
           </>
         )}
       </div>

@@ -28,9 +28,11 @@ interface KnowledgeSpaceSelectProps {
     value: TaskModeKnowledgeItem[];
     disabled?: boolean;
     onChange: (items: TaskModeKnowledgeItem[]) => void;
+    /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
+    compact?: boolean;
 }
 
-export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: KnowledgeSpaceSelectProps) {
+export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compact = false }: KnowledgeSpaceSelectProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { data: bsConfig } = useGetBsConfig();
@@ -173,7 +175,7 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
                             WebkitMaskSize: 'contain', maskSize: 'contain',
                         }}
                     />
-                    <span className="truncate max-w-[min(30vw,120px)]">{localize('com_ui_knowledge_space')}</span>
+                    {!compact && <span className="truncate">{localize('com_ui_knowledge_space')}</span>}
                     <ChevronDown size={14} className="text-slate-400" />
                 </button>
             </DropdownMenuTrigger>

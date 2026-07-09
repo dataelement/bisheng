@@ -28,11 +28,14 @@ export const ChatToolDown = ({
   searchType,
   setSearchType,
   disabled,
+  compact = false,
 }: {
   config?: BsConfig;
   searchType: string;
   setSearchType: (type: string) => void;
   disabled: boolean;
+  /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
+  compact?: boolean;
 }) => {
   const localize = useLocalize();
 
@@ -42,21 +45,25 @@ export const ChatToolDown = ({
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-7 rounded-full px-2 text-[#334155] data-[state=open]:border-blue-500 touch-mobile:px-1.5",
+          "h-7 rounded-full px-2 text-[#334155] data-[state=open]:border-blue-500",
+          compact && "px-1.5",
           searchType === "netSearch" && "bg-blue-100"
         )}
       >
         <div
           className={cn(
-            "flex gap-2 touch-mobile:gap-1",
+            "flex items-center",
+            compact ? "gap-1" : "gap-2",
             searchType === "netSearch" && "text-blue-600"
           )}
         >
           <Settings2Icon size="16" />
-          {/* Mobile: collapse to icon + chevron only to save horizontal space. */}
-          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] touch-mobile:max-w-[min(18vw,56px)] touch-mobile:hidden">
-            {localize("com_tools_title")}
-          </span>
+          {/* Compact: collapse to icon + chevron only to save horizontal space. */}
+          {!compact && (
+            <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
+              {localize("com_tools_title")}
+            </span>
+          )}
         </div>
       </SelectTrigger>
       <SelectContent auto className="bg-white rounded-[8px] min-w-[160px] max-w-[280px]">
@@ -124,10 +131,10 @@ export const LinsiTools = ({ tools, setTools }) => {
 
   return (
     <Select>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 touch-mobile:px-1.5">
-        <div className={cn("flex gap-2 touch-mobile:gap-1", active && "text-blue-600")}>
+      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 max-md:px-1.5">
+        <div className={cn("flex gap-2 max-md:gap-1", active && "text-blue-600")}>
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] touch-mobile:max-w-[min(18vw,56px)]">
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] max-md:max-w-[min(18vw,56px)]">
             {localize("com_tools_title")}
           </span>
         </div>

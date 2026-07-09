@@ -31,6 +31,10 @@ class WorkstationMessage(BaseModel):
     # to the execution detail for lazy-loading. Both absent on normal turns.
     category: str | None = None
     linsightSessionVersionId: str | None = None
+    # like/dislike echo: 0 none / 1 up / 2 down, plus the dislike reason. The
+    # frontend re-highlights the rated state on reload.
+    liked: int | None = None
+    remark: str | None = None
 
     @field_validator("messageId", mode="before")
     @classmethod
@@ -70,6 +74,8 @@ class WorkstationMessage(BaseModel):
             source=message.source,
             category=message.category,
             linsightSessionVersionId=extra.get("linsight_session_version_id"),
+            liked=message.liked,
+            remark=message.remark,
         )
 
 

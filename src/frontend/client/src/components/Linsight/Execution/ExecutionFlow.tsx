@@ -230,7 +230,11 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     {/* ── artifacts area (P4): report link / answer markdown / file
                         card — lifted into the terminal ResultPanel (peak-end). ── */}
                     {completed && (
-                        <ResultPanel>
+                        <ResultPanel
+                            messageId={linsight?.message_id ?? undefined}
+                            liked={linsight?.liked ?? undefined}
+                            allowFeedback={!readOnly && !isSharePage}
+                        >
                             <ResultSection
                                 answer={linsight?.output_result?.answer}
                                 files={fileList}

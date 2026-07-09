@@ -8,25 +8,33 @@
 import { X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
-import { useLocalize } from '~/hooks';
-import useMediaQuery from '~/hooks/useMediaQuery';
+import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
 
 interface TaskModeToggleProps {
     active: boolean;
     disabled?: boolean;
     onClick: () => void;
+    /**
+     * Toolbar ran out of room (measured by the parent, see useContainerCompact):
+     * collapse to icon-only with a persistent exit "x". When compact, the hover
+     * icon-swap is disabled — otherwise it renders a SECOND x next to the
+     * persistent one. Roomy toolbars keep the hover binoculars→x affordance.
+     */
+    compact?: boolean;
 }
 
-export function TaskModeToggle({ active, disabled = false, onClick }: TaskModeToggleProps) {
+export function TaskModeToggle({ active, disabled = false, onClick, compact = false }: TaskModeToggleProps) {
     const localize = useLocalize();
     const [hovered, setHovered] = useState(false);
-    // Matches the CSS `touch-mobile` variant (≤1023px), where the label is
-    // hidden and a persistent exit "x" is shown instead. In that layout the
-    // hover icon-swap must be disabled — otherwise it renders a SECOND x next to
-    // the persistent one. Wide screens keep the hover binoculars→x affordance.
-    const isTouchLayout = useMediaQuery('(max-width: 1023px)');
-    const showExit = active && hovered && !isTouchLayout;
+    // Touch devices (iPad, foldables) can't hover, so the binoculars→x swap
+    // never fires there — fall back to a persistent exit "x" even when the label
+    // is shown. The swap stays only on hover-capable, roomy layouts.
+    const noHover = useMediaQuery('(hover: none)');
+    const showExit = active && hovered && !compact && !noHover;
+    // Standing exit "x": when there's no hover-swap to reveal it (compact layout
+    // or a non-hover device).
+    const showPersistentExit = active && (compact || noHover);
 
     return (
         <button
@@ -48,14 +56,15 @@ export function TaskModeToggle({ active, disabled = false, onClick }: TaskModeTo
             ) : (
                 <Outlined.Binoculars size={16} className={active ? 'text-blue-600' : 'text-[#4E5969]'} />
             )}
-            {/* Mobile: collapse to icon only to save horizontal space in the
+            {/* Compact: collapse to icon only to save horizontal space in the
                 input toolbar, matching the knowledge/tools selectors. */}
-            <span className="touch-mobile:hidden">{localize('com_linsight_task_mode')}</span>
-            {/* Mobile + active: persistent exit "x" standing in for the other
-                selectors' chevron — same size/color/gap as their down icon
-                (size 16, #999). Desktop keeps the hover-swap affordance above. */}
-            {active && (
-                <X size={16} className="hidden shrink-0 text-[#999] touch-mobile:block" />
+            {!compact && <span>{localize('com_linsight_task_mode')}</span>}
+            {/* Persistent exit "x" standing in for the other selectors' chevron
+                — same size/color/gap as their down icon (size 16, #999). Shown
+                when no hover-swap will reveal one: compact layout, or a device
+                that can't hover. Hover-capable roomy layouts use the swap above. */}
+            {showPersistentExit && (
+                <X size={16} className="shrink-0 text-[#999]" />
             )}
         </button>
     );
