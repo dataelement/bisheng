@@ -652,6 +652,12 @@ class PortalAgentWorkflowsQuery(BaseModel):
     workflow_ids: List[str] = Field(default_factory=list, description='Workflow IDs configured in portal')
 
 
+class PortalAgentConversationsQuery(BaseModel):
+    """Schema for querying current user's portal agent conversations"""
+    page: int = Field(default=1, ge=1, description='Page number')
+    limit: int = Field(default=20, ge=1, le=100, description='Page size')
+
+
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
     model_id: int = Field(..., description='embeddingModelsID')

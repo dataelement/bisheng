@@ -106,6 +106,9 @@ export function usePortalUploadDialog({
     const [uploadFolderNodes, setUploadFolderNodes] = useState<PortalUploadFolderNode[]>([]);
     const [uploadFolderLoading, setUploadFolderLoading] = useState(false);
     const [uploadSubmitting, setUploadSubmitting] = useState(false);
+    // Re-entry guard: flips synchronously so rapid double-clicks on the upload
+    // button can't launch the pre-upload check + upload flow more than once.
+    const uploadSubmittingRef = useRef(false);
     const [uploadImporting, setUploadImporting] = useState(false);
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
@@ -167,6 +170,7 @@ export function usePortalUploadDialog({
         setUploadFolderSelection({ mode: "ai" });
         setUploadFolderNodes([]);
         setUploadFolderLoading(false);
+        uploadSubmittingRef.current = false;
         setUploadSubmitting(false);
         setUploadImporting(false);
         setUploadReviewRows([]);
@@ -617,51 +621,59 @@ export function usePortalUploadDialog({
             showToast({ message: "请先选择文件", severity: NotificationSeverity.INFO });
             return;
         }
-        const uploadMetadataPayload = buildPortalUploadMetadataPayload(
-            { businessDomainCode, selectedTagValues: selectedUploadTagValues },
-            selectedFileSubcategory,
-        );
-
-        // Pre-upload sensitive-word check: filenames (batch)
-        const filenames = uploadFiles.map((item) => item.file.name);
-        const filenameCheck = await checkSensitiveWordsApi(activeSpace.id, filenames);
-        if (filenameCheck.has_violation) {
-            const violated = filenameCheck.violated_texts.slice(0, 3).join("、");
-            showToast({
-                message: `文件名包含敏感词（${violated}${filenameCheck.violated_texts.length > 3 ? "…" : ""}），请修改后重试`,
-                severity: NotificationSeverity.ERROR,
-            });
-            return;
-        }
-
-        // Pre-upload sensitive-word check: text file content (per file, report by filename)
-        const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "html", "htm"]);
-        const violatedContentFiles: string[] = [];
-        for (const item of uploadFiles) {
-            const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
-            if (TEXT_EXTENSIONS.has(ext)) {
-                try {
-                    const content = await item.file.text();
-                    const contentCheck = await checkSensitiveWordsApi(activeSpace.id, [content]);
-                    if (contentCheck.has_violation) {
-                        violatedContentFiles.push(item.file.name);
-                    }
-                } catch {
-                    // Skip content check on read error
-                }
-            }
-        }
-        if (violatedContentFiles.length > 0) {
-            const violated = violatedContentFiles.slice(0, 3).join("、");
-            showToast({
-                message: `文件内容包含敏感词（${violated}${violatedContentFiles.length > 3 ? "…" : ""}），请修改后重试`,
-                severity: NotificationSeverity.ERROR,
-            });
-            return;
-        }
-
+        // Guard re-entry and flip the button to its busy state up front, before
+        // the (potentially many, network-bound) sensitive-word checks run — so
+        // the button disables immediately instead of only after all checks pass.
+        if (uploadSubmittingRef.current) return;
+        uploadSubmittingRef.current = true;
         setUploadSubmitting(true);
         try {
+            const uploadMetadataPayload = buildPortalUploadMetadataPayload(
+                { businessDomainCode, selectedTagValues: selectedUploadTagValues },
+                selectedFileSubcategory,
+            );
+
+            // Pre-upload sensitive-word check: filenames (batch)
+            const filenames = uploadFiles.map((item) => item.file.name);
+            const filenameCheck = await checkSensitiveWordsApi(activeSpace.id, filenames);
+            if (filenameCheck.has_violation) {
+                const violated = filenameCheck.violated_texts.slice(0, 3).join("、");
+                showToast({
+                    message: `文件名包含敏感词（${violated}${filenameCheck.violated_texts.length > 3 ? "…" : ""}），请修改后重试`,
+                    severity: NotificationSeverity.ERROR,
+                });
+                return;
+            }
+
+            // Pre-upload sensitive-word check: text file content (per file, report
+            // by filename). Runs concurrently so N text files cost one round-trip
+            // window, not N serialized ones.
+            const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "html", "htm"]);
+            const textItems = uploadFiles.filter(
+                (item) => TEXT_EXTENSIONS.has(item.file.name.split(".").pop()?.toLowerCase() ?? ""),
+            );
+            const contentChecks = await Promise.all(
+                textItems.map(async (item) => {
+                    try {
+                        const content = await item.file.text();
+                        const contentCheck = await checkSensitiveWordsApi(activeSpace.id, [content]);
+                        return contentCheck.has_violation ? item.file.name : null;
+                    } catch {
+                        // Skip content check on read error
+                        return null;
+                    }
+                }),
+            );
+            const violatedContentFiles = contentChecks.filter((name): name is string => name !== null);
+            if (violatedContentFiles.length > 0) {
+                const violated = violatedContentFiles.slice(0, 3).join("、");
+                showToast({
+                    message: `文件内容包含敏感词（${violated}${violatedContentFiles.length > 3 ? "…" : ""}），请修改后重试`,
+                    severity: NotificationSeverity.ERROR,
+                });
+                return;
+            }
+
             if (uploadLocalFolderName) {
                 const recommendations = await recommendUploadTargetMap([
                     { id: `folder:${uploadLocalFolderName}`, name: uploadLocalFolderName },
@@ -751,6 +763,7 @@ export function usePortalUploadDialog({
             const message = error instanceof Error && error.message ? error.message : "上传失败";
             showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
+            uploadSubmittingRef.current = false;
             setUploadSubmitting(false);
         }
     }, [activeSpace, businessDomainCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, selectedFileSubcategory, selectedUploadTagValues, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);

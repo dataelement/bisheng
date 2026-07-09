@@ -198,6 +198,31 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_latest_message_by_chat_ids(cls,
+                                              chat_ids: list[str],
+                                              category: str = None,
+                                              exclude_category: str = None):
+        """
+        Async variant for fetching the most recent message for each session.
+        """
+        if not chat_ids:
+            return []
+        statement = select(ChatMessage.chat_id,
+                           func.max(ChatMessage.id)).where(ChatMessage.chat_id.in_(chat_ids))
+        if category:
+            statement = statement.where(ChatMessage.category == category)
+        if exclude_category:
+            statement = statement.where(ChatMessage.category != exclude_category)
+        statement = statement.group_by(ChatMessage.chat_id)
+        async with get_async_db_session() as session:
+            res = (await session.exec(statement)).all()
+            ids = [one[1] for one in res if one[1] is not None]
+            if not ids:
+                return []
+            statement = select(ChatMessage).where(ChatMessage.id.in_(ids))
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def get_messages_by_chat_id(cls,
                                 chat_id: str,
                                 category_list: list = None,

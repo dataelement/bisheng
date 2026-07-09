@@ -203,7 +203,7 @@ export function FileTree({
     };
 
     const renderTreeNode = (node: PortalFileTreeNode, depth = 0): ReactNode => {
-        const hasMore = node.expanded && node.loaded && node.children.length < node.total;
+        const hasMore = node.expanded && node.loaded && node.hasMore;
         return (
             <div key={node.file.id}>
                 {renderFileRow(node.file, depth, node)}
