@@ -6,7 +6,6 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import AppChatList
-from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatList
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -207,13 +206,6 @@ class ChatSessionService:
         if not res:
             return []
 
-        chat_ids = [one.chat_id for one in res]
-        latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(
-            chat_ids,
-            exclude_category=WorkflowEventType.UserInput.value,
-        )
-        latest_messages = {one.chat_id: one for one in latest_messages}
-
         return [
             ChatList(
                 chat_id=one.chat_id,
@@ -222,7 +214,7 @@ class ChatSessionService:
                 flow_type=one.flow_type,
                 name=one.name,
                 logo=BaseService.get_logo_share_link(one.flow_logo) if one.flow_logo else '',
-                latest_message=latest_messages.get(one.chat_id, None),
+                latest_message=None,
                 create_time=one.create_time,
                 update_time=one.update_time,
             )
