@@ -2626,7 +2626,6 @@ describe("PortalKnowledgeWorkbench", () => {
             "编辑标签",
             "下载",
             "权限管理",
-            "复制",
         ]);
         expect(within(actions).queryByRole("button", { name: "AI 对话" })).not.toBeInTheDocument();
 
@@ -3033,72 +3032,6 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).getByText("RPT-PP-00000001")).toBeInTheDocument();
         expect(within(drawer).queryByRole("button", { name: "编辑文件编码" })).not.toBeInTheDocument();
         expect(updateFileEncoding).not.toHaveBeenCalled();
-    });
-
-    test("copies the selected file encoding from the document header", async () => {
-        const personalSpace = makeSpace("personal-1", "我的技术文档", {
-            role: SpaceRole.ADMIN,
-        });
-        const file = makeFile("201", "后端开发.md", {
-            fileEncoding: "RPT-PP-00000001",
-        });
-        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [],
-            departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [personalSpace],
-        } as any);
-        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
-            data: [file],
-            total: 1,
-        } as any);
-
-        renderWorkbench();
-
-        const fileRow = await screen.findByTestId("file-tree-row-201");
-        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
-
-        const actions = await screen.findByTestId("portal-document-actions");
-        fireEvent.click(within(actions).getByRole("button", { name: "复制" }));
-
-        await waitFor(() => {
-            expect(mockClipboardWriteText).toHaveBeenCalledWith("RPT-PP-00000001");
-        });
-        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
-            message: "文件编码已复制",
-        }));
-    });
-
-    test("does not copy an empty file encoding", async () => {
-        const personalSpace = makeSpace("personal-1", "我的技术文档", {
-            role: SpaceRole.ADMIN,
-        });
-        const file = makeFile("201", "后端开发.md", {
-            fileEncoding: null,
-        });
-        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
-            publicSpaces: [],
-            departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [personalSpace],
-        } as any);
-        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
-            data: [file],
-            total: 1,
-        } as any);
-
-        renderWorkbench();
-
-        const fileRow = await screen.findByTestId("file-tree-row-201");
-        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
-
-        const actions = await screen.findByTestId("portal-document-actions");
-        fireEvent.click(within(actions).getByRole("button", { name: "复制" }));
-
-        expect(mockClipboardWriteText).not.toHaveBeenCalled();
-        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
-            message: "暂无文件编码",
-        }));
     });
 
     test("expands summary content in a stacked original summary bar and toggles button state", async () => {

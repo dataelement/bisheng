@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Copy, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
@@ -42,7 +42,6 @@ interface DocumentPreviewProps {
     onDownload: () => void;
     canManagePermission: boolean;
     onOpenPermission: () => void;
-    onCopyEncoding: () => void;
     onToggleSummary: () => void;
 }
 
@@ -57,7 +56,6 @@ export function DocumentPreview({
     onDownload,
     canManagePermission,
     onOpenPermission,
-    onCopyEncoding,
     onToggleSummary,
 }: DocumentPreviewProps) {
     const isRichPreview = isRichPreviewData(preview.previewData);
@@ -91,9 +89,6 @@ export function DocumentPreview({
                                     <ShieldCheck size={16} />
                                 </button>
                             ) : null}
-                            <button type="button" className={s.iconAction} title="复制" aria-label="复制" onClick={onCopyEncoding}>
-                                <Copy size={16} />
-                            </button>
                         </div>
                     </div>
                     <div className={s.divider} />

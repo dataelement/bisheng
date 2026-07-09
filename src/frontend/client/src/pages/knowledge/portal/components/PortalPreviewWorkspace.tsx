@@ -24,7 +24,6 @@ interface PortalPreviewWorkspaceProps {
     summaryExpanded: boolean;
     onAiDrawerOpenChange: (open: boolean) => void;
     onBackToFileList: () => void;
-    onCopyEncoding: () => void;
     onCopyShareLink: () => void;
     onDownload: () => void;
     onUpdateEncoding: (newEncoding: string, fileSubcategoryCode?: string | null) => void | Promise<void>;
@@ -51,7 +50,6 @@ export function PortalPreviewWorkspace({
     summaryExpanded,
     onAiDrawerOpenChange,
     onBackToFileList,
-    onCopyEncoding,
     onCopyShareLink,
     onDownload,
     onUpdateEncoding,
@@ -77,7 +75,6 @@ export function PortalPreviewWorkspace({
                     onDownload={onDownload}
                     canManagePermission={canManagePermission}
                     onOpenPermission={onOpenPermission}
-                    onCopyEncoding={onCopyEncoding}
                     onToggleSummary={onToggleSummary}
                 />
             </div>
