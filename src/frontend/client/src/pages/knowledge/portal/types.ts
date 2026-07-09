@@ -38,6 +38,8 @@ export interface PortalFileTreeNode {
     loading: boolean;
     page: number;
     total: number;
+    hasMore: boolean;
+    nextCursor: string | null;
 }
 
 export type PortalUploadStep = "select" | "review";

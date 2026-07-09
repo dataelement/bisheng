@@ -445,6 +445,9 @@ export interface KnowledgeFile {
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
     user_name?: string;           // mapped from user_name — original uploader of this file
     updater_name?: string;        // mapped from updater_name — last updater of this file
+    folderPath?: string;          // mapped from folder_path / file_level_path
+    sourcePath?: string;          // mapped from source_path
+    sourceSpaceName?: string;     // mapped from knowledge_name / space_name
     // Transient UI-only fields
     isCreating?: boolean;
     /** 0–100 upload progress for in-flight uploads */
@@ -988,6 +991,9 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         has_similar: Boolean(raw?.has_similar),
         user_name: raw?.user_name ?? undefined,
         updater_name: raw?.updater_name ?? undefined,
+        folderPath: raw?.folder_path ?? raw?.file_level_path ?? undefined,
+        sourcePath: raw?.source_path ?? undefined,
+        sourceSpaceName: raw?.knowledge_name ?? raw?.space_name ?? undefined,
     };
 }
 
@@ -1997,6 +2003,7 @@ export async function listKnowledgeFolders(params: {
 export async function getSpaceChildrenApi(params: {
     space_id: string;
     parent_id?: string;
+    file_ids?: Array<string | number>;
     page?: number;
     cursor?: string | null;
     page_size?: number;
@@ -2018,6 +2025,7 @@ export async function getSpaceChildrenApi(params: {
                 order_field: queryParams.order_field,
                 order_sort: queryParams.order_sort,
                 file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
+                file_ids: queryParams.file_ids?.length ? queryParams.file_ids.map(Number) : undefined,
             },
             paramsSerializer: request.paramsSerializer,
         }

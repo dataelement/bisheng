@@ -114,6 +114,7 @@ export function PortalInfoDrawer({
     activePanel,
     activeSpace,
     selectedFile,
+    documentPath,
     canEditEncoding = false,
     fileCategoryGroups,
     businessDomainOptions,
@@ -154,6 +155,13 @@ export function PortalInfoDrawer({
     const tags = selectedFile?.tags ?? [];
     const versionText = formatVersionText(selectedFile?.version_no);
     const operatorName = selectedFile?.user_name || "-";
+    const updaterName = selectedFile?.updater_name || selectedFile?.user_name || "-";
+    const sourceSpaceName = selectedFile
+        ? (selectedFile.sourceSpaceName
+            || (selectedFile.spaceId && selectedFile.spaceId === activeSpace?.id ? activeSpace?.name : "")
+            || (selectedFile.spaceId ? `知识库 ${selectedFile.spaceId}` : "-"))
+        : "-";
+    const sourcePath = selectedFile?.sourcePath || selectedFile?.folderPath || documentPath || "-";
     const detailTabs = DETAIL_TABS;
 
     const renderDetailItem = (label: string, value: string | number | null | undefined) => (
@@ -357,8 +365,10 @@ export function PortalInfoDrawer({
                         className={s.detailList}
                     >
                         {renderDetailItem("创建人", operatorName)}
-                        {renderDetailItem("最后修改人", operatorName)}
+                        {renderDetailItem("最后修改人", updaterName)}
                         {renderDetailItem("部门", selectedFile ? DEFAULT_DEPARTMENT_NAME : "-")}
+                        {renderDetailItem("知识库", sourceSpaceName)}
+                        {renderDetailItem("路径", sourcePath)}
                     </div>
                 ) : null}
 
