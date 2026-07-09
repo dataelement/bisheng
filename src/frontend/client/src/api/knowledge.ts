@@ -1,4 +1,5 @@
 import request from "./request";
+import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
 
 // Standard backend response wrapper
 interface ApiResponse<T> {
@@ -463,16 +464,7 @@ function formatSensitiveViolationMessage(hits: any[]): string {
 }
 
 function formatMediaParseFailureMessage(parsed: any): string | undefined {
-    if (parsed?.status_code === 10956) {
-        return "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。";
-    }
-
-    const exception = String(parsed?.data?.exception ?? "").trim().toLowerCase();
-    if (exception === "media audio extraction failed" || exception === "asr returned empty text") {
-        return "未检测到可识别音频，无法生成识别文本。请上传包含清晰人声的音频或视频文件。";
-    }
-
-    return undefined;
+    return resolveKnowledgeParseFailureMessage(parsed);
 }
 
 export function extractKnowledgeFileError(raw: any): string | undefined {

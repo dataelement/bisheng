@@ -32,6 +32,7 @@ import AddKnowledgeFileMenu from "./AddKnowledgeFileMenu";
 import WebLinkImportDialog from "./WebLinkImportDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 interface StatusIndicatorProps {
     status: number;
@@ -73,16 +74,7 @@ function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?:
 }
 
 function formatMediaParseFailureMessage(obj: any, t: (key: string, options?: Record<string, any>) => string) {
-    if (obj?.status_code === 10956) {
-        return t("mediaNoRecognizableAudio", { ns: "knowledge" });
-    }
-
-    const exception = String(obj?.data?.exception ?? "").trim().toLowerCase();
-    if (exception === "media audio extraction failed" || exception === "asr returned empty text") {
-        return t("mediaNoRecognizableAudio", { ns: "knowledge" });
-    }
-
-    return "";
+    return resolveKnowledgeParseFailure(obj, t) ?? "";
 }
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {

@@ -95,11 +95,11 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
     is_web_link_non_dedup_markdown,
 )
-from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.domain.knowledge_space_permission_template import (
@@ -3270,7 +3270,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=db_file.user_id,
             file_id=db_file.id,
             file_name=db_file.file_name,
-            preview_cache_key=self.get_preview_cache_key(knowledge_id, import_result.final_url, import_result.content_hash),
+            preview_cache_key=self.get_preview_cache_key(
+                knowledge_id, import_result.final_url, import_result.content_hash
+            ),
             callback_url=None,
         )
         await self.update_folder_update_time(file_level_path)
@@ -3335,7 +3337,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=updated_file.user_id,
             file_id=updated_file.id,
             file_name=updated_file.file_name,
-            preview_cache_key=self.get_preview_cache_key(updated_file.knowledge_id, user_metadata.get("final_url", ""), content_hash),
+            preview_cache_key=self.get_preview_cache_key(
+                updated_file.knowledge_id, user_metadata.get("final_url", ""), content_hash
+            ),
             callback_url=None,
         )
         await self.update_folder_update_time(file_level_path)

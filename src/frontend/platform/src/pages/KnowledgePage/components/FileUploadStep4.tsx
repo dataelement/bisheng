@@ -11,29 +11,17 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
 function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
+    const resolved = resolveKnowledgeParseFailure(remark, t);
+    if (resolved) return resolved;
+
     const trimmedRemark = typeof remark === "string" ? remark.trim() : "";
     if (!trimmedRemark) return t("parseFailed");
-    if (!trimmedRemark.startsWith("{")) return trimmedRemark;
-
-    try {
-        const parsed = JSON.parse(trimmedRemark);
-        if (parsed?.status_code === 10956) {
-            return t("mediaNoRecognizableAudio");
-        }
-
-        const exception = String(parsed?.data?.exception ?? "").trim().toLowerCase();
-        if (exception === "media audio extraction failed" || exception === "asr returned empty text") {
-            return t("mediaNoRecognizableAudio");
-        }
-
-        return t(`bs:errors.${parsed.status_code}`, parsed.data);
-    } catch {
-        return trimmedRemark;
-    }
+    return trimmedRemark;
 }
 
 export default function FileUploadStep4({ data, kId, hasRepeat }) {

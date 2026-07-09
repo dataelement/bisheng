@@ -541,7 +541,9 @@ export function previewFileSplitApi(
     const emitError = (payload) => {
         onEvent('error', {
             code: payload?.code || 10952,
-            message: payload?.message || '文档解析失败'
+            message: payload?.message || '文档解析失败',
+            data: payload?.data,
+            ...payload,
         });
     };
 
