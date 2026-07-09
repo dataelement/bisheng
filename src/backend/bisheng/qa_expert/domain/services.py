@@ -227,7 +227,7 @@ class QuestionService:
         answer.status = 1  # 已采纳
         await self.answer_repo.update(answer_id, status=1,adopted=True)
         # 增加采纳采纳数
-        await self.expert_repo.increment_adopted_count(answer.expert_id, count=1)
+        await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
 
         # 发送采纳通知
         await self._send_adoption_notification(
