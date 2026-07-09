@@ -71,14 +71,14 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                         <X className="h-4 w-4 text-muted-foreground" />
                     </button>
 
-                    <AlertDialogHeader className="relative pt-2">
+                    <AlertDialogHeader className="relative pt-2 min-w-0">
                         <div className="absolute left-0 -top-3">
                             <AlertCircle className="h-6 w-6 text-red-500" />
                         </div>
                         <AlertDialogTitle className="text-center text-xl font-medium pt-2">
                             {options.title || "提示"}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center py-4 text-base text-slate-600">
+                        <AlertDialogDescription className="text-center py-4 text-base text-slate-600 min-w-0 break-all max-h-[40vh] overflow-y-auto">
                             {options.description}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
