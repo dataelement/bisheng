@@ -298,9 +298,7 @@ async def test_knowledge_space_create_creates_exception_when_scenario_disabled(m
         validate_knowledge_space_create=AsyncMock(return_value=None),
         create_knowledge_space=AsyncMock(),
     )
-    approval_gate = SimpleNamespace(
-        request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError())
-    )
+    approval_gate = SimpleNamespace(request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError()))
     create_instance, create_exception = _patch_exception_repository(monkeypatch, instance_id=501)
     service = ShougangApprovalService(approval_gate=approval_gate)
     monkeypatch.setattr(service, "_is_create_approval_exempt", AsyncMock(return_value=False))
@@ -868,11 +866,13 @@ async def test_file_publish_target_spaces_follow_source_matrix(monkeypatch, sour
         AsyncMock(return_value=SimpleNamespace(level=getattr(KnowledgeSpaceLevelEnum, source_level))),
     )
     space_service = SimpleNamespace(
-        get_grouped_spaces=AsyncMock(return_value=SimpleNamespace(
-            public_spaces=[space(101, KnowledgeSpaceLevelEnum.PUBLIC)],
-            department_spaces=[space(201, KnowledgeSpaceLevelEnum.DEPARTMENT)],
-            team_spaces=[space(301, KnowledgeSpaceLevelEnum.TEAM)],
-        ))
+        get_grouped_spaces=AsyncMock(
+            return_value=SimpleNamespace(
+                public_spaces=[space(101, KnowledgeSpaceLevelEnum.PUBLIC)],
+                department_spaces=[space(201, KnowledgeSpaceLevelEnum.DEPARTMENT)],
+                team_spaces=[space(301, KnowledgeSpaceLevelEnum.TEAM)],
+            )
+        )
     )
 
     result = await ShougangApprovalService().list_file_publish_target_spaces(
@@ -1247,9 +1247,7 @@ async def test_file_publish_creates_exception_when_scenario_disabled(monkeypatch
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
     service = ShougangApprovalService(
-        approval_gate=SimpleNamespace(
-            request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError())
-        )
+        approval_gate=SimpleNamespace(request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError()))
     )
     monkeypatch.setattr(
         service,
@@ -1410,8 +1408,8 @@ async def test_file_publish_similar_candidates_filters_by_file_view_permission(m
     from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
     from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
-    from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+    from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
     service = ShougangApprovalService()
     monkeypatch.setattr(
@@ -1811,6 +1809,10 @@ async def test_file_publish_handler_reuses_existing_copied_file(monkeypatch):
         "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.aget_file_by_filters",
         AsyncMock(return_value=[copied_file]),
     )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler._copy_file_tags",
+        AsyncMock(),
+    )
     monkeypatch.setattr(handler, "_copy_file", Mock())
 
     result = await handler.on_approved(
@@ -1845,6 +1847,10 @@ async def test_file_publish_handler_links_existing_file_version_once(monkeypatch
     monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_handler._link_file_as_version",
         AsyncMock(return_value={"document_id": 300}),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler._copy_file_tags",
+        AsyncMock(),
     )
     monkeypatch.setattr(handler, "_copy_file", Mock())
 
@@ -1883,6 +1889,7 @@ async def test_file_publish_handler_builds_document_for_target_file_before_link(
     monkeypatch.setattr(handler_mod, "_ensure_file_publish_target_document", ensure_document, raising=False)
     link_file = AsyncMock(return_value={"document_id": 300})
     monkeypatch.setattr(handler_mod, "_link_file_as_version", link_file)
+    monkeypatch.setattr(handler_mod, "_copy_file_tags", AsyncMock())
     monkeypatch.setattr(handler, "_copy_file", Mock())
 
     result = await handler.on_approved(
@@ -2049,6 +2056,7 @@ async def test_file_publish_handler_links_version_with_selected_folder_path(monk
     )
     link_file = AsyncMock(return_value={"document_id": 300})
     monkeypatch.setattr(handler_mod, "_link_file_as_version", link_file)
+    monkeypatch.setattr(handler_mod, "_copy_file_tags", AsyncMock())
 
     result = await handler.on_approved(
         102,
@@ -2072,6 +2080,152 @@ async def test_file_publish_handler_links_version_with_selected_folder_path(monk
         level=3,
     )
     assert result == {"file_id": 188, "target_space_id": 20, "version": {"document_id": 300}}
+
+
+@pytest.mark.asyncio
+async def test_copy_file_tags_copies_approved_and_pending_review_tags(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import _copy_file_tags
+    from bisheng.database.models.group_resource import ResourceTypeEnum
+    from bisheng.database.models.tag import Tag
+
+    add_approved = AsyncMock()
+    add_review = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.database.models.tag.TagDao.get_tags_by_resource_batch",
+        lambda *args, **kwargs: {"100": [Tag(id=11, name="技术文档", resource_type="manual_tag")]},
+    )
+    monkeypatch.setattr(
+        "bisheng.database.models.review_tags.ReviewTagDao.get_tags_by_resource_batch",
+        lambda *args, **kwargs: {
+            "100": [
+                SimpleNamespace(id=21, name="新标签", resource_type="ai_auto_tag", review_status=0),
+                SimpleNamespace(id=22, name="已拒绝", resource_type="ai_auto_tag", review_status=2),
+            ]
+        },
+    )
+    monkeypatch.setattr("bisheng.database.models.tag.TagDao.add_tags", add_approved)
+    monkeypatch.setattr("bisheng.database.models.review_tags.ReviewTagDao.add_tags", add_review)
+
+    await _copy_file_tags(source_file_id=100, target_file_id=188, user_id=11, tenant_id=1)
+
+    add_approved.assert_awaited_once_with([11], "188", ResourceTypeEnum.SPACE_FILE, 11)
+    add_review.assert_awaited_once_with(
+        [21],
+        "188",
+        ResourceTypeEnum.SPACE_FILE,
+        11,
+        tenant_id=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_copies_tags_on_approved(monkeypatch):
+    from bisheng.approval.domain.services import shougang_approval_handler as handler_mod
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    copy_tags = AsyncMock()
+    monkeypatch.setattr(handler_mod, "_copy_file_tags", copy_tags)
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.aget_file_by_filters",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeDao.aquery_by_id",
+        AsyncMock(
+            side_effect=[
+                SimpleNamespace(id=10, type=KnowledgeTypeEnum.SPACE.value, name="团队空间"),
+                SimpleNamespace(id=20, type=KnowledgeTypeEnum.SPACE.value, name="公共空间"),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.query_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=100, knowledge_id=10, status=KnowledgeFileStatus.SUCCESS.value)),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeSpaceScopeDao.aget_by_space_id",
+        AsyncMock(
+            side_effect=[
+                SimpleNamespace(level=KnowledgeSpaceLevelEnum.TEAM),
+                SimpleNamespace(level=KnowledgeSpaceLevelEnum.PUBLIC),
+            ]
+        ),
+    )
+    monkeypatch.setattr(handler, "_copy_file", Mock(return_value=SimpleNamespace(id=188)))
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeDao.async_update_knowledge_update_time_by_id",
+        AsyncMock(),
+    )
+    fake_space_service = Mock()
+    fake_space_service._initialize_child_resource_permissions = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService",
+        Mock(return_value=fake_space_service),
+    )
+
+    result = await handler.on_approved(
+        102,
+        {
+            "tenant_id": 1,
+            "applicant_user_id": 11,
+            "applicant_user_name": "申请人",
+            "source_space_id": 10,
+            "source_file_id": 100,
+            "target_space_id": 20,
+        },
+    )
+
+    copy_tags.assert_awaited_once_with(
+        source_file_id=100,
+        target_file_id=188,
+        user_id=11,
+        tenant_id=1,
+    )
+    assert result == {"file_id": 188, "target_space_id": 20, "version": None}
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_copies_tags_on_idempotent_retry(monkeypatch):
+    from bisheng.approval.domain.services import shougang_approval_handler as handler_mod
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    copy_tags = AsyncMock()
+    monkeypatch.setattr(handler_mod, "_copy_file_tags", copy_tags)
+    copied_file = SimpleNamespace(
+        id=188,
+        user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.aget_file_by_filters",
+        AsyncMock(return_value=[copied_file]),
+    )
+    monkeypatch.setattr(handler, "_copy_file", Mock())
+
+    result = await handler.on_approved(
+        102,
+        {
+            "tenant_id": 1,
+            "applicant_user_id": 11,
+            "applicant_user_name": "申请人",
+            "source_space_id": 10,
+            "source_file_id": 100,
+            "target_space_id": 20,
+        },
+    )
+
+    copy_tags.assert_awaited_once_with(
+        source_file_id=100,
+        target_file_id=188,
+        user_id=11,
+        tenant_id=1,
+    )
+    assert result == {"file_id": 188, "target_space_id": 20, "version": None, "idempotent": True}
+    handler._copy_file.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2256,8 +2410,7 @@ def test_shougang_scenarios_registered_in_default_presets():
         "personal",
     ]
     assert [
-        option.source_type
-        for option in presets["knowledge_space_file_publish_request"].approver_source_options
+        option.source_type for option in presets["knowledge_space_file_publish_request"].approver_source_options
     ] == [
         "direct_user",
         "department_admin",
@@ -2278,7 +2431,9 @@ def test_shougang_scenarios_registered_in_default_presets():
     assert publish_source_options["target_knowledge_space_owner"] == "目标知识空间 Owner"
     assert publish_source_options["target_knowledge_space_manager"] == "目标知识空间 Manager"
     assert publish_source_options["target_knowledge_space_owner_department_admin"] == "目标知识空间 Owner 的部门管理员"
-    assert publish_source_options["target_knowledge_space_manager_department_admin"] == "目标知识空间 Manager 的部门管理员"
+    assert (
+        publish_source_options["target_knowledge_space_manager_department_admin"] == "目标知识空间 Manager 的部门管理员"
+    )
 
 
 @pytest.mark.asyncio
