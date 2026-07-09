@@ -19,9 +19,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceScopeDao
 
-KNOWLEDGE_SPACE_CREATE_SCENARIO = 'knowledge_space_create_request'
-FILE_PUBLISH_SCENARIO = 'knowledge_space_file_publish_request'
-FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE = '您发布的文档与目标库不符'
+KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request"
+FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request"
+FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE = "您发布的文档与目标库不符"
 
 _FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
     KnowledgeSpaceLevelEnum.PERSONAL: {
@@ -51,11 +51,11 @@ class _RuntimeLoginUser:
 
 
 def _runtime_request() -> Any:
-    return SimpleNamespace(headers={}, client=SimpleNamespace(host='approval-runtime'))
+    return SimpleNamespace(headers={}, client=SimpleNamespace(host="approval-runtime"))
 
 
 def _enum_value(value):
-    return value.value if hasattr(value, 'value') else value
+    return value.value if hasattr(value, "value") else value
 
 
 def _file_publish_pair_allowed(source_level, target_level) -> bool:
@@ -85,17 +85,15 @@ def _normalize_file_publish_business_domain_codes(raw_codes: Any) -> list[str]:
 
 
 def _extract_file_publish_business_domain_code(source_file: Any) -> str:
-    file_encoding = str(getattr(source_file, 'file_encoding', '') or '').strip()
-    parts = [part.strip() for part in file_encoding.split('-')]
+    file_encoding = str(getattr(source_file, "file_encoding", "") or "").strip()
+    parts = [part.strip() for part in file_encoding.split("-")]
     if len(parts) < 4:
-        return ''
-    return normalize_business_domain_code(parts[2]) or ''
+        return ""
+    return normalize_business_domain_code(parts[2]) or ""
 
 
 def ensure_file_publish_business_domain_matches(source_file: Any, target_space: Any) -> None:
-    allowed_codes = _normalize_file_publish_business_domain_codes(
-        getattr(target_space, 'business_domain_codes', None)
-    )
+    allowed_codes = _normalize_file_publish_business_domain_codes(getattr(target_space, "business_domain_codes", None))
     if not allowed_codes:
         return
     source_code = _extract_file_publish_business_domain_code(source_file)
@@ -103,18 +101,67 @@ def ensure_file_publish_business_domain_matches(source_file: Any, target_space: 
         raise ValueError(FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE)
 
 
+async def _copy_file_tags(
+    *,
+    source_file_id: int,
+    target_file_id: int,
+    user_id: int,
+    tenant_id: int,
+) -> None:
+    """Copy approved and pending review tag links from source file to the published copy."""
+    from bisheng.database.models.group_resource import ResourceTypeEnum
+    from bisheng.database.models.review_tags import ReviewTagDao
+    from bisheng.database.models.tag import TagDao
+
+    source_rid = str(source_file_id)
+    target_rid = str(target_file_id)
+    resource_types = [ResourceTypeEnum.SPACE_FILE]
+
+    tag_dict = await asyncio.to_thread(
+        TagDao.get_tags_by_resource_batch,
+        resource_types,
+        [source_rid],
+    )
+    review_tag_dict = await asyncio.to_thread(
+        ReviewTagDao.get_tags_by_resource_batch,
+        resource_types,
+        [source_rid],
+        tenant_id=tenant_id,
+    )
+
+    approved_tag_ids = list(dict.fromkeys(tag.id for tag in tag_dict.get(source_rid, []) if getattr(tag, "id", None)))
+    if approved_tag_ids:
+        await TagDao.add_tags(approved_tag_ids, target_rid, ResourceTypeEnum.SPACE_FILE, user_id)
+
+    pending_review_tag_ids = list(
+        dict.fromkeys(
+            tag.id
+            for tag in review_tag_dict.get(source_rid, [])
+            if getattr(tag, "id", None) and getattr(tag, "review_status", 0) == 0
+        )
+    )
+    if pending_review_tag_ids:
+        await ReviewTagDao.add_tags(
+            pending_review_tag_ids,
+            target_rid,
+            ResourceTypeEnum.SPACE_FILE,
+            user_id,
+            tenant_id=tenant_id,
+        )
+
+
 async def _resolve_approvers(node_config: dict, req) -> list[int]:
-    sources = node_config.get('sources') or []
+    sources = node_config.get("sources") or []
     if sources:
         return await resolve_approvers_from_sources(sources, req)
-    approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
+    approver_ids = node_config.get("approver_user_ids") or node_config.get("user_ids") or []
     return [int(one) for one in approver_ids]
 
 
 async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
-    sources = node_config.get('sources') or []
+    sources = node_config.get("sources") or []
     if not sources:
-        approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
+        approver_ids = node_config.get("approver_user_ids") or node_config.get("user_ids") or []
         return [int(one) for one in approver_ids]
 
     seen: set[int] = set()
@@ -125,44 +172,44 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
             seen.add(uid)
             result.append(uid)
 
-    source_space_role_types = {'knowledge_space_owner', 'knowledge_space_manager'}
-    target_space_role_types = {'target_knowledge_space_owner', 'target_knowledge_space_manager', 'space_admin'}
+    source_space_role_types = {"knowledge_space_owner", "knowledge_space_manager"}
+    target_space_role_types = {"target_knowledge_space_owner", "target_knowledge_space_manager", "space_admin"}
     target_department_admin_types = {
-        'target_knowledge_space_owner_department_admin',
-        'target_knowledge_space_manager_department_admin',
+        "target_knowledge_space_owner_department_admin",
+        "target_knowledge_space_manager_department_admin",
     }
-    payload_snapshot = getattr(req, 'payload_snapshot', {}) or {}
+    payload_snapshot = getattr(req, "payload_snapshot", {}) or {}
     source_owner_ids: list[int] = []
     source_manager_ids: list[int] = []
     target_owner_ids: list[int] = []
     target_manager_ids: list[int] = []
-    if any(source.get('type') in source_space_role_types for source in sources):
-        source_space_id = payload_snapshot.get('source_space_id')
+    if any(source.get("type") in source_space_role_types for source in sources):
+        source_space_id = payload_snapshot.get("source_space_id")
         if source_space_id:
             source_owner_ids, source_manager_ids = await _resolve_space_roles_via_fga(int(source_space_id))
-    if any(source.get('type') in target_space_role_types | target_department_admin_types for source in sources):
-        target_space_id = payload_snapshot.get('target_space_id')
+    if any(source.get("type") in target_space_role_types | target_department_admin_types for source in sources):
+        target_space_id = payload_snapshot.get("target_space_id")
         if target_space_id:
             target_owner_ids, target_manager_ids = await _resolve_space_roles_via_fga(int(target_space_id))
 
     for source in sources:
-        source_type = source.get('type', '')
-        if source_type == 'knowledge_space_owner':
+        source_type = source.get("type", "")
+        if source_type == "knowledge_space_owner":
             for uid in source_owner_ids:
                 _add(int(uid))
-        elif source_type == 'knowledge_space_manager':
+        elif source_type == "knowledge_space_manager":
             for uid in source_manager_ids:
                 _add(int(uid))
-        elif source_type == 'target_knowledge_space_owner':
+        elif source_type == "target_knowledge_space_owner":
             for uid in target_owner_ids:
                 _add(int(uid))
-        elif source_type in ('target_knowledge_space_manager', 'space_admin'):
+        elif source_type in ("target_knowledge_space_manager", "space_admin"):
             for uid in target_manager_ids:
                 _add(int(uid))
-        elif source_type == 'target_knowledge_space_owner_department_admin':
+        elif source_type == "target_knowledge_space_owner_department_admin":
             for uid in await resolve_department_admins_for_user_ids([int(uid) for uid in target_owner_ids]):
                 _add(int(uid))
-        elif source_type == 'target_knowledge_space_manager_department_admin':
+        elif source_type == "target_knowledge_space_manager_department_admin":
             for uid in await resolve_department_admins_for_user_ids([int(uid) for uid in target_manager_ids]):
                 _add(int(uid))
         else:
@@ -173,11 +220,11 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
 
 def _approval_instance_id_from_metadata(metadata: Any) -> int | None:
     if isinstance(metadata, dict):
-        approval_meta = metadata.get('shougang_approval') or metadata.get('shougang_portal_publish')
-        if isinstance(approval_meta, dict) and approval_meta.get('approval_instance_id') is not None:
-            return int(approval_meta['approval_instance_id'])
-        if metadata.get('approval_instance_id') is not None:
-            return int(metadata['approval_instance_id'])
+        approval_meta = metadata.get("shougang_approval") or metadata.get("shougang_portal_publish")
+        if isinstance(approval_meta, dict) and approval_meta.get("approval_instance_id") is not None:
+            return int(approval_meta["approval_instance_id"])
+        if metadata.get("approval_instance_id") is not None:
+            return int(metadata["approval_instance_id"])
     if isinstance(metadata, list):
         for item in metadata:
             instance_id = _approval_instance_id_from_metadata(item)
@@ -190,7 +237,7 @@ def _metadata_with_approval_instance(metadata: Any, instance_id: int) -> list[di
     items = list(metadata or []) if isinstance(metadata, list) else []
     return [
         *items,
-        {'shougang_approval': {'approval_instance_id': int(instance_id)}},
+        {"shougang_approval": {"approval_instance_id": int(instance_id)}},
     ]
 
 
@@ -204,22 +251,22 @@ class KnowledgeSpaceCreateApprovalHandler:
         return f"新建知识库：{req.payload_snapshot.get('create_params', {}).get('name') or req.business_name}"
 
     async def build_detail(self, req) -> dict:
-        params = req.payload_snapshot.get('create_params') or {}
+        params = req.payload_snapshot.get("create_params") or {}
         return {
-            'type': 'knowledge_space_create',
-            'name': params.get('name'),
-            'space_level': params.get('space_level'),
-            'department_id': params.get('department_id'),
-            'user_group_id': params.get('user_group_id'),
-            'auth_type': params.get('auth_type'),
-            'is_released': params.get('is_released'),
-            'reason': req.reason,
-            'applicant_user_id': req.applicant_user_id,
-            'applicant_user_name': req.applicant_user_name,
+            "type": "knowledge_space_create",
+            "name": params.get("name"),
+            "space_level": params.get("space_level"),
+            "department_id": params.get("department_id"),
+            "user_group_id": params.get("user_group_id"),
+            "auth_type": params.get("auth_type"),
+            "is_released": params.get("is_released"),
+            "reason": req.reason,
+            "applicant_user_id": req.applicant_user_id,
+            "applicant_user_name": req.applicant_user_name,
         }
 
     async def build_business_link(self, req) -> dict:
-        return {'scenario_code': self.scenario_code}
+        return {"scenario_code": self.scenario_code}
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
         return await _resolve_approvers(node_config, req)
@@ -232,7 +279,7 @@ class KnowledgeSpaceCreateApprovalHandler:
         return None
 
     async def _ensure_admin_only_level_applicant_is_admin(self, applicant_user_id: int, params: dict) -> None:
-        level = _enum_value(params.get('space_level'))
+        level = _enum_value(params.get("space_level"))
         if level not in {KnowledgeSpaceLevelEnum.PUBLIC.value, KnowledgeSpaceLevelEnum.DEPARTMENT.value}:
             return
         from bisheng.common.errcode.knowledge_space import (
@@ -243,7 +290,7 @@ class KnowledgeSpaceCreateApprovalHandler:
         from bisheng.user.domain.models.user_role import UserRoleDao
 
         roles = await UserRoleDao.aget_user_roles(int(applicant_user_id))
-        if not any(int(getattr(role, 'role_id', 0)) == AdminRole for role in roles):
+        if not any(int(getattr(role, "role_id", 0)) == AdminRole for role in roles):
             if level == KnowledgeSpaceLevelEnum.DEPARTMENT.value:
                 raise SpaceCreateDepartmentDeniedError()
             raise SpaceCreatePublicDeniedError()
@@ -251,17 +298,17 @@ class KnowledgeSpaceCreateApprovalHandler:
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-        applicant_user_id = int(payload_snapshot['applicant_user_id'])
+        applicant_user_id = int(payload_snapshot["applicant_user_id"])
         existing_space = await self._find_created_space(instance_id, applicant_user_id)
         if existing_space:
-            return {'space_id': int(existing_space.id), 'space_name': existing_space.name, 'idempotent': True}
+            return {"space_id": int(existing_space.id), "space_name": existing_space.name, "idempotent": True}
 
-        params = payload_snapshot.get('create_params') or {}
+        params = payload_snapshot.get("create_params") or {}
         await self._ensure_admin_only_level_applicant_is_admin(applicant_user_id, params)
         login_user = _RuntimeLoginUser(
             user_id=applicant_user_id,
-            user_name=str(payload_snapshot.get('applicant_user_name') or ''),
-            tenant_id=int(payload_snapshot['tenant_id']),
+            user_name=str(payload_snapshot.get("applicant_user_name") or ""),
+            tenant_id=int(payload_snapshot["tenant_id"]),
             elevated=True,
         )
         service = KnowledgeSpaceService(request=_runtime_request(), login_user=login_user)
@@ -269,7 +316,7 @@ class KnowledgeSpaceCreateApprovalHandler:
         space = await service.create_knowledge_space(**params)
         space.metadata_fields = _metadata_with_approval_instance(space.metadata_fields, instance_id)
         space = await KnowledgeDao.async_update_space(space)
-        return {'space_id': int(space.id), 'space_name': space.name}
+        return {"space_id": int(space.id), "space_name": space.name}
 
     async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
         return None
@@ -285,33 +332,33 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         return None
 
     async def build_title(self, req) -> str:
-        source_name = req.payload_snapshot.get('source_file_name') or req.business_name
-        target_name = req.payload_snapshot.get('target_space_name') or ''
+        source_name = req.payload_snapshot.get("source_file_name") or req.business_name
+        target_name = req.payload_snapshot.get("target_space_name") or ""
         return f"发布文件：{source_name} → {target_name}".rstrip()
 
     async def build_detail(self, req) -> dict:
         return {
-            'type': 'knowledge_space_file_publish',
-            'source_space_id': req.payload_snapshot.get('source_space_id'),
-            'source_space_name': req.payload_snapshot.get('source_space_name'),
-            'source_file_id': req.payload_snapshot.get('source_file_id'),
-            'source_file_name': req.payload_snapshot.get('source_file_name'),
-            'target_space_id': req.payload_snapshot.get('target_space_id'),
-            'target_space_name': req.payload_snapshot.get('target_space_name'),
-            'target_folder_id': req.payload_snapshot.get('target_folder_id'),
-            'target_folder_name': req.payload_snapshot.get('target_folder_name'),
-            'target_document_id': req.payload_snapshot.get('target_document_id'),
-            'target_document_title': req.payload_snapshot.get('target_document_title'),
-            'reason': req.reason,
-            'applicant_user_id': req.applicant_user_id,
-            'applicant_user_name': req.applicant_user_name,
+            "type": "knowledge_space_file_publish",
+            "source_space_id": req.payload_snapshot.get("source_space_id"),
+            "source_space_name": req.payload_snapshot.get("source_space_name"),
+            "source_file_id": req.payload_snapshot.get("source_file_id"),
+            "source_file_name": req.payload_snapshot.get("source_file_name"),
+            "target_space_id": req.payload_snapshot.get("target_space_id"),
+            "target_space_name": req.payload_snapshot.get("target_space_name"),
+            "target_folder_id": req.payload_snapshot.get("target_folder_id"),
+            "target_folder_name": req.payload_snapshot.get("target_folder_name"),
+            "target_document_id": req.payload_snapshot.get("target_document_id"),
+            "target_document_title": req.payload_snapshot.get("target_document_title"),
+            "reason": req.reason,
+            "applicant_user_id": req.applicant_user_id,
+            "applicant_user_name": req.applicant_user_name,
         }
 
     async def build_business_link(self, req) -> dict:
         return {
-            'source_file_id': req.payload_snapshot.get('source_file_id'),
-            'target_space_id': req.payload_snapshot.get('target_space_id'),
-            'target_folder_id': req.payload_snapshot.get('target_folder_id'),
+            "source_file_id": req.payload_snapshot.get("source_file_id"),
+            "target_space_id": req.payload_snapshot.get("target_space_id"),
+            "target_folder_id": req.payload_snapshot.get("target_folder_id"),
         }
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
@@ -325,15 +372,15 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         user_id: int,
         instance_id: int,
         target_level: int = 0,
-        target_file_level_path: str = '',
+        target_file_level_path: str = "",
     ) -> KnowledgeFile | None:
         from bisheng.worker.knowledge import file_worker
 
         extra_user_metadata = {
-            'shougang_portal_publish': {
-                'approval_instance_id': int(instance_id),
-                'source_space_id': source_space.id,
-                'source_file_id': source_file.id,
+            "shougang_portal_publish": {
+                "approval_instance_id": int(instance_id),
+                "source_space_id": source_space.id,
+                "source_file_id": source_file.id,
             }
         }
         return file_worker.copy_normal(
@@ -360,13 +407,13 @@ class KnowledgeSpaceFilePublishApprovalHandler:
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-        source_space_id = int(payload_snapshot['source_space_id'])
-        source_file_id = int(payload_snapshot['source_file_id'])
-        target_space_id = int(payload_snapshot['target_space_id'])
-        target_folder_id = payload_snapshot.get('target_folder_id')
+        source_space_id = int(payload_snapshot["source_space_id"])
+        source_file_id = int(payload_snapshot["source_file_id"])
+        target_space_id = int(payload_snapshot["target_space_id"])
+        target_folder_id = payload_snapshot.get("target_folder_id")
         target_folder_id = int(target_folder_id) if target_folder_id else None
-        target_document_id = payload_snapshot.get('target_document_id')
-        target_file_id = payload_snapshot.get('target_file_id')
+        target_document_id = payload_snapshot.get("target_document_id")
+        target_file_id = payload_snapshot.get("target_file_id")
 
         async def resolve_target_document_id(login_user: _RuntimeLoginUser) -> int | None:
             if target_document_id:
@@ -380,11 +427,17 @@ class KnowledgeSpaceFilePublishApprovalHandler:
 
         existing_file = await self._find_copied_file(instance_id, target_space_id)
         if existing_file:
+            await _copy_file_tags(
+                source_file_id=source_file_id,
+                target_file_id=int(existing_file.id),
+                user_id=int(payload_snapshot["applicant_user_id"]),
+                tenant_id=int(payload_snapshot["tenant_id"]),
+            )
             version_result = None
             login_user = _RuntimeLoginUser(
-                user_id=int(payload_snapshot['applicant_user_id']),
-                user_name=str(payload_snapshot.get('applicant_user_name') or ''),
-                tenant_id=int(payload_snapshot['tenant_id']),
+                user_id=int(payload_snapshot["applicant_user_id"]),
+                user_name=str(payload_snapshot.get("applicant_user_name") or ""),
+                tenant_id=int(payload_snapshot["tenant_id"]),
                 elevated=True,
             )
             resolved_target_document_id = await resolve_target_document_id(login_user)
@@ -393,37 +446,37 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                     login_user=login_user,
                     knowledge_file_id=int(existing_file.id),
                     target_document_id=resolved_target_document_id,
-                    file_level_path=getattr(existing_file, 'file_level_path', '') or '',
-                    level=int(getattr(existing_file, 'level', 0) or 0),
+                    file_level_path=getattr(existing_file, "file_level_path", "") or "",
+                    level=int(getattr(existing_file, "level", 0) or 0),
                 )
             return {
-                'file_id': int(existing_file.id),
-                'target_space_id': target_space_id,
-                'version': version_result,
-                'idempotent': True,
+                "file_id": int(existing_file.id),
+                "target_space_id": target_space_id,
+                "version": version_result,
+                "idempotent": True,
             }
 
         source_space = await KnowledgeDao.aquery_by_id(source_space_id)
         target_space = await KnowledgeDao.aquery_by_id(target_space_id)
         source_file = await KnowledgeFileDao.query_by_id(source_file_id)
         if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
-            raise ValueError('source space not found')
+            raise ValueError("source space not found")
         if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
-            raise ValueError('target space not found')
+            raise ValueError("target space not found")
         if not source_file or source_file.knowledge_id != source_space_id:
-            raise ValueError('source file not found')
+            raise ValueError("source file not found")
         source_level = await self._space_level(source_space_id)
         target_level = await self._space_level(target_space_id)
         if not _file_publish_pair_allowed(source_level, target_level):
-            raise ValueError('source and target space levels are not allowed for publish')
+            raise ValueError("source and target space levels are not allowed for publish")
         if source_file.status != KnowledgeFileStatus.SUCCESS.value:
-            raise ValueError('source file is not parsed successfully')
+            raise ValueError("source file is not parsed successfully")
         ensure_file_publish_business_domain_matches(source_file, target_space)
 
-        target_parent_type = 'knowledge_space'
+        target_parent_type = "knowledge_space"
         target_parent_id = target_space_id
         copy_target_level = 0
-        copy_target_file_level_path = ''
+        copy_target_file_level_path = ""
         if target_folder_id is not None:
             target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
             if (
@@ -431,13 +484,13 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 or int(target_folder.knowledge_id) != target_space_id
                 or int(target_folder.file_type) != FileType.DIR.value
             ):
-                raise ValueError('target folder not found')
+                raise ValueError("target folder not found")
             copy_target_level = int(target_folder.level or 0) + 1
-            folder_level_path = (target_folder.file_level_path or '').rstrip('/')
+            folder_level_path = (target_folder.file_level_path or "").rstrip("/")
             copy_target_file_level_path = (
                 f"{folder_level_path}/{target_folder_id}" if folder_level_path else f"/{target_folder_id}"
             )
-            target_parent_type = 'folder'
+            target_parent_type = "folder"
             target_parent_id = target_folder_id
 
         copied_file = await asyncio.to_thread(
@@ -445,23 +498,30 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             source_file,
             source_space,
             target_space,
-            int(payload_snapshot['applicant_user_id']),
+            int(payload_snapshot["applicant_user_id"]),
             instance_id,
             copy_target_level,
             copy_target_file_level_path,
         )
         if not copied_file or not copied_file.id:
-            raise ValueError('copy file failed')
+            raise ValueError("copy file failed")
+
+        await _copy_file_tags(
+            source_file_id=source_file_id,
+            target_file_id=int(copied_file.id),
+            user_id=int(payload_snapshot["applicant_user_id"]),
+            tenant_id=int(payload_snapshot["tenant_id"]),
+        )
 
         login_user = _RuntimeLoginUser(
-            user_id=int(payload_snapshot['applicant_user_id']),
-            user_name=str(payload_snapshot.get('applicant_user_name') or ''),
-            tenant_id=int(payload_snapshot['tenant_id']),
+            user_id=int(payload_snapshot["applicant_user_id"]),
+            user_name=str(payload_snapshot.get("applicant_user_name") or ""),
+            tenant_id=int(payload_snapshot["tenant_id"]),
             elevated=True,
         )
         space_service = KnowledgeSpaceService(request=_runtime_request(), login_user=login_user)
         await space_service._initialize_child_resource_permissions(
-            'knowledge_file',
+            "knowledge_file",
             int(copied_file.id),
             target_parent_type,
             target_parent_id,
@@ -479,9 +539,9 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 level=copy_target_level,
             )
         return {
-            'file_id': int(copied_file.id),
-            'target_space_id': target_space_id,
-            'version': version_result,
+            "file_id": int(copied_file.id),
+            "target_space_id": target_space_id,
+            "version": version_result,
         }
 
     async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
