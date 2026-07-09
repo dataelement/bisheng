@@ -47,6 +47,10 @@ import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStart
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
     versionId: string;
+    /** task-result ChatMessage id — the like/dislike target (this turn's bot row) */
+    messageId?: string;
+    /** persisted like/dislike verdict on the task result: 0 none / 1 up / 2 down */
+    liked?: number;
     /** chat id of the hosting conversation (for the history lazy-load) */
     conversationId?: string;
     /** final answer text (fallback shown before the panel hydrates) */
@@ -58,7 +62,7 @@ interface TaskTurnPanelProps {
     onPreviewFile?: (file: ArtifactFile) => void;
 }
 
-export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
+export function TaskTurnPanel({ versionId, messageId, liked, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
     const localize = useLocalize();
     const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
@@ -250,7 +254,7 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 document link opens it directly in ChatView's inline workspace
                 panel (preview), replacing the legacy right-side drawer. */}
             {completed && (
-                <ResultPanel versionId={versionId} liked={linsight?.liked ?? undefined} allowFeedback={!readOnly}>
+                <ResultPanel messageId={messageId} liked={liked} allowFeedback={!readOnly}>
                     <ResultSection
                         answer={linsight.output_result?.answer}
                         files={fileList}

@@ -231,7 +231,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         card — lifted into the terminal ResultPanel (peak-end). ── */}
                     {completed && (
                         <ResultPanel
-                            versionId={versionId}
+                            messageId={linsight?.message_id ?? undefined}
                             liked={linsight?.liked ?? undefined}
                             allowFeedback={!readOnly && !isSharePage}
                         >

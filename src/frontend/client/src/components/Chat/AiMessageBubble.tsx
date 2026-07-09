@@ -603,6 +603,8 @@ function AssistantBubble({
                 <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
                     <TaskTurnPanel
                         versionId={message.linsightSessionVersionId || ""}
+                        messageId={allowFeedback ? message.messageId : undefined}
+                        liked={message.liked}
                         conversationId={message.conversationId}
                         answer={message.text}
                         onPreviewFile={onPreviewFile}

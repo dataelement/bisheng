@@ -52,7 +52,11 @@ export type LinsightInfo = {
     }[];
     output_result: null | any;
     score: null | number;
-    // 点赞/点踩 verdict on the task result: 0 none / 1 up / 2 down.
+    // like/dislike on the task result. The result is a category="task" ChatMessage;
+    // `message_id` is that row's id (the feedback target) and `liked` its verdict
+    // (0 none / 1 up / 2 down). Both come enriched on the session-version list
+    // (snake_case so they pass through the raw `...version` spread into the store).
+    message_id?: string | null;
     liked?: null | number;
     has_reexecute: boolean;
     id: string;
