@@ -5,6 +5,8 @@
  */
 import { Check } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
+import { useQueryClient } from '@tanstack/react-query';
+import { getSelectableSkills } from '~/api/linsight';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -41,9 +43,21 @@ export function PlusMenu({
     showAddSkill = true,
 }: PlusMenuProps) {
     const localize = useLocalize();
+    const queryClient = useQueryClient();
 
     return (
-        <DropdownMenu>
+        <DropdownMenu
+            // Warm the skills list as soon as the root opens so the "添加技能"
+            // submenu paints with data — and its final width — on first hover.
+            onOpenChange={(open) => {
+                if (open && showAddSkill) {
+                    queryClient.prefetchQuery({
+                        queryKey: ['linsightSelectableSkills'],
+                        queryFn: getSelectableSkills,
+                    });
+                }
+            }}
+        >
             <DropdownMenuTrigger asChild disabled={disabled}>
                 <button
                     type="button"
@@ -59,7 +73,7 @@ export function PlusMenu({
 
             <DropdownMenuContent
                 align="start"
-                className="flex w-[200px] flex-col gap-0 rounded-2xl border-slate-100 p-1.5 shadow-xl"
+                className="flex min-w-[140px] max-w-[280px] flex-col gap-0 rounded-2xl border-slate-100 p-1.5 shadow-xl"
             >
                 {/* Upload file (icon: shared daily-mode `link` asset) */}
                 <DropdownMenuItem
@@ -101,7 +115,7 @@ export function PlusMenu({
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger
                             className={cn(
-                                'mt-0.5 flex cursor-pointer items-center justify-between rounded-xl px-2 py-1.5 outline-none',
+                                'mt-0.5 flex cursor-pointer items-center justify-between gap-3 rounded-xl px-2 py-1.5 outline-none',
                                 '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
                             )}
                         >
@@ -122,7 +136,7 @@ export function PlusMenu({
                             {/* ChevronRight is rendered by DropdownMenuSubTrigger itself */}
                         </DropdownMenuSubTrigger>
                         {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`). */}
-                        <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                        <DropdownMenuSubContent className="ml-2 flex max-h-[256px] min-w-[180px] max-w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                             <SkillSelector selected={selectedSkills} onChange={onSkillsChange} />
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>

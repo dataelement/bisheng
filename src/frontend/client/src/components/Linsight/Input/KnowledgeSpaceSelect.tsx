@@ -17,7 +17,7 @@ import {
     Input,
 } from '~/components/ui';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
-import { useLocalize } from '~/hooks';
+import { useFreezePanelWidth, useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
 import type { TaskModeKnowledgeItem } from '~/store/linsight';
 import { cn } from '~/utils';
@@ -35,10 +35,13 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
     const { showToast } = useToastContext();
     const { data: bsConfig } = useGetBsConfig();
     const [open, setOpen] = useState(false);
+    const [warm, setWarm] = useState(false);
     const [keyword, setKeyword] = useState('');
 
     // Personal knowledge spaces: mine + joined + department merged (same as ChatKnowledge).
-    const { data: spaces = [], isFetching: spaceFetching } = useQuery({
+    // Fetch starts on trigger hover (warm) so the popup usually opens with data
+    // — and its frozen content-fit width — already on the first frame.
+    const { data: spaces = [], isFetching: spaceFetching, isFetched: spacesFetched, refetch: refetchSpaces } = useQuery({
         queryKey: ['taskModeKnowledgeSpaces'],
         queryFn: async () => {
             const [mine, joined, department] = await Promise.all([
@@ -55,13 +58,27 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
             }
             return merged;
         },
-        enabled: open,
+        enabled: open || warm,
         refetchOnWindowFocus: false,
     });
 
+    // `warm` keeps the observer enabled after the first hover, so reopening no
+    // longer flips enabled off→on (which used to trigger the refresh). Restore
+    // refresh-on-open explicitly — cached data stays on screen while
+    // refetching, and the frozen panel width can't jump.
+    useEffect(() => {
+        if (open && spacesFetched) refetchSpaces();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only on open
+    }, [open]);
+
     // Org knowledge bases (use-permission filtered server-side).
     const orgEnabled = (bsConfig as any)?.knowledgeBase?.enabled !== false;
-    const { data: orgKbs = [], isFetching: orgFetching } = useGetOrgToolList({ page: 1, page_size: 50 });
+    const { data: orgKbs = [], isFetching: orgFetching, isFetched: orgFetched } = useGetOrgToolList({ page: 1, page_size: 50 });
+
+    // Content-fit popup width, frozen once both lists have their first batch so
+    // search filtering can't resize the open popup (see useFreezePanelWidth).
+    const panelReady = spacesFetched && (!orgEnabled || orgFetched);
+    const freeze = useFreezePanelWidth(panelReady, open);
 
     useEffect(() => {
         if (!open) setKeyword('');
@@ -133,9 +150,11 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
                         // Active highlight uses brand-600 to match the checked-checkbox
                         // color in the picker rows below (renderRow).
-                        active ? 'text-blue-600' : 'text-[#4E5969]',
+                        active ? 'text-blue-600' : 'text-[#334155]',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
+                    onMouseEnter={() => setWarm(true)}
+                    onFocus={() => setWarm(true)}
                 >
                     {/* book-one.svg has a baked #999999 stroke, so an <img> can't
                         follow the active color. Render it as a CSS mask instead so the
@@ -160,13 +179,18 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
             </DropdownMenuTrigger>
 
             <DropdownMenuContent
+                ref={freeze.ref}
                 align="start"
-                className="flex max-h-[380px] w-[280px] flex-col gap-2 overflow-hidden rounded-2xl border-slate-100 p-3 shadow-xl"
+                className="flex max-h-[380px] min-w-[180px] max-w-[240px] flex-col gap-2 overflow-hidden rounded-2xl border-slate-100 p-3 shadow-xl"
+                style={freeze.style}
             >
                 <div className="relative shrink-0">
                     <SearchIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                     <Input
                         className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
+                        // size=1 kills the input's ~180px intrinsic width so it can't
+                        // floor the content-fit popup above its min-w; still renders 100%.
+                        size={1}
                         placeholder={localize('com_chat_knowledge_placeholder_search_space')}
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}

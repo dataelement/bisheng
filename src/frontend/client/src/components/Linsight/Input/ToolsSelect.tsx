@@ -36,7 +36,7 @@ export function ToolsSelect({ tools, disabled = false, onChange }: ToolsSelectPr
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
                         // Active highlight uses brand-600 to match the checked-checkbox
                         // color in the picker dropdowns (KnowledgeSpaceSelect rows).
-                        active ? 'text-blue-600' : 'text-[#4E5969]',
+                        active ? 'text-blue-600' : 'text-[#334155]',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
@@ -48,13 +48,16 @@ export function ToolsSelect({ tools, disabled = false, onChange }: ToolsSelectPr
 
             <DropdownMenuContent
                 align="start"
-                className="flex max-h-[320px] w-64 flex-col gap-0 overflow-y-auto rounded-2xl border-slate-100 p-2 shadow-xl"
+                // Width fits the longest tool row between the clamps; the tool
+                // list comes from in-memory bsConfig, so the first frame
+                // already has the final width — no reflow on open.
+                className="flex max-h-[320px] min-w-[160px] max-w-[320px] flex-col gap-0 overflow-y-auto rounded-2xl border-slate-100 p-2 shadow-xl"
             >
                 {tools.map((tool) => (
-                    <div key={String(tool.id)} className="flex items-center justify-between gap-2 rounded-lg px-1.5 py-2">
+                    <div key={String(tool.id)} className="flex items-center justify-between gap-3 rounded-lg px-1.5 py-2">
                         <div className="flex min-w-0 items-center gap-2">
                             <Hammer size={16} className="shrink-0 text-slate-600" />
-                            <span className="line-clamp-1 max-w-40 text-xs font-normal text-slate-700">
+                            <span className="line-clamp-1 max-w-[200px] text-xs font-normal text-slate-700">
                                 {tool.name}
                             </span>
                         </div>

@@ -42,7 +42,7 @@ export const ChatToolDown = ({
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-7 rounded-full px-2 data-[state=open]:border-blue-500 touch-mobile:px-1.5",
+          "h-7 rounded-full px-2 text-[#334155] data-[state=open]:border-blue-500 touch-mobile:px-1.5",
           searchType === "netSearch" && "bg-blue-100"
         )}
       >
@@ -59,12 +59,12 @@ export const ChatToolDown = ({
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-[8px] w-52">
+      <SelectContent auto className="bg-white rounded-[8px] min-w-[160px] max-w-[280px]">
         {config?.webSearch.enabled && (
-          <div className="flex justify-between items-center px-2 py-[5px]">
+          <div className="flex justify-between items-center gap-3 px-2 py-[5px]">
             <div className="flex gap-2 items-center">
               <GlobeIcon className="text-[#999]" size="16" />
-              <span className="text-sm font-normal">
+              <span className="text-sm font-normal text-slate-700">
                 {localize("com_tools_web_search")}
               </span>
             </div>

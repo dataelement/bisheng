@@ -7,11 +7,13 @@ import {
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getMineSpacesApi,
   getJoinedSpacesApi,
   getDepartmentSpacesApi,
 } from "~/api/knowledge";
+import { getSelectableSkills } from "~/api/linsight";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +30,7 @@ import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useLocalize, useMediaQuery, useScrollRevealRef } from "~/hooks";
+import { useFreezePanelWidth, useLocalize, useMediaQuery, useScrollRevealRef } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 
@@ -228,6 +230,9 @@ const KnowledgeListPanel = ({
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <Input
           className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          // size=1 kills the input's ~180px intrinsic width so it can't floor
+          // the content-fit popup above its min-w; rendered width is still 100%.
+          size={1}
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -366,15 +371,27 @@ export const ChatKnowledge = ({
   const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
   const [hasMoreOrg, setHasMoreOrg] = useState(true);
 
-  // --- Knowledge space data (load all on mount, no pagination) ---
+  // --- Knowledge space data (load all at once, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
   const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
-  const [allSpaces, setAllSpaces] = useState<any[]>([]);
-  const [spaceFetching, setSpaceFetching] = useState(false);
 
-  const loadSpaces = useCallback(async () => {
-    setSpaceFetching(true);
-    try {
+  // Spaces are only shown inside the open picker, so fetch lazily on open (or
+  // on trigger hover, as a warm-up) instead of eagerly on mount. The eager
+  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
+  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
+  // duplicate requests on send. react-query keeps the result cached
+  // (stale-while-revalidate), so every reopen paints with data on the first
+  // frame — which also keeps the content-fit popup width stable from frame 1.
+  const [rootOpen, setRootOpen] = useState(false);
+  const [warm, setWarm] = useState(false);
+  const {
+    data: allSpaces = [],
+    isFetching: spaceFetching,
+    isFetched: spacesFetched,
+    refetch: refetchSpaces,
+  } = useQuery({
+    queryKey: ["chatKnowledgeSpaces"],
+    queryFn: async () => {
       // Fetch "mine" + "joined" + "department" in parallel and merge into a single list
       const [mine, joined, department] = await Promise.all([
         getMineSpacesApi(),
@@ -402,23 +419,22 @@ export const ChatKnowledge = ({
           sensitivity: "base",
         });
       });
-      setAllSpaces(merged);
-    } catch (err) {
-      console.error("[ChatKnowledge] Failed to load spaces:", err);
-    } finally {
-      setSpaceFetching(false);
-    }
-  }, []);
+      return merged;
+    },
+    // Only the 'knowledge' pill renders the spaces list; the '+' variant never
+    // shows it, so don't let opening the '+' menu fire these requests.
+    enabled: variant === "knowledge" && (rootOpen || warm),
+    refetchOnWindowFocus: false,
+  });
 
-  // Spaces are only shown inside the open picker, so load them lazily on first
-  // open (and refresh on each reopen) instead of eagerly on mount. The eager
-  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
-  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
-  // duplicate requests on send.
-  const [rootOpen, setRootOpen] = useState(false);
+  // `warm` keeps the query observer enabled after the first hover, which means
+  // reopening no longer flips enabled off→on (the trigger that used to refresh
+  // the list). Restore the refresh-on-open semantics explicitly — cached data
+  // stays on screen while refetching, and the frozen panel width can't jump.
   useEffect(() => {
-    if (rootOpen) loadSpaces();
-  }, [rootOpen, loadSpaces]);
+    if (rootOpen && variant === "knowledge" && spacesFetched) refetchSpaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only on open
+  }, [rootOpen]);
 
   // Client-side filter by keyword
   const filteredSpaces = useMemo(
@@ -511,9 +527,35 @@ export const ChatKnowledge = ({
   const orgEnabled = !!config?.knowledgeBase?.enabled;
 
   const [openSub, setOpenSub] = useState<'org' | null>(null);
+
+  // Content-fit popup widths: each list panel auto-fits its first data batch
+  // between the min/max clamps, then freezes so pagination / search filtering
+  // can't resize an open popup (see useFreezePanelWidth).
+  const spacesFreeze = useFreezePanelWidth(spacesFetched, rootOpen && variant === 'knowledge');
+  // Org readiness must track the *accumulated* list (allOrgKbs lags orgData by
+  // one effect tick) — freezing on isFetched alone could measure an empty list.
+  const orgReady =
+    allOrgKbs.length > 0 || (!orgFetching && orgData !== undefined && orgData.length === 0);
+  const orgFreeze = useFreezePanelWidth(orgReady, openSub === 'org');
+
+  // Warm the skills list as soon as the "+" root opens so the "添加技能"
+  // submenu paints with data — and its final width — on first hover.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (rootOpen && renderSkillSubmenu) {
+      queryClient.prefetchQuery({
+        queryKey: ['linsightSelectableSkills'],
+        queryFn: getSelectableSkills,
+      });
+    }
+  }, [rootOpen, renderSkillSubmenu, queryClient]);
+
   // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）
   const isMobile = useMediaQuery('(max-width: 576px)');
   const [mobilePanel, setMobilePanel] = useState<'root' | 'org' | 'skill'>('root');
+  // Mobile renders the org list as a drill panel inside the root popup (no
+  // Radix sub), so it needs its own freeze instance keyed to the drill state.
+  const orgFreezeMobile = useFreezePanelWidth(orgReady, rootOpen && mobilePanel === 'org');
   const menuContentRef = useRef<HTMLDivElement>(null);
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
@@ -585,10 +627,14 @@ export const ChatKnowledge = ({
                   className={cn(
                     // `group` lets the chevron pick up the Radix-emitted
                     // `data-state` to mirror the Tools-select rotation.
-                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-[#334155] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
+                  // Warm up the spaces fetch on hover/focus so the popup opens
+                  // with data (and its frozen content-fit width) on frame 1.
+                  onMouseEnter={() => setWarm(true)}
+                  onFocus={() => setWarm(true)}
                 >
                   <div className="relative shrink-0">
                     {/* Icon is neutral by default (matches the + button) and
@@ -649,17 +695,17 @@ export const ChatKnowledge = ({
           'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
-          // compact for its short action items.
+          // compact for its short action items. Width fits content between the
+          // min/max clamps (the Radix popper wrapper is shrink-to-fit); the
+          // knowledge list additionally freezes on first data (spacesFreeze).
           variant === 'knowledge'
-            ? 'w-[240px] overflow-hidden pt-2 px-2 pb-0'
-            : 'w-[160px] p-2',
-          // Mobile width override only applies to the knowledge variant — the
-          // "+" menu shows short action items and matches the desktop 160px
-          // width on phones too. (knowledge needs more room for search + list)
-          // Mobile: any "tall" panel (knowledge, or the "+" menu drilled into
-          // skill / org lists) needs the wider width; 160px is fine only for
-          // the compact root of the "+" menu (short action items).
-          isMobile && mobileTallPanel && 'touch-mobile:w-[min(calc(100vw-24px),320px)]',
+            ? 'min-w-[180px] max-w-[240px] overflow-hidden pt-2 px-2 pb-0'
+            : 'min-w-[140px] max-w-[280px] p-2',
+          // Mobile tall panels (knowledge, or the "+" menu drilled into
+          // skill / org lists) follow the same content-fit clamps as desktop
+          // (180–240); the viewport term only guards tiny screens. No fixed
+          // width — mobile popups auto-fit and freeze exactly like desktop.
+          isMobile && mobileTallPanel && 'touch-mobile:min-w-[180px] touch-mobile:max-w-[min(calc(100vw-24px),240px)]',
           // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
           // the scroll list's own `pb-2` handles the last-item spacing.
           isMobile && variant === 'knowledge' && 'touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
@@ -696,7 +742,7 @@ export const ChatKnowledge = ({
             Matches the desktop layout (title + list) so both surfaces feel the
             same; only the outer width / position adapt to the smaller screen. */}
         {variant === 'knowledge' && isMobile && (
-          <div className="flex min-h-0 w-full flex-1 flex-col">
+          <div ref={spacesFreeze.ref} style={spacesFreeze.style} className="flex min-h-0 w-full flex-1 flex-col">
             <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
               {localize('com_ui_knowledge_space')}
             </p>
@@ -717,7 +763,7 @@ export const ChatKnowledge = ({
 
         {/* Knowledge pill (desktop): show the SPACES list directly — no sub. */}
         {variant === 'knowledge' && !isMobile && (
-          <div className="flex min-h-0 w-full flex-1 flex-col">
+          <div ref={spacesFreeze.ref} style={spacesFreeze.style} className="flex min-h-0 w-full flex-1 flex-col">
             <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
               {localize('com_ui_knowledge_space')}
             </p>
@@ -749,7 +795,9 @@ export const ChatKnowledge = ({
             <DropdownMenuSubTrigger
               data-sub-key="org"
               className={cn(
-                'mt-0.5 flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                // Explicit gap: at content-fit (max-content) width,
+                // justify-between alone lets the label butt against the chevron.
+                'mt-0.5 flex cursor-pointer items-center justify-between gap-3 rounded-[6px] px-2 py-[5px] outline-none',
               )}
             >
               <div className="flex items-center gap-2">
@@ -764,14 +812,16 @@ export const ChatKnowledge = ({
             </DropdownMenuSubTrigger>
 
             <DropdownMenuSubContent
+              ref={orgFreeze.ref}
               alignOffset={orgLayout.alignOffset}
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="ml-2 flex min-w-[180px] max-w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
                   '--tw-enter-easing': 'ease-in-out',
                   maxHeight: orgLayout.maxH,
+                  ...orgFreeze.style,
                 } as React.CSSProperties
               }
             >
@@ -818,7 +868,7 @@ export const ChatKnowledge = ({
 
         {/* Org knowledge selector (mobile): drill panel. */}
         {variant === 'plus' && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+          <div ref={orgFreezeMobile.ref} style={orgFreezeMobile.style} className="flex min-h-0 w-full flex-1 flex-col gap-2">
             <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
               <button
                 type="button"
@@ -880,7 +930,7 @@ export const ChatKnowledge = ({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
                     className={cn(
-                      'flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                      'flex cursor-pointer items-center justify-between gap-3 rounded-[6px] px-2 py-[5px] outline-none',
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -890,8 +940,9 @@ export const ChatKnowledge = ({
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
-                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above). */}
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
+                      Width fits content between the clamps; SkillSelector freezes it internally. */}
+                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] min-w-[180px] max-w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

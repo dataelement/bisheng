@@ -14,7 +14,10 @@ const SelectValue = SelectPrimitive.Value
 
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+    /** Hide the built-in chevron (for triggers that render their own). */
+    showIcon?: boolean
+  }
 >(({ className, children, showIcon = true, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
@@ -71,7 +74,12 @@ SelectScrollDownButton.displayName =
 
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+    headNode?: React.ReactNode
+    footerNode?: React.ReactNode
+    /** Skip the trigger-width floor on the viewport so the popup shrinks/grows to fit its content. */
+    auto?: boolean
+  }
 >(({ className, children, headNode = null, footerNode = null, auto, position = "popper", ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content

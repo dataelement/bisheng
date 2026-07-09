@@ -118,8 +118,8 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           // Tools Select never sets a value (selection is via inner switches), so
           // Radix keeps the trigger in [data-placeholder] state; without this the
           // base `data-[placeholder]:text-gray-500` would override to #595959 and
-          // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] data-[placeholder]:text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
+          // mismatch the knowledge/model selects. Pin it to the shared #334155.
+          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#334155] data-[placeholder]:text-[#334155] focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
@@ -136,13 +136,18 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-[8px] w-[200px] max-h-[320px] overflow-y-auto">
+      {/* Width fits the longest row between the clamps (`auto` skips the
+          trigger-width floor); tool names come from the in-memory bsConfig, so
+          the first frame already has the final width — no reflow on open. */}
+      <SelectContent auto className="bg-white rounded-[8px] min-w-[160px] max-w-[280px] max-h-[320px] overflow-y-auto">
         {availableTools.map((group) => (
-          <div key={group.id} className="flex justify-between items-center px-2 py-[5px]">
+          // Explicit gap: with the content-fit popup, justify-between alone
+          // lets the name butt against the switch at max-content width.
+          <div key={group.id} className="flex justify-between items-center gap-3 px-2 py-[5px]">
             <div className="flex gap-2 items-center min-w-0">
               {iconForGroup(group)}
               <span
-                className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
+                className="max-w-[180px] text-sm font-normal text-slate-700 line-clamp-1 flex-1 truncate"
                 title={group.description || group.name}
               >
                 {group.name}

@@ -59,7 +59,7 @@ const AiModelSelect = memo(
                 disabled={disabled}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-[#f8f8f8] focus:ring-0">
+                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-[#334155] shadow-none outline-none hover:bg-[#f8f8f8] focus:ring-0">
                     <div className="min-w-0 flex-1 overflow-hidden">
                         <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-normal">
                             {label}
@@ -75,7 +75,10 @@ const AiModelSelect = memo(
                     {uniqueOptions.map((opt) => (
                         <SelectItem key={opt.id + ""} value={opt.id + ""} textValue={opt.displayName}>
                             <div className="flex min-w-0 items-center py-0.5">
-                                <span className="shrink-0">{opt.displayName}</span>
+                                {/* Explicit color: SelectContent's text-popover-foreground is
+                                    undefined in this app's Tailwind config, so options would
+                                    otherwise inherit body black — unify with the other menus. */}
+                                <span className="shrink-0 text-slate-700">{opt.displayName}</span>
                                 {opt.description && (
                                     <>
                                         <span className="mx-1.5 h-3 w-px shrink-0 bg-[#E5E6EB]" />
