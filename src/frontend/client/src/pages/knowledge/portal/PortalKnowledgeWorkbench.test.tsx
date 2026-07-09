@@ -4145,9 +4145,9 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(await screen.findByRole("button", { name: "筛选" }));
         fireEvent.click(screen.getByRole("button", { name: "失败" }));
 
-        const input = screen.getByPlaceholderText("Search in current knowledge space");
+        const input = await screen.findByPlaceholderText("Search in current knowledge space");
         fireEvent.change(input, { target: { value: "后端" } });
-        fireEvent.keyDown(input, { key: "Enter" });
+        expect(searchSpaceChildrenApi).not.toHaveBeenCalled();
 
         await waitFor(() => {
             expect(searchSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
@@ -4187,7 +4187,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
 
-        const input = screen.getByPlaceholderText("Search in current knowledge space");
+        const input = await screen.findByPlaceholderText("Search in current knowledge space");
         fireEvent.change(input, { target: { value: "搜索" } });
         fireEvent.keyDown(input, { key: "Enter" });
 
@@ -4198,6 +4198,52 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
         expect(screen.queryByText("搜索结果.md")).not.toBeInTheDocument();
+    });
+
+    test("deletes a file from search results through the backend", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const matchedFile = makeFile("401", "搜索结果.md", {
+            status: FileStatus.SUCCESS,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [matchedFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const input = await screen.findByPlaceholderText("Search in current knowledge space");
+        fireEvent.change(input, { target: { value: "搜索" } });
+
+        expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();
+
+        const resultRow = await screen.findByTestId("file-tree-row-401");
+        fireEvent.mouseEnter(resultRow);
+        const rowButtons = within(resultRow).getAllByRole("button");
+        fireEvent.click(rowButtons[rowButtons.length - 1]);
+        fireEvent.click(await screen.findByText(/删除|delete|com_knowledge\.delete/i));
+
+        await waitFor(() => {
+            expect(batchDeleteApi).toHaveBeenCalledWith("personal-1", {
+                file_ids: [401],
+                folder_ids: undefined,
+            });
+        });
+        await waitFor(() => {
+            expect(screen.queryByText("搜索结果.md")).not.toBeInTheDocument();
+        });
     });
 
     test("runs real batch actions for selected files and folders", async () => {
