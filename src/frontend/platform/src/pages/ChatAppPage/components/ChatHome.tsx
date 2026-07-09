@@ -193,7 +193,7 @@ export default function HomePage({ onSelect }) {
                 </div>
             </div>
 
-            <div className="relative overflow-y-auto h-[calc(100vh-308px)]">
+            <div className="relative overflow-y-auto h-[calc(100vh-308px-var(--license-banner-h,0px))]">
                 <div className="flex flex-wrap gap-2 px-12 scrollbar-hide pt-4 pb-20">
                     {renderChatOptions()}
                     {hasMoreData && <LoadMore onScrollLoad={handleLoadMore} />}

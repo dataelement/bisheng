@@ -161,11 +161,11 @@ export default function editAssistant() {
 
     return <div className="bg-background-main">
         <Header loca={loca} canEdit={canEdit} onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
-        <div className="h-[calc(100vh-70px)]">
+        <div className="h-[calc(100vh-70px-var(--license-banner-h,0px))]">
             <div className={`flex h-full ${showApiPage ? 'hidden' : ''}`}>
                 <div className="w-[60%]">
                     <div className="text-md font-medium leading-none p-4 shadow-sm">{t('build.assistantConfiguration')}</div>
-                    <div className="flex h-[calc(100vh-120px)]">
+                    <div className="flex h-[calc(100vh-120px-var(--license-banner-h,0px))]">
                         <Prompt canEdit={canEdit}></Prompt>
                         <Setting></Setting>
                     </div>

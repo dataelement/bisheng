@@ -203,7 +203,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
             <div className="flex-1">
                 <h1 className="text-3xl text-primary mt-2">{finish ? t('documentDataParsingCompleted') : t('documentDataBeingPrepared')}</h1>
                 <p className="text-base text-gray-500 mt-2">{t('youCanReturn')}</p>
-                <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px)]">
+                <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px-var(--license-banner-h,0px))]">
                     {files.map(item => <ProgressItem analysis key={item.id} item={item} />)}
                 </div>
                 <div className="flex justify-end gap-4">

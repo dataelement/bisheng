@@ -811,7 +811,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     }, [canEditKb, mainMetadataList, selectedFileId, t]);
 
     return (
-        <div className="relative flex flex-col h-[calc(100vh-64px)]">
+        <div className="relative flex flex-col h-[calc(100vh-64px-var(--license-banner-h,0px))]">
             {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
@@ -900,7 +900,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                                 edit={canEditKb}
                                 canDelete={canDeleteKb}
                                 page={page}
-                                className="h-[calc(100vh-206px)] pb-6"
+                                className="h-[calc(100vh-206px-var(--license-banner-h,0px))] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={chunks}

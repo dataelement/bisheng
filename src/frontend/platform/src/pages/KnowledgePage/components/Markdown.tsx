@@ -138,7 +138,7 @@ export default forwardRef(function Markdown({ edit, isUns, title, q, value }, re
                 <Switch checked={!isAce} onCheckedChange={hangleCheckChagne} />
             </div>}
         </div>
-        <div className="border mb-2 h-[calc(100vh-104px)]">
+        <div className="border mb-2 h-[calc(100vh-104px-var(--license-banner-h,0px))]">
             {/* 编辑器 */}
             <AceEditorCom hidden={!isAce} markdown={val} onChange={setValue} />
             <VditorEditor ref={vditorRef} edit={edit} hidden={isAce} markdown={val} />

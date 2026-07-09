@@ -578,8 +578,8 @@ export default function Roles() {
   }
 
   return (
-    <div className="relative">
-      <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10 pt-2">
+    <div className="relative h-full">
+      <div className="h-full overflow-y-auto pb-10 pt-2">
         <div className="mb-3 flex items-center justify-between">
           <div className="w-[220px]">
             <SearchInput

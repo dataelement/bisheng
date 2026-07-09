@@ -586,7 +586,7 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
     onChange(true);
   };
   return (
-    <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-40 scrollbar-hide">
+    <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-40 scrollbar-hide">
       {/* 角色名称输入 */}
       <div className="font-bold mt-4">
         <p className="text-xl mb-4">{t('system.roleName')}</p>

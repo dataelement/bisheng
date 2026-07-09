@@ -346,7 +346,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         <SheetTitle>{isEditMode ? t('edit') : t('add')} {t('mcpServer')}</SheetTitle>
                     </SheetHeader>
 
-                    <div className="mt-4 space-y-6 px-6 overflow-y-auto h-[calc(100vh-200px)]">
+                    <div className="mt-4 space-y-6 px-6 overflow-y-auto h-[calc(100vh-200px-var(--license-banner-h,0px))]">
                         {/* Name input */}
                         <div>
                             <label className="">{t('tools.name')}</label>

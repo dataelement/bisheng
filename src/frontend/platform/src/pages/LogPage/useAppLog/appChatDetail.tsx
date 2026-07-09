@@ -68,7 +68,7 @@ export default function AppChatDetail() {
                     <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
                 </div>
             </div>
-            <div className="h-[calc(100vh-132px)]">
+            <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))]">
                 {type === AppNumType.FLOW
                     ? <ChatMessages logo={logo} debug useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
                     : <MessagePanne logo={logo} debug useName='' guideWord=''

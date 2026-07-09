@@ -122,7 +122,7 @@ export default function DailyChatDetail() {
                 </div>
 
                 {/* messages */}
-                <div className="h-[calc(100vh-132px)] overflow-y-auto">
+                <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))] overflow-y-auto">
                     <div className="max-w-4xl mx-auto px-4 py-8">
                         {messages.map((msg) => (
                             <div key={msg.messageId} className="mb-8 flex items-start gap-4">

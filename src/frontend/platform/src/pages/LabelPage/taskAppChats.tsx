@@ -159,7 +159,7 @@ export default function index() {
                 </RadioGroup>
                 <PageChange />
             </div>
-            <div className="h-[calc(100vh-132px)]">
+            <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))]">
                 {type === AppNumType.FLOW
                     ? <ChatMessages mark={mark} logo='' useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
                     : <MessagePanne mark={mark} logo='' useName='' guideWord=''

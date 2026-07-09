@@ -191,7 +191,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
     }
 
     return (
-        <div className="mx-auto flex h-[calc(100vh-128px)] max-w-[800px] flex-col">
+        <div className="mx-auto flex h-[calc(100vh-128px-var(--license-banner-h,0px))] max-w-[800px] flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto px-1 pt-4 pb-4">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.groupName')}</p>

@@ -629,7 +629,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             </ShadTooltip>
             <span>{id === -1 ? t('model.addModel') : t('model.modelConfiguration')}</span>
         </div>
-        <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px)] overflow-y-auto">
+        <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto">
             <div className="mb-2">
                 <Label className="bisheng-label"> {t('model.interModelFormat')}</Label>
                 <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
