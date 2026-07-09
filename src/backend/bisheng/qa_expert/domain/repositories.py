@@ -96,7 +96,7 @@ class ExpertRepository:
     async def increment_adopted_count(self, expert_id: int, count: int = 1):
         """原子性增加专家采纳采纳数量"""
         async with get_async_db_session() as session:
-            stmt = update(Expert).where(Expert.id == expert_id).values(adopted_count=Expert.adopted_count + count)
+            stmt = update(Expert).where(Expert.id == expert_id).values(adoption_count=Expert.adoption_count + count)
             await session.exec(stmt)
             await session.commit()
 
