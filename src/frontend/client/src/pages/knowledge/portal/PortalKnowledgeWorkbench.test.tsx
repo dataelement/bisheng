@@ -512,6 +512,51 @@ function renderWorkbench(initialEntry = "/knowledge-portal") {
     return { ...view, queryClient };
 }
 
+function installIntersectionObserverMock() {
+    const originalIntersectionObserver = global.IntersectionObserver;
+    let intersectionCallback: IntersectionObserverCallback | undefined;
+    class MockIntersectionObserver {
+        readonly root = null;
+        readonly rootMargin = "";
+        readonly thresholds = [];
+        observe = jest.fn();
+        unobserve = jest.fn();
+        disconnect = jest.fn();
+        takeRecords = jest.fn(() => []);
+        constructor(callback: IntersectionObserverCallback) {
+            intersectionCallback = callback;
+        }
+    }
+    Object.defineProperty(window, "IntersectionObserver", {
+        configurable: true,
+        writable: true,
+        value: MockIntersectionObserver,
+    });
+    Object.defineProperty(global, "IntersectionObserver", {
+        configurable: true,
+        writable: true,
+        value: MockIntersectionObserver,
+    });
+    return {
+        trigger: async () => {
+            await act(async () => {
+                intersectionCallback?.([
+                    { isIntersecting: true } as IntersectionObserverEntry,
+                ], {} as IntersectionObserver);
+            });
+        },
+        restore: () => {
+            if (originalIntersectionObserver) {
+                global.IntersectionObserver = originalIntersectionObserver;
+                window.IntersectionObserver = originalIntersectionObserver;
+            } else {
+                delete (global as any).IntersectionObserver;
+                delete (window as any).IntersectionObserver;
+            }
+        },
+    };
+}
+
 function openMyUploadsFromPortalShell() {
     act(() => {
         window.dispatchEvent(new MessageEvent("message", {
@@ -4208,6 +4253,96 @@ describe("PortalKnowledgeWorkbench", () => {
                 file_status: [2],
             }));
         });
+    });
+
+    test("loads the next root file batch with the returned cursor", async () => {
+        const intersectionObserver = installIntersectionObserverMock();
+
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const firstFile = makeFile("201", "第一页.md");
+        const secondFile = makeFile("202", "第二页.md");
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation((params: any) => Promise.resolve(
+            params?.cursor === "root-cursor-2"
+                ? { data: [secondFile], page_size: 20, has_more: false, next_cursor: null }
+                : { data: [firstFile], page_size: 20, has_more: true, next_cursor: "root-cursor-2" },
+        ) as any);
+
+        try {
+            renderWorkbench();
+
+            expect(await screen.findByText("第一页.md")).toBeInTheDocument();
+
+            await intersectionObserver.trigger();
+
+            expect(await screen.findByText("第二页.md")).toBeInTheDocument();
+            await waitFor(() => {
+                expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                    space_id: "personal-1",
+                    cursor: "root-cursor-2",
+                    page_size: 20,
+                }));
+            });
+            expect(jest.mocked(getSpaceChildrenApi).mock.calls.some(([params]) => params?.page === 2)).toBe(false);
+        } finally {
+            intersectionObserver.restore();
+        }
+    });
+
+    test("loads the next folder file batch with the folder cursor", async () => {
+        const intersectionObserver = installIntersectionObserverMock();
+
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("301", "规章目录", { type: FileType.FOLDER });
+        const firstChild = makeFile("401", "目录第一页.md", { parentId: "301" });
+        const secondChild = makeFile("402", "目录第二页.md", { parentId: "301" });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation((params: any) => {
+            if (params?.parent_id === "301" && params?.cursor === "folder-cursor-2") {
+                return Promise.resolve({ data: [secondChild], page_size: 20, has_more: false, next_cursor: null }) as any;
+            }
+            if (params?.parent_id === "301") {
+                return Promise.resolve({ data: [firstChild], page_size: 20, has_more: true, next_cursor: "folder-cursor-2" }) as any;
+            }
+            return Promise.resolve({ data: [folder], page_size: 20, has_more: false, next_cursor: null }) as any;
+        });
+
+        try {
+            renderWorkbench();
+
+            const workspace = await screen.findByTestId("portal-file-workspace");
+            fireEvent.click(await within(workspace).findByRole("button", { name: "打开规章目录" }));
+            expect(await screen.findByText("目录第一页.md")).toBeInTheDocument();
+
+            await intersectionObserver.trigger();
+
+            expect(await screen.findByText("目录第二页.md")).toBeInTheDocument();
+            await waitFor(() => {
+                expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                    space_id: "personal-1",
+                    parent_id: "301",
+                    cursor: "folder-cursor-2",
+                    page_size: 20,
+                }));
+            });
+            expect(jest.mocked(getSpaceChildrenApi).mock.calls.some(([params]) => params?.parent_id === "301" && params?.page === 2)).toBe(false);
+        } finally {
+            intersectionObserver.restore();
+        }
     });
 
     test("search requests include selected status filters", async () => {

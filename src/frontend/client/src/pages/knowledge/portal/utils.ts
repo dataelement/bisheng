@@ -157,6 +157,8 @@ export function createTreeNode(file: KnowledgeFile): PortalFileTreeNode {
         loading: false,
         page: 1,
         total: 0,
+        hasMore: false,
+        nextCursor: null,
     };
 }
 

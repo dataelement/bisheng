@@ -237,6 +237,7 @@ export default function PortalKnowledgeWorkbench() {
     const [treeRootPage, setTreeRootPage] = useState(1);
     const [treeRootTotal, setTreeRootTotal] = useState(0);
     const [treeRootHasMore, setTreeRootHasMore] = useState(false);
+    const [treeRootNextCursor, setTreeRootNextCursor] = useState<string | null>(null);
     const [treeRootLoadingMore, setTreeRootLoadingMore] = useState(false);
     const [searchMode, setSearchMode] = useState(false);
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
@@ -611,6 +612,7 @@ export default function PortalKnowledgeWorkbench() {
                 loaded: true,
                 expanded: true,
                 total: Math.max(node.total, dedupedFiles.length),
+                hasMore: node.hasMore && dedupedFiles.length < node.total,
             };
         }));
     }, [currentFolderId, setRootFiles]);
@@ -729,6 +731,7 @@ export default function PortalKnowledgeWorkbench() {
             setTreeNodes([]);
             setTreeRootTotal(0);
             setTreeRootHasMore(false);
+            setTreeRootNextCursor(null);
             return;
         }
         if (append) {
@@ -739,14 +742,14 @@ export default function PortalKnowledgeWorkbench() {
         try {
             const res = await getSpaceChildrenApi({
                 space_id: spaceId,
-                page,
+                page: append ? undefined : page,
+                cursor: append ? treeRootNextCursor : null,
                 page_size: TREE_PAGE_SIZE,
                 order_field: sortBy,
                 order_sort: sortDirection,
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
-            const total = (res as any).total ?? res.data.length;
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => {
                 if (append) {
@@ -761,8 +764,9 @@ export default function PortalKnowledgeWorkbench() {
                 return nextNodes;
             });
             setTreeRootPage(page);
-            setTreeRootTotal(total);
-            setTreeRootHasMore(Boolean((res as any).has_more ?? (page * TREE_PAGE_SIZE < total)));
+            setTreeRootTotal((prev) => (res as any).total ?? (append ? prev + nextFiles.length : nextFiles.length));
+            setTreeRootHasMore(Boolean(res.has_more));
+            setTreeRootNextCursor(res.next_cursor ?? null);
             void loadFolderStats(spaceId, nextFiles);
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
@@ -770,6 +774,7 @@ export default function PortalKnowledgeWorkbench() {
                 setTreeNodes([]);
                 setTreeRootTotal(0);
                 setTreeRootHasMore(false);
+                setTreeRootNextCursor(null);
             }
             showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         } finally {
@@ -778,7 +783,7 @@ export default function PortalKnowledgeWorkbench() {
                 setTreeRootLoadingMore(false);
             }
         }
-    }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers]);
+    }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers, treeRootNextCursor]);
 
     // Always-current ref to loadRootTree so the space/sort/filter reset effect
     // below can call it WITHOUT listing it as a dependency. loadRootTree's
@@ -820,6 +825,8 @@ export default function PortalKnowledgeWorkbench() {
                 loading: false,
                 page: 1,
                 total: (res as any).total ?? res.data.length,
+                hasMore: Boolean(res.has_more),
+                nextCursor: res.next_cursor ?? null,
             })));
             void loadFolderStats(spaceId, nextFiles);
         } catch {
@@ -954,8 +961,8 @@ export default function PortalKnowledgeWorkbench() {
     const currentFileListHasMore = searchMode
         ? false
         : currentFolderNode
-            ? currentFolderNode.children.length < currentFolderNode.total
-            : treeRootHasMore || treeNodes.length < treeRootTotal;
+            ? currentFolderNode.hasMore
+            : treeRootHasMore;
     const currentFileListLoading = treeLoading || searchLoading || treeRootLoadingMore || Boolean(currentFolderNode?.loading);
     const displayedFiles = searchMode ? searchResults : visibleTreeFiles;
     const selectedFiles = useMemo(
@@ -1113,6 +1120,7 @@ export default function PortalKnowledgeWorkbench() {
             setTreeRootPage(1);
             setTreeRootTotal(0);
             setTreeRootHasMore(false);
+            setTreeRootNextCursor(null);
             setCurrentFolderId(undefined);
             setCanCreateFolder(false);
             setCanUploadFile(false);
@@ -1752,6 +1760,8 @@ export default function PortalKnowledgeWorkbench() {
                 loading: false,
                 page: 1,
                 total,
+                hasMore: Boolean(res.has_more),
+                nextCursor: res.next_cursor ?? null,
             })));
             void loadFolderStats(spaceId, nextFiles);
         } catch {
@@ -1767,7 +1777,7 @@ export default function PortalKnowledgeWorkbench() {
 
     const handleLoadMoreChildren = useCallback(async (node: PortalFileTreeNode) => {
         const spaceId = activeSpace?.id;
-        if (!spaceId || node.loading) return;
+        if (!spaceId || node.loading || !node.nextCursor) return;
         const nextPage = node.page + 1;
         setCurrentFolderId(node.file.id);
         setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, loading: true })));
@@ -1775,7 +1785,7 @@ export default function PortalKnowledgeWorkbench() {
             const res = await getSpaceChildrenApi({
                 space_id: spaceId,
                 parent_id: node.file.id,
-                page: nextPage,
+                cursor: node.nextCursor,
                 page_size: TREE_PAGE_SIZE,
                 order_field: sortBy,
                 order_sort: sortDirection,
@@ -1791,6 +1801,8 @@ export default function PortalKnowledgeWorkbench() {
                 loaded: true,
                 page: nextPage,
                 total,
+                hasMore: Boolean(res.has_more),
+                nextCursor: res.next_cursor ?? null,
             })));
             void loadFolderStats(spaceId, nextFiles);
         } catch {
@@ -1862,6 +1874,8 @@ export default function PortalKnowledgeWorkbench() {
                     loading: false,
                     page: 1,
                     total,
+                    hasMore: Boolean(res.has_more),
+                    nextCursor: res.next_cursor ?? null,
                 }),
             ));
             void loadFolderStats(spaceId, nextFiles);
@@ -1905,8 +1919,9 @@ export default function PortalKnowledgeWorkbench() {
             void handleLoadMoreChildren(currentFolderNode);
             return;
         }
+        if (page > 1 && !treeRootNextCursor) return;
         void loadRootTree(page, page > 1);
-    }, [currentFolderNode, handleLoadMoreChildren, loadRootTree, searchMode]);
+    }, [currentFolderNode, handleLoadMoreChildren, loadRootTree, searchMode, treeRootNextCursor]);
 
     const confirmCreateFolder = useCallback(() => {
         if (!fileUpload.creatingFolder) return;
