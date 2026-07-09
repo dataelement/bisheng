@@ -49,6 +49,16 @@ def test_llm_rate_limit_sse_envelope_is_12046():
     assert payload["status_code"] == 12046
 
 
-def test_genuine_quota_not_misrouted_to_rate_limit():
-    """Billing exhaustion must NOT take the 12046 path (would wrongly say 'try later')."""
-    assert label_error(unwrap(RuntimeError("insufficient_quota"))) is ErrorType.QUOTA_EXHAUSTED
+def test_insufficient_quota_routes_to_rate_limit():
+    """MaaS reuses OpenAI's ``insufficient_quota`` code for TPM/TPS throttling, so
+    it must take the friendly 12046 rate-limit path in daily-mode chat, not the
+    scary billing message (COFCO 图一)."""
+    assert label_error(unwrap(RuntimeError("insufficient_quota"))) is ErrorType.RATE_LIMIT
+    assert label_error(unwrap(RuntimeError("You exceeded your current quota"))) is ErrorType.RATE_LIMIT
+
+
+def test_genuine_billing_not_misrouted_to_rate_limit():
+    """True balance/arrears exhaustion must NOT take the 12046 path (would wrongly
+    say 'try later'); it stays QUOTA_EXHAUSTED so the copy points to 'top up'."""
+    for msg in ("账户余额不足", "您已欠费", "arrearage", "insufficient balance"):
+        assert label_error(unwrap(RuntimeError(msg))) is ErrorType.QUOTA_EXHAUSTED, msg
