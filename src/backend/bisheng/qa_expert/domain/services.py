@@ -33,6 +33,7 @@ from bisheng.qa_expert.domain.repositories import (
     QAExpertStatsRepository,
 )
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.database.models.department import DepartmentDao
 
 
 # ==================== 错误定义 ====================
@@ -118,7 +119,14 @@ class ExpertService:
         self, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
     ) -> tuple[List[Expert], int]:
         """列表查询专家"""
-        return await self.repository.list_all(keyword=keyword, skip=skip, limit=limit)
+        experts, total = await self.repository.list_all(keyword=keyword, skip=skip, limit=limit)
+        for expert in experts:
+            department = DepartmentDao.get_by_id(expert.depart_ment)
+            if department:
+                expert.depart_ment = department.name
+            else:
+                expert.depart_ment = None
+        return experts, total
 
     async def delete_expert(self, expert_id: int) -> bool:
         """删除专家"""
