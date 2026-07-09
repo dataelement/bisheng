@@ -224,6 +224,7 @@ export default function PortalKnowledgeWorkbench() {
     const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [pendingCreateLevel, setPendingCreateLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
+    const [pendingRestoreGroupKey, setPendingRestoreGroupKey] = useState<SpaceGroupKey | null>(null);
     const [uploadedFilesOpen, setUploadedFilesOpen] = useState(false);
     const [uploadRecordsRefreshKey, setUploadRecordsRefreshKey] = useState(0);
     const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
@@ -305,6 +306,7 @@ export default function PortalKnowledgeWorkbench() {
     } = usePortalSpaces({
         activeSpace,
         setActiveSpace,
+        expandedGroups,
         preferredSpaceId: isDeepLinkRestoring ? portalDeepLinkTarget?.spaceId : undefined,
     });
 
@@ -361,6 +363,9 @@ export default function PortalKnowledgeWorkbench() {
         const firstSpace = groups.find((group) => group.key === groupKey)?.spaces[0];
         if (firstSpace) {
             setActiveSpace(firstSpace);
+            setPendingRestoreGroupKey(null);
+        } else {
+            setPendingRestoreGroupKey(groupKey);
         }
         setExpandedGroups((prev) => ({
             ...prev,
@@ -368,6 +373,19 @@ export default function PortalKnowledgeWorkbench() {
         }));
         scrollToGroup(groupKey);
     }, [groups, scrollToGroup]);
+
+    useEffect(() => {
+        if (!pendingRestoreGroupKey) return;
+        const group = groups.find((item) => item.key === pendingRestoreGroupKey);
+        if (!group || group.loading) return;
+
+        const firstSpace = group.spaces[0];
+        if (firstSpace) {
+            setActiveSpace(firstSpace);
+        }
+        setPendingRestoreGroupKey(null);
+        scrollToGroup(pendingRestoreGroupKey);
+    }, [groups, pendingRestoreGroupKey, scrollToGroup]);
 
     const handleOpenCreateSpace = useCallback((group: SpaceGroup) => {
         if (createOptionsLoading || !createPermissionByLevel[group.level]) return;

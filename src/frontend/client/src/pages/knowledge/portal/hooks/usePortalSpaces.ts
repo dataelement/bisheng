@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { useQuery } from "@tanstack/react-query";
 import {
     getCreateSpaceOptionsApi,
+    getSpaceInfoApi,
     getSpacesByLevelApi,
     SpaceLevel,
     SpaceRole,
@@ -14,7 +15,7 @@ import {
     type KnowledgeSpaceActionPermission,
 } from "../../hooks/useKnowledgeSpacePermissions";
 import { GROUP_ICON_SRC } from "../constants";
-import type { SpaceGroup } from "../types";
+import type { SpaceGroup, SpaceGroupKey } from "../types";
 
 export interface SpaceActionPermissions {
     canEditSpace: boolean;
@@ -47,6 +48,7 @@ export function resolveSpacePermissions(
 interface UsePortalSpacesParams {
     activeSpace: KnowledgeSpace | null;
     setActiveSpace: Dispatch<SetStateAction<KnowledgeSpace | null>>;
+    expandedGroups: Record<SpaceGroupKey, boolean>;
     preferredSpaceId?: string;
 }
 
@@ -54,30 +56,63 @@ function findDefaultPersonalSpace(spaces: KnowledgeSpace[]): KnowledgeSpace | nu
     return spaces.find((space) => space.isFavorite) ?? spaces[0] ?? null;
 }
 
-export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId }: UsePortalSpacesParams) {
-    const personalSpacesQuery = useQuery({
-        queryKey: ["knowledgeSpaces", "level", SpaceLevel.PERSONAL],
-        queryFn: () => getSpacesByLevelApi(SpaceLevel.PERSONAL, { order_by: SpaceSortType.UPDATE_TIME }),
+function getSpaceGroupKey(space?: Pick<KnowledgeSpace, "spaceLevel"> | null): SpaceGroupKey | null {
+    if (!space) return null;
+    switch (space.spaceLevel) {
+        case SpaceLevel.PUBLIC:
+            return "public";
+        case SpaceLevel.DEPARTMENT:
+            return "department";
+        case SpaceLevel.TEAM:
+            return "team";
+        case SpaceLevel.PERSONAL:
+            return "personal";
+        default:
+            return null;
+    }
+}
+
+export function usePortalSpaces({
+    activeSpace,
+    setActiveSpace,
+    expandedGroups,
+    preferredSpaceId,
+}: UsePortalSpacesParams) {
+    const preferredSpaceQuery = useQuery({
+        queryKey: ["knowledgeSpaces", "preferred", preferredSpaceId],
+        queryFn: () => getSpaceInfoApi(String(preferredSpaceId)),
+        enabled: Boolean(preferredSpaceId),
         placeholderData: (prev) => prev,
     });
 
-    const silentGroupQueriesEnabled = personalSpacesQuery.isFetched || personalSpacesQuery.isError;
+    const preferredSpaceGroupKey = getSpaceGroupKey(preferredSpaceQuery.data);
+    const shouldLoadGroup = useCallback((groupKey: SpaceGroupKey) => (
+        expandedGroups[groupKey] || preferredSpaceGroupKey === groupKey
+    ), [expandedGroups, preferredSpaceGroupKey]);
+
+    const personalSpacesQuery = useQuery({
+        queryKey: ["knowledgeSpaces", "level", SpaceLevel.PERSONAL],
+        queryFn: () => getSpacesByLevelApi(SpaceLevel.PERSONAL, { order_by: SpaceSortType.UPDATE_TIME }),
+        enabled: shouldLoadGroup("personal"),
+        placeholderData: (prev) => prev,
+    });
+
     const publicSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.PUBLIC],
         queryFn: () => getSpacesByLevelApi(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME }),
-        enabled: silentGroupQueriesEnabled,
+        enabled: shouldLoadGroup("public"),
         placeholderData: (prev) => prev,
     });
     const departmentSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT],
         queryFn: () => getSpacesByLevelApi(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME }),
-        enabled: silentGroupQueriesEnabled,
+        enabled: shouldLoadGroup("department"),
         placeholderData: (prev) => prev,
     });
     const teamSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.TEAM],
         queryFn: () => getSpacesByLevelApi(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME }),
-        enabled: silentGroupQueriesEnabled,
+        enabled: shouldLoadGroup("team"),
         placeholderData: (prev) => prev,
     });
 
@@ -97,7 +132,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
                 level: SpaceLevel.PUBLIC,
                 iconSrc: GROUP_ICON_SRC.public,
                 spaces: publicSpacesQuery.data ?? [],
-                loading: !silentGroupQueriesEnabled || publicSpacesQuery.isLoading,
+                loading: shouldLoadGroup("public") && publicSpacesQuery.isLoading,
             },
             {
                 key: "department",
@@ -105,7 +140,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
                 level: SpaceLevel.DEPARTMENT,
                 iconSrc: GROUP_ICON_SRC.department,
                 spaces: departmentSpacesQuery.data ?? [],
-                loading: !silentGroupQueriesEnabled || departmentSpacesQuery.isLoading,
+                loading: shouldLoadGroup("department") && departmentSpacesQuery.isLoading,
             },
             {
                 key: "team",
@@ -113,7 +148,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
                 level: SpaceLevel.TEAM,
                 iconSrc: GROUP_ICON_SRC.team,
                 spaces: teamSpacesQuery.data ?? [],
-                loading: !silentGroupQueriesEnabled || teamSpacesQuery.isLoading,
+                loading: shouldLoadGroup("team") && teamSpacesQuery.isLoading,
             },
             {
                 key: "personal",
@@ -121,7 +156,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
                 level: SpaceLevel.PERSONAL,
                 iconSrc: GROUP_ICON_SRC.personal,
                 spaces: personalSpacesQuery.data ?? [],
-                loading: personalSpacesQuery.isLoading,
+                loading: shouldLoadGroup("personal") && personalSpacesQuery.isLoading,
             },
         ];
     }, [
@@ -131,7 +166,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         personalSpacesQuery.isLoading,
         publicSpacesQuery.data,
         publicSpacesQuery.isLoading,
-        silentGroupQueriesEnabled,
+        shouldLoadGroup,
         teamSpacesQuery.data,
         teamSpacesQuery.isLoading,
     ]);
@@ -154,23 +189,18 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
     );
     const preferredSpace = useMemo(
         () => preferredSpaceId
-            ? selectableSpaces.find((space) => String(space.id) === String(preferredSpaceId)) ?? null
+            ? selectableSpaces.find((space) => String(space.id) === String(preferredSpaceId))
+                ?? preferredSpaceQuery.data
+                ?? null
             : null,
-        [preferredSpaceId, selectableSpaces],
+        [preferredSpaceId, preferredSpaceQuery.data, selectableSpaces],
     );
     const preferredSpacePending = Boolean(
         preferredSpaceId
         && !preferredSpace
         && (
-            personalSpacesQuery.isLoading
-            || personalSpacesQuery.isFetching
-            || !silentGroupQueriesEnabled
-            || publicSpacesQuery.isLoading
-            || publicSpacesQuery.isFetching
-            || departmentSpacesQuery.isLoading
-            || departmentSpacesQuery.isFetching
-            || teamSpacesQuery.isLoading
-            || teamSpacesQuery.isFetching
+            preferredSpaceQuery.isLoading
+            || preferredSpaceQuery.isFetching
         ),
     );
     const fullAccessSpaceIds = useMemo(
@@ -192,8 +222,9 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         { fullAccessSpaceIds },
     );
     const activeGroup = useMemo(
-        () => groups.find((group) => group.spaces.some((space) => space.id === activeSpace?.id)),
-        [activeSpace?.id, groups],
+        () => groups.find((group) => group.spaces.some((space) => space.id === activeSpace?.id))
+            ?? groups.find((group) => group.key === getSpaceGroupKey(activeSpace)),
+        [activeSpace?.id, activeSpace?.spaceLevel, groups],
     );
 
     const getSpacePermissions = useCallback(
@@ -211,6 +242,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         if (preferredSpacePending) return;
         // 用 String() 兜底：新建返回的 space id 可能是数字，避免与列表里的字符串 id 不匹配而误重置
         if (activeSpace && selectableSpaces.some((space) => String(space.id) === String(activeSpace.id))) return;
+        if (activeSpace && preferredSpaceId && String(activeSpace.id) === String(preferredSpaceId)) return;
         if (personalSpacesQuery.isLoading) return;
         setActiveSpace(defaultPersonalSpace ?? selectableSpaces[0] ?? null);
     }, [
@@ -218,6 +250,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace, preferredSpaceId 
         defaultPersonalSpace,
         personalSpacesQuery.isLoading,
         preferredSpace,
+        preferredSpaceId,
         preferredSpacePending,
         selectableSpaces,
         setActiveSpace,
