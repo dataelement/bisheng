@@ -21,8 +21,9 @@ import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 import {
     ExportSelectionButton,
@@ -31,6 +32,12 @@ import {
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+
+// Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
+// limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
+// (12045). These get the calm ServiceBusyNotice + Retry; every other error keeps the
+// red error bubble. Mirrors the classifier's RETRYABLE intent on the status-code side.
+const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
 // Map an uploaded file's extension to a bisheng outlined file-type icon.
 // Anything not listed falls back to the generic Outlined.File icon.
@@ -500,6 +507,13 @@ function AssistantBubble({
     activeCitationMessageId?: string | null;
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
+    const localize = useLocalize();
+
+    // A transient/retryable failure (rate limit / busy) renders as the calm neutral
+    // notice + Retry instead of the red error bubble.
+    const isTransientError = !!message.error && message.errorCode !== undefined
+        && RETRYABLE_ERROR_CODES.has(message.errorCode);
+
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
     // loader), skip the legacy :::thinking:::/:::web::: regex parsing and let
@@ -658,16 +672,26 @@ function AssistantBubble({
 
                 {/* Error state */}
                 {showWaiting ? null : message.error ? (
-                    <div
-                        className={cn(
-                            "text-red-500 bg-red-50 px-3 py-2",
-                            knowledgeChatLayout
-                                ? "rounded-[2px] text-[14px] leading-[22px]"
-                                : "text-sm rounded-[10px]"
-                        )}
-                    >
-                        {regularContent || "发生错误，请重试"}
-                    </div>
+                    isTransientError ? (
+                        // Transient upstream hiccup (rate limit / busy): calm neutral
+                        // notice + Retry (re-sends the last user message via regenerate),
+                        // never the red error bubble.
+                        <ServiceBusyNotice
+                            desc={regularContent || localize("api_errors.12046")}
+                            onRetry={onRegenerate}
+                        />
+                    ) : (
+                        <div
+                            className={cn(
+                                "text-red-500 bg-red-50 px-3 py-2",
+                                knowledgeChatLayout
+                                    ? "rounded-[2px] text-[14px] leading-[22px]"
+                                    : "text-sm rounded-[10px]"
+                            )}
+                        >
+                            {regularContent || "发生错误，请重试"}
+                        </div>
+                    )
                 ) : (
                     /* Main content — uses existing Markdown with citation support */
                     <div
@@ -697,8 +721,10 @@ function AssistantBubble({
                     </div>
                 )}
 
-                {/* Action buttons (only show when not streaming) */}
-                {!isStreaming && regularContent && (
+                {/* Action buttons (only show when not streaming). Suppressed on the
+                    transient busy notice — copy/feedback on a "try again" status is
+                    meaningless; the notice carries its own Retry. */}
+                {!isStreaming && regularContent && !isTransientError && (
                     <div className="flex items-center gap-1 mt-1.5 text-gray-400">
                         <CitationReferencesDrawer
                             content={regularContent}
