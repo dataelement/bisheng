@@ -219,9 +219,9 @@ export function EditTagsModal({
             <DialogContent
                 onPointerDownOutside={(e) => e.preventDefault()}
                 onInteractOutside={(e) => e.preventDefault()}
-                className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
+                className="flex w-[600px] max-w-[600px] flex-col items-stretch gap-0 border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none rounded-none sm:rounded-none md:rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 [&>button]:hidden"
             >
-                <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-6 py-3 text-left touch-mobile:h-auto touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
+                <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-6 py-3 text-left max-md:h-auto max-md:px-4 max-md:pt-6 max-md:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
@@ -235,7 +235,7 @@ export function EditTagsModal({
                     </button>
                 </DialogHeader>
 
-                <div className="flex flex-1 flex-col gap-3 px-6 py-6 touch-mobile:px-4 touch-mobile:py-4">
+                <div className="flex flex-1 flex-col gap-3 px-6 py-6 max-md:px-4 max-md:py-4">
                     {/* Tags Input Box */}
                     <div
                         className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"
@@ -318,16 +318,16 @@ export function EditTagsModal({
                     </div>
                 </div>
 
-                <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:!mt-auto touch-mobile:!h-auto touch-mobile:!flex-row touch-mobile:!justify-stretch touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
+                <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3 sm:space-x-0">
                     <Button
                         variant="outline"
-                        className="h-8 min-w-[60px] rounded-[6px] border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 touch-mobile:flex-1"
+                        className="h-8 min-w-[60px] rounded-[6px] border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 max-md:flex-1"
                         onClick={handleClose}
                     >
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 min-w-[60px] rounded-[6px] px-4 font-normal touch-mobile:flex-1"
+                        className="h-8 min-w-[60px] rounded-[6px] px-4 font-normal max-md:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >
