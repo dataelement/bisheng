@@ -20,6 +20,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteRemoveResp,
     ShougangPortalFavoriteStatusReq,
     ShougangPortalFavoriteStatusResp,
+    ShougangPortalFileDetailResp,
     ShougangPortalFileSearchReq,
     ShougangPortalFileSearchResp,
     ShougangPortalHomeReq,
@@ -27,6 +28,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalHomeStatsResp,
     ShougangPortalQaFileSearchReq,
     ShougangPortalQaFileSearchResp,
+    ShougangPortalRelatedFilesResp,
     ShougangPortalPersonalSpacesResp,
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkCreateReq,
@@ -225,6 +227,28 @@ async def get_shougang_portal_home_stats(
         KnowledgeFileDao.async_count_all_success_files(),
     )
     return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode='json'))
+
+
+@router.get('/files/{space_id}/{file_id}/related')
+async def list_shougang_portal_related_files(
+        space_id: int,
+        file_id: int,
+        limit: int = 3,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.list_shougang_portal_related_files(space_id=space_id, file_id=file_id, limit=limit)
+    return resp_200(ShougangPortalRelatedFilesResp(**result).model_dump(mode='json'))
+
+
+@router.get('/files/{space_id}/{file_id}')
+async def get_shougang_portal_file(
+        space_id: int,
+        file_id: int,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    item = await svc.get_shougang_portal_file(space_id=space_id, file_id=file_id)
+    raw = item.model_dump(mode='json') if hasattr(item, 'model_dump') else item
+    return resp_200(ShougangPortalFileDetailResp(data=raw).model_dump(mode='json'))
 
 
 @router.post('/files/search')
