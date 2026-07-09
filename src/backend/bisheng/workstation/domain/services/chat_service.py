@@ -548,6 +548,18 @@ def _build_tool_meta(tool: BaseTool) -> dict:
     }
 
 
+def _is_nested_tool_event(ev: dict, visible_tool_run_ids: set[str]) -> bool:
+    """Return True when a tool callback belongs to a visible parent tool.
+
+    DailyChatCitationToolWrapper is itself a BaseTool and invokes the wrapped
+    tool internally. LangChain emits callbacks for both layers with the same
+    name/input and different run_ids; only the outer tool call is part of the
+    user-facing ReAct step.
+    """
+    parent_ids = ev.get("parent_ids") or []
+    return any(str(parent_id) in visible_tool_run_ids for parent_id in parent_ids)
+
+
 async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tuple[BaseTool | None, str | None]:
     """Return (tool, error_msg). A non-None error_msg means the agent should
     surface the failure to the user (e.g. missing provider config) rather
@@ -1468,7 +1480,8 @@ async def _agent_stream_chat_completion(
                 )
 
                 tool_meta_map = {t.name: _build_tool_meta(t) for t in langchain_tools}
-                inflight: dict[str, dict] = {}
+                visible_tool_run_ids: set[str] = set()
+                ignored_tool_run_ids: set[str] = set()
                 max_iter = await _get_agent_max_iterations()
 
                 async for ev in agent.astream_events(
@@ -1526,6 +1539,11 @@ async def _agent_stream_chat_completion(
                             )
 
                     elif et == "on_tool_start":
+                        tc_id = str(ev.get("run_id") or f"call_{uuid4().hex[:12]}")
+                        if _is_nested_tool_event(ev, visible_tool_run_ids):
+                            ignored_tool_run_ids.add(tc_id)
+                            continue
+
                         # Close any in-flight thinking before the tool call
                         # so each ReAct round gets its own collapsible block.
                         d = close_thinking()
@@ -1538,7 +1556,6 @@ async def _agent_stream_chat_completion(
                             )
 
                         tool_name = name
-                        tc_id = str(ev.get("run_id") or f"call_{uuid4().hex[:12]}")
                         meta = tool_meta_map.get(
                             tool_name,
                             {
@@ -1557,6 +1574,7 @@ async def _agent_stream_chat_completion(
                         }
                         events.append(tool_event)
                         inflight_tool_idx[tc_id] = len(events) - 1
+                        visible_tool_run_ids.add(tc_id)
                         # SSE payload uses the bare tool_call shape (no type:).
                         yield _sse_resp(
                             "agent_tool_call",
@@ -1567,7 +1585,13 @@ async def _agent_stream_chat_completion(
 
                     elif et == "on_tool_end":
                         tc_id = str(ev.get("run_id") or "")
+                        if tc_id in ignored_tool_run_ids:
+                            ignored_tool_run_ids.discard(tc_id)
+                            continue
+                        if _is_nested_tool_event(ev, visible_tool_run_ids) and tc_id not in inflight_tool_idx:
+                            continue
                         idx = inflight_tool_idx.pop(tc_id, None)
+                        visible_tool_run_ids.discard(tc_id)
                         raw_output = (ev.get("data") or {}).get("output")
                         ended_ms = int(time.time() * 1000)
                         if idx is not None:
@@ -1591,6 +1615,43 @@ async def _agent_stream_chat_completion(
                                 "args": {},
                                 "results": results,
                                 "error": _extract_tool_error(raw_output),
+                                "started_at": ended_ms,
+                                "ended_at": ended_ms,
+                                "duration_ms": 0,
+                            }
+                            events.append(tool_event)
+                            payload = {k: v for k, v in tool_event.items() if k != "type"}
+                        yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
+                    elif et == "on_tool_error":
+                        tc_id = str(ev.get("run_id") or "")
+                        if tc_id in ignored_tool_run_ids:
+                            ignored_tool_run_ids.discard(tc_id)
+                            continue
+                        if _is_nested_tool_event(ev, visible_tool_run_ids) and tc_id not in inflight_tool_idx:
+                            continue
+                        idx = inflight_tool_idx.pop(tc_id, None)
+                        visible_tool_run_ids.discard(tc_id)
+                        ended_ms = int(time.time() * 1000)
+                        err = (ev.get("data") or {}).get("error")
+                        err_msg = str(err) if err is not None else "tool execution failed"
+                        if idx is not None:
+                            tool_event = events[idx]
+                            tool_event["results"] = []
+                            tool_event["error"] = err_msg
+                            tool_event["ended_at"] = ended_ms
+                            if tool_event.get("started_at") is not None:
+                                tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
+                            payload = {k: v for k, v in tool_event.items() if k != "type"}
+                        else:
+                            tool_event = {
+                                "type": "tool_call",
+                                "tool_call_id": tc_id,
+                                "tool_name": name,
+                                "display_name": name,
+                                "tool_type": "tool",
+                                "args": (ev.get("data") or {}).get("input", {}),
+                                "results": [],
+                                "error": err_msg,
                                 "started_at": ended_ms,
                                 "ended_at": ended_ms,
                                 "duration_ms": 0,
@@ -1670,7 +1731,7 @@ async def _agent_stream_chat_completion(
         # render as perpetually "in-flight" on history reload.
         if inflight_tool_idx:
             now_ms = int(time.time() * 1000)
-            for tc_id, idx in inflight_tool_idx.items():
+            for _tc_id, idx in inflight_tool_idx.items():
                 if 0 <= idx < len(events):
                     ev = events[idx]
                     if ev.get("ended_at") is None:
