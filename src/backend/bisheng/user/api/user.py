@@ -468,6 +468,13 @@ async def list_user(*,
     for one, avatar_url in zip(users, avatar_urls):
         one_data = one.model_dump()
         one_data["department_id"] = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
+        # 获取部门信息
+        if one_data["department_id"]:
+            department = DepartmentDao.get_by_id(one_data["department_id"])
+            if department:
+                one_data["department_name"] = department.name
+            else:
+                one_data["department_name"] = None
         one_data["avatar"] = avatar_url
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
