@@ -121,7 +121,7 @@ class ExpertService:
         """列表查询专家"""
         experts, total = await self.repository.list_all(keyword=keyword, skip=skip, limit=limit)
         for expert in experts:
-            department = await DepartmentDao.get_by_id(expert.depart_ment)
+            department = DepartmentDao.get_by_id(expert.depart_ment)
             if department:
                 expert.depart_name = department.name
             else:
