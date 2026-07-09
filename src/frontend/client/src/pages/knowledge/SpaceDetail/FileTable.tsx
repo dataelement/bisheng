@@ -833,12 +833,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 
         setSavingEncodingFileId(file.id);
         try {
-            if (normalizedSubcategoryCode !== undefined) {
-                await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding, normalizedSubcategoryCode);
-            } else {
-                await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding);
-            }
-            onFileEncodingUpdated?.(file.id, newEncoding, normalizedSubcategoryCode);
+            const updatedFile = normalizedSubcategoryCode !== undefined
+                ? await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding, normalizedSubcategoryCode)
+                : await updateFileEncoding(String(file.spaceId), String(file.id), newEncoding);
+            const resolvedEncoding = updatedFile.fileEncoding?.trim() || newEncoding;
+            const resolvedSubcategoryCode = normalizedSubcategoryCode !== undefined
+                ? (updatedFile.fileSubcategoryCode ?? normalizedSubcategoryCode)
+                : undefined;
+            onFileEncodingUpdated?.(file.id, resolvedEncoding, resolvedSubcategoryCode);
             setEncodingDrafts((prev) => {
                 const { [file.id]: _, ...rest } = prev;
                 return rest;

@@ -646,6 +646,18 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile((prev) => prev?.id === fileId ? updater(prev) : prev);
     }, []);
 
+    const handleFileEncodingUpdated = useCallback((
+        fileId: string,
+        newEncoding: string,
+        fileSubcategoryCode?: string | null,
+    ) => {
+        patchFileById(fileId, (file) => ({
+            ...file,
+            fileEncoding: newEncoding,
+            ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
+        }));
+    }, [patchFileById]);
+
     const loadFolderStats = useCallback(async (spaceId: string, files: KnowledgeFile[]) => {
         const folderIds = Array.from(new Set(
             files
@@ -2268,6 +2280,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     fileCategoryGroups={fileCategoryGroups}
                                                     businessDomainOptions={activeSpaceBusinessDomainOptions}
                                                     encodingPrefix={fileEncodingPrefix}
+                                                    onFileEncodingUpdated={handleFileEncodingUpdated}
                                                     markPendingDeletion={markPendingDeletion}
                                                     clearPendingDeletion={clearPendingDeletion}
                                                     setFiles={setCurrentFolderFiles}
