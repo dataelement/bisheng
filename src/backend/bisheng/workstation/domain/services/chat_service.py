@@ -1360,8 +1360,6 @@ async def _agent_stream_chat_completion(
             has_citation_tool = knowledge_bases_info or any(
                 isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools
             )
-            if has_citation_tool and not prompt_has_citation_rules(sys_prompt):
-                sys_prompt = f"{sys_prompt}\n\n{CITATION_PROMPT_RULES}" if sys_prompt else CITATION_PROMPT_RULES
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(

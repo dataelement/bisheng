@@ -275,8 +275,6 @@ class AgentNode(BaseNode):
         # Citation-rule backstop: only inject when the node has citation tools and its own
         # system prompt doesn't already carry the rules (the default template does), so
         # existing nodes keep citations and updated prompts aren't duplicated.
-        if self._has_citation_tools(func_tools) and not prompt_has_citation_rules(system_prompt):
-            system_prompt = f"{system_prompt}\n\n{CITATION_PROMPT_RULES}"
         if self._agent_executor_type == "ReAct":
             self._agent = ConfigurableAssistant(
                 agent_executor_type=agent_executor_dict.get(self._agent_executor_type),

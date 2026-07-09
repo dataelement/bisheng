@@ -476,10 +476,7 @@ class AssistantService(BaseService, AssistantUtils):
             final_prompt += one_prompt.content
         # Append the citation rules block so the generated (user-visible, editable) prompt
         # carries them; the runtime backstop then detects them and won't duplicate.
-        if has_knowledge:
-            rules_block = f"\n\n{CITATION_PROMPT_RULES}"
-            yield str(StreamData(event="message", data={"type": "prompt", "message": rules_block}))
-            final_prompt += rules_block
+
         assistant.prompt = final_prompt
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 
