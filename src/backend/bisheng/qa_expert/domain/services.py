@@ -123,9 +123,9 @@ class ExpertService:
         for expert in experts:
             department = DepartmentDao.get_by_id(expert.depart_ment)
             if department:
-                expert.depart_name = department.name
+                expert.depart_ment = department.name
             else:
-                expert.depart_name = None
+                expert.depart_ment = None
         return experts, total
 
     async def delete_expert(self, expert_id: int) -> bool:
