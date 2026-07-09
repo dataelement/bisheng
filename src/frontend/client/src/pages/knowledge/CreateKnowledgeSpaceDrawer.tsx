@@ -95,7 +95,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
-    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
+    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
     const [autoTagLibraryId, setAutoTagLibraryId] = useState<number | null>(null);
@@ -135,7 +135,7 @@ export function CreateKnowledgeSpaceDrawer({
         setName("");
         setDescription("");
         setJoinPolicy("review");
-        setPublishToSquare("yes");
+        setPublishToSquare("no");
         setAutoTagEnabled(false);
         setAutoTagMode("library");
         setAutoTagLibraryId(null);
