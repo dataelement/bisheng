@@ -312,7 +312,7 @@ class AnswerRepository:
     async def get_by_expertname(self, expert_name: str,question_id: int) -> Optional[Answer]:
         """根据专家名称获取回答"""
         async with get_async_db_session() as session:
-            stmt = select(Answer).where(Answer.expert_name == expert_name and Answer.question_id == question_id)
+            stmt = select(Answer).where(and_(Answer.expert_name == expert_name, Answer.question_id == question_id))
             result = await session.exec(stmt)
             
             return result.first()
