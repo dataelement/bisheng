@@ -340,9 +340,9 @@ class AnswerRepository:
                 .where(and_(Answer.question_id == question_id, Answer.status != 3))                
             )
             if sort_by:
-                if sort_by == "vote_hot":
+                if sort_by == "top":
                     stmt = stmt.order_by(desc(Answer.vote_count), desc(Answer.created_at))
-                elif sort_by == "latest_time":
+                elif sort_by == "latest":
                     stmt = stmt.order_by(desc(Answer.created_at))
             stmt = stmt.offset(skip).limit(limit)
 
