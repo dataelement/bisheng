@@ -485,22 +485,34 @@ class KnowledgeSpaceTagLibraryService:
         await KnowledgeSpaceTagLibraryDao.adelete(library_id)
 
     @staticmethod
+    def _library_has_tags(
+        library: KnowledgeSpaceTagLibrary,
+        system: list[str],
+        manual: list[str],
+        ai: list[str],
+    ) -> bool:
+        return bool(system or manual or ai or library.tags or library.ai_tags)
+
+    @staticmethod
     async def validate_bindable_library(library_id: int | None) -> None:
         if not library_id:
-            raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须绑定非空标签库")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须绑定非空标签库")
         await KnowledgeSpaceTagLibraryService.validate_bindable_libraries([library_id])
 
     @staticmethod
     async def validate_bindable_libraries(library_ids: list[int] | None) -> None:
         normalized = list(dict.fromkeys(int(library_id) for library_id in (library_ids or []) if library_id))
         if not normalized:
-            raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须绑定非空标签库")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须绑定非空标签库")
+        has_any_tags = False
         for library_id in normalized:
             library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
             if not library:
                 raise KnowledgeSpaceTagLibraryNotExistError()
             if library.owner_knowledge_id is not None:
-                raise KnowledgeSpaceTagLibraryInvalidError(message="无效的标签库")
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="无效的标签库")
             system, manual, ai = await TagLibraryTagService.list_tag_names(library_id)
-            if not system and not manual and not ai and not (library.tags or library.ai_tags):
-                raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须绑定非空标签库")
+            if KnowledgeSpaceTagLibraryService._library_has_tags(library, system, manual, ai):
+                has_any_tags = True
+        if not has_any_tags:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须绑定非空标签库")
