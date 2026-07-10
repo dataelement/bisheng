@@ -236,7 +236,10 @@ async def get_spaces_by_level(
     order_by: str = "update_time",
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    spaces = await svc.get_spaces_by_level(space_level, order_by)
+    if space_level == KnowledgeSpaceLevelEnum.PUBLIC:
+        spaces = await svc.get_public_spaces(order_by)
+    else:
+        spaces = await svc.get_spaces_by_level(space_level, order_by)
     return resp_200(spaces)
 
 
@@ -459,8 +462,8 @@ async def list_space_children(
         description="是否富化文件的 tags/缩略图/摘要/版本字段；门户 QA 树传 false 以省开销",
     ),
     folder_count_mode: str = Query(
-        default="deep",
-        description="deep=深度可见数(默认);shallow=直接子文件数(门户 QA 树,零 openfga)",
+        default="none",
+        description="none=列表不统计目录数量(默认);shallow=直接子文件数(门户 QA 树,零 openfga)",
     ),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:

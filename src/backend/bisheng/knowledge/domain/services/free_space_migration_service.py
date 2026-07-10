@@ -75,7 +75,7 @@ class FreeSpaceMigrationService:
 
     @classmethod
     async def pre_delete_guard(cls, space) -> "MigrationDecision":
-        """删除前置判定：迁移中/科室库禁止删除/非 team 直接删/自由 team 库判迁移目标与向量模型。"""
+        """删除前置判定：迁移中阻断；科室库和非 team 库直接删除；自由 team 库判迁移目标与向量模型。"""
         space_id = getattr(space, "id", None)
         if space.state == KnowledgeState.COPYING.value:
             _logger.info("pre_delete_guard space=%s → block(migrating 迁移中)", space_id)
@@ -83,10 +83,10 @@ class FreeSpaceMigrationService:
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space.id)
         if binding is not None:
             _logger.info(
-                "pre_delete_guard space=%s → block(department_space_forbidden 科室库禁删，需先解绑)",
+                "pre_delete_guard space=%s → normal_delete(科室库允许删除，绑定随知识库级联清理)",
                 space_id,
             )
-            return MigrationDecision("block", reason="department_space_forbidden")
+            return MigrationDecision("normal_delete")
         scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space.id)
         level = getattr(scope, "level", None)
         if level != KnowledgeSpaceLevelEnum.TEAM.value and level != KnowledgeSpaceLevelEnum.TEAM:

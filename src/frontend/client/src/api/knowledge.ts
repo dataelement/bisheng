@@ -1890,7 +1890,7 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
     await request.delete(
         `/api/v1/knowledge/space/${space_id}`,
         // Opt into the interceptor's business-error pipeline: a blocked delete
-        // (e.g. 科室知识库禁止删除 / 权限不足) returns HTTP 200 with an envelope
+        // (e.g. 权限不足 / 自由库迁移条件不满足) returns HTTP 200 with an envelope
         // status_code !== 200; without this it would resolve as a false success.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { skip403Redirect: true } as any,

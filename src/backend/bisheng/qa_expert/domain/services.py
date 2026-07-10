@@ -104,7 +104,13 @@ class ExpertService:
             user_id=request.user_id,
             major = request.major
         )
-        return await self.repository.create(expert)
+        temp_expert = await self.repository.create(expert)
+        depart = DepartmentDao.get_by_id(temp_expert.depart_ment)
+        if depart:
+            temp_expert.depart_ment = depart.name
+        else:
+            temp_expert.depart_ment = None
+        return temp_expert
 
     async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> Expert:
         """更新专家信息"""

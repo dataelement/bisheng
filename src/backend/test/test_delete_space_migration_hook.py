@@ -63,13 +63,13 @@ async def test_migrate_branch_rolls_back_copying_when_enqueue_fails():
 
 @pytest.mark.asyncio
 async def test_block_branch_raises():
-    from bisheng.common.errcode.knowledge_space import DepartmentSpaceDeleteForbiddenError
+    from bisheng.common.errcode.knowledge_space import FreeSpaceMigrationTargetNotFoundError
     svc = _svc()
     with patch(f"{MOD}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=_space())), \
          patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id", new=AsyncMock(return_value=None)), \
          patch(f"{MOD}.FreeSpaceMigrationService.pre_delete_guard",
-               new=AsyncMock(return_value=MigrationDecision("block", reason="department_space_forbidden"))):
-        with pytest.raises(Exception):
+               new=AsyncMock(return_value=MigrationDecision("block", reason="target_not_found"))):
+        with pytest.raises(FreeSpaceMigrationTargetNotFoundError):
             await svc.delete_space(1)
 
 

@@ -223,7 +223,7 @@ async def list_questions(
     )
 
 
-@router.get("/questions/answer_count", response_model=list[dict])
+@router.get("/questions/answer_count/domain", response_model=list[dict])
 async def get_answer_count_by_domain(
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: QuestionService = Depends(get_question_service),

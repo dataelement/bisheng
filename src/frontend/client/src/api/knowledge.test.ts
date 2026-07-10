@@ -194,7 +194,7 @@ describe("deleteSpaceApi", () => {
     mockDelete.mockReset();
   });
 
-  // A blocked delete (e.g. 科室知识库禁止删除 / 权限不足) comes back as HTTP 200 with an
+  // A blocked delete (e.g. 权限不足 / 自由库迁移条件不满足) comes back as HTTP 200 with an
   // envelope status_code !== 200. Passing skip403Redirect opts the call into the response
   // interceptor's business-error pipeline, which toasts the backend message and rejects —
   // so the caller shows the reason instead of a false "删除成功".
