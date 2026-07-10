@@ -208,6 +208,10 @@ export function buildPortalUploadMetadataPayload(
     return payload;
 }
 
+function isPendingReviewUploadTag(tag: SpaceTag): boolean {
+    return tag.review_status === 0;
+}
+
 export function buildUploadTagOptions(
     existingTags: SpaceTag[],
     commonTagNames: string[],
@@ -216,6 +220,9 @@ export function buildUploadTagOptions(
     const seenNames = new Set<string>();
 
     existingTags.forEach((tag) => {
+        if (isPendingReviewUploadTag(tag)) {
+            return;
+        }
         const name = String(tag.name ?? "").trim();
         const id = Number(tag.id);
         if (!name || !Number.isInteger(id) || id <= 0 || seenNames.has(name)) return;
