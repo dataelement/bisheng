@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -129,6 +129,24 @@ class TestNoChange:
         patches.audit.assert_not_awaited()
 
 
+def test_maintenance_force_sync_bypasses_enabled_resource_gate(patches, monkeypatch):
+    _set_enforce(monkeypatch, True)
+    patches.resolve.return_value = _tenant(7)
+    patches.get_active.return_value = _user_tenant(100, 5)
+    patches.count_owned.return_value = 3
+
+    result = asyncio.run(
+        UserTenantSyncService.force_sync_user_for_maintenance(
+            100, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+        )
+    )
+
+    assert result.id == 7
+    patches.activate.assert_awaited_once_with(100, 7)
+    patches.increment.assert_awaited_once_with(100)
+    patches.notify.assert_awaited_once_with(100, 5, 7, 3)
+
+
 # -------------------------------------------------------------------------
 # Relocate — happy path
 # -------------------------------------------------------------------------
@@ -218,7 +236,7 @@ class TestRelocateHappy:
 
         asyncio.run(UserTenantSyncService.sync_user(103))
 
-        args, kwargs = patches.batch_tuples.call_args
+        args, _kwargs = patches.batch_tuples.call_args
         ops = args[0]
         # Only a delete for the old tenant; no write for Root.
         assert len(ops) == 1
