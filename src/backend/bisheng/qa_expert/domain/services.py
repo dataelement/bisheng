@@ -198,9 +198,14 @@ class QuestionService:
         limit: int = 20,
     ) -> tuple[List[Question], int]:
         """列表查询问题"""
-        return await self.repository.list_all(
+        questions, total = await self.repository.list_all(
             business_domain=business_domain, status=status, sort_by=sort_by, user_id=user_id, skip=skip, limit=limit
         )
+        if questions and len(questions) > 0:
+            for question in questions:
+                vote_count = await self.answer_repo.get_answer_vote_count(question.id)
+                question.vote_count = vote_count
+        return questions, total
 
     async def get_question_detail(self, question_id: int, user_id: Optional[int] = None) -> Question:
         """获取问题详情"""

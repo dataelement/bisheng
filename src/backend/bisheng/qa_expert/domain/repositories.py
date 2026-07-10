@@ -380,6 +380,15 @@ class AnswerRepository:
             await session.flush()
             return True
 
+    async def get_answer_vote_count(self, question_id: int) -> int:
+        """获取回答的投票数"""
+        async with get_async_db_session() as session:
+            stmt = (
+                select(func.sum(Answer.vote_count).over().label("total_vote_count"))
+                .where(and_(Answer.question_id == question_id, Answer.status != 3))
+            )
+            result = await session.exec(stmt)
+            return result.first() or 0
 
 class CommentRepository:
     """评论仓储"""
