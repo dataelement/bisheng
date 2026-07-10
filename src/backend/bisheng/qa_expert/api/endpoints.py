@@ -313,11 +313,12 @@ async def get_answers(
     question_id: int = Path(..., ge=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
+    sort_by: Optional[str] = Query(None),
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: AnswerService = Depends(get_answer_service),
 ):
     """获取问题的所有回答"""
-    answers, total = await service.get_answers(question_id, (page - 1) * page_size, page_size)
+    answers, total = await service.get_answers(question_id, (page - 1) * page_size, page_size, sort_by)
     return resp_200(data={"answers": answers, "total": total})
 
 

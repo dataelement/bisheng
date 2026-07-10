@@ -479,9 +479,9 @@ class AnswerService:
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
         return answer
 
-    async def get_answers(self, question_id: int, skip: int = 0, limit: int = 100) -> tuple[List[Answer], int]:
+    async def get_answers(self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None) -> tuple[List[Answer], int]:
         """获取问题的回答列表"""
-        return await self.repository.get_by_question_id(question_id, skip=skip, limit=limit)
+        return await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
 
 
     async def get_by_expertname(self,  expert_name: str,question_id: int,) -> Optional[Answer]:

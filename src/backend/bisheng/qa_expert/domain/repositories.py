@@ -332,16 +332,19 @@ class AnswerRepository:
             return result.first()
 
 
-    async def get_by_question_id(self, question_id: int, skip: int = 0, limit: int = 100) -> tuple[List[Answer], int]:
+    async def get_by_question_id(self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None) -> tuple[List[Answer], int]:
         """获取问题的所有回答"""
         async with get_async_db_session() as session:
             stmt = (
                 select(Answer, func.count().over().label("total"))
-                .where(Answer.question_id == question_id)
-                .order_by(Answer.status == 1, desc(Answer.vote_count), desc(Answer.created_at))
-                .offset(skip)
-                .limit(limit)
+                .where(and_(Answer.question_id == question_id, Answer.status != 3))                
             )
+            if sort_by:
+                if sort_by == "vote_hot":
+                    stmt = stmt.order_by(desc(Answer.vote_count), desc(Answer.created_at))
+                elif sort_by == "latest_time":
+                    stmt = stmt.order_by(desc(Answer.created_at))
+            stmt = stmt.offset(skip).limit(limit)
 
             result = await session.exec(stmt)
             rows = result.all()  # 获取所有的 Row 对象
