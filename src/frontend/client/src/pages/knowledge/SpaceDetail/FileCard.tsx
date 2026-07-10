@@ -1,4 +1,4 @@
-import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Send, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
+import { Download, Edit, FileSearch, GitBranch, History, Loader2, MoreVertical, RefreshCw, Send, Shield, Tag, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -533,7 +533,12 @@ export function FileCard({
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
                             {isFolder && file.folderStatsLoading && (
-                                <span className="text-xs text-[#86909c] whitespace-nowrap">加载中</span>
+                                <Loader2
+                                    size={14}
+                                    className="animate-spin text-[#86909c]"
+                                    role="status"
+                                    aria-label={`${file.name} 文件夹数量加载中`}
+                                />
                             )}
                             {isFolder && file.folderStatsError && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">--</span>
