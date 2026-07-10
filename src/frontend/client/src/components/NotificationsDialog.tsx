@@ -105,6 +105,13 @@ const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
     "approval_execute_failed",
 ]);
 
+const QA_EXPERT_ACTION_CODES = new Set([
+    "qa_expert_invited",
+    "qa_expert_answered",
+    "qa_answer_commented",
+    "qa_answer_accepted",
+]);
+
 export function NotificationsDialog({
     open = false,
     onOpenChange,
@@ -675,6 +682,35 @@ export function NotificationsDialog({
         return null;
     };
 
+    const getQaQuestionTarget = (notification: MessageItem): { targetType: "qa_question"; targetId: string } | null => {
+        const actionCode = getActionCode(notification);
+        if (!QA_EXPERT_ACTION_CODES.has(actionCode) && !QA_EXPERT_ACTION_CODES.has(notification.action_code || "")) {
+            return null;
+        }
+
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            if (metadata?.business_type === "qa_question") {
+                const questionId = metadata?.data?.question_id ?? metadata?.business_id;
+                if (questionId !== undefined && questionId !== null && String(questionId) !== "") {
+                    return { targetType: "qa_question", targetId: String(questionId) };
+                }
+            }
+        }
+
+        // Fallback: any business_url payload that carries a question_id.
+        for (const part of parts) {
+            const data = (part as any)?.metadata?.data ?? {};
+            const questionId = data?.question_id;
+            if (questionId !== undefined && questionId !== null && String(questionId) !== "") {
+                return { targetType: "qa_question", targetId: String(questionId) };
+            }
+        }
+
+        return null;
+    };
+
     const markOneAsRead = (nid: string) => {
         markMessageReadApi([Number(nid)]).catch(() => { });
         applyReadToUnreadCounts(notifications.find(n => String(n.id) === nid));
@@ -705,7 +741,7 @@ export function NotificationsDialog({
         const approvalStatus = notification.status;
         const { text, targetName, showApproval } = getNotificationText(notification);
         const supplementaryText = getSupplementaryText(notification);
-        const target = getNotificationTarget(notification);
+        const target = getNotificationTarget(notification) ?? getQaQuestionTarget(notification);
         const targetSplitMatch = targetName
             ? text.match(new RegExp(`^(.*?)([-—\\s]*${escapeRegExp(targetName)})(.*)$`))
             : null;
@@ -713,6 +749,61 @@ export function NotificationsDialog({
         const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
         const canNavigateTarget = Boolean(target && target.targetId && targetName);
         const targetLabel = targetName;
+
+        const handleTargetClick = () => {
+            console.info("[NotificationsDialog] target click", {
+                notificationId: notification.id,
+                messageType: notification.message_type,
+                actionCode: notification.action_code,
+                systemTextCode: getSystemTextCode(notification),
+                targetName,
+                resolvedTarget: target,
+            });
+            if (!target) {
+                console.warn("[NotificationsDialog] target unresolved", {
+                    notificationId: notification.id,
+                    content: notification.content,
+                });
+                return;
+            }
+            if (!notification.is_read) {
+                markOneAsRead(id);
+            }
+            const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+            const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+            if (target.targetType === "qa_question") {
+                const route = `/qa-expert/question/${target.targetId}`;
+                console.info("[NotificationsDialog] navigate", {
+                    notificationId: notification.id,
+                    route,
+                });
+                window.open(normalizedBase + route, "_blank");
+            } else if (target.targetType === "channel") {
+                const route = isRejectedChannelJoinNotification(notification)
+                    ? `/channel/share/${target.targetId}?square=1`
+                    : `/channel/${target.targetId}`;
+                console.info("[NotificationsDialog] navigate", {
+                    notificationId: notification.id,
+                    route,
+                });
+                window.open(normalizedBase + route, "_blank");
+            } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
+                const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
+                console.info("[NotificationsDialog] navigate", {
+                    notificationId: notification.id,
+                    route,
+                });
+                window.open(normalizedBase + route, "_blank");
+            } else {
+                const route = `/knowledge/space/${target.targetId}`;
+                console.info("[NotificationsDialog] navigate", {
+                    notificationId: notification.id,
+                    route,
+                });
+                window.open(normalizedBase + route, "_blank");
+            }
+            onOpenChange?.(false);
+        };
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
@@ -848,50 +939,7 @@ export function NotificationsDialog({
                             {!targetSplitMatch && canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"
-                                    onClick={() => {
-                                        console.info("[NotificationsDialog] target click", {
-                                            notificationId: notification.id,
-                                            messageType: notification.message_type,
-                                            actionCode: notification.action_code,
-                                            systemTextCode: getSystemTextCode(notification),
-                                            targetName,
-                                            resolvedTarget: target,
-                                        });
-                                        if (!target) {
-                                            console.warn("[NotificationsDialog] target unresolved", {
-                                                notificationId: notification.id,
-                                                content: notification.content,
-                                            });
-                                            return;
-                                        }
-                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-                                        if (target.targetType === "channel") {
-                                            const route = isRejectedChannelJoinNotification(notification)
-                                                ? `/channel/share/${target.targetId}?square=1`
-                                                : `/channel/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
-                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else {
-                                            const route = `/knowledge/space/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        }
-                                        onOpenChange?.(false);
-                                    }}
+                                    onClick={handleTargetClick}
                                 >
                                     {targetLabel}
                                 </span>
@@ -903,50 +951,7 @@ export function NotificationsDialog({
                             {targetSplitMatch && canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"
-                                    onClick={() => {
-                                        console.info("[NotificationsDialog] target click", {
-                                            notificationId: notification.id,
-                                            messageType: notification.message_type,
-                                            actionCode: notification.action_code,
-                                            systemTextCode: getSystemTextCode(notification),
-                                            targetName,
-                                            resolvedTarget: target,
-                                        });
-                                        if (!target) {
-                                            console.warn("[NotificationsDialog] target unresolved", {
-                                                notificationId: notification.id,
-                                                content: notification.content,
-                                            });
-                                            return;
-                                        }
-                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-                                        if (target.targetType === "channel") {
-                                            const route = isRejectedChannelJoinNotification(notification)
-                                                ? `/channel/share/${target.targetId}?square=1`
-                                                : `/channel/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
-                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else {
-                                            const route = `/knowledge/space/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        }
-                                        onOpenChange?.(false);
-                                    }}
+                                    onClick={handleTargetClick}
                                 >
                                     {targetLabel}
                                 </span>

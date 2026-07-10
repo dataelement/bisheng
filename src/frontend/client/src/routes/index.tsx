@@ -31,6 +31,7 @@ import PortalWorkflowChatPage from '~/pages/portalWorkflowChat/PortalWorkflowCha
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
+import QaExpertQuestionDetail from '~/pages/qaExpert/QuestionDetailPage';
 import ShougangPortalAdmin from '@/pages/ShougangPortalAdmin';
 import { useAuthContext } from '@/hooks';
 import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
@@ -200,6 +201,7 @@ export const router = createBrowserRouter([
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
           { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
           { path: 'shougang-portal-admin', element: <ShougangPortalAdmin /> },
+          { path: 'qa-expert/question/:questionId', element: <QaExpertQuestionDetail /> },
         ],
       },
       // Chrome-less host for the portal approval/notification dialogs, embedded

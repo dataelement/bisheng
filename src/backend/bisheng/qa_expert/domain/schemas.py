@@ -272,6 +272,7 @@ class AnswerDetailResponse(BaseModel):
     question_id: int
     user_id: int
     expert_id: Optional[int]
+    expert_name: Optional[str] = None
     content: str
     status: str
     attachments: List[str]
