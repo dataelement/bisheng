@@ -146,51 +146,9 @@ steps:
       - 'docker push $DOCKER_REPO:$VERSION'
 
   # =========================================
-  # backend 部署（源码映射）
+  # 拉取 sg 分支最新镜像并部署
   # =========================================
-  - name: deploy_backend
-
-    image: appleboy/drone-ssh
-
-    pull: if-not-exists
-
-    settings:
-
-      host: 192.168.106.171
-
-      username: root
-
-      password:
-        from_secret: sshpwd
-
-      port: 22
-
-      command_timeout: 20m
-
-      script: |
-
-        set -e
-
-        echo "======= deploy backend ======="
-
-        export https_proxy=http://118.195.232.223:39995
-        export http_proxy=http://118.195.232.223:39995
-        export all_proxy=socks5://118.195.232.223:39995
-
-        cd /opt/code/bisheng
-
-        echo "======= pull latest code ======="
-
-        git pull
-
-        echo "======= restart backend ======="
-
-        docker compose -f docker/docker-compose.yml restart backend backend_worker
-
-  # =========================================
-  # frontend 部署
-  # =========================================
-  - name: deploy_frontend
+  - name: deploy_sg_images
 
     image: appleboy/drone-ssh
 
@@ -223,27 +181,38 @@ steps:
 
       script: |
 
-        set -e
+        set -eu
 
-        echo "======= deploy frontend ======="
+        echo "======= deploy latest sg images ======="
 
         export https_proxy=http://118.195.232.223:39995
         export http_proxy=http://118.195.232.223:39995
         export all_proxy=socks5://118.195.232.223:39995
+        export no_proxy=cr.dataelem.com,192.168.106.171,localhost,127.0.0.1
 
         cd /opt/code/bisheng
+
+        echo "======= update deployment config ======="
+
+        git fetch origin feat/2.5.0-sg
+        git checkout feat/2.5.0-sg
+        git pull --ff-only origin feat/2.5.0-sg
 
         echo "======= login docker registry ======="
 
         echo "$NEXUS_PASSWORD" | docker login cr.dataelem.com -u "$NEXUS_USER" --password-stdin
 
-        echo "======= pull frontend image ======="
+        echo "======= pull application images ======="
 
-        docker compose -f docker/docker-compose.yml pull frontend
+        docker compose -f docker/docker-compose.yml pull backend backend_worker frontend
 
-        echo "======= restart frontend ======="
+        echo "======= recreate application containers ======="
 
-        docker compose -f docker/docker-compose.yml up -d frontend
+        docker compose -f docker/docker-compose.yml up -d --no-deps --force-recreate backend backend_worker frontend
+
+        echo "======= application status ======="
+
+        docker compose -f docker/docker-compose.yml ps backend backend_worker frontend
 
   # =========================================
   # 飞书通知
