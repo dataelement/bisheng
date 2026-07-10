@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChannelSubscribeScenarioHandler:
-    scenario_code = 'channel_subscribe_request'
+    scenario_code = "channel_subscribe_request"
 
     def __init__(self, space_channel_member_repository, sync_permissions=None):
         self.space_channel_member_repository = space_channel_member_repository
@@ -22,34 +22,36 @@ class ChannelSubscribeScenarioHandler:
 
     async def build_detail(self, req) -> dict:
         return {
-            'channel_name': req.payload_snapshot.get('channel_name') or req.business_name,
+            "channel_name": req.payload_snapshot.get("channel_name") or req.business_name,
         }
 
     async def build_business_link(self, req) -> dict:
-        return {'channel_id': req.payload_snapshot.get('channel_id')}
+        return {"channel_id": req.payload_snapshot.get("channel_id")}
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
-        sources = node_config.get('sources') or []
+        sources = node_config.get("sources") or []
         if not sources:
-            approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
+            approver_ids = node_config.get("approver_user_ids") or node_config.get("user_ids") or []
             return [int(one) for one in approver_ids]
 
         from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
         from bisheng.common.models.space_channel_member import UserRoleEnum
 
-        channel_source_types = {'channel_admin', 'channel_owner', 'channel_manager'}
-        has_channel_source = any(s.get('type') in channel_source_types for s in sources)
+        channel_source_types = {"channel_admin", "channel_owner", "channel_manager"}
+        has_channel_source = any(s.get("type") in channel_source_types for s in sources)
 
         channel_admin_ids: list[int] = []
         if has_channel_source:
-            channel_id = req.payload_snapshot.get('channel_id') or req.business_resource_id
+            channel_id = req.payload_snapshot.get("channel_id") or req.business_resource_id
             if channel_id:
                 try:
                     creators = await self.space_channel_member_repository.find_members_by_role(
-                        channel_id=str(channel_id), role=UserRoleEnum.CREATOR,
+                        channel_id=str(channel_id),
+                        role=UserRoleEnum.CREATOR,
                     )
                     admins = await self.space_channel_member_repository.find_members_by_role(
-                        channel_id=str(channel_id), role=UserRoleEnum.ADMIN,
+                        channel_id=str(channel_id),
+                        role=UserRoleEnum.ADMIN,
                     )
                     seen_admin: set[int] = set()
                     for m in creators + admins:
@@ -57,20 +59,20 @@ class ChannelSubscribeScenarioHandler:
                             seen_admin.add(m.user_id)
                             channel_admin_ids.append(m.user_id)
                 except Exception:
-                    logger.exception('resolve_approvers: failed to load channel admins for channel_id=%s', channel_id)
+                    logger.exception("resolve_approvers: failed to load channel admins for channel_id=%s", channel_id)
 
         seen: set[int] = set()
         result: list[int] = []
 
         for source in sources:
-            source_type = source.get('type', '')
+            source_type = source.get("type", "")
             if source_type in channel_source_types:
                 for uid in channel_admin_ids:
                     if uid not in seen:
                         seen.add(uid)
                         result.append(uid)
 
-        generic_sources = [s for s in sources if s.get('type') not in channel_source_types]
+        generic_sources = [s for s in sources if s.get("type") not in channel_source_types]
         if generic_sources:
             generic_ids = await resolve_approvers_from_sources(generic_sources, req)
             for uid in generic_ids:
@@ -88,7 +90,7 @@ class ChannelSubscribeScenarioHandler:
             # instance EXECUTED while the membership stays PENDING and ReBAC is never
             # written, so the channel never appears in the user's subscription list.
             raise RuntimeError(
-                f'Channel membership not found for approval instance={instance_id}, '
+                f"Channel membership not found for approval instance={instance_id}, "
                 f"channel_id={payload_snapshot.get('channel_id')}, "
                 f"applicant_user_id={payload_snapshot.get('applicant_user_id')}"
             )
@@ -96,23 +98,35 @@ class ChannelSubscribeScenarioHandler:
         await self.space_channel_member_repository.update(membership)
         if self.sync_permissions:
             await self.sync_permissions(
-                str(payload_snapshot['channel_id']),
+                str(payload_snapshot["channel_id"]),
                 membership.user_id,
                 membership.user_role,
                 is_active=True,
             )
-        return {'status': MembershipStatusEnum.ACTIVE.value}
+        return {"status": MembershipStatusEnum.ACTIVE.value}
 
     async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
-        membership = await self._get_membership(payload_snapshot)
-        if not membership:
-            logger.warning('Channel membership not found when approval instance=%s rejected', instance_id)
-            return
-        membership.status = MembershipStatusEnum.REJECTED
-        await self.space_channel_member_repository.update(membership)
+        await self._delete_pending_membership(instance_id, payload_snapshot, action="rejected")
 
     async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
-        return None
+        await self._delete_pending_membership(instance_id, payload_snapshot, action="withdrawn")
+
+    async def _delete_pending_membership(self, instance_id: int, payload_snapshot: dict, action: str) -> None:
+        membership = await self._get_membership(payload_snapshot)
+        if not membership:
+            logger.warning("Channel membership not found when approval instance=%s %s", instance_id, action)
+            return
+        if membership.status != MembershipStatusEnum.PENDING:
+            logger.warning(
+                "Channel membership is not pending when approval instance=%s %s: status=%s",
+                instance_id,
+                action,
+                membership.status,
+            )
+            return
+        if membership.id is None:
+            raise RuntimeError(f"Channel membership has no id when approval instance={instance_id} {action}")
+        await self.space_channel_member_repository.delete(membership.id)
 
     async def on_cancelled(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
         membership = await self._get_membership(payload_snapshot)
@@ -123,7 +137,7 @@ class ChannelSubscribeScenarioHandler:
 
     async def _get_membership(self, payload_snapshot: dict):
         return await self.space_channel_member_repository.find_membership(
-            business_id=str(payload_snapshot['channel_id']),
+            business_id=str(payload_snapshot["channel_id"]),
             business_type=BusinessTypeEnum.CHANNEL,
-            user_id=int(payload_snapshot['applicant_user_id']),
+            user_id=int(payload_snapshot["applicant_user_id"]),
         )
