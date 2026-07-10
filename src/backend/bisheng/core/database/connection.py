@@ -125,6 +125,21 @@ class DatabaseConnectionManager:
 
         return config
 
+    def _get_engine_config(self) -> dict[str, Any]:
+        """Combine defaults with caller-supplied SQLAlchemy engine options.
+
+        ``connect_args`` are nested options. Updating the outer configuration
+        directly would replace MySQL's default ``charset`` when TLS adds an
+        ``SSLContext``; merge the nested mapping instead.
+        """
+        config = self._get_default_engine_config()
+        engine_kwargs = self.engine_kwargs.copy()
+        connect_args = engine_kwargs.pop("connect_args", None)
+        config.update(engine_kwargs)
+        if connect_args:
+            config.setdefault("connect_args", {}).update(connect_args)
+        return config
+
     @staticmethod
     def _normalize_dm_url(url: str) -> str:
         """Carry a DaMeng schema via the URL query string, never the path.
@@ -173,8 +188,7 @@ class DatabaseConnectionManager:
     def engine(self) -> Engine:
         """Get Synchronization Database Engine"""
         if self._engine is None:
-            config = self._get_default_engine_config()
-            config.update(self.engine_kwargs)
+            config = self._get_engine_config()
             # StaticPool (SQLite) rejects QueuePool sizing kwargs; drop them so
             # an externally-supplied pool config doesn't break SQLite engines.
             if config.get("poolclass") is StaticPool:
@@ -193,8 +207,7 @@ class DatabaseConnectionManager:
     def async_engine(self) -> AsyncEngine:
         """Get Asynchronous Database Engine"""
         if self._async_engine is None:
-            config = self._get_default_engine_config()
-            config.update(self.engine_kwargs)
+            config = self._get_engine_config()
 
             # Remove Synchronization Engine Specific Configuration
             config.pop("poolclass", None)
