@@ -57,6 +57,91 @@ const PERMISSION_RELATION: Record<string, string> = {
   manage_file_relation: 'can_manage',
 }
 
+const PERMISSION_IDS_CACHE_TTL_MS = 60_000
+
+type PermissionIdsCacheEntry = {
+  expiresAt: number
+  permissions: Record<string, string[]>
+}
+
+type PermissionIdsCheckResult = {
+  hasError: boolean
+  permissions: Record<string, string[]>
+}
+
+const permissionIdsCache = new Map<string, PermissionIdsCacheEntry>()
+const permissionIdsInFlight = new Map<string, Promise<PermissionIdsCheckResult>>()
+
+function getPermissionIdsCacheKey(
+  userId: string,
+  resourceType: ResourceType,
+  resourceIds: string[],
+  permissionIds: string[],
+): string {
+  return JSON.stringify([userId, resourceType, resourceIds, permissionIds])
+}
+
+function getPermissionIds(
+  userId: string,
+  resourceType: ResourceType,
+  resourceIds: string[],
+  permissionIds: string[],
+): Promise<PermissionIdsCheckResult> {
+  const cacheKey = getPermissionIdsCacheKey(userId, resourceType, resourceIds, permissionIds)
+  const cached = permissionIdsCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return Promise.resolve({ hasError: false, permissions: cached.permissions })
+  }
+
+  if (cached) permissionIdsCache.delete(cacheKey)
+
+  const inFlight = permissionIdsInFlight.get(cacheKey)
+  if (inFlight) return inFlight
+
+  const request = Promise.all(resourceIds.map(async (resourceId): Promise<[string, string[], boolean]> => {
+    const allowedPermissions: string[] = []
+    let hasError = false
+
+    for (const permissionId of permissionIds) {
+      try {
+        const res = await checkPermission(
+          resourceType,
+          resourceId,
+          PERMISSION_RELATION[permissionId] || 'can_read',
+          permissionId,
+        )
+        if (res?.allowed) allowedPermissions.push(permissionId)
+      } catch {
+        // A failed check must not be cached, otherwise a transient error hides actions for a minute.
+        hasError = true
+      }
+    }
+
+    return [resourceId, allowedPermissions, hasError]
+  })).then((results) => {
+    const permissions: Record<string, string[]> = {}
+    const hasError = results.some(([, , failed]) => failed)
+
+    for (const [id, ids] of results) {
+      if (ids.length) permissions[id] = ids
+    }
+
+    if (!hasError) {
+      permissionIdsCache.set(cacheKey, {
+        expiresAt: Date.now() + PERMISSION_IDS_CACHE_TTL_MS,
+        permissions,
+      })
+    }
+
+    return { hasError, permissions }
+  }).finally(() => {
+    permissionIdsInFlight.delete(cacheKey)
+  })
+
+  permissionIdsInFlight.set(cacheKey, request)
+  return request
+}
+
 export function canManageResource(levels: Record<string, RelationLevel>, id: string | number): boolean {
   const level = levels[String(id)]
   return level === 'owner' || level === 'manager'
@@ -143,12 +228,16 @@ export function usePermissionIds(
   const { user } = useContext(userContext)
   const [permissions, setPermissions] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(false)
-  const abortRef = useRef<AbortController | null>(null)
+  const userId = user?.user_id == null ? '' : String(user.user_id)
+  const resourceIdsKey = resourceIds.join(',')
+  const permissionIdsKey = permissionIds.join(',')
 
   useEffect(() => {
-    if (!resourceIds.length || !permissionIds.length) {
-      abortRef.current?.abort()
+    // Wait for UserProvider to resolve the current user. Starting checks with its
+    // initial empty object used to trigger an extra round after user info arrived.
+    if (!userId || !resourceIds.length || !permissionIds.length) {
       setPermissions({})
+      setLoading(false)
       return
     }
 
@@ -162,59 +251,25 @@ export function usePermissionIds(
       return
     }
 
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-
     setLoading(true)
+    let disposed = false
 
-    let notifiedError = false
-    const notifyErrorOnce = (error: unknown) => {
-      if (error == null || notifiedError || controller.signal.aborted || (error as any)?.code === "ERR_CANCELED") return
-      notifiedError = true
-      toast({
-        title: '提示',
-        variant: 'error',
-        description: typeof error === 'string' && error ? error : '权限校验失败，请稍后重试',
-      })
-    }
+    getPermissionIds(userId, resourceType, resourceIds, permissionIds).then((result) => {
+      if (disposed) return
 
-    const resolvePermissions = async (resourceId: string): Promise<[string, string[]]> => {
-      const allowedPermissions: string[] = []
-      for (const permissionId of permissionIds) {
-        if (controller.signal.aborted) return [resourceId, allowedPermissions]
-        try {
-          const res = await checkPermission(
-            resourceType,
-            resourceId,
-            PERMISSION_RELATION[permissionId] || 'can_read',
-            permissionId,
-          )
-          if (res?.allowed) allowedPermissions.push(permissionId)
-        } catch (error) {
-          // Keep permission checks best-effort for UI gating; backend still enforces.
-          notifyErrorOnce(error)
-        }
-      }
-      return [resourceId, allowedPermissions]
-    }
-
-    Promise.allSettled(resourceIds.map(resolvePermissions)).then((results) => {
-      if (controller.signal.aborted) return
-
-      const newPermissions: Record<string, string[]> = {}
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const [id, ids] = result.value
-          if (ids.length) newPermissions[id] = ids
-        }
-      }
-      setPermissions(newPermissions)
+      setPermissions(result.permissions)
       setLoading(false)
+      if (result.hasError) {
+        toast({
+          title: '提示',
+          variant: 'error',
+          description: '权限校验失败，请稍后重试',
+        })
+      }
     })
 
-    return () => { controller.abort() }
-  }, [resourceType, resourceIds.join(','), permissionIds.join(','), user?.role])
+    return () => { disposed = true }
+  }, [resourceType, resourceIdsKey, permissionIdsKey, user?.role, userId])
 
   return { permissions, loading }
 }
