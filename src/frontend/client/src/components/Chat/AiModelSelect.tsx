@@ -23,6 +23,11 @@ const AiModelSelect = memo(
             if (!options) return [];
             const seen = new Set<string>();
             return options.filter((opt) => {
+                // Radix <SelectItem> throws when its value is an empty string.
+                // A stale / mis-configured workbench model can carry a blank id
+                // (older backends don't sanitize it out), so drop those here —
+                // never render <SelectItem value="">, which crashes the page.
+                if (opt?.id == null || String(opt.id) === "") return false;
                 const id = String(opt.id);
                 if (seen.has(id)) return false;
                 seen.add(id);
