@@ -82,6 +82,13 @@ export default function WorkbenchModel({ onBack }) {
         if (!models.length) {
             errors.push('请至少配置一个对话模型');
         }
+        // Reject blank rows: a model without an id serializes to `{ id: '' }`,
+        // which reaches the client model picker as <SelectItem value="">
+        // (empty string) and crashes the whole page in Radix. Force the admin
+        // to pick a model or remove the empty row before saving.
+        if (models.some((m) => !m.id)) {
+            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
+        }
         if (errors.length) return message({ variant: 'error', description: errors });
         setSaveLoad(true);
         try {
