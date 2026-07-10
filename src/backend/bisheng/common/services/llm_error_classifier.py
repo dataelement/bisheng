@@ -67,29 +67,34 @@ class ErrorType(str, enum.Enum):
 # Flat shared signatures — extend these (and only these) for a new vendor.
 # ---------------------------------------------------------------------------
 
-# Quota / billing EXHAUSTION (balance/credit run out — will NOT recover). MUST be
-# checked before rate-limit, because a quota error can surface as HTTP 429 just
-# like a transient rate limit, but its remedy is "top up", not "retry later".
-# Kept narrow so transient quota *throttling* (see _RATE_LIMIT_SIGNATURES) is not
-# mislabeled as an unrecoverable billing error.
+# Billing/balance EXHAUSTION ONLY — the account owes money or its balance/credit
+# is depleted. Retrying is useless (the sole remedy is "top up"), so this bucket
+# FAIL_FASTs. MUST be checked before rate-limit, because such an error can surface
+# as HTTP 429 just like a transient rate limit. Kept DELIBERATELY NARROW to
+# unambiguous *money* wording only. The generic quota/配额/额度 family — including
+# the OpenAI ``insufficient_quota`` code and the "exceeded your current quota" /
+# "allocated quota exceeded" messages — lives in _RATE_LIMIT_SIGNATURES instead:
+# MaaS gateways (Aliyun Bailian / DashScope and other OpenAI-compatible endpoints)
+# reuse those OpenAI-shaped signals for TPM/TPS *throttling* (429-Throttling.*),
+# which DOES recover. Product decision: only arrears/balance wording is treated as
+# unrecoverable exhaustion. Because quota is checked first, a body carrying any of
+# these strong money signals still wins over a co-occurring throttle word, pinning
+# genuine arrears to the "top up" copy.
 _QUOTA_SIGNATURES: tuple[str, ...] = (
-    "insufficient_quota",
-    "insufficient quota",
     "arrearage",
-    "quota used up",
-    "quota_used_up",
+    "insufficient balance",
     "余额不足",
     "欠费",
-    "额度不足",
-    "配额",
 )
 
 # Transient throttling — RPM (requests/min), TPM (tokens/min) and burst-rate
 # protection. Recovers on its own → RETRYABLE + "service busy, try again later"
-# copy. Distinct from quota EXHAUSTION above: "exceeded your current quota" /
-# "allocated quota exceeded" are treated as throttling (product decision), while
-# "insufficient_quota" / 余额不足 / 欠费 stay in the exhaustion bucket. Checked
-# AFTER _is_quota so genuine billing exhaustion is never retried.
+# copy. On MaaS gateways the generic quota family denotes token/rate-quota
+# throttling, NOT billing exhaustion, so the OpenAI ``insufficient_quota`` code,
+# "exceeded your current quota" / "allocated quota exceeded" messages and the
+# 配额/额度 wording all live here (429-Throttling.AllocationQuota). Only true
+# arrears/balance wording stays in _QUOTA_SIGNATURES above. Checked AFTER _is_quota
+# so genuine billing exhaustion (a strong money signal) is never retried.
 _RATE_LIMIT_SIGNATURES: tuple[str, ...] = (
     "rate limit",
     "rate_limit",
@@ -99,6 +104,12 @@ _RATE_LIMIT_SIGNATURES: tuple[str, ...] = (
     "request rate increased too quickly",
     "allocated quota exceeded",
     "exceeded your current quota",  # throttling, not billing (per product decision)
+    "insufficient_quota",  # MaaS reuses OpenAI's code for TPM/TPS throttling
+    "insufficient quota",
+    "quota used up",
+    "quota_used_up",
+    "额度不足",
+    "配额",
     "too many requests",
     "请求过于频繁",
     "限流",

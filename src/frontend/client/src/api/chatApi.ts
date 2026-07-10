@@ -120,6 +120,10 @@ export interface ChatMessage {
     clientTimestamp?: string;
     content?: ContentPart[];
     error?: boolean;
+    /** backend status_code on an errored assistant row — lets the UI show the calm
+        ServiceBusyNotice + Retry for transient codes (rate limit / busy) vs the red
+        error bubble for terminal ones. */
+    errorCode?: number;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;

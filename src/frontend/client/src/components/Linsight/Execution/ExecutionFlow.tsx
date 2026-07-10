@@ -218,6 +218,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             errorType={linsight.taskErrorInfo?.error_type}
                             detail={linsight.taskErrorInfo?.detail}
                             fallbackMessage={linsight.taskError}
+                            // Transient errors show a Retry — re-run this round via the
+                            // same continueConversation path as the follow-up input
+                            // (same SV + agent thread). Off on share/history/no-question.
+                            onRetry={
+                                isSharePage || readOnly || !linsight?.question
+                                    ? undefined
+                                    : () => continueConversation(versionId, linsight.question)
+                            }
                         />
                     )}
                     {stopped && !linsight?.taskError && (
