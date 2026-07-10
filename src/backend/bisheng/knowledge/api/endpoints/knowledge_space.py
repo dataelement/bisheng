@@ -236,7 +236,10 @@ async def get_spaces_by_level(
     order_by: str = "update_time",
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    spaces = await svc.get_spaces_by_level(space_level, order_by)
+    if space_level == KnowledgeSpaceLevelEnum.PUBLIC:
+        spaces = await svc.get_public_spaces(order_by)
+    else:
+        spaces = await svc.get_spaces_by_level(space_level, order_by)
     return resp_200(spaces)
 
 

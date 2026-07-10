@@ -5888,6 +5888,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
+    async def get_public_spaces(self, order_by: str = "update_time") -> list[dict[str, Any]]:
+        """List every public knowledge space without user-specific enrichment.
+
+        The level endpoint keeps its login dependency, but public spaces do not
+        need membership or ReBAC evaluation.  Return the persisted space fields
+        plus the known scope level only; file counts and department metadata are
+        intentionally excluded from this lightweight list response.
+        """
+        space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        return [
+            {
+                **space.model_dump(),
+                "space_level": KnowledgeSpaceLevelEnum.PUBLIC.value,
+            }
+            for space in spaces
+        ]
+
     async def global_search_files(
         self,
         keyword: str,
