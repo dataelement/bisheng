@@ -476,6 +476,27 @@ describe("usePortalUploadDialog", () => {
         });
     });
 
+    test("excludes pending review tags from upload tag options", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 1, name: "已有标签", business_type: "tag_library" },
+            { id: 2, name: "待审核标签", business_type: "tag_library", review_status: 0 },
+            { id: 3, name: "制度", business_type: "tag_library", review_status: 1 },
+        ] as any);
+
+        const { hook } = renderUploadDialogHook();
+
+        act(() => {
+            hook.result.current.handleOpenUploadDialog();
+        });
+
+        await waitFor(() => {
+            expect(hook.result.current.uploadTagOptions).toEqual([
+                { label: "已有标签", value: "name:已有标签" },
+                { label: "制度", value: "name:制度" },
+            ]);
+        });
+    });
+
     test("passes tag-library upload selections as manual tag names", async () => {
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
             { id: 1, name: "已有标签", business_type: "tag_library" },
