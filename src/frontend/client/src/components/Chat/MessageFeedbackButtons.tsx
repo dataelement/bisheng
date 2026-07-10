@@ -2,19 +2,22 @@
  * Shared 点赞/点踩 (thumbs up / down) feedback control.
  *
  * Reused by every AI answer surface (daily chat, knowledge-space 知源, channel
- * subscription via AiMessageBubble; linsight task mode via ResultPanel). The
- * button visuals match the appChat MessageButtons / AiMessageBubble action row
- * (size-6 hit area, 14px bisheng-icons Outlined glyph, #818181 idle /
- * brand-500 active) so the whole action row reads as one consistent set.
+ * subscription via AiMessageBubble; linsight task mode via ResultPanel; appChat
+ * workflow/assistant via MessageButtons). The button visuals match the
+ * AiMessageBubble action row (size-6 hit area, 14px bisheng-icons Outlined
+ * glyph, #818181 idle / brand-500 active) so the whole action row reads as one
+ * consistent set.
  *
- * State is optimistic-local: the parent injects the persistence via `onLike`
- * (thumbs verdict) and `onDislikeComment` (reason text). `liked` seeds the
- * initial highlight and re-syncs when history reload delivers the stored value.
+ * Dislike is deferred: clicking thumbs-down only opens the reason dialog
+ * (shared shell: ui/CommentDialog, which resets the draft on open) —
+ * nothing is persisted or highlighted until the user hits submit (the comment
+ * itself is optional). Cancel/close discards the dislike entirely. Thumbs-up
+ * and un-toggling persist immediately. `liked` seeds the initial highlight and
+ * re-syncs when history reload delivers the stored value.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlined } from "bisheng-icons";
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Textarea } from "~/components";
-import { useToastContext } from "~/Providers";
+import { CommentDialog } from "~/components";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -27,9 +30,9 @@ const ACTION_BTN =
 interface MessageFeedbackButtonsProps {
     /** Initial / persisted verdict: 0 none, 1 up, 2 down. */
     liked?: number;
-    /** Persist the new verdict (0/1/2). Called on every toggle. */
+    /** Persist the new verdict (0/1/2). Dislike is only sent on dialog submit. */
     onLike: (liked: number) => void;
-    /** Persist the free-text reason when the user submits a dislike comment. */
+    /** Persist the free-text reason when the user submits a non-empty dislike comment. */
     onDislikeComment?: (comment: string) => void;
     className?: string;
 }
@@ -41,11 +44,8 @@ export function MessageFeedbackButtons({
     className,
 }: MessageFeedbackButtonsProps) {
     const localize = useLocalize();
-    const { showToast } = useToastContext();
     const [state, setState] = useState<ThumbsState>(liked as ThumbsState);
     const [commentOpen, setCommentOpen] = useState(false);
-    const [commentError, setCommentError] = useState(false);
-    const commentRef = useRef<HTMLTextAreaElement | null>(null);
 
     // Re-sync when the persisted value arrives/changes (e.g. history reload).
     useEffect(() => {
@@ -53,29 +53,22 @@ export function MessageFeedbackButtons({
     }, [liked]);
 
     const handleClick = (type: ThumbsState) => {
-        setState((prev) => {
-            const next: ThumbsState = prev === type ? 0 : type;
-            onLike(next);
-            // Prompt for a reason only when newly disliking.
-            if (next === 2 && onDislikeComment) {
-                setCommentError(false);
-                setCommentOpen(true);
-                if (commentRef.current) commentRef.current.value = "";
-            }
-            return next;
-        });
-    };
-
-    const handleSubmitComment = () => {
-        const value = commentRef.current?.value?.trim();
-        if (!value) {
-            showToast?.({ message: localize("com_feedback_required"), status: "warning" });
-            setCommentError(true);
+        // Newly disliking with a reason dialog available: defer — no persist,
+        // no highlight until the dialog is submitted.
+        if (type === 2 && state !== 2 && onDislikeComment) {
+            setCommentOpen(true);
             return;
         }
-        onDislikeComment?.(value);
+        const next: ThumbsState = state === type ? 0 : type;
+        setState(next);
+        onLike(next);
+    };
+
+    const handleSubmitComment = (comment: string) => {
+        setState(2);
+        onLike(2);
+        if (comment) onDislikeComment?.(comment);
         setCommentOpen(false);
-        setCommentError(false);
     };
 
     return (
@@ -110,28 +103,13 @@ export function MessageFeedbackButtons({
             </div>
 
             {onDislikeComment && (
-                <Dialog open={commentOpen} onOpenChange={setCommentOpen}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>{localize("com_feedback_title")}</DialogTitle>
-                        </DialogHeader>
-                        <div>
-                            <Textarea
-                                ref={commentRef}
-                                maxLength={9999}
-                                className={cn("textarea", commentError && "border border-red-400")}
-                            />
-                            <div className="flex justify-end gap-4 mt-4">
-                                <Button className="px-11" variant="outline" onClick={() => setCommentOpen(false)}>
-                                    {localize("com_ui_cancel")}
-                                </Button>
-                                <Button className="px-11" onClick={handleSubmitComment}>
-                                    {localize("com_ui_submit")}
-                                </Button>
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                <CommentDialog
+                    open={commentOpen}
+                    onOpenChange={setCommentOpen}
+                    title={localize("com_feedback_title")}
+                    placeholder={localize("com_feedback_placeholder")}
+                    onSubmit={handleSubmitComment}
+                />
             )}
         </>
     );

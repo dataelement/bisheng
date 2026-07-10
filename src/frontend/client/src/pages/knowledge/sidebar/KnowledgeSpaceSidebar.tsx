@@ -374,7 +374,7 @@ export function KnowledgeSpaceSidebar({
                 ) : null}
                 {/* Top actions */}
                 <div className={cn(
-                    collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 pt-5 pb-4",
+                    collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 pt-4 pb-4",
                     (compactMode || mobilePageMode) && "hidden",
                 )}>
                     {mobileDrawerMode ? (
