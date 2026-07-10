@@ -8,6 +8,7 @@ import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/wo
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { initNode } from "@/util/flowUtils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -26,6 +27,7 @@ function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
 
 export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const { t } = useTranslation('knowledge');
+    const { t: flowT } = useTranslation('flow');
     const { message } = useToast();
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
@@ -187,7 +189,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const handleCreateFlow = async (params) => {
         const model = await getLlmDefaultModel()
 
-        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id)
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id, flowT)
         const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
             t('documentKnowledgeQa') + generateUUID(5),
             t('retrieveDocumentKnowledge'),
@@ -225,8 +227,8 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
     </div>
 };
 
-// Keep getKnowledgeDefaultFlowTemplate function unchanged
-const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
+// Build the quick-start flow with the same node initialization used by canvas drops.
+const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId, t) => {
     const templates = await getWorkflowNodeTemplate()
     let startNode = null
     let inputNode = null
@@ -246,6 +248,13 @@ const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
             ragNode = nodeCopy;
         }
     });
+
+    const initializedNodes = [];
+    startNode = initNode(startNode, initializedNodes, t);
+    initializedNodes.push({ data: startNode });
+    inputNode = initNode(inputNode, initializedNodes, t);
+    initializedNodes.push({ data: inputNode });
+    ragNode = initNode(ragNode, initializedNodes, t);
 
     ragNode.group_params.forEach(group => {
         group.params.forEach(param => {
