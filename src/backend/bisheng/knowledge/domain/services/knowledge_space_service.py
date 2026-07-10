@@ -982,6 +982,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         memberships: list[SpaceChannelMember] | None = None,
         exclude_created: bool = False,
         required_permission_id: str | None = None,
+        include_file_count: bool = True,
     ) -> list[KnowledgeRead]:
         t0 = time.perf_counter()
         if not space_ids:
@@ -1075,7 +1076,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         ordered_spaces = pinned_spaces + normal_spaces
         file_count_ms = 0.0
-        if ordered_spaces:
+        if include_file_count and ordered_spaces:
             _t_file_count = time.perf_counter()
             file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
                 [space.id for space in ordered_spaces]
@@ -1083,6 +1084,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_count_ms = (time.perf_counter() - _t_file_count) * 1000
             for space in ordered_spaces:
                 space.file_num = int(file_count_map.get(space.id, 0) or 0)
+        elif ordered_spaces:
+            # The level-specific lightweight list does not need file totals.
+            # Avoid exposing the schema's non-zero default as a real count.
+            for space in ordered_spaces:
+                space.file_num = 0
 
         _t_decorate = time.perf_counter()
         result = await self._decorate_department_metadata(ordered_spaces)
@@ -5882,6 +5888,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_level = self._normalize_space_level(space_level)
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
             return await self._get_personal_spaces()
+
+        # Team and department listings are generally much smaller than the
+        # user's complete accessible-space set.  Select the level's candidate
+        # spaces first, then let _format_accessible_spaces perform the same
+        # membership/ReBAC ``view_space`` checks and response enrichment used
+        # by the other listings.
+        if target_level in {
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+        }:
+            space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(target_level)
+            if not space_ids:
+                return []
+            memberships = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+            return await self._format_accessible_spaces(
+                space_ids,
+                order_by,
+                memberships=memberships,
+                required_permission_id="view_space",
+                include_file_count=False,
+            )
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
