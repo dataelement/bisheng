@@ -6,6 +6,7 @@ import { NotificationSeverity } from '~/common';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { WorkbenchEmptyIllustration } from '~/components/workbench/WorkbenchEmptyIllustration';
 import { Button } from '~/components/ui/Button';
+import { CommentDialog } from '~/components/ui/CommentDialog';
 
 const MENU_LABEL_KEYS: Record<string, string> = {
   home: 'com_nav_home',
@@ -49,7 +50,6 @@ export default function MenuUnavailablePage() {
   const menuName = pluginId ? localize((MENU_LABEL_KEYS[pluginId] || pluginId) as any) : '';
 
   const [showDialog, setShowDialog] = useState(false);
-  const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [applied, setApplied] = useState(false);
 
@@ -67,14 +67,14 @@ export default function MenuUnavailablePage() {
     return () => { cancelled = true; };
   }, [canApply, pluginId]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (reason: string) => {
     if (!canApply || !pluginId || submitting) return;
     setSubmitting(true);
     try {
       await applyMenuAccessApi({
         menu_key: pluginId,
         menu_name: menuName || pluginId,
-        reason: reason.trim() || undefined,
+        reason: reason || undefined,
       });
       setApplied(true);
       setShowDialog(false);
@@ -121,43 +121,16 @@ export default function MenuUnavailablePage() {
         </Button>
       )}
 
-      {/* Apply reason dialog */}
-      {showDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-base font-semibold text-gray-900">
-              {localize('com_menu_unavailable_apply_button')}
-            </h3>
-            <label className="mb-1 block text-sm text-gray-600">
-              {localize('com_menu_unavailable_reason_label')}
-            </label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              placeholder={localize('com_menu_unavailable_reason_placeholder') as string}
-              className="mb-4 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-500"
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => { setShowDialog(false); setReason(''); }}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                {localize('com_ui_cancel')}
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => void handleSubmit()}
-                className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-60 btn-brand-primary"
-              >
-                {submitting ? localize('com_menu_unavailable_apply_submitting') : localize('com_ui_submit')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Apply reason dialog — shared shell with the message-feedback dialog. */}
+      <CommentDialog
+        open={showDialog}
+        onOpenChange={(open) => { if (!submitting) setShowDialog(open); }}
+        title={localize('com_menu_unavailable_apply_button')}
+        placeholder={localize('com_menu_unavailable_reason_placeholder') as string}
+        submitting={submitting}
+        submittingText={localize('com_menu_unavailable_apply_submitting')}
+        onSubmit={(reason) => void handleSubmit(reason)}
+      />
     </div>
   );
 }

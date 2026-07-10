@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useRecoilValue } from "recoil";
 import type { CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import { SelectionMessagesProvider, SelectAllBelowBanner } from "~/components/Chat/MessageSelection";
@@ -9,7 +9,6 @@ import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
 import MessageBs, { ReasoningLog } from "./components/MessageBs";
 import MessageBsChoose from "./components/MessageBsChoose";
-import MessageFeedbackForm from "./components/MessageFeedbackForm";
 import MessageFile from "./components/MessageFile";
 import MessageNodeRun from "./components/MessageNodeRun";
 import MessageRemark from "./components/MessageRemark";
@@ -73,7 +72,6 @@ export default function ChatMessages({
     }, [messages]);
 
     console.log("messages :>> ", chatState, messages, guideWord);
-    const thumbRef = useRef(null);
 
     const remark = chatState?.flow?.guide_word;
 
@@ -132,7 +130,6 @@ export default function ChatMessages({
                             isGuestMode={isGuestMode}
                             onOpenCitationPanel={onOpenCitationPanel}
                             activeCitationMessageId={activeCitationMessageId}
-                            onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
                         />;
                     case 'divider':
                         return <div key={msg.id} className="flex items-center justify-center py-4 text-gray-400 text-sm">
@@ -185,7 +182,6 @@ export default function ChatMessages({
             <InputFormSkill flow={chatState.flow} logo={logo} />
         )}
 
-        <MessageFeedbackForm ref={thumbRef} />
         </SelectionMessagesProvider>
     </div>
 };
