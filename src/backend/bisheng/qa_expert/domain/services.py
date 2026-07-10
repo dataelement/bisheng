@@ -104,7 +104,13 @@ class ExpertService:
             user_id=request.user_id,
             major = request.major
         )
-        return await self.repository.create(expert)
+        temp_expert = await self.repository.create(expert)
+        depart = DepartmentDao.get_by_id(temp_expert.depart_ment)
+        if depart:
+            temp_expert.depart_ment = depart.name
+        else:
+            temp_expert.depart_ment = None
+        return temp_expert
 
     async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> Expert:
         """更新专家信息"""
@@ -133,9 +139,16 @@ class ExpertService:
         return await self.repository.delete(expert_id)
     
     
-    async def get_expertinfo(self, expert_name: str) -> bool:
+    async def get_expertinfo(self, expert_name: str) -> Optional[Expert]:
         """获取专家信息"""
-        return await self.repository.get_expertinfo(expert_name)
+        expert = await self.repository.get_expertinfo(expert_name)
+        if expert:
+            department = DepartmentDao.get_by_id(expert.depart_ment)
+            if department:
+                expert.depart_ment = department.name
+            else:
+                expert.depart_ment = None
+        return expert
     
         
     async def get_expertinfobyid(self, user_id: int) -> bool:
@@ -318,6 +331,9 @@ class QuestionService:
                 action_code="qa_answer_accepted",
             )
 
+    async def get_answer_count_by_domain(self) -> list[dict]:
+        """获取每个业务域的回答数"""
+        return await self.repository.get_answer_count_by_domain()
     
     async def delete_question(self, question_id: int) -> bool:
         """删除问题"""

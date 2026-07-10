@@ -228,6 +228,7 @@ class QuestionDetailResponse(BaseModel):
     attachments: List[str]
     related_docs: List[int]
     invited_experts: List[int]
+    experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
     adopted_answer_id: Optional[int]
     vote_count: int
     answer_count: int

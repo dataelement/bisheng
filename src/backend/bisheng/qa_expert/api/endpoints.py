@@ -223,6 +223,16 @@ async def list_questions(
     )
 
 
+@router.get("/questions/answer_count/domain", response_model=list[dict])
+async def get_answer_count_by_domain(
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service),
+):
+    """获取每个业务域的回答数"""
+    answer_count = await service.get_answer_count_by_domain()
+    return resp_200(data=answer_count)
+
+
 @router.put("/questions/{question_id}", response_model=ExpertResponse)
 async def update_question(
     question_id: int,
@@ -273,7 +283,6 @@ async def delete_question(
         return resp_200(data={"success": success})
     except Exception as e:
         return resp_500(code=500, msg=str(e))
-
 
 
 # ==================== 回答管理 Endpoints ====================

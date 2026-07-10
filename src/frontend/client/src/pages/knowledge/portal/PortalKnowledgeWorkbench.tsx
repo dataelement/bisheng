@@ -2079,21 +2079,6 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace, showToast]);
 
-    const handleCopyFileEncoding = useCallback(async () => {
-        const fileEncoding = selectedFile?.fileEncoding?.trim();
-        if (!fileEncoding) {
-            showToast({ message: "暂无文件编码", severity: NotificationSeverity.INFO });
-            return;
-        }
-
-        try {
-            await navigator.clipboard.writeText(fileEncoding);
-            showToast({ message: "文件编码已复制", severity: NotificationSeverity.SUCCESS });
-        } catch {
-            showToast({ message: "复制失败，请重试", severity: NotificationSeverity.ERROR });
-        }
-    }, [selectedFile?.fileEncoding, showToast]);
-
     const handleUpdateSelectedFileEncoding = useCallback(async (newEncoding: string, fileSubcategoryCode?: string | null) => {
         if (!activeSpace || !selectedFile || !canEditSelectedFileEncoding) return;
 
@@ -2394,7 +2379,6 @@ export default function PortalKnowledgeWorkbench() {
                     summaryExpanded={summaryExpanded}
                     onAiDrawerOpenChange={setAiDrawerOpen}
                     onBackToFileList={handleBackToFileList}
-                    onCopyEncoding={() => void handleCopyFileEncoding()}
                     onCopyShareLink={() => void copyShareLink()}
                     onDownload={() => void handleDownloadSelected()}
                     fileCategoryGroups={fileCategoryGroups}

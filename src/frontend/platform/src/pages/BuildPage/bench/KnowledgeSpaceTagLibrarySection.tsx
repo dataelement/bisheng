@@ -21,7 +21,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cname } from "@/components/bs-ui/utils";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { MouseEvent } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 10;
@@ -116,6 +116,13 @@ interface LibraryTagsDialogProps {
     library: KnowledgeSpaceTagLibraryListItem | null;
     onOpenChange: (open: boolean) => void;
     onUpdated: () => void;
+}
+
+interface AddTagToLibraryDialogProps {
+    open: boolean;
+    saving: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSubmit: (tagName: string) => Promise<boolean>;
 }
 
 function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: TagLibraryFormDialogProps) {
@@ -237,14 +244,101 @@ function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: Ta
     );
 }
 
+function AddTagToLibraryDialog({ open, saving, onOpenChange, onSubmit }: AddTagToLibraryDialogProps) {
+    const { t } = useTranslation();
+    const [tagName, setTagName] = useState("");
+    const [tagNameError, setTagNameError] = useState("");
+
+    useEffect(() => {
+        if (!open) return;
+        setTagName("");
+        setTagNameError("");
+    }, [open]);
+
+    const handleSubmit = async () => {
+        const trimmed = tagName.trim();
+        if (!trimmed) {
+            setTagNameError(t("build.tagNameRequired", "标签名称不能为空"));
+            return;
+        }
+        setTagNameError("");
+        const ok = await onSubmit(trimmed);
+        if (ok) {
+            onOpenChange(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="gap-0 p-0 sm:max-w-[480px] bg-background-login">
+                <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
+                    <DialogTitle>{t("build.addTagDialogTitle", "新增标签")}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-1 px-6 py-5">
+                    <Label htmlFor="tag-library-new-tag-name">
+                        {t("build.tagName", "标签名称")}<span className="bisheng-tip">*</span>
+                    </Label>
+                    <Input
+                        id="tag-library-new-tag-name"
+                        name="tag-library-new-tag-name"
+                        type="text"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        data-1p-ignore
+                        data-lpignore="true"
+                        data-form-type="other"
+                        className={cname(tagNameError && "border-red-500 focus-visible:ring-red-500")}
+                        value={tagName}
+                        maxLength={100}
+                        placeholder={t("build.tagNamePlaceholder", "在此处输入标签名称")}
+                        onChange={(e) => {
+                            setTagName(e.target.value);
+                            if (tagNameError) {
+                                setTagNameError("");
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                void handleSubmit();
+                            }
+                        }}
+                    />
+                    {tagNameError ? (
+                        <p className="text-xs text-red-500">{tagNameError}</p>
+                    ) : null}
+                </div>
+                <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
+                    <Button type="button" variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
+                        {t("cancel", { ns: "bs" })}
+                    </Button>
+                    <Button type="button" className="px-8" disabled={saving} onClick={() => void handleSubmit()}>
+                        {t("confirm", { ns: "bs" })}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTagsDialogProps) {
     const { t } = useTranslation();
     const { toast } = useToast();
     const [tagItems, setTagItems] = useState<KnowledgeSpaceTagLibraryTagItem[]>([]);
-    const [newTag, setNewTag] = useState("");
-    const [newTagError, setNewTagError] = useState("");
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [addTagDialogOpen, setAddTagDialogOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    const filteredTagItems = useMemo(() => {
+        const keyword = searchKeyword.trim().toLowerCase();
+        if (!keyword) {
+            return tagItems;
+        }
+        return tagItems.filter((item) => item.name.toLowerCase().includes(keyword));
+    }, [searchKeyword, tagItems]);
 
     const loadTags = useCallback(async () => {
         if (!library?.id) return;
@@ -267,8 +361,8 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
 
     useEffect(() => {
         if (!open || !library?.id) return;
-        setNewTag("");
-        setNewTagError("");
+        setSearchKeyword("");
+        setAddTagDialogOpen(false);
         loadTags();
     }, [open, library?.id, loadTags]);
 
@@ -298,25 +392,23 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
         return true;
     };
 
-    const handleAddTag = async () => {
-        const trimmed = newTag.trim();
+    const handleAddTag = async (tagName: string) => {
+        const trimmed = tagName.trim();
         if (!trimmed) {
-            setNewTagError(t("build.tagNameRequired", "标签名称不能为空"));
-            return;
+            return false;
         }
-        setNewTagError("");
         if (tagItems.some((item) => item.name === trimmed)) {
             toast({ variant: "error", description: t("build.tagAlreadyExists", "标签已存在") });
-            return;
+            return false;
         }
         const ok = await persistTagItems([
             ...tagItems,
             { name: trimmed, resource_type: "system_tag" },
         ]);
         if (ok) {
-            setNewTag("");
             toast({ variant: "success", description: t("build.saved", "已保存") });
         }
+        return ok;
     };
 
     const handleDeleteTag = (item: KnowledgeSpaceTagLibraryTagItem) => {
@@ -341,49 +433,23 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="gap-0 p-0 sm:max-w-[920px] bg-background-login">
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="gap-0 p-0 sm:max-w-[920px] bg-background-login">
                 <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
                     <DialogTitle>
                         {t("build.tagLibraryTagsTitle", "标签库标签")} — {library?.name || ""}
                     </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 px-6 py-5">
-                    <div className="flex items-start gap-2">
-                        <div className="flex min-w-0 flex-1 flex-col gap-1">
-                            <Input
-                                id="tag-library-tag-name"
-                                name="tag-library-tag-name"
-                                type="text"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="off"
-                                spellCheck={false}
-                                data-1p-ignore
-                                data-lpignore="true"
-                                data-form-type="other"
-                                className={cname(newTagError && "border-red-500 focus-visible:ring-red-500")}
-                                value={newTag}
-                                maxLength={100}
-                                placeholder={t("build.tagNamePlaceholder", "在此处输入标签名称")}
-                                onChange={(e) => {
-                                    setNewTag(e.target.value);
-                                    if (newTagError) {
-                                        setNewTagError("");
-                                    }
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        handleAddTag();
-                                    }
-                                }}
-                            />
-                            {newTagError ? (
-                                <p className="text-xs text-red-500">{newTagError}</p>
-                            ) : null}
-                        </div>
-                        <Button className="shrink-0" disabled={saving} onClick={handleAddTag}>
+                    <div className="flex items-center gap-2">
+                        <SearchInput
+                            className="min-w-0 flex-1"
+                            placeholder={t("build.searchTagInLibrary", "搜索标签")}
+                            value={searchKeyword}
+                            onChange={(e) => setSearchKeyword(e.target.value)}
+                        />
+                        <Button className="shrink-0" disabled={saving} onClick={() => setAddTagDialogOpen(true)}>
                             <Plus className="mr-1 size-4" />
                             {t("build.addTag", "添加")}
                         </Button>
@@ -407,14 +473,16 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                                             {t("loading")}
                                         </td>
                                     </tr>
-                                ) : tagItems.length === 0 ? (
+                                ) : filteredTagItems.length === 0 ? (
                                     <tr>
                                         <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
-                                            {t("build.tagLibraryTagsEmpty", "暂无标签，请在上方添加")}
+                                            {tagItems.length === 0
+                                                ? t("build.tagLibraryTagsEmpty", "暂无标签，请点击右上角添加")
+                                                : t("build.tagLibraryTagsEmptySearch", "未找到匹配的标签")}
                                         </td>
                                     </tr>
                                 ) : (
-                                    tagItems.map((item) => (
+                                    filteredTagItems.map((item) => (
                                         <tr
                                             key={`${item.resource_type}-${item.name}`}
                                             className="border-t text-sm"
@@ -457,6 +525,13 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+            <AddTagToLibraryDialog
+                open={addTagDialogOpen}
+                saving={saving}
+                onOpenChange={setAddTagDialogOpen}
+                onSubmit={handleAddTag}
+            />
+        </>
     );
 }
 

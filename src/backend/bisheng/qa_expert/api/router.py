@@ -30,10 +30,14 @@ router.add_api_route("/check_questions", endpoints.check_question, methods=["POS
 # 问题管理
 router.add_api_route("/questions", endpoints.create_question, methods=["POST"])
 router.add_api_route("/questions", endpoints.list_questions, methods=["GET"])
+# 静态路由必须放在 /questions/{question_id} 动态路由之前
+router.add_api_route("/questions/answer_count/domain", endpoints.get_answer_count_by_domain, methods=["GET"])
 router.add_api_route("/questions/{question_id}", endpoints.update_question, methods=["PUT"])
 router.add_api_route("/questions/{question_id}", endpoints.get_question_detail, methods=["GET"])
 router.add_api_route("/questions/{question_id}/adopt", endpoints.adopt_answer, methods=["POST"])
 router.add_api_route("/questions/{question_id}", endpoints.delete_question, methods=["DELETE"])
+
+
 
 # 回答管理
 router.add_api_route("/answers", endpoints.create_answer, methods=["POST"])
