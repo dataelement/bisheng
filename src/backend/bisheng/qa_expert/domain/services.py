@@ -325,6 +325,9 @@ class QuestionService:
                 action_code="qa_answer_accepted",
             )
 
+    async def get_answer_count_by_domain(self) -> list[dict]:
+        """获取每个业务域的回答数"""
+        return await self.repository.get_answer_count_by_domain()
     
     async def delete_question(self, question_id: int) -> bool:
         """删除问题"""

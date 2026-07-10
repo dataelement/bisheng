@@ -34,6 +34,9 @@ router.add_api_route("/questions/{question_id}", endpoints.update_question, meth
 router.add_api_route("/questions/{question_id}", endpoints.get_question_detail, methods=["GET"])
 router.add_api_route("/questions/{question_id}/adopt", endpoints.adopt_answer, methods=["POST"])
 router.add_api_route("/questions/{question_id}", endpoints.delete_question, methods=["DELETE"])
+router.add_api_route("/questions/answer_count", endpoints.get_answer_count_by_domain, methods=["GET"])
+
+
 
 # 回答管理
 router.add_api_route("/answers", endpoints.create_answer, methods=["POST"])

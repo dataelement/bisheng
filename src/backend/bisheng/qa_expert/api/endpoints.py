@@ -274,6 +274,14 @@ async def delete_question(
     except Exception as e:
         return resp_500(code=500, msg=str(e))
 
+@router.get("/questions/answer_count", response_model=list[dict])
+async def get_answer_count_by_domain(
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service),
+):
+    """获取每个业务域的回答数"""
+    answer_count = await service.get_answer_count_by_domain()
+    return resp_200(data=answer_count)
 
 
 # ==================== 回答管理 Endpoints ====================

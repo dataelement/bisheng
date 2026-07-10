@@ -254,7 +254,21 @@ class QuestionRepository:
             closed = (await session.exec(closed_stmt)).scalars().first() or 0
 
             return {"total": total, "unsolved": unsolved, "solved": solved, "closed": closed}
-
+    
+    async def get_answer_count_by_domain(self) -> list[dict]:
+        async with get_async_db_session() as session:
+            stmt = (
+                select(
+                    Question.business_domain,
+                    func.sum(Question.answer_count).label("answer_count"),
+                )
+                .group_by(Question.business_domain)
+            )
+            result = (await session.exec(stmt)).all()
+            return [
+                {"business_domain": row.business_domain, "answer_count": row.answer_count}
+                for row in result
+            ]
 
 class QAExpertStatsRepository:
     """Repository for Expert QA overview statistics."""
