@@ -46,7 +46,11 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
             return `${__APP_ENV__.BASE_URL}${audioPath}`
         } catch (error) {
             console.error("Failed to fetch audio URL:", error)
-            throw new Error("Audio generation failed")
+            // Re-throw as-is (not wrapped) so a backend business error (e.g. TTS
+            // synthesis failure, code 10026) keeps its status_code — the request
+            // interceptor already toasted the localized message for those; the
+            // caller only needs to fall back to a generic toast for other errors.
+            throw error
         }
     }
 
@@ -72,7 +76,14 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
             playAudio(messageId, audioUrl)
         } catch (error) {
             console.error("Failed to play audio:", error)
-            showToast({ message: "播放功能不可用，请联系管理员", status: "error" })
+            // A backend business error (e.g. TTS synthesis failure, code 10026)
+            // already got its localized toast from the request interceptor
+            // (skip403Redirect path) — only show the generic fallback here for
+            // errors that never reached that path (network failure, malformed
+            // response, etc.), so the user doesn't see two toasts.
+            if (!(error as any)?.status_code) {
+                showToast({ message: "播放功能不可用，请联系管理员", status: "error" })
+            }
 
             // Clean up state on error
             if (isCurrentMessage) {
