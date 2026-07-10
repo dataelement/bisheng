@@ -172,7 +172,7 @@ class QuestionRepository:
     async def list_all(
         self,
         business_domain: Optional[str] = None,
-        status: Optional[str] = None,
+        status: Optional[int] = 0,
         sort_by: str = "latest",
         user_id: Optional[int] = None,  # 我提问的
         skip: int = 0,
@@ -188,7 +188,7 @@ class QuestionRepository:
                 stmt = stmt.where(Question.user_id == user_id)
             if status in (1, 2):
                 # 状态为 1 (未解决) 或 2 (已解决) 时，直接按问题状态过滤
-                stmt = stmt.where(Question.status == status)
+                stmt = stmt.where(Question.status == status-1)
             elif status == 3:
                 # 状态为 3 (我提问的) 时，按提问人 ID 过滤
                 if user_id is not None:

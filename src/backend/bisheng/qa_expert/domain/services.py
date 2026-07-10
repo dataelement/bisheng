@@ -191,7 +191,7 @@ class QuestionService:
     async def list_questions(
         self,
         business_domain: Optional[str] = None,
-        status: Optional[str] = None,
+        status: Optional[int] = 0,
         sort_by: str = "latest",
         user_id: Optional[int] = None,
         skip: int = 0,
