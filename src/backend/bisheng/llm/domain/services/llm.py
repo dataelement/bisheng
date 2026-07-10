@@ -169,11 +169,11 @@ class LLMService:
 
     # Credential and endpoint fields in the server config. Users pasting values with
     # leading/trailing whitespace break the http request header(e.g. "Bearer sk-xxx ")
-    STRIP_CONFIG_KEY_SUFFIXES = ('_key', '_secret', '_base', '_url', '_endpoint', '_proxy', '_version')
+    STRIP_CONFIG_KEY_SUFFIXES = ("_key", "_secret", "_base", "_url", "_endpoint", "_proxy", "_version")
 
     @classmethod
-    def strip_config_whitespace(cls, config: Optional[dict]) -> Optional[dict]:
-        """ Strip leading/trailing whitespace from credential and endpoint fields in the server config """
+    def strip_config_whitespace(cls, config: dict | None) -> dict | None:
+        """Strip leading/trailing whitespace from credential and endpoint fields in the server config"""
         if not isinstance(config, dict):
             return config
         result = {}
@@ -843,7 +843,8 @@ class LLMService:
         exist_server.limit = server.limit
         mask_maker = JsonFieldMasker()
         exist_server.config = cls.strip_config_whitespace(
-            mask_maker.update_json_with_masked(exist_server.config, server.config))
+            mask_maker.update_json_with_masked(exist_server.config, server.config)
+        )
 
         # Route share_to_children flips through the dedicated DAO helper
         # so super-admin / Root-only invariants are enforced via FGA.
@@ -1497,7 +1498,14 @@ class LLMService:
             app_type=ApplicationTypeEnum.TTS,
             user_id=login_user.user_id,
         )
-        audio_bytes = await tts_client.ainvoke(text)
+        try:
+            audio_bytes = await tts_client.ainvoke(text)
+        except Exception as e:
+            # Provider-level synthesis failure (e.g. empty audio from the TTS
+            # backend) — surface as a dedicated business code, not a raw 500,
+            # so the client shows a toast instead of the global maintenance overlay.
+            logger.exception("workbench tts synthesis failed")
+            raise TtsSynthesisFailedError.http_exception() from e
         # upload to minio
         object_name = f"tts/{generate_uuid()}.mp3"
 
