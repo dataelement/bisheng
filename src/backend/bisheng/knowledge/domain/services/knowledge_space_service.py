@@ -33,7 +33,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
-    DepartmentSpaceDeleteForbiddenError,
     FavoriteSpaceProtectedError,
     FreeSpaceMigratingError,
     FreeSpaceMigrationEmbeddingMismatchError,
@@ -5497,11 +5496,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 decision = await FreeSpaceMigrationService.pre_delete_guard(space)
                 if decision.action == "block":
                     raise {
-                        "department_space_forbidden": DepartmentSpaceDeleteForbiddenError,
                         "target_not_found": FreeSpaceMigrationTargetNotFoundError,
                         "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
                         "migrating": FreeSpaceMigratingError,
-                    }.get(decision.reason, DepartmentSpaceDeleteForbiddenError)()
+                    }.get(decision.reason, FreeSpaceMigrationTargetNotFoundError)()
                 if decision.action == "migrate":
                     await KnowledgeDao.async_update_state(
                         knowledge_id=space_id,

@@ -222,11 +222,6 @@ class KnowledgeSpaceTagLibraryNotBoundError(BaseErrorCode):
 
 
 # —— Free space deletion / migration to department knowledge space
-class DepartmentSpaceDeleteForbiddenError(BaseErrorCode):
-    Code: int = 18080
-    Msg: str = "科室知识库禁止删除，请先在后台解除部门绑定"
-
-
 class FreeSpaceMigrationTargetNotFoundError(BaseErrorCode):
     Code: int = 18081
     Msg: str = "无法迁移：创建者无主部门，或所属部门（含上级）未绑定科室知识库"
