@@ -104,6 +104,8 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
+      - /opt/code/bisheng/src/backend/bisheng:/app/bisheng  # 挂载源码目录，便于调试
+      - /opt/code/bisheng/src/backend/scripts:/app/scripts  # 挂载源码目录，便于调试
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh api  # 启动api服务
@@ -146,6 +148,8 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
+      - /opt/code/bisheng/src/backend/bisheng:/app/bisheng  # 挂载源码目录，便于调试
+      - /opt/code/bisheng/src/backend/scripts:/app/scripts  # 挂载源码目录，便于调试
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务

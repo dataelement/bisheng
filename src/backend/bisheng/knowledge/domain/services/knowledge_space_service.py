@@ -3730,6 +3730,121 @@ class KnowledgeSpaceService(KnowledgeUtils):
         sorted_items = self._sort_shougang_portal_file_items(items, "relevance", keyword)
         return self._build_shougang_portal_qa_paged_response(sorted_items, req.page, req.page_size)
 
+    async def get_shougang_portal_file(
+        self,
+        *,
+        space_id: int,
+        file_id: int,
+    ) -> ShougangPortalFileItemResp | None:
+        file, spaces = await self._get_visible_shougang_portal_file(space_id=space_id, file_id=file_id)
+        if file is None:
+            return None
+        items = await self._map_shougang_portal_files_to_items(
+            files=[file],
+            spaces=spaces,
+            file_ext=None,
+            document_type=None,
+            file_subcategory_code=None,
+            include_source_paths=True,
+        )
+        return items[0] if items else None
+
+    async def list_shougang_portal_related_files(
+        self,
+        *,
+        space_id: int,
+        file_id: int,
+        limit: int,
+    ) -> dict:
+        safe_limit = max(int(limit or 3), 0)
+        if safe_limit <= 0:
+            return {"data": [], "total": 0}
+
+        file, spaces = await self._get_visible_shougang_portal_file(space_id=space_id, file_id=file_id)
+        if file is None:
+            return {"data": [], "total": 0}
+
+        current_items = await self._map_shougang_portal_files_to_items(
+            files=[file],
+            spaces=spaces,
+            file_ext=None,
+            document_type=None,
+            file_subcategory_code=None,
+            include_source_paths=False,
+        )
+        if not current_items or not current_items[0].tags:
+            return {"data": [], "total": 0}
+
+        score_map: dict[int, int] = {}
+        for tag_name in current_items[0].tags:
+            tag_ids = await TagLibraryTagService.resolve_tag_ids_by_name_for_space(space_id, tag_name)
+            if not tag_ids:
+                continue
+            resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
+            matched_file_ids: set[int] = set()
+            for resource in resources:
+                resource_id = str(resource.resource_id or "")
+                if not resource_id.isdigit():
+                    continue
+                candidate_id = int(resource_id)
+                if candidate_id == file_id:
+                    continue
+                matched_file_ids.add(candidate_id)
+            for candidate_id in matched_file_ids:
+                score_map[candidate_id] = score_map.get(candidate_id, 0) + 1
+
+        if not score_map:
+            return {"data": [], "total": 0}
+
+        candidate_files = await KnowledgeFileDao.aget_file_by_ids(list(score_map.keys()))
+        candidate_files = [
+            candidate
+            for candidate in candidate_files
+            if int(candidate.knowledge_id) == space_id
+            and int(candidate.file_type) == FileType.FILE.value
+            and int(candidate.status) == KnowledgeFileStatus.SUCCESS.value
+        ]
+        visible_files = await self._filter_shougang_portal_visible_files(candidate_files, spaces=spaces)
+        sorted_files = sorted(
+            visible_files,
+            key=lambda candidate: (
+                -score_map.get(int(candidate.id or 0), 0),
+                self._serialize_datetime(candidate.update_time),
+            ),
+        )
+        selected_files = sorted_files[:safe_limit]
+        items = await self._map_shougang_portal_files_to_items(
+            files=selected_files,
+            spaces=spaces,
+            file_ext=None,
+            document_type=None,
+            file_subcategory_code=None,
+            include_source_paths=True,
+        )
+        return {"data": items, "total": len(items)}
+
+    async def _get_visible_shougang_portal_file(
+        self,
+        *,
+        space_id: int,
+        file_id: int,
+    ) -> tuple[KnowledgeFile | None, list[Knowledge]]:
+        spaces = await self._get_shougang_portal_visible_search_spaces([space_id], None)
+        if not spaces:
+            return None, []
+
+        file = await KnowledgeFileDao.query_by_id(file_id)
+        if (
+            file is None
+            or int(file.knowledge_id) != space_id
+            or int(file.file_type) != FileType.FILE.value
+            or int(file.status) != KnowledgeFileStatus.SUCCESS.value
+        ):
+            return None, spaces
+
+        visible_files = await self._filter_shougang_portal_visible_files([file], spaces=spaces)
+        return (visible_files[0], spaces) if visible_files else (None, spaces)
+
     async def _search_shougang_portal_files_impl(self, req: ShougangPortalFileSearchReq) -> dict:
         _set_portal_search_stage("resolve_spaces")
         spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)

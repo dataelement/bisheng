@@ -433,6 +433,15 @@ class ShougangPortalFileSearchResp(BaseModel):
     next_cursor: str | None = None
 
 
+class ShougangPortalFileDetailResp(BaseModel):
+    data: ShougangPortalFileItemResp | None = None
+
+
+class ShougangPortalRelatedFilesResp(BaseModel):
+    data: list[ShougangPortalFileItemResp] = Field(default_factory=list)
+    total: int = 0
+
+
 class ShougangPortalQaFileSearchReq(BaseModel):
     q: str = Field(..., min_length=1, description="File name keyword")
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
