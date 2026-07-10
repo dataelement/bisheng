@@ -384,11 +384,11 @@ class AnswerRepository:
         """获取回答的投票数"""
         async with get_async_db_session() as session:
             stmt = (
-                select(func.sum(Answer.vote_count).over().label("total_vote_count"))
+                select(func.coalesce(func.sum(Answer.vote_count), 0).label("total_vote_count"))
                 .where(and_(Answer.question_id == question_id, Answer.status != 3))
             )
             result = await session.exec(stmt)
-            return result.first() or 0
+            return result.scalar() or 0
 
 class CommentRepository:
     """评论仓储"""
