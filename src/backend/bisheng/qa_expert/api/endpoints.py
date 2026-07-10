@@ -204,7 +204,7 @@ async def list_questions(
 ):
     """问题列表"""
 
-    user_id = user.user_id if query.my_questions else None
+    user_id = user.user_id if query.my_questions or query.invitations else None
 
     questions, total = await service.list_questions(
         business_domain=query.domain,
