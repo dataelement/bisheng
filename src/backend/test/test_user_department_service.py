@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -24,32 +24,46 @@ from bisheng.user.domain.services.user_department_service import (
 
 def _primary(user_id: int, dept_id: int):
     return SimpleNamespace(
-        user_id=user_id, department_id=dept_id, is_primary=1,
+        user_id=user_id,
+        department_id=dept_id,
+        is_primary=1,
     )
 
 
 @pytest.fixture()
 def patches(monkeypatch):
     """Wire up the DAO / session / sync_user mocks."""
-    primary_mock = AsyncMock(name='aget_user_primary_department')
-    sync_mock = AsyncMock(name='sync_user')
+    primary_mock = AsyncMock(name="aget_user_primary_department")
+    sync_mock = AsyncMock(name="sync_user")
+    force_sync_mock = AsyncMock(name="force_sync_user_for_maintenance")
 
     monkeypatch.setattr(
         uds_module.UserDepartmentDao,
-        'aget_user_primary_department',
+        "aget_user_primary_department",
         primary_mock,
     )
     monkeypatch.setattr(
-        uds_module.UserTenantSyncService, 'sync_user', sync_mock,
+        uds_module.UserTenantSyncService,
+        "sync_user",
+        sync_mock,
     )
-    dept_execute = AsyncMock(name='DepartmentChangeHandler.execute_async')
     monkeypatch.setattr(
-        uds_module.DepartmentChangeHandler, 'execute_async', dept_execute,
+        uds_module.UserTenantSyncService,
+        "force_sync_user_for_maintenance",
+        force_sync_mock,
+    )
+    dept_execute = AsyncMock(name="DepartmentChangeHandler.execute_async")
+    monkeypatch.setattr(
+        uds_module.DepartmentChangeHandler,
+        "execute_async",
+        dept_execute,
     )
 
     # Fake async session — record every ``exec`` + ``add`` + ``commit``.
     session_calls = {
-        'exec': [], 'add': [], 'commit': 0,
+        "exec": [],
+        "add": [],
+        "commit": 0,
     }
 
     class _FakeExecResult:
@@ -63,32 +77,31 @@ def patches(monkeypatch):
     # want a different shape can replace this list's first element via
     # ``session_calls['exec_result'] = [row]`` before calling the service.
     exec_result = []
-    session_calls['exec_result'] = exec_result
+    session_calls["exec_result"] = exec_result
 
     class _FakeSession:
         async def exec(self, stmt):
-            session_calls['exec'].append(stmt)
-            if session_calls['exec_result']:
-                return _FakeExecResult(
-                    [session_calls['exec_result'].pop(0)]
-                )
+            session_calls["exec"].append(stmt)
+            if session_calls["exec_result"]:
+                return _FakeExecResult([session_calls["exec_result"].pop(0)])
             return _FakeExecResult([])
 
         def add(self, obj):
-            session_calls['add'].append(obj)
+            session_calls["add"].append(obj)
 
         async def commit(self):
-            session_calls['commit'] += 1
+            session_calls["commit"] += 1
 
     @asynccontextmanager
     async def _fake_get_session():
         yield _FakeSession()
 
-    monkeypatch.setattr(uds_module, 'get_async_db_session', _fake_get_session)
+    monkeypatch.setattr(uds_module, "get_async_db_session", _fake_get_session)
 
     return SimpleNamespace(
         primary=primary_mock,
         sync=sync_mock,
+        force_sync=force_sync_mock,
         dept_execute=dept_execute,
         session_calls=session_calls,
     )
@@ -98,49 +111,45 @@ def patches(monkeypatch):
 # No-op branch
 # -------------------------------------------------------------------------
 
-class TestNoOp:
 
+class TestNoOp:
     def test_same_primary_skips_writes_and_sync(self, patches):
         patches.primary.return_value = _primary(100, 5)
 
-        result = asyncio.run(
-            UserDepartmentService.change_primary_department(100, 5)
-        )
-        assert result['changed'] is False
+        result = asyncio.run(UserDepartmentService.change_primary_department(100, 5))
+        assert result["changed"] is False
         patches.sync.assert_not_awaited()
         patches.dept_execute.assert_not_awaited()
-        assert patches.session_calls['commit'] == 0
+        assert patches.session_calls["commit"] == 0
 
 
 # -------------------------------------------------------------------------
 # Happy path — swap + sync
 # -------------------------------------------------------------------------
 
-class TestHappyPath:
 
+class TestHappyPath:
     def test_promote_new_primary_triggers_sync(self, patches):
         patches.primary.return_value = _primary(100, 5)
         patches.sync.return_value = SimpleNamespace(id=7)
 
-        result = asyncio.run(
-            UserDepartmentService.change_primary_department(100, 12)
-        )
-        assert result['changed'] is True
-        assert result['primary_department_id'] == 12
-        assert result['leaf_tenant_id'] == 7
+        result = asyncio.run(UserDepartmentService.change_primary_department(100, 12))
+        assert result["changed"] is True
+        assert result["primary_department_id"] == 12
+        assert result["leaf_tenant_id"] == 7
 
         # sync_user called with DEPT_CHANGE trigger.
         patches.sync.assert_awaited_once()
         call = patches.sync.call_args
         assert call.args[0] == 100
-        assert call.kwargs.get('trigger') == UserTenantSyncTrigger.DEPT_CHANGE
+        assert call.kwargs.get("trigger") == UserTenantSyncTrigger.DEPT_CHANGE
 
         # DB writes happened (1 commit).
-        assert patches.session_calls['commit'] == 1
+        assert patches.session_calls["commit"] == 1
         patches.dept_execute.assert_awaited_once()
         ops = patches.dept_execute.await_args.args[0]
         assert [(op.action, op.user, op.relation, op.object) for op in ops] == [
-            ('write', 'user:100', 'member', 'department:12'),
+            ("write", "user:100", "member", "department:12"),
         ]
 
     def test_first_primary_no_demote(self, patches):
@@ -148,10 +157,8 @@ class TestHappyPath:
         patches.primary.return_value = None
         patches.sync.return_value = SimpleNamespace(id=1)
 
-        result = asyncio.run(
-            UserDepartmentService.change_primary_department(101, 20)
-        )
-        assert result['changed'] is True
+        result = asyncio.run(UserDepartmentService.change_primary_department(101, 20))
+        assert result["changed"] is True
         patches.sync.assert_awaited_once()
 
 
@@ -159,8 +166,8 @@ class TestHappyPath:
 # Blocked propagation
 # -------------------------------------------------------------------------
 
-class TestBlockedPropagation:
 
+class TestBlockedPropagation:
     def test_sync_blocked_raises(self, patches):
         patches.primary.return_value = _primary(102, 5)
         patches.sync.side_effect = TenantRelocateBlockedError(
@@ -168,24 +175,31 @@ class TestBlockedPropagation:
         )
 
         with pytest.raises(TenantRelocateBlockedError):
-            asyncio.run(
-                UserDepartmentService.change_primary_department(102, 12)
-            )
+            asyncio.run(UserDepartmentService.change_primary_department(102, 12))
 
 
 # -------------------------------------------------------------------------
 # Trigger passthrough (explicit regression)
 # -------------------------------------------------------------------------
 
-class TestTriggerEnumUsed:
 
+class TestTriggerEnumUsed:
     def test_trigger_value_is_dept_change(self, patches):
         patches.primary.return_value = _primary(103, 5)
         patches.sync.return_value = SimpleNamespace(id=7)
 
-        asyncio.run(
-            UserDepartmentService.change_primary_department(103, 12)
-        )
-        trigger = patches.sync.call_args.kwargs.get('trigger')
+        asyncio.run(UserDepartmentService.change_primary_department(103, 12))
+        trigger = patches.sync.call_args.kwargs.get("trigger")
         assert trigger == UserTenantSyncTrigger.DEPT_CHANGE
-        assert trigger.value == 'dept_change'
+        assert trigger.value == "dept_change"
+
+
+def test_maintenance_force_path_does_not_call_normal_sync(patches):
+    patches.primary.return_value = _primary(104, 5)
+    patches.force_sync.return_value = SimpleNamespace(id=9)
+
+    result = asyncio.run(UserDepartmentService.force_change_primary_department_for_maintenance(104, 12))
+
+    assert result["changed"] is True
+    patches.sync.assert_not_awaited()
+    patches.force_sync.assert_awaited_once()
