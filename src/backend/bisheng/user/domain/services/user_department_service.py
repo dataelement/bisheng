@@ -75,10 +75,10 @@ class UserDepartmentService:
             # (sync would also be a no-op, but saving the audit/FGA
             # work is meaningful under bulk rekey operations).
             return {
-                'user_id': user_id,
-                'primary_department_id': new_dept_id,
-                'leaf_tenant_id': None,
-                'changed': False,
+                "user_id": user_id,
+                "primary_department_id": new_dept_id,
+                "leaf_tenant_id": None,
+                "changed": False,
             }
 
         async with get_async_db_session() as session:
@@ -94,16 +94,16 @@ class UserDepartmentService:
 
             # Upsert the new primary row. If the user already belongs to
             # new_dept_id as a secondary, promote it; otherwise insert.
-            existing_secondary = await session.exec(
-                _select_user_dept(user_id, new_dept_id)
-            )
+            existing_secondary = await session.exec(_select_user_dept(user_id, new_dept_id))
             row = existing_secondary.first()
             if row is None:
-                session.add(UserDepartment(
-                    user_id=user_id,
-                    department_id=new_dept_id,
-                    is_primary=1,
-                ))
+                session.add(
+                    UserDepartment(
+                        user_id=user_id,
+                        department_id=new_dept_id,
+                        is_primary=1,
+                    )
+                )
             else:
                 await session.exec(
                     update(UserDepartment)
@@ -123,20 +123,21 @@ class UserDepartmentService:
         # TenantRelocateBlockedError — let it propagate; the caller (API
         # endpoint or org-sync worker) handles the 409 translation.
         leaf = await UserTenantSyncService.sync_user(
-            user_id, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+            user_id,
+            trigger=UserTenantSyncTrigger.DEPT_CHANGE,
         )
 
         return {
-            'user_id': user_id,
-            'primary_department_id': new_dept_id,
-            'leaf_tenant_id': getattr(leaf, 'id', None),
-            'changed': True,
+            "user_id": user_id,
+            "primary_department_id": new_dept_id,
+            "leaf_tenant_id": getattr(leaf, "id", None),
+            "changed": True,
         }
-
 
 def _select_user_dept(user_id: int, department_id: int):
     """Reusable ``SELECT`` statement for the user+dept composite lookup."""
     from sqlmodel import select
+
     return select(UserDepartment).where(
         UserDepartment.user_id == user_id,
         UserDepartment.department_id == department_id,

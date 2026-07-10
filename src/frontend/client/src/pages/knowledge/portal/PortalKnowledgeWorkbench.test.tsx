@@ -1430,7 +1430,7 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         const folderRow = await screen.findByTestId("file-tree-row-101");
-        expect(within(folderRow).getByText("加载中")).toBeInTheDocument();
+        expect(within(folderRow).getByRole("status", { name: "技术文档 文件夹数量加载中" })).toBeInTheDocument();
         expect(within(folderRow).queryByText("(0/0)")).not.toBeInTheDocument();
         expect(getSpaceFolderStatsApi).toHaveBeenCalledWith({
             space_id: "personal-1",

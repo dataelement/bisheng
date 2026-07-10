@@ -11,6 +11,7 @@ import {
     FolderInput,
     GitBranch,
     History,
+    Loader2,
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
@@ -1431,7 +1432,12 @@ function FileRow({
                 >
                     {isFolder ? (
                         file.folderStatsLoading ? (
-                            <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
+                            <Loader2
+                                size={16}
+                                className="animate-spin text-[#86909c]"
+                                role="status"
+                                aria-label={`${file.name} 文件夹数量加载中`}
+                            />
                         ) : file.folderStatsError ? (
                             <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
                         ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (

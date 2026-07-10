@@ -252,3 +252,69 @@ Failure handling:
 - 如果 OpenFGA 写入失败，脚本会以非 0 退出；此时数据库变更已经提交，预写的 `failed_tuple` 会保持 pending。运维必须先处理 retry 队列或重新执行 `--apply`，确认 OpenFGA 旧权限已清除后，才能认为重置完成。
 - 如果脚本输出 OpenFGA 不可用，`--apply` 会在写数据库前中止。
 - 如果 `permission_relation_model_bindings_v1` 配置不是合法 JSON list，脚本会中止，避免把损坏配置覆盖为空。
+
+## Destructive Department Scripts
+
+### `purge_department_subtree.py`
+
+按业务 `dept_id` 物理删除指定部门及其全部子孙部门，并物理删除子树成员用户。脚本会将受支持的资源转移给指定管理员，清理 Linsight 用户记录和账号/部门权限关联；聊天、审计与渠道历史不主动删除。
+
+默认是 dry-run，只输出部门、用户、资产和权限影响面。必须显式传入 `--apply` 才会执行不可逆写入。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/purge_department_subtree.py \
+  --dept-id BS@example \
+  --transfer-to-user-id 1
+
+PYTHONPATH=./ .venv/bin/python scripts/purge_department_subtree.py \
+  --dept-id BS@example \
+  --transfer-to-user-id 1 \
+  --apply
+
+bash scripts/purge_department_subtree.sh \
+  --dept-id BS@example \
+  --transfer-to-user-id 1
+```
+
+Safety:
+
+- `BS@guest`、租户挂载根节点和不合法的资产接收人会使整次操作在写入前中止。
+- 外部同步账号可能在下一轮组织同步时被重新创建；脚本不会修改外部身份源或同步配置。
+- OpenFGA 失败会由 `failed_tuple` 补偿机制重试；执行摘要只报告已提交的权限清理操作。
+- `--apply` 不可恢复，务必先保存 dry-run 输出并在维护窗口执行。
+
+## Organization Migration Scripts
+
+### `migrate_admin_to_department.py`
+
+将一个明确指定的 admin 账号迁移到指定部门。默认 dry-run；`--apply` 会修改主部门和叶子租户，但保留 admin 在原叶子租户中拥有的资源。
+
+每次必须且只能提供一种账号定位方式，以及一种目标部门定位方式。
+
+Usage:
+
+```bash
+# 默认预览，不写入
+PYTHONPATH=./ .venv/bin/python scripts/migrate_admin_to_department.py \
+  --username admin \
+  --dept-id BS@example
+
+# 显式执行
+PYTHONPATH=./ .venv/bin/python scripts/migrate_admin_to_department.py \
+  --user-id 10 \
+  --department-id 42 \
+  --apply
+
+bash scripts/migrate_admin_to_department.sh \
+  --username admin \
+  --dept-id BS@example
+```
+
+Safety:
+
+- `--user-id` / `--username` 与 `--department-id` / `--dept-id` 均为必须二选一的参数组；用户名采用精确匹配。
+- 不接受 `--transfer-to-user-id`，也不会修改任何资源 owner 或资源内容。
+- 跨租户迁移仅由该脚本绕过资源阻断；不会修改全局 `enforce_transfer_before_relocate` 配置。
+- `--apply` 会改变主部门与叶子租户。脚本不会修改管理员角色、账号状态、密码或其他次级部门关系；OpenFGA 同步遵循现有 `FailedTuple` 补偿机制。

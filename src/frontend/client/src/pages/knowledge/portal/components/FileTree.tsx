@@ -1,5 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { ChevronDown, ChevronRight, MoreHorizontal, Send, Shield } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, MoreHorizontal, Send, Shield } from "lucide-react";
 import { FileStatus, type KnowledgeFile } from "~/api/knowledge";
 import LegacyFileIcon from "~/components/ui/icon/File";
 import {
@@ -156,7 +156,15 @@ export function FileTree({
                         <span className={s.fileName}>{file.name}</span>
                     )}
                 </button>
-                {countText ? <span className={s.folderCount}>{countText}</span> : null}
+                {isFolder(file) && file.folderStatsLoading ? (
+                    <span
+                        className={s.folderCount}
+                        role="status"
+                        aria-label={`${file.name} 文件夹数量加载中`}
+                    >
+                        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                    </span>
+                ) : countText ? <span className={s.folderCount}>{countText}</span> : null}
                 {!isFolder(file) && label ? <span className={getStatusClassName(file)}>{label}</span> : null}
                 {showMoreMenu ? (
                     <DropdownMenu>

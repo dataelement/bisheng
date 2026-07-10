@@ -5497,6 +5497,52 @@ class TestDeleteSpace:
 
 class TestSpaceListings:
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "space_level",
+        [KnowledgeSpaceLevelEnum.DEPARTMENT, KnowledgeSpaceLevelEnum.TEAM],
+    )
+    async def test_get_spaces_by_level_queries_level_candidates_before_permission_matching(
+        self,
+        service,
+        space_level,
+    ):
+        members = [_make_member(user_id=service.login_user.user_id, user_role=UserRoleEnum.MEMBER, space_id=202)]
+        formatted_spaces = [_make_space(space_id=202, user_id=99, auth_type=AuthTypeEnum.PRIVATE)]
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+                new_callable=AsyncMock,
+                return_value=[202],
+            ) as mock_level_candidates,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_space_members",
+                new_callable=AsyncMock,
+                return_value=members,
+            ) as mock_members,
+            patch.object(
+                service,
+                "_format_accessible_spaces",
+                new_callable=AsyncMock,
+                return_value=formatted_spaces,
+            ) as mock_format,
+            patch.object(service, "_list_accessible_spaces", new_callable=AsyncMock) as mock_accessible_spaces,
+        ):
+            result = await service.get_spaces_by_level(space_level)
+
+        assert result == formatted_spaces
+        mock_level_candidates.assert_awaited_once_with(space_level)
+        mock_members.assert_awaited_once_with(service.login_user.user_id)
+        mock_format.assert_awaited_once_with(
+            [202],
+            "update_time",
+            memberships=members,
+            required_permission_id="view_space",
+            include_file_count=False,
+        )
+        mock_accessible_spaces.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_get_my_created_spaces_excludes_department_bound_spaces(self, service):
         department_member = _make_member(
             user_id=service.login_user.user_id,
@@ -9650,6 +9696,37 @@ async def test_filter_visible_child_items_manager_sees_all(service):
 
 class TestFormatAccessibleSpacesCharacterization:
     """锁住 _format_accessible_spaces 的输出，作为性能重构的等价性护栏。"""
+
+    @pytest.mark.asyncio
+    async def test_lightweight_listing_skips_file_count_query(self, service):
+        own = _make_space(space_id=1, user_id=service.login_user.user_id, auth_type=AuthTypeEnum.PRIVATE)
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+                new_callable=AsyncMock,
+                return_value=[own],
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
+                new_callable=AsyncMock,
+            ) as mock_file_count,
+            patch.object(
+                service,
+                "_decorate_department_metadata",
+                new_callable=AsyncMock,
+                side_effect=lambda spaces: spaces,
+            ),
+        ):
+            result = await service._format_accessible_spaces(
+                [1],
+                "update_time",
+                memberships=[],
+                required_permission_id="view_space",
+                include_file_count=False,
+            )
+
+        mock_file_count.assert_not_awaited()
+        assert result[0].file_num == 0
 
     @pytest.mark.asyncio
     async def test_creator_space_maps_to_creator_role_and_subscribed(self, service):

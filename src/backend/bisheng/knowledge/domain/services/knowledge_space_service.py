@@ -33,7 +33,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
-    DepartmentSpaceDeleteForbiddenError,
     FavoriteSpaceProtectedError,
     FreeSpaceMigratingError,
     FreeSpaceMigrationEmbeddingMismatchError,
@@ -982,6 +981,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         memberships: list[SpaceChannelMember] | None = None,
         exclude_created: bool = False,
         required_permission_id: str | None = None,
+        include_file_count: bool = True,
     ) -> list[KnowledgeRead]:
         t0 = time.perf_counter()
         if not space_ids:
@@ -1075,7 +1075,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         ordered_spaces = pinned_spaces + normal_spaces
         file_count_ms = 0.0
-        if ordered_spaces:
+        if include_file_count and ordered_spaces:
             _t_file_count = time.perf_counter()
             file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
                 [space.id for space in ordered_spaces]
@@ -1083,6 +1083,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_count_ms = (time.perf_counter() - _t_file_count) * 1000
             for space in ordered_spaces:
                 space.file_num = int(file_count_map.get(space.id, 0) or 0)
+        elif ordered_spaces:
+            # The level-specific lightweight list does not need file totals.
+            # Avoid exposing the schema's non-zero default as a real count.
+            for space in ordered_spaces:
+                space.file_num = 0
 
         _t_decorate = time.perf_counter()
         result = await self._decorate_department_metadata(ordered_spaces)
@@ -2607,10 +2612,50 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return again
             raise
 
-    async def _ensure_personal_spaces(self) -> None:
-        """首次访问个人分组时，确保 我的收藏 + {用户名}的知识库 均存在。"""
-        await self._ensure_favorite_space()
-        await self._ensure_personal_default_space()
+    async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
+        """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
+        favorite_space = await self._ensure_favorite_space()
+        default_space = await self._ensure_personal_default_space()
+        return favorite_space, default_space
+
+    async def _get_personal_spaces(self) -> list[KnowledgeSpaceInfoResp]:
+        """Return the current user's two fixed personal spaces without ReBAC checks.
+
+        Personal spaces are system-managed, private resources: the only valid
+        entries are the user's favorite space and ``{username}的知识库``.  They
+        are therefore not part of the all-accessible-space permission fan-out.
+        """
+        favorite_space, default_space = await self._ensure_personal_spaces()
+        spaces_by_id = {
+            int(space.id): space
+            for space in (favorite_space, default_space)
+            if getattr(space, "id", None) is not None
+        }
+        spaces = list(spaces_by_id.values())
+        if not spaces:
+            return []
+
+        file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
+            [int(space.id) for space in spaces]
+        )
+        result: list[KnowledgeSpaceInfoResp] = []
+        for space in spaces:
+            item = KnowledgeSpaceInfoResp(
+                **space.model_dump(),
+                is_pinned=False,
+                user_name=self.login_user.user_name,
+                file_num=int(file_count_map.get(int(space.id), 0) or 0),
+                space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+                owner_id=int(self.login_user.user_id),
+                owner_name=self.login_user.user_name,
+            )
+            item.user_role = UserRoleEnum.CREATOR
+            self._apply_subscription_flags(item, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+            result.append(item)
+
+        result.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
+        return result
 
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
@@ -5566,11 +5611,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 decision = await FreeSpaceMigrationService.pre_delete_guard(space)
                 if decision.action == "block":
                     raise {
-                        "department_space_forbidden": DepartmentSpaceDeleteForbiddenError,
                         "target_not_found": FreeSpaceMigrationTargetNotFoundError,
                         "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
                         "migrating": FreeSpaceMigratingError,
-                    }.get(decision.reason, DepartmentSpaceDeleteForbiddenError)()
+                    }.get(decision.reason, FreeSpaceMigrationTargetNotFoundError)()
                 if decision.action == "migrate":
                     await KnowledgeDao.async_update_state(
                         knowledge_id=space_id,
@@ -5955,27 +5999,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_by: str = "update_time",
     ) -> list[KnowledgeRead]:
         target_level = self._normalize_space_level(space_level)
-        favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            await self._ensure_personal_spaces()
-            favorite_space = await self._find_favorite_space()
-            favorite_space_id = int(favorite_space.id) if favorite_space else None
+            return await self._get_personal_spaces()
+
+        # Team and department listings are generally much smaller than the
+        # user's complete accessible-space set.  Select the level's candidate
+        # spaces first, then let _format_accessible_spaces perform the same
+        # membership/ReBAC ``view_space`` checks and response enrichment used
+        # by the other listings.
+        if target_level in {
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+        }:
+            space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(target_level)
+            if not space_ids:
+                return []
+            memberships = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+            return await self._format_accessible_spaces(
+                space_ids,
+                order_by,
+                memberships=memberships,
+                required_permission_id="view_space",
+                include_file_count=False,
+            )
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
 
-        if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
-            current_user_id = int(self.login_user.user_id)
-            result = [space for space in result if int(getattr(space, "user_id", 0) or 0) == current_user_id]
-
-        if favorite_space_id is not None:
-            for space in result:
-                if int(space.id) == favorite_space_id:
-                    space.is_favorite = True
-            result.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
-
         return result
+
+    async def get_public_spaces(self, order_by: str = "update_time") -> list[dict[str, Any]]:
+        """List every public knowledge space without user-specific enrichment.
+
+        The level endpoint keeps its login dependency, but public spaces do not
+        need membership or ReBAC evaluation.  Return the persisted space fields
+        plus the known scope level only; file counts and department metadata are
+        intentionally excluded from this lightweight list response.
+        """
+        space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        return [
+            {
+                **space.model_dump(),
+                "space_level": KnowledgeSpaceLevelEnum.PUBLIC.value,
+            }
+            for space in spaces
+        ]
 
     async def global_search_files(
         self,
@@ -7192,6 +7261,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         enrich_files: bool = True,
         folder_count_mode: str = "deep",
     ) -> list[dict]:
+        perf_start = time.perf_counter()
         folder_ids = []
         file_ids = []
         for one in res:
@@ -7201,7 +7271,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_ids.append(one.id)
 
         folder_counts = {}
+        folder_counts_ms = 0.0
         if include_folder_counts and folder_ids:
+            folder_counts_start = time.perf_counter()
             if folder_counts_override is not None:
                 folder_counts = folder_counts_override
             else:
@@ -7210,10 +7282,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     folder_counts = await self._load_folder_direct_counts(folders)
                 else:
                     folder_counts = await self._load_folder_stat_counts(folders)
+            folder_counts_ms = (time.perf_counter() - folder_counts_start) * 1000
 
         # file need find all tags (skip when caller does not consume enrichment, e.g. QA tree)
+        file_tags_start = time.perf_counter()
         file_tags = await self._load_file_tags_batch(file_ids) if (enrich_files and file_ids) else {}
+        file_tags_ms = (time.perf_counter() - file_tags_start) * 1000
 
+        serialize_start = time.perf_counter()
         result = []
         for one in res:
             item = one.model_dump()
@@ -7241,6 +7317,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
             result.append(item)
 
+        _logger.info(
+            "knowledge_space_children_extra_info_perf items=%s folders=%s files=%s "
+            "folder_count_mode=%s enrich_files=%s folder_counts_ms=%.1f "
+            "file_tags_ms=%.1f serialize_ms=%.1f total_ms=%.1f",
+            len(res),
+            len(folder_ids),
+            len(file_ids),
+            folder_count_mode,
+            enrich_files,
+            folder_counts_ms,
+            file_tags_ms,
+            (time.perf_counter() - serialize_start) * 1000,
+            (time.perf_counter() - perf_start) * 1000,
+        )
         return result
 
     async def _count_visible_success_files_under_folder(
@@ -7349,10 +7439,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visible_page_items: list[KnowledgeFile] = []
         order_field = normalize_child_order_field(order_field)
         order_sort = normalize_child_order_sort(order_sort)
+        perf_start = time.perf_counter()
+        permission_context_start = time.perf_counter()
         permission_context = await self._build_child_permission_context(space_id)
+        permission_context_ms = (time.perf_counter() - permission_context_start) * 1000
         batch_cursor: list | None = list(cursor) if cursor else None
+        db_fetch_ms = 0.0
+        visibility_filter_ms = 0.0
+        batch_count = 0
+        db_item_count = 0
+        visibility_check_count = 0
+
+        def log_scan_perf(*, has_more: bool) -> None:
+            _logger.info(
+                "knowledge_space_children_visibility_scan_perf space_id=%s parent_id=%s "
+                "page_size=%s batches=%s db_items=%s visibility_checks=%s visible_items=%s "
+                "has_more=%s permission_context_ms=%.1f db_fetch_ms=%.1f "
+                "visibility_filter_ms=%.1f total_ms=%.1f",
+                space_id,
+                parent_id,
+                page_size,
+                batch_count,
+                db_item_count,
+                visibility_check_count,
+                len(visible_page_items),
+                has_more,
+                permission_context_ms,
+                db_fetch_ms,
+                visibility_filter_ms,
+                (time.perf_counter() - perf_start) * 1000,
+            )
 
         while True:
+            db_fetch_start = time.perf_counter()
             batch_items = await SpaceFileDao.async_list_children(
                 space_id,
                 parent_id,
@@ -7366,8 +7485,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 exclude_file_ids=exclude_file_ids,
                 cursor=batch_cursor,
             )
+            db_fetch_ms += (time.perf_counter() - db_fetch_start) * 1000
             if not batch_items:
                 break
+            batch_count += 1
+            db_item_count += len(batch_items)
 
             # Permission-check the fetched batch in chunks, stopping as soon as we
             # have page_size + 1 visible items. Each ReBAC check is an OpenFGA
@@ -7379,15 +7501,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             chunk_size = page_size + 1
             for chunk_start in range(0, len(batch_items), chunk_size):
                 chunk = batch_items[chunk_start : chunk_start + chunk_size]
+                visibility_check_count += len(chunk)
+                visibility_filter_start = time.perf_counter()
                 visible_chunk = await self._filter_visible_child_items(
                     chunk,
                     space_id=space_id,
                     context=permission_context,
                 )
+                visibility_filter_ms += (time.perf_counter() - visibility_filter_start) * 1000
                 for item in visible_chunk:
                     visible_page_items.append(item)
                     if len(visible_page_items) > page_size:
                         # Got the +1 probe — done scanning.
+                        log_scan_perf(has_more=True)
                         return visible_page_items[:page_size], True
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
@@ -7400,6 +7526,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
                 break
 
+        log_scan_perf(has_more=False)
         return visible_page_items, False
 
     async def list_space_children(
@@ -7414,7 +7541,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int = 20,
         file_type: int | None = None,
         enrich_files: bool = True,
-        folder_count_mode: str = "deep",
+        folder_count_mode: str = "none",
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
@@ -7422,6 +7549,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         next_cursor}``. Legacy ``total`` / ``page`` fields removed (AC-03);
         clients drive infinite-scroll via ``has_more`` + ``next_cursor``.
         """
+        perf_start = time.perf_counter()
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
@@ -7432,10 +7560,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             normalize_child_order_sort,
         )
 
+        permission_start = time.perf_counter()
         if parent_id:
             await self._require_folder_relation(space_id, parent_id, "can_read")
         else:
             await self._require_read_permission(space_id)
+        permission_ms = (time.perf_counter() - permission_start) * 1000
 
         order_field = normalize_child_order_field(order_field)
         order_sort = normalize_child_order_sort(order_sort)
@@ -7451,9 +7581,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Exclude non-primary version files so only the current primary revision is visible.
         exclude_file_ids: list[int] | None = None
+        version_exclusion_start = time.perf_counter()
         if self.version_repo is not None:
             exclude_file_ids = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
+        version_exclusion_ms = (time.perf_counter() - version_exclusion_start) * 1000
 
+        visibility_scan_start = time.perf_counter()
         visible_page_items, has_more = await self._scan_visible_child_items(
             space_id=space_id,
             parent_id=parent_id,
@@ -7466,17 +7599,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             cursor=decoded,
             exclude_file_ids=exclude_file_ids,
         )
+        visibility_scan_ms = (time.perf_counter() - visibility_scan_start) * 1000
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
+        version_enrichment_start = time.perf_counter()
         if enrich_files:
             await self._enrich_with_version_info(visible_page_items)
+        version_enrichment_ms = (time.perf_counter() - version_enrichment_start) * 1000
 
+        extra_info_start = time.perf_counter()
         data = await self._handle_file_folder_extra_info(
             visible_page_items,
-            include_folder_counts=True,
+            # Deep folder counts fetch all descendant files and evaluate their
+            # permissions, which must not delay the paginated file list. The
+            # portal loads them after render from POST /folder-stats. Keep the
+            # lightweight QA-tree `shallow` mode for its has_children contract.
+            include_folder_counts=folder_count_mode == "shallow",
             enrich_files=enrich_files,
             folder_count_mode=folder_count_mode,
         )
+        extra_info_ms = (time.perf_counter() - extra_info_start) * 1000
 
         next_cursor: str | None = None
         if has_more and visible_page_items:
@@ -7486,6 +7628,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 context=context,
             )
 
+        folder_count = sum(1 for item in visible_page_items if item.file_type == FileType.DIR.value)
+        _logger.info(
+            "knowledge_space_children_perf space_id=%s parent_id=%s page_size=%s "
+            "returned_items=%s folders=%s has_more=%s enrich_files=%s folder_count_mode=%s "
+            "excluded_non_primary=%s permission_ms=%.1f version_exclusion_ms=%.1f "
+            "visibility_scan_ms=%.1f version_enrichment_ms=%.1f extra_info_ms=%.1f total_ms=%.1f",
+            space_id,
+            parent_id,
+            page_size,
+            len(visible_page_items),
+            folder_count,
+            has_more,
+            enrich_files,
+            folder_count_mode,
+            len(exclude_file_ids or []),
+            permission_ms,
+            version_exclusion_ms,
+            visibility_scan_ms,
+            version_enrichment_ms,
+            extra_info_ms,
+            (time.perf_counter() - perf_start) * 1000,
+        )
         return PageInfiniteCursorData(
             data=data,
             page_size=page_size,

@@ -1360,7 +1360,6 @@
     "18040": "Permission denied: only the creator or admin can perform this operation",
     "18041": "The current tenant does not match the knowledge space owner tenant. This operation is not supported here. Switch to the knowledge space tenant and try again.",
     "18050": "Tag already exists in this space",
-    "18080": "Department knowledge spaces cannot be deleted. Unbind the department in the admin console first.",
     "18051": "Pending review tags are disabled; AI and manual tags cannot be submitted",
     "18077": "Bind a tag library to this knowledge space before adding tags",
     "18060": "Version management is disabled.",

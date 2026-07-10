@@ -54,11 +54,11 @@ logger = logging.getLogger(__name__)
 # current DB (e.g. SQLite test env) are silently skipped in
 # ``_count_owned_resources``, so adding a table here does not break tests.
 _OWNED_RESOURCE_TABLES: tuple[tuple[str, str], ...] = (
-    ('knowledge', 'user_id'),
-    ('flow', 'user_id'),
-    ('assistant', 'user_id'),
-    ('channel', 'user_id'),
-    ('t_gpts_tools', 'user_id'),
+    ("knowledge", "user_id"),
+    ("flow", "user_id"),
+    ("assistant", "user_id"),
+    ("channel", "user_id"),
+    ("t_gpts_tools", "user_id"),
 )
 
 
@@ -88,9 +88,7 @@ class UserTenantSyncService:
         if current is not None and current.tenant_id == new_leaf.id:
             return new_leaf  # No change — cheap exit.
 
-        old_tenant_id: Optional[int] = (
-            current.tenant_id if current is not None else None
-        )
+        old_tenant_id: Optional[int] = current.tenant_id if current is not None else None
 
         owned_count = 0
         if old_tenant_id is not None:
@@ -116,7 +114,9 @@ class UserTenantSyncService:
         await UserTenantDao.aactivate_user_tenant(user_id, new_leaf.id)
         await UserDao.aincrement_token_version(user_id)
         await cls._rewrite_fga_member_tuples(
-            user_id, old_tenant_id, new_leaf.id,
+            user_id,
+            old_tenant_id,
+            new_leaf.id,
         )
         await cls._invalidate_redis_caches(user_id)
         # F019 AC-11: once ``token_version`` has been bumped the old JWT is
@@ -126,15 +126,12 @@ class UserTenantSyncService:
         # keeps tenant → admin module dependency off the top-level graph.
         try:
             from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+
             await TenantScopeService.clear_on_token_version_bump(user_id)
         except Exception as exc:  # noqa: BLE001
-            logger.debug('admin_scope clear on relocate failed: %s', exc)
+            logger.debug("admin_scope clear on relocate failed: %s", exc)
 
-        relocate_reason = (
-            'no_primary_department'
-            if old_tenant_id is None and new_leaf.id == ROOT_TENANT_ID
-            else None
-        )
+        relocate_reason = "no_primary_department" if old_tenant_id is None and new_leaf.id == ROOT_TENANT_ID else None
         await cls._write_relocation_audit(
             user_id=user_id,
             action=TenantAuditAction.USER_TENANT_RELOCATED,
@@ -149,7 +146,10 @@ class UserTenantSyncService:
         if owned_count > 0:
             # Inbox notification — best effort; audit log is the source of truth.
             await cls._notify_resource_owner_relocation(
-                user_id, old_tenant_id, new_leaf.id, owned_count,
+                user_id,
+                old_tenant_id,
+                new_leaf.id,
+                owned_count,
             )
 
         return new_leaf
@@ -176,20 +176,21 @@ class UserTenantSyncService:
         glitch.
         """
         if not dept_path:
-            return {'synced': [], 'failed': []}
+            return {"synced": [], "failed": []}
 
         dept_ids = await DepartmentDao.aget_subtree_ids(dept_path)
         if not dept_ids:
-            return {'synced': [], 'failed': []}
+            return {"synced": [], "failed": []}
 
         user_ids: set[int] = set()
         for dept_id in dept_ids:
             ids = await UserDepartmentDao.aget_user_ids_by_department(
-                dept_id, is_primary=True,
+                dept_id,
+                is_primary=True,
             )
             user_ids.update(ids)
         if not user_ids:
-            return {'synced': [], 'failed': []}
+            return {"synced": [], "failed": []}
 
         synced: list[int] = []
         failed: list[tuple[int, str]] = []
@@ -200,16 +201,20 @@ class UserTenantSyncService:
             except Exception as exc:  # noqa: BLE001
                 failed.append((uid, repr(exc)))
                 logger.warning(
-                    'sync_subtree_primary_users: user=%s trigger=%s failed: %s',
-                    uid, cls._trigger_str(trigger), exc,
+                    "sync_subtree_primary_users: user=%s trigger=%s failed: %s",
+                    uid,
+                    cls._trigger_str(trigger),
+                    exc,
                 )
 
         if failed:
             logger.warning(
-                'sync_subtree_primary_users: trigger=%s synced=%d failed=%d',
-                cls._trigger_str(trigger), len(synced), len(failed),
+                "sync_subtree_primary_users: trigger=%s synced=%d failed=%d",
+                cls._trigger_str(trigger),
+                len(synced),
+                len(failed),
             )
-        return {'synced': synced, 'failed': failed}
+        return {"synced": synced, "failed": failed}
 
     # --- Internals ------------------------------------------------------
 
@@ -223,6 +228,7 @@ class UserTenantSyncService:
     def _enforce_transfer_before_relocate() -> bool:
         """Read the flag lazily — tests can monkeypatch settings."""
         from bisheng.common.services.config_service import settings
+
         try:
             return bool(settings.user_tenant_sync.enforce_transfer_before_relocate)
         except AttributeError:
@@ -231,7 +237,9 @@ class UserTenantSyncService:
 
     @classmethod
     async def _count_owned_resources(
-        cls, user_id: int, tenant_id: int,
+        cls,
+        user_id: int,
+        tenant_id: int,
     ) -> int:
         """Count rows the user owns under ``tenant_id`` across the MVP
         whitelist. Uses raw parameterised SQL so each COUNT is a single
@@ -249,20 +257,17 @@ class UserTenantSyncService:
                 for table_name, user_col in _OWNED_RESOURCE_TABLES:
                     try:
                         result = await session.exec(
-                            text(
-                                f'SELECT COUNT(*) FROM {table_name} '
-                                f'WHERE {user_col} = :uid '
-                                f'AND tenant_id = :tid'
-                            ),
-                            params={'uid': user_id, 'tid': tenant_id},
+                            text(f"SELECT COUNT(*) FROM {table_name} WHERE {user_col} = :uid AND tenant_id = :tid"),
+                            params={"uid": user_id, "tid": tenant_id},
                         )
                         row = result.first()
                         if row is not None:
                             total += int(row[0])
                     except Exception as exc:  # noqa: BLE001
                         logger.debug(
-                            'owned-resource count skipped for %s: %s',
-                            table_name, exc,
+                            "owned-resource count skipped for %s: %s",
+                            table_name,
+                            exc,
                         )
         return total
 
@@ -282,30 +287,37 @@ class UserTenantSyncService:
         """
         operations: list[TupleOperation] = []
         if old_tenant_id is not None and old_tenant_id != new_tenant_id:
-            operations.append(TupleOperation(
-                action='delete',
-                user=f'user:{user_id}',
-                relation='member',
-                object=f'tenant:{old_tenant_id}',
-            ))
+            operations.append(
+                TupleOperation(
+                    action="delete",
+                    user=f"user:{user_id}",
+                    relation="member",
+                    object=f"tenant:{old_tenant_id}",
+                )
+            )
         # New tenant membership — skip Root since F013 doesn't write tenant:1#member
         # tuples (see INV-T3). The invariant is still enforced here because Root
         # users derive visibility from leaf == Root, not from #member.
         if new_tenant_id != ROOT_TENANT_ID:
-            operations.append(TupleOperation(
-                action='write',
-                user=f'user:{user_id}',
-                relation='member',
-                object=f'tenant:{new_tenant_id}',
-            ))
+            operations.append(
+                TupleOperation(
+                    action="write",
+                    user=f"user:{user_id}",
+                    relation="member",
+                    object=f"tenant:{new_tenant_id}",
+                )
+            )
         if not operations:
             return
         try:
             await PermissionService.batch_write_tuples(operations, crash_safe=True)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                'FGA tuple rewrite for user %d relocate %s→%s failed: %s',
-                user_id, old_tenant_id, new_tenant_id, exc,
+                "FGA tuple rewrite for user %d relocate %s→%s failed: %s",
+                user_id,
+                old_tenant_id,
+                new_tenant_id,
+                exc,
             )
 
     @classmethod
@@ -313,19 +325,20 @@ class UserTenantSyncService:
         """Evict every per-user cache that could now be stale."""
         try:
             from bisheng.core.cache.redis_manager import get_redis_client
+
             redis = await get_redis_client()
         except Exception as exc:  # noqa: BLE001
-            logger.debug('Redis unavailable; cache invalidation skipped: %s', exc)
+            logger.debug("Redis unavailable; cache invalidation skipped: %s", exc)
             return
         for key in (
-            f'user:{user_id}:leaf_tenant',
-            f'user:{user_id}:token_version',
-            f'user:{user_id}:is_super',
+            f"user:{user_id}:leaf_tenant",
+            f"user:{user_id}:token_version",
+            f"user:{user_id}:is_super",
         ):
             try:
                 await redis.adelete(key)
             except Exception as exc:  # noqa: BLE001
-                logger.debug('Redis delete %s failed: %s', key, exc)
+                logger.debug("Redis delete %s failed: %s", key, exc)
 
     @classmethod
     async def _write_relocation_audit(
@@ -345,31 +358,34 @@ class UserTenantSyncService:
                 operator_id=user_id,
                 operator_tenant_id=audit_tenant_id,
                 action=action.value,
-                target_type='user',
+                target_type="user",
                 target_id=str(user_id),
                 reason=reason,
                 metadata={
-                    'old_tenant_id': old_tenant_id,
-                    'new_tenant_id': new_tenant_id,
-                    'owned_count': owned_count,
-                    'trigger': trigger,
+                    "old_tenant_id": old_tenant_id,
+                    "new_tenant_id": new_tenant_id,
+                    "owned_count": owned_count,
+                    "trigger": trigger,
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            logger.error('audit %s write failed: %s', action.value, exc)
+            logger.error("audit %s write failed: %s", action.value, exc)
 
     @classmethod
     async def _notify_resource_owner_relocation(
-        cls, user_id: int,
-        old_tenant_id: Optional[int], new_tenant_id: int,
+        cls,
+        user_id: int,
+        old_tenant_id: Optional[int],
+        new_tenant_id: int,
         owned_count: int,
     ) -> None:
         """Best-effort inbox notice — audit_log is the source of truth."""
         from bisheng.tenant.domain.services.inbox_helper import send_inbox_notice
-        title = '租户归属已变更 (tenant relocated)'
+
+        title = "租户归属已变更 (tenant relocated)"
         body = (
-            f'您的主部门发生变更，已从 Tenant {old_tenant_id} 切换至 '
-            f'Tenant {new_tenant_id}。您名下仍有 {owned_count} 个资源保留在原 Tenant，'
-            f'请联系管理员完成资源交接。'
+            f"您的主部门发生变更，已从 Tenant {old_tenant_id} 切换至 "
+            f"Tenant {new_tenant_id}。您名下仍有 {owned_count} 个资源保留在原 Tenant，"
+            f"请联系管理员完成资源交接。"
         )
         await send_inbox_notice(title, body, recipients=[user_id])

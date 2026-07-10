@@ -50,10 +50,13 @@ async def test_migrating_state_blocks():
 
 
 @pytest.mark.asyncio
-async def test_bound_department_space_blocks():
-    d = await _run(_Space(1, 5), binding=object())
-    assert d.action == "block"
-    assert d.reason == "department_space_forbidden"
+async def test_bound_department_space_allows_direct_delete():
+    with patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=object())), \
+         patch.object(FreeSpaceMigrationService, "resolve_target_department_space", new=AsyncMock()) as resolve_target:
+        d = await FreeSpaceMigrationService.pre_delete_guard(_Space(1, 5))
+
+    assert d.action == "normal_delete"
+    resolve_target.assert_not_awaited()
 
 
 @pytest.mark.asyncio
