@@ -388,7 +388,7 @@ class AnswerRepository:
                 .where(and_(Answer.question_id == question_id, Answer.status != 3))
             )
             result = await session.exec(stmt)
-            return result.scalar() or 0
+            return result.first() or 0
 
 class CommentRepository:
     """评论仓储"""
