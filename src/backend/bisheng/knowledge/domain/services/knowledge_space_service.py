@@ -2607,10 +2607,50 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return again
             raise
 
-    async def _ensure_personal_spaces(self) -> None:
-        """首次访问个人分组时，确保 我的收藏 + {用户名}的知识库 均存在。"""
-        await self._ensure_favorite_space()
-        await self._ensure_personal_default_space()
+    async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
+        """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
+        favorite_space = await self._ensure_favorite_space()
+        default_space = await self._ensure_personal_default_space()
+        return favorite_space, default_space
+
+    async def _get_personal_spaces(self) -> list[KnowledgeSpaceInfoResp]:
+        """Return the current user's two fixed personal spaces without ReBAC checks.
+
+        Personal spaces are system-managed, private resources: the only valid
+        entries are the user's favorite space and ``{username}的知识库``.  They
+        are therefore not part of the all-accessible-space permission fan-out.
+        """
+        favorite_space, default_space = await self._ensure_personal_spaces()
+        spaces_by_id = {
+            int(space.id): space
+            for space in (favorite_space, default_space)
+            if getattr(space, "id", None) is not None
+        }
+        spaces = list(spaces_by_id.values())
+        if not spaces:
+            return []
+
+        file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
+            [int(space.id) for space in spaces]
+        )
+        result: list[KnowledgeSpaceInfoResp] = []
+        for space in spaces:
+            item = KnowledgeSpaceInfoResp(
+                **space.model_dump(),
+                is_pinned=False,
+                user_name=self.login_user.user_name,
+                file_num=int(file_count_map.get(int(space.id), 0) or 0),
+                space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+                owner_id=int(self.login_user.user_id),
+                owner_name=self.login_user.user_name,
+            )
+            item.user_role = UserRoleEnum.CREATOR
+            self._apply_subscription_flags(item, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+            result.append(item)
+
+        result.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
+        return result
 
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
@@ -5840,25 +5880,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_by: str = "update_time",
     ) -> list[KnowledgeRead]:
         target_level = self._normalize_space_level(space_level)
-        favorite_space_id: int | None = None
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            await self._ensure_personal_spaces()
-            favorite_space = await self._find_favorite_space()
-            favorite_space_id = int(favorite_space.id) if favorite_space else None
+            return await self._get_personal_spaces()
 
         spaces = await self._list_accessible_spaces(order_by)
         result = [space for space in spaces if space.space_level == target_level]
-
-        if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
-            # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
-            current_user_id = int(self.login_user.user_id)
-            result = [space for space in result if int(getattr(space, "user_id", 0) or 0) == current_user_id]
-
-        if favorite_space_id is not None:
-            for space in result:
-                if int(space.id) == favorite_space_id:
-                    space.is_favorite = True
-            result.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
 
         return result
 

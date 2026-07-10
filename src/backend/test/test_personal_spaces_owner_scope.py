@@ -8,6 +8,7 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -50,15 +51,24 @@ async def test_grouped_personal_spaces_only_current_user_owned():
 
 
 @pytest.mark.asyncio
-async def test_level_personal_only_current_user_owned():
+async def test_level_personal_returns_only_the_two_fixed_spaces_without_accessible_space_lookup():
     svc = _svc(user_id=1)
-    with patch.object(KnowledgeSpaceService, "_ensure_personal_spaces", new=AsyncMock()), \
-         patch.object(KnowledgeSpaceService, "_find_favorite_space", new=AsyncMock(return_value=None)), \
-         patch.object(KnowledgeSpaceService, "_list_accessible_spaces",
-                      new=AsyncMock(return_value=_mixed_spaces())):
+    favorite = Knowledge(id=117, name="我的收藏", user_id=1,
+                         type=KnowledgeTypeEnum.SPACE.value, is_favorite=True)
+    default = Knowledge(id=149, name="admin的知识库", user_id=1,
+                        type=KnowledgeTypeEnum.SPACE.value)
+    accessible_spaces = AsyncMock(return_value=_mixed_spaces())
+    with patch.object(KnowledgeSpaceService, "_ensure_personal_spaces",
+                      new=AsyncMock(return_value=(favorite, default))), \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
+               new=AsyncMock(return_value={117: 3, 149: 5})), \
+         patch.object(KnowledgeSpaceService, "_list_accessible_spaces", new=accessible_spaces):
         result = await svc.get_spaces_by_level(KnowledgeSpaceLevelEnum.PERSONAL)
 
     assert {s.id for s in result} == {117, 149}
+    assert [s.id for s in result] == [117, 149]
+    assert [s.file_num for s in result] == [3, 5]
+    accessible_spaces.assert_not_awaited()
 
 
 @pytest.mark.asyncio
