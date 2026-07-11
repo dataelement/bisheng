@@ -265,6 +265,21 @@ export interface SpaceTag {
     business_type?: string;
     /** Present on pending review tags returned by the space tag API. */
     review_status?: number;
+    /** Populated by tag lookup when the tag belongs to a tag library. */
+    tag_library_id?: number;
+    tag_library_name?: string;
+    /** Whether tag_library_id is bound to the current knowledge space (lookup only). */
+    is_bound_to_space?: boolean;
+}
+
+export function isPendingReviewSpaceTag(tag: Pick<SpaceTag, "review_status">): boolean {
+    return tag.review_status === 0;
+}
+
+export function isUnboundLibraryLookupTag(
+    tag: Pick<SpaceTag, "tag_library_id" | "is_bound_to_space">,
+): boolean {
+    return tag.tag_library_id != null && tag.is_bound_to_space === false;
 }
 
 export function isLibrarySpaceTag(tag: SpaceTag): boolean {

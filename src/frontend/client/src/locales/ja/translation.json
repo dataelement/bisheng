@@ -1392,6 +1392,8 @@
     "tag_type_manual": "手動タグ",
     "manual_tag_review_hint": "手動で追加したタグは、管理者の承認後に有効になります。",
     "tag_under_review": "タグは審査中です",
+    "tag_already_under_review": "すでに審査待ちです",
+    "tag_exists_in_library_named": "タグはすでに{{libraryName}}タグライブラリに存在します",
     "tag_already_selected": "このタグは既に追加されています",
     "tag_exists_in_other_library": "タグは既に存在します",
     "review_tag_feature_disabled": "審査待ちタグ機能が無効のため、AIタグと手動タグは送信できません",

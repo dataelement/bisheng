@@ -2627,17 +2627,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         favorite_space, default_space = await self._ensure_personal_spaces()
         spaces_by_id = {
-            int(space.id): space
-            for space in (favorite_space, default_space)
-            if getattr(space, "id", None) is not None
+            int(space.id): space for space in (favorite_space, default_space) if getattr(space, "id", None) is not None
         }
         spaces = list(spaces_by_id.values())
         if not spaces:
             return []
 
-        file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
-            [int(space.id) for space in spaces]
-        )
+        file_count_map = await KnowledgeFileDao.async_count_success_files_batch([int(space.id) for space in spaces])
         result: list[KnowledgeSpaceInfoResp] = []
         for space in spaces:
             item = KnowledgeSpaceInfoResp(
@@ -9555,10 +9551,63 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return None
 
-    async def lookup_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag | None:
+    async def _build_tag_lookup_resp(
+        self,
+        space_id: int,
+        tag: Tag | ReviewTag | None,
+    ) -> dict[str, Any] | None:
+        if tag is None:
+            return None
+
+        bound_ids = set(await KnowledgeSpaceTagLibraryService.resolve_bound_library_ids(space_id))
+
+        business_type = getattr(tag, "business_type", None)
+        if hasattr(business_type, "value"):
+            business_type = business_type.value
+        business_id = getattr(tag, "business_id", None)
+
+        tag_library_id: int | None = None
+        if business_type == TagBusinessTypeEnum.TAG_LIBRARY.value and business_id:
+            try:
+                tag_library_id = int(business_id)
+            except (TypeError, ValueError):
+                tag_library_id = None
+
+        tag_library_name: str | None = None
+        if tag_library_id is not None:
+            library = await KnowledgeSpaceTagLibraryDao.aget(tag_library_id)
+            tag_library_name = library.name if library else None
+
+        is_bound_to_space: bool | None = None
+        if tag_library_id is not None:
+            is_bound_to_space = tag_library_id in bound_ids
+        elif business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE.value:
+            is_bound_to_space = str(business_id) == str(space_id) if business_id else True
+
+        review_status = getattr(tag, "review_status", None)
+        if review_status is None:
+            review_status = 1
+
+        resource_type = getattr(tag, "resource_type", None)
+        if hasattr(resource_type, "value"):
+            resource_type = resource_type.value
+
+        return {
+            "id": tag.id,
+            "name": tag.name,
+            "resource_type": resource_type,
+            "business_type": business_type,
+            "review_status": review_status,
+            "tag_library_id": tag_library_id,
+            "tag_library_name": tag_library_name,
+            "is_bound_to_space": is_bound_to_space,
+        }
+
+    async def lookup_space_tag(self, space_id: int, tag_name: str) -> dict[str, Any] | None:
         """Resolve an existing tag by name without creating a new review tag."""
         await self._require_read_permission(space_id)
-        return await self._find_space_tag_by_name(space_id, tag_name)
+        tag = await self._find_space_tag_by_name(space_id, tag_name)
+        return await self._build_tag_lookup_resp(space_id, tag)
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
         await self._require_permission_id("knowledge_space", space_id, "edit_space")

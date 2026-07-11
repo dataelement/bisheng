@@ -23,6 +23,8 @@ import {
     batchUpdateTagsApi,
     getKnowledgeSpaceReviewTagVisibilityApi,
     resolveSpaceTagAddHint,
+    isPendingReviewSpaceTag,
+    isUnboundLibraryLookupTag,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
@@ -133,10 +135,6 @@ function mergeSpaceTagsWithInitial(tags: SpaceTag[], initialTags: FileTag[]): Sp
         });
     }
     return merged;
-}
-
-function isPendingReviewSpaceTag(tag: SpaceTag): boolean {
-    return tag.review_status === 0;
 }
 
 function normalizeCreatedSpaceTag(tag: SpaceTag, reviewTagEnabled: boolean): SpaceTag {
@@ -530,6 +528,11 @@ export function EditTagsModal({
 
         const existing = findKnownSpaceTagByName(trimmed, spaceTags, tagMetaRef);
         if (existing) {
+            if (isPendingReviewSpaceTag(existing)) {
+                showToast({ message: localize("com_knowledge.tag_already_under_review"), status: "warning" });
+                setInputValue("");
+                return false;
+            }
             return applyExistingManualTag(existing, selectionMode);
         }
 
@@ -542,6 +545,21 @@ export function EditTagsModal({
         }
 
         if (serverTag) {
+            if (isPendingReviewSpaceTag(serverTag)) {
+                showToast({ message: localize("com_knowledge.tag_already_under_review"), status: "warning" });
+                setInputValue("");
+                return false;
+            }
+            if (isUnboundLibraryLookupTag(serverTag)) {
+                showToast({
+                    message: localize("com_knowledge.tag_exists_in_library_named", {
+                        libraryName: serverTag.tag_library_name || "",
+                    }),
+                    status: "warning",
+                });
+                setInputValue("");
+                return false;
+            }
             return applyExistingManualTag(serverTag, selectionMode);
         }
 

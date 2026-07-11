@@ -580,9 +580,10 @@ describe("EditTagsModal recommended tags", () => {
 
         await waitFor(() => {
             expect(mockShowToast).toHaveBeenCalledWith({
-                message: "com_knowledge.tag_under_review",
+                message: "com_knowledge.tag_already_under_review",
                 status: "warning",
             });
+            expect(input).toHaveValue("");
         });
         expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "待审核");
         expect(addSpaceTagApi).not.toHaveBeenCalled();
@@ -616,9 +617,49 @@ describe("EditTagsModal recommended tags", () => {
         await waitFor(() => {
             expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "服务端待审核");
             expect(mockShowToast).toHaveBeenCalledWith({
-                message: "com_knowledge.tag_under_review",
+                message: "com_knowledge.tag_already_under_review",
                 status: "warning",
             });
+            expect(input).toHaveValue("");
+        });
+        expect(addSpaceTagApi).not.toHaveBeenCalled();
+    });
+
+    it("rejects lookup hits from unbound libraries and clears the input", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(lookupSpaceTagApi).mockResolvedValue({
+            id: 99,
+            name: "其他库标签",
+            review_status: 1,
+            business_type: "tag_library",
+            resource_type: "system_tag",
+            tag_library_id: 8,
+            tag_library_name: "外部标签库",
+            is_bound_to_space: false,
+        });
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
+        const input = screen.getByRole("textbox");
+        await user.type(input, "其他库标签");
+        await user.keyboard("{Enter}");
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith({
+                message: "com_knowledge.tag_exists_in_library_named",
+                status: "warning",
+            });
+            expect(input).toHaveValue("");
         });
         expect(addSpaceTagApi).not.toHaveBeenCalled();
     });
@@ -633,6 +674,7 @@ describe("EditTagsModal recommended tags", () => {
             name: "其他库标签",
             business_type: "tag_library",
             resource_type: "manual_tag",
+            review_status: 1,
         });
 
         render(

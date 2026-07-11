@@ -560,7 +560,9 @@ class FileCreateReq(BaseModel):
     file_path: list[str] = Field(..., description="File Path")
     parent_id: int | None = Field(None, description="Parent Folder ID")
     file_category_code: str | None = Field(None, max_length=16, description="Selected business file category code")
-    file_subcategory_code: str | None = Field(None, max_length=16, description="Selected second-level file category code")
+    file_subcategory_code: str | None = Field(
+        None, max_length=16, description="Selected second-level file category code"
+    )
     business_domain_code: str | None = Field(None, max_length=16, description="Selected business domain code")
     manual_tag_ids: list[int] = Field(default_factory=list, description="Selected existing tag IDs")
     manual_tag_names: list[str] = Field(default_factory=list, description="Selected tag names")
@@ -808,4 +810,23 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     has_similar: bool = Field(
         default=False,
         description="Whether this file has unresolved similar candidates (similar_status == 1)",
+    )
+
+
+class KnowledgeSpaceTagLookupResp(BaseModel):
+    """Lookup result for an existing tag by name within a knowledge space."""
+
+    id: int = Field(..., description="Tag or review-tag ID")
+    name: str = Field(..., description="Tag name")
+    resource_type: str | None = Field(default=None, description="Tag resource type")
+    business_type: str | None = Field(default=None, description="Tag business scope")
+    review_status: int | None = Field(
+        default=None,
+        description="Review status; 0 means pending review, 1 means approved",
+    )
+    tag_library_id: int | None = Field(default=None, description="Owning tag library ID when applicable")
+    tag_library_name: str | None = Field(default=None, description="Owning tag library name when applicable")
+    is_bound_to_space: bool | None = Field(
+        default=None,
+        description="Whether the tag library is bound to the current knowledge space",
     )
