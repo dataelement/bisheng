@@ -2207,5 +2207,17 @@
   "com_notifications_action_qa_expert_invited": "Invited you to answer expert question \"{{target}}\"",
   "com_notifications_action_qa_expert_answered": "Answered expert question \"{{target}}\"",
   "com_notifications_action_qa_answer_commented": "Commented on expert question \"{{target}}\"",
-  "com_notifications_action_qa_answer_accepted": "Accepted expert question \"{{target}}\""
+  "com_notifications_action_qa_answer_accepted": "Accepted expert question \"{{target}}\"",
+  "com_qa_expert_detail_load_failed": "Failed to load expert Q&A details",
+  "com_qa_expert_detail_invalid_question": "Invalid question parameter",
+  "com_qa_expert_detail_answers_count": "{{count}} answers",
+  "com_qa_expert_detail_no_answers": "No answers yet",
+  "com_qa_expert_detail_no_comments": "No comments yet",
+  "com_qa_expert_detail_status_unsolved": "Unsolved",
+  "com_qa_expert_detail_status_solved": "Solved",
+  "com_qa_expert_detail_status_closed": "Closed",
+  "com_qa_expert_detail_adopted_label": "Adopted",
+  "com_qa_expert_detail_follow_up": "Follow-up",
+  "com_qa_expert_detail_comments_count": "{{count}} comments",
+  "com_qa_expert_detail_attachments": "Attachments"
 }

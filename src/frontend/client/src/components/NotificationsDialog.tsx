@@ -26,9 +26,9 @@ export interface NotificationsDialogProps {
     /** Forward-compat: message id to focus when dialog opens (v2 will scroll + highlight). */
     focusedMessageId?: number | null;
     onOpenApprovalCenter?: (target: {
-        tab: "my_tasks" | "my_requests";
-        taskId?: number | null;
-        instanceId?: number | null;
+        readonly tab: "my_tasks" | "my_requests";
+        readonly taskId?: number | null;
+        readonly instanceId?: number | null;
     }) => void;
 }
 
@@ -103,6 +103,13 @@ const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
     "approval_exception_route_missing",
     "approval_exception_approver_empty",
     "approval_execute_failed",
+]);
+
+const QA_ACTION_CODES = new Set([
+    "qa_expert_invited",
+    "qa_expert_answered",
+    "qa_answer_commented",
+    "qa_answer_accepted",
 ]);
 
 export function NotificationsDialog({
@@ -538,6 +545,19 @@ export function NotificationsDialog({
         );
     };
 
+    const getQuestionIdFromNotification = (notification: MessageItem): number | null => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        const businessUrlPart = parts.find(
+            (c: any) => c?.type === "business_url" && c?.metadata?.business_type === "qa_question"
+        ) as any;
+        const rawId =
+            businessUrlPart?.metadata?.data?.question_id ??
+            businessUrlPart?.metadata?.business_id;
+        if (rawId === undefined || rawId === null) return null;
+        const num = Number(rawId);
+        return Number.isFinite(num) && num > 0 ? num : null;
+    };
+
     const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space"; targetId: string } | null => {
         const allBusinessParts = (notification.content ?? []).filter((c: any) => c?.type === "business_url") as any[];
         const systemText = String(notification.content?.find((c: any) => c?.type === "system_text")?.content ?? "");
@@ -706,6 +726,10 @@ export function NotificationsDialog({
         const { text, targetName, showApproval } = getNotificationText(notification);
         const supplementaryText = getSupplementaryText(notification);
         const target = getNotificationTarget(notification);
+        const questionId = getQuestionIdFromNotification(notification);
+        const systemTextCode = getSystemTextCode(notification);
+        const isQAAction = QA_ACTION_CODES.has(systemTextCode);
+        const canNavigateQA = isQAAction && questionId !== null && Boolean(targetName);
         const targetSplitMatch = targetName
             ? text.match(new RegExp(`^(.*?)([-—\\s]*${escapeRegExp(targetName)})(.*)$`))
             : null;
@@ -897,8 +921,35 @@ export function NotificationsDialog({
                                 </span>
                             )}
                             {textPrefix}
-                            {targetSplitMatch && !canNavigateTarget && targetLabel && (
+                            {targetSplitMatch && !canNavigateTarget && targetLabel && !canNavigateQA && (
                                 <span className="font-medium">{targetLabel}</span>
+                            )}
+                            {canNavigateQA && (
+                                <span
+                                    className="font-medium cursor-pointer hover:text-[#165dff]"
+                                    onClick={() => {
+                                        console.info("[NotificationsDialog] qa target click", {
+                                            notificationId: notification.id,
+                                            messageType: notification.message_type,
+                                            actionCode: notification.action_code,
+                                            systemTextCode,
+                                            targetName,
+                                            questionId,
+                                        });
+                                        if (!notification.is_read) markOneAsRead(id);
+                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+                                        const route = `/qa-expert/question/${questionId}`;
+                                        console.info("[NotificationsDialog] navigate", {
+                                            notificationId: notification.id,
+                                            route,
+                                        });
+                                        window.open(normalizedBase + route, "_blank");
+                                        onOpenChange?.(false);
+                                    }}
+                                >
+                                    {targetLabel}
+                                </span>
                             )}
                             {targetSplitMatch && canNavigateTarget && (
                                 <span
@@ -989,7 +1040,9 @@ export function NotificationsDialog({
                             type="button"
                             onClick={() => {
                                 if (!notification.is_read) markOneAsRead(id);
-                                onOpenApprovalCenter?.(approvalCenterTarget);
+                                if (approvalCenterTarget) {
+                                    onOpenApprovalCenter?.(approvalCenterTarget);
+                                }
                                 onOpenChange?.(false);
                             }}
                             className="inline-flex h-7 items-center rounded-[6px] border border-[#165dff] px-3 py-0 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"

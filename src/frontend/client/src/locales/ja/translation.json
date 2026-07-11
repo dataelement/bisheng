@@ -2096,5 +2096,21 @@
   "com_approval_task_badge_approved": "承認済み",
   "com_approval_task_badge_rejected": "却下",
   "com_approval_section_business_content": "業務内容",
-  "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索"
+  "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
+  "com_notifications_action_qa_expert_invited": "専門家Q&Aの問題「{{target}}」に回答するよう招待されました",
+  "com_notifications_action_qa_expert_answered": "専門家Q&Aの問題「{{target}}」に回答しました",
+  "com_notifications_action_qa_answer_commented": "専門家Q&Aの問題「{{target}}」の回答にコメントしました",
+  "com_notifications_action_qa_answer_accepted": "専門家Q&Aの問題「{{target}}」の回答が採用されました",
+  "com_qa_expert_detail_load_failed": "専門家Q&Aの詳細を読み込めませんでした",
+  "com_qa_expert_detail_invalid_question": "質問のパラメータが無効です",
+  "com_qa_expert_detail_answers_count": "回答 {{count}} 件",
+  "com_qa_expert_detail_no_answers": "まだ回答がありません",
+  "com_qa_expert_detail_no_comments": "まだコメントがありません",
+  "com_qa_expert_detail_status_unsolved": "未解決",
+  "com_qa_expert_detail_status_solved": "解決済み",
+  "com_qa_expert_detail_status_closed": "終了",
+  "com_qa_expert_detail_adopted_label": "採用済み",
+  "com_qa_expert_detail_follow_up": "追加質問",
+  "com_qa_expert_detail_comments_count": "コメント {{count}} 件",
+  "com_qa_expert_detail_attachments": "添付ファイル"
 }

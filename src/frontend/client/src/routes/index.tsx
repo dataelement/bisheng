@@ -30,6 +30,7 @@ import PortalDialogsEmbed from '~/pages/knowledge/portal/PortalDialogsEmbed';
 import PortalWorkflowChatPage from '~/pages/portalWorkflowChat/PortalWorkflowChatPage';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
+import QuestionDetailPage from '~/pages/qa-expert/QuestionDetailPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
 import ShougangPortalAdmin from '@/pages/ShougangPortalAdmin';
 import { useAuthContext } from '@/hooks';
@@ -214,6 +215,12 @@ export const router = createBrowserRouter([
       { path: 'share/:token/:vid?', element: <Share /> },
       { path: 'knowledge/file/:fileId', element: <FilePreviewPage /> },
       { path: 'knowledge-portal', element: <PortalKnowledgeWorkbench /> },
+      {
+        path: 'qa-expert',
+        children: [
+          { path: 'question/:questionId', element: <QuestionDetailPage /> },
+        ],
+      },
     ],
   },
   // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)
