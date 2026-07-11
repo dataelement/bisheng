@@ -374,6 +374,21 @@ class TenantDao:
                 return [row for row in result.all()]
 
     @classmethod
+    def get_children_ids_active(cls, root_id: int = ROOT_TENANT_ID) -> list[int]:
+        """Sync counterpart of :meth:`aget_children_ids_active`.
+
+        Used by Celery Beat tasks that run in a synchronous worker context and
+        cannot await the async DAO (e.g. ``sync_information_article``).
+        """
+        with bypass_tenant_filter():
+            with get_sync_db_session() as session:
+                stmt = select(Tenant.id).where(
+                    Tenant.parent_tenant_id == root_id,
+                    Tenant.status == "active",
+                )
+                return [row for row in session.exec(stmt).all()]
+
+    @classmethod
     async def aget_non_active_ids(cls) -> list[int]:
         """Return ids of tenants in disabled/archived/orphaned status.
 
