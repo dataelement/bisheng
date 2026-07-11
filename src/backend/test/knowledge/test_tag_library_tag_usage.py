@@ -38,10 +38,11 @@ async def test_count_total_usage_uses_json_fallback_when_tag_rows_missing():
     items = count_usage_batch.await_args.kwargs["items"]
     assert ("安全生产", TagResourceTypeEnum.MANUAL_TAG.value) in items
     assert ("制度", TagResourceTypeEnum.MANUAL_TAG.value) in items
+    assert count_usage_batch.await_args.kwargs["library_id"] == 1
 
 
 @pytest.mark.asyncio
-async def test_resolve_file_tag_ids_excludes_tag_library_rows():
+async def test_resolve_file_tag_ids_scopes_tag_library_rows_to_library_id():
     with patch("bisheng.knowledge.domain.services.tag_library_tag_service.get_async_db_session") as session_ctx:
         session = AsyncMock()
         session_ctx.return_value.__aenter__.return_value = session
@@ -50,8 +51,32 @@ async def test_resolve_file_tag_ids_excludes_tag_library_rows():
         tag_ids = await TagLibraryTagService._resolve_file_tag_ids(
             items=[("安全生产", TagResourceTypeEnum.MANUAL_TAG.value)],
             tenant_id=1,
+            library_id=5,
         )
 
     assert tag_ids == [101, 102]
     compiled = str(session.exec.await_args.args[0])
-    assert "tag.business_type !=" in compiled
+    assert "tag.business_type" in compiled
+    assert "tag.business_id" in compiled
+
+
+@pytest.mark.asyncio
+async def test_count_usage_batch_includes_tag_library_links_for_library():
+    with patch("bisheng.knowledge.domain.services.tag_library_tag_service.get_async_db_session") as session_ctx:
+        session = AsyncMock()
+        session_ctx.return_value.__aenter__.return_value = session
+        session.exec = AsyncMock(
+            side_effect=[
+                AsyncMock(all=lambda: [201]),
+                AsyncMock(all=lambda: [(201, "人工新标签", TagResourceTypeEnum.MANUAL_TAG.value)]),
+                AsyncMock(all=lambda: [(201, 2)]),
+            ]
+        )
+
+        usage_map = await TagLibraryTagService.count_usage_batch(
+            items=[("人工新标签", TagResourceTypeEnum.MANUAL_TAG.value)],
+            tenant_id=1,
+            library_id=5,
+        )
+
+    assert usage_map[("人工新标签", TagResourceTypeEnum.MANUAL_TAG.value)] == 2

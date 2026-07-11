@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select, update
 
@@ -176,6 +177,7 @@ class TagLibraryTagService:
         *,
         items: Iterable[tuple[str, str]],
         tenant_id: int | None,
+        library_id: int | None = None,
     ) -> list[int]:
         normalized_items = [(name, resource_type) for name, resource_type in items if name]
         if not normalized_items or tenant_id is None:
@@ -190,17 +192,22 @@ class TagLibraryTagService:
             )
         )
 
-        async with get_async_db_session() as session:
-            tag_ids = (
-                await session.exec(
-                    select(Tag.id).where(
-                        Tag.name.in_(names),
-                        Tag.tenant_id == tenant_id,
-                        Tag.resource_type.in_(file_types),
-                        Tag.business_type != TagBusinessTypeEnum.TAG_LIBRARY.value,
-                    )
+        scope_filters = [
+            Tag.name.in_(names),
+            Tag.tenant_id == tenant_id,
+            Tag.resource_type.in_(file_types),
+        ]
+        if library_id is not None:
+            library_business_id = cls._business_id(library_id)
+            scope_filters.append(
+                or_(
+                    Tag.business_type != TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    Tag.business_id == library_business_id,
                 )
-            ).all()
+            )
+
+        async with get_async_db_session() as session:
+            tag_ids = (await session.exec(select(Tag.id).where(*scope_filters))).all()
         return [int(tag_id) for tag_id in tag_ids]
 
     @classmethod
@@ -209,13 +216,18 @@ class TagLibraryTagService:
         *,
         items: Iterable[tuple[str, str]],
         tenant_id: int | None,
+        library_id: int | None = None,
     ) -> dict[tuple[str, str], int]:
-        """Count tag_link rows for knowledge-space file tags matching library candidates."""
+        """Count tag_link rows for file tags matching library candidates."""
         normalized_items = [(name, resource_type) for name, resource_type in items if name]
         if not normalized_items or tenant_id is None:
             return {}
 
-        tag_ids = await cls._resolve_file_tag_ids(items=normalized_items, tenant_id=tenant_id)
+        tag_ids = await cls._resolve_file_tag_ids(
+            items=normalized_items,
+            tenant_id=tenant_id,
+            library_id=library_id,
+        )
         if not tag_ids:
             return dict.fromkeys(normalized_items, 0)
 
@@ -259,7 +271,11 @@ class TagLibraryTagService:
     ) -> int:
         tags = await cls.list_tags(library_id)
         items = cls._library_usage_items(tags=tags, manual_tags=manual_tags, ai_tags=ai_tags)
-        return await cls.count_distinct_usage_by_items(items=items, tenant_id=tenant_id)
+        return await cls.count_distinct_usage_by_items(
+            items=items,
+            tenant_id=tenant_id,
+            library_id=library_id,
+        )
 
     @classmethod
     async def count_distinct_usage_by_items(
@@ -267,8 +283,13 @@ class TagLibraryTagService:
         *,
         items: Iterable[tuple[str, str]],
         tenant_id: int | None,
+        library_id: int | None = None,
     ) -> int:
-        tag_ids = await cls._resolve_file_tag_ids(items=items, tenant_id=tenant_id)
+        tag_ids = await cls._resolve_file_tag_ids(
+            items=items,
+            tenant_id=tenant_id,
+            library_id=library_id,
+        )
         if not tag_ids:
             return 0
 
@@ -305,7 +326,11 @@ class TagLibraryTagService:
         )
         if not items or tenant_id is None:
             return 0
-        usage_map = await cls.count_usage_batch(items=items, tenant_id=tenant_id)
+        usage_map = await cls.count_usage_batch(
+            items=items,
+            tenant_id=tenant_id,
+            library_id=library_id,
+        )
         return sum(usage_map.values())
 
     @classmethod

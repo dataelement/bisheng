@@ -307,6 +307,7 @@ class KnowledgeSpaceTagLibraryService:
         usage_map = await TagLibraryTagService.count_usage_batch(
             items=usage_keys,
             tenant_id=library.tenant_id,
+            library_id=int(library.id),
         )
 
         user_ids = {int(tag.user_id) for tag in tags if tag.user_id}
