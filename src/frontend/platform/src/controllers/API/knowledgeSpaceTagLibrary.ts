@@ -117,6 +117,16 @@ export async function updateKnowledgeSpaceTagLibraryApi(
   return await axios.put(`/api/v1/knowledge/space/tag-libraries/${id}`, data)
 }
 
+export async function deleteKnowledgeSpaceTagLibraryTagApi(
+  id: number,
+  data: {
+    tag_name: string
+    resource_type: string
+  },
+): Promise<KnowledgeSpaceTagLibraryDetail> {
+  return await axios.delete(`/api/v1/knowledge/space/tag-libraries/${id}/tags`, { params: data })
+}
+
 export async function deleteKnowledgeSpaceTagLibraryApi(id: number): Promise<boolean> {
   return await axios.delete(`/api/v1/knowledge/space/tag-libraries/${id}`)
 }

@@ -9,6 +9,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
     createKnowledgeSpaceTagLibraryApi,
     deleteKnowledgeSpaceTagLibraryApi,
+    deleteKnowledgeSpaceTagLibraryTagApi,
     getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibraryApi,
     getKnowledgeSpaceTagLibraryUsageApi,
@@ -419,14 +420,26 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
             okTxt: t("build.confirmDelete", "确认删除"),
             canelTxt: t("cancel", { ns: "bs" }),
             async onOk(next) {
-                const ok = await persistTagItems(
-                    tagItems.filter(
-                        (tag) => !(tag.name === item.name && tag.resource_type === item.resource_type),
-                    ),
+                if (!library?.id) return;
+                setSaving(true);
+                const res = await captureAndAlertRequestErrorHoc(
+                    deleteKnowledgeSpaceTagLibraryTagApi(library.id, {
+                        tag_name: item.name,
+                        resource_type: item.resource_type,
+                    }),
                 );
-                if (ok) {
-                    toast({ variant: "success", description: t("build.deleted", "已删除") });
+                setSaving(false);
+                if (!res) {
+                    next?.();
+                    return;
                 }
+                setTagItems(
+                    res.tag_items?.length
+                        ? res.tag_items
+                        : (res.tags || []).map((name) => ({ name, resource_type: "system_tag" })),
+                );
+                onUpdated();
+                toast({ variant: "success", description: t("build.deleted", "已删除") });
                 next?.();
             },
         });

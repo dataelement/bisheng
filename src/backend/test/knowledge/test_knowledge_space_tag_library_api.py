@@ -69,6 +69,16 @@ def _service() -> SimpleNamespace:
             )
         ),
         delete_library=AsyncMock(return_value=None),
+        delete_library_tag=AsyncMock(
+            return_value=KnowledgeSpaceTagLibraryDetail(
+                id=1,
+                name="业务标签",
+                description="按业务线分类",
+                tag_count=1,
+                is_builtin=False,
+                tags=["制度"],
+            )
+        ),
         get_library_usage=AsyncMock(return_value=3),
         list_bound_libraries_for_knowledge=AsyncMock(
             return_value=[
@@ -159,11 +169,28 @@ def test_create_update_and_delete_tag_library_routes_thread_payloads():
         name="更新标签库",
         description="更新",
         tags=["合同"],
+        manual_tags=None,
+        ai_tags=None,
     )
 
     assert delete_resp.status_code == 200
     assert delete_resp.json()["data"] is True
     service.delete_library.assert_awaited_once_with(1)
+
+
+def test_delete_tag_library_tag_route():
+    service = _service()
+    app = _mount_app(service)
+
+    with TestClient(app) as client:
+        resp = client.delete(
+            "/api/v1/knowledge/space/tag-libraries/1/tags",
+            params={"tag_name": "合同", "resource_type": "system_tag"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["data"]["tags"] == ["制度"]
+    service.delete_library_tag.assert_awaited_once_with(1, "合同", "system_tag")
 
 
 def test_create_tag_library_defaults_is_builtin_false():

@@ -87,6 +87,16 @@ async def update_tag_library(
     )
 
 
+@router.delete("/{library_id}/tags")
+async def delete_tag_library_tag(
+    library_id: int,
+    tag_name: str = Query(..., description="标签名称"),
+    resource_type: str = Query(..., description="manual_tag | ai_auto_tag | system_tag"),
+    svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
+) -> Any:
+    return resp_200(await svc.delete_library_tag(library_id, tag_name, resource_type))
+
+
 @router.delete("/{library_id}")
 async def delete_tag_library(
     library_id: int,

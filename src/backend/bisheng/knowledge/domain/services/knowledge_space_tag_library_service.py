@@ -456,6 +456,69 @@ class KnowledgeSpaceTagLibraryService:
             library = await KnowledgeSpaceTagLibraryDao.aupdate(library_id, **updates)
         return await self.to_detail(library)
 
+    async def delete_library_tag(
+        self,
+        library_id: int,
+        tag_name: str,
+        resource_type: str,
+    ) -> KnowledgeSpaceTagLibraryDetail:
+        """Remove a single tag from a library without cross-library uniqueness checks."""
+        library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
+        if not library:
+            raise KnowledgeSpaceTagLibraryNotExistError()
+
+        normalized_name = (tag_name or "").strip()
+        if not normalized_name:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="标签名称不能为空")
+
+        normalized_type = (resource_type or "").strip().lower()
+        allowed_types = {
+            TagResourceTypeEnum.SYSTEM_TAG.value,
+            TagResourceTypeEnum.MANUAL_TAG.value,
+            TagResourceTypeEnum.AI_AUTO_TAG.value,
+        }
+        if normalized_type not in allowed_types:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="无效的标签类型")
+
+        current_system, current_manual, current_ai = await TagLibraryTagService.list_tag_names(library_id)
+        if not current_system and not current_manual:
+            current_system = list(library.tags or [])
+        if not current_ai:
+            current_ai = list(library.ai_tags or [])
+
+        removed = False
+        if normalized_type == TagResourceTypeEnum.SYSTEM_TAG.value:
+            if normalized_name in current_system:
+                current_system = [name for name in current_system if name != normalized_name]
+                removed = True
+        elif normalized_type == TagResourceTypeEnum.MANUAL_TAG.value:
+            if normalized_name in current_manual:
+                current_manual = [name for name in current_manual if name != normalized_name]
+                removed = True
+        elif normalized_name in current_ai:
+            current_ai = [name for name in current_ai if name != normalized_name]
+            removed = True
+
+        if not removed:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="标签不存在")
+
+        non_ai = TagLibraryTagService.non_ai_tag_names(current_system, current_manual)
+        await TagLibraryTagService.replace_tags(
+            library_id=library_id,
+            tenant_id=library.tenant_id,
+            user_id=self.login_user.user_id,
+            system_tags=current_system,
+            manual_tags=current_manual,
+            ai_tags=current_ai,
+        )
+        library = await KnowledgeSpaceTagLibraryDao.aupdate(
+            library_id,
+            tags=non_ai,
+            ai_tags=current_ai,
+            tag_count=len(non_ai) + len(current_ai),
+        )
+        return await self.to_detail(library)
+
     async def get_library_usage(self, library_id: int) -> int:
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
         if not library:
