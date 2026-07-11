@@ -61,6 +61,9 @@ jest.mock("~/components/ui/Tooltip", () => ({
 }));
 
 describe("NotificationsDialog approval jump", () => {
+  const originalParent = window.parent;
+  const mockParentPostMessage = jest.fn();
+
   beforeEach(() => {
     jest.clearAllMocks();
     Object.defineProperty(window, "matchMedia", {
@@ -77,6 +80,17 @@ describe("NotificationsDialog approval jump", () => {
     }
     (window as any).IntersectionObserver = MockIntersectionObserver;
     (global as any).IntersectionObserver = MockIntersectionObserver;
+    Object.defineProperty(window, "parent", {
+      configurable: true,
+      value: { ...window, postMessage: mockParentPostMessage },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "parent", {
+      configurable: true,
+      value: originalParent,
+    });
   });
 
   it("opens approval center instead of inline approving request messages", async () => {
@@ -120,5 +134,106 @@ describe("NotificationsDialog approval jump", () => {
         instanceId: 99,
       });
     });
+  });
+
+  it.each([
+    ["qa_expert_invited"],
+    ["qa_expert_answered"],
+    ["qa_answer_commented"],
+    ["qa_answer_accepted"],
+  ])("posts portal navigate message when clicking a %s notification target", async (actionCode) => {
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 601,
+        sender: 8,
+        sender_name: "Expert",
+        message_type: "notify",
+        action_code: actionCode,
+        status: "approved",
+        is_read: false,
+        create_time: "2026-04-27T10:00:00Z",
+        update_time: "2026-04-27T10:00:00Z",
+        content: [
+          { type: "user", content: "@Expert", metadata: { user_id: 8 } },
+          { type: "system_text", content: actionCode },
+          {
+            type: "business_url",
+            content: "--Test Question",
+            metadata: {
+              business_type: "qa_question",
+              data: { question_id: "12345" },
+            },
+          },
+        ],
+      }],
+    });
+    jest.mocked(markMessageReadApi).mockResolvedValue({});
+    const onOpenChange = jest.fn();
+
+    render(<NotificationsDialog open onOpenChange={onOpenChange} />);
+
+    const target = await screen.findByText("Test Question");
+    expect(target).toBeInTheDocument();
+
+    fireEvent.click(target);
+
+    await waitFor(() => {
+      expect(markMessageReadApi).toHaveBeenCalledWith([601]);
+    });
+    expect(mockParentPostMessage).toHaveBeenCalledWith(
+      {
+        type: "shougang-portal:qa-expert-navigate",
+        questionId: "12345",
+        actionCode,
+      },
+      "*",
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("does not post portal navigate message when not embedded in an iframe", async () => {
+    Object.defineProperty(window, "parent", {
+      configurable: true,
+      value: window,
+    });
+
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 602,
+        sender: 8,
+        sender_name: "Expert",
+        message_type: "notify",
+        action_code: "qa_expert_answered",
+        status: "approved",
+        is_read: false,
+        create_time: "2026-04-27T10:00:00Z",
+        update_time: "2026-04-27T10:00:00Z",
+        content: [
+          { type: "user", content: "@Expert", metadata: { user_id: 8 } },
+          { type: "system_text", content: "qa_expert_answered" },
+          {
+            type: "business_url",
+            content: "--Test Question",
+            metadata: {
+              business_type: "qa_question",
+              data: { question_id: "12345" },
+            },
+          },
+        ],
+      }],
+    });
+    jest.mocked(markMessageReadApi).mockResolvedValue({});
+    const onOpenChange = jest.fn();
+
+    render(<NotificationsDialog open onOpenChange={onOpenChange} />);
+
+    fireEvent.click(await screen.findByText("Test Question"));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(mockParentPostMessage).not.toHaveBeenCalled();
   });
 });

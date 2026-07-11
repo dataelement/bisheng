@@ -105,6 +105,12 @@ const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
     "approval_execute_failed",
 ]);
 
+// QA expert notifications are rendered inside bisheng but the detail page lives
+// in the outer portal (shougang-group-knowledge-portal). Clicking the question
+// title posts this message to window.parent so the portal can navigate.
+// Payload: { type: "shougang-portal:qa-expert-navigate", questionId: string, actionCode: string }
+const PORTAL_QA_EXPERT_NAVIGATE_MESSAGE = "shougang-portal:qa-expert-navigate";
+
 export function NotificationsDialog({
     open = false,
     onOpenChange,
@@ -175,6 +181,7 @@ export function NotificationsDialog({
         if (typeof code === "string" && code.trim()) return code.trim();
         return notification.action_code || "";
     };
+
     const isPendingApprovalItem = (notification: MessageItem) =>
         isPendingApprovalStatus(notification.status) ||
         getActionCode(notification) === "approval_task_pending" ||
@@ -538,7 +545,7 @@ export function NotificationsDialog({
         );
     };
 
-    const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space"; targetId: string } | null => {
+    const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space" | "qa_question"; targetId: string } | null => {
         const allBusinessParts = (notification.content ?? []).filter((c: any) => c?.type === "business_url") as any[];
         const systemText = String(notification.content?.find((c: any) => c?.type === "system_text")?.content ?? "");
 
@@ -620,6 +627,16 @@ export function NotificationsDialog({
             if (knowledgeSpaceId) {
                 return { targetType: "space", targetId: knowledgeSpaceId };
             }
+        }
+        if (businessType === "qa_question") {
+            const questionId = pickId(
+                data?.question_id,
+                data?.business_id,
+                meta?.business_id,
+                meta?.data?.question_id,
+                meta?.data?.business_id
+            );
+            if (questionId) return { targetType: "qa_question", targetId: questionId };
         }
 
         // Fallback: backend variants sometimes only provide business_id / id
@@ -864,6 +881,21 @@ export function NotificationsDialog({
                                             });
                                             return;
                                         }
+                                        if (target.targetType === "qa_question") {
+                                            if (!notification.is_read) markOneAsRead(id);
+                                            if (typeof window !== "undefined" && window.parent !== window) {
+                                                window.parent.postMessage(
+                                                    {
+                                                        type: PORTAL_QA_EXPERT_NAVIGATE_MESSAGE,
+                                                        questionId: target.targetId,
+                                                        actionCode: getSystemTextCode(notification),
+                                                    },
+                                                    "*"
+                                                );
+                                            }
+                                            onOpenChange?.(false);
+                                            return;
+                                        }
                                         const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
                                         const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
                                         if (target.targetType === "channel") {
@@ -917,6 +949,21 @@ export function NotificationsDialog({
                                                 notificationId: notification.id,
                                                 content: notification.content,
                                             });
+                                            return;
+                                        }
+                                        if (target.targetType === "qa_question") {
+                                            if (!notification.is_read) markOneAsRead(id);
+                                            if (typeof window !== "undefined" && window.parent !== window) {
+                                                window.parent.postMessage(
+                                                    {
+                                                        type: PORTAL_QA_EXPERT_NAVIGATE_MESSAGE,
+                                                        questionId: target.targetId,
+                                                        actionCode: getSystemTextCode(notification),
+                                                    },
+                                                    "*"
+                                                );
+                                            }
+                                            onOpenChange?.(false);
                                             return;
                                         }
                                         const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
