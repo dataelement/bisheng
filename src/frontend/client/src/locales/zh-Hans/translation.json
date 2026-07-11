@@ -2139,17 +2139,5 @@
   "com_notifications_action_qa_expert_invited": "邀请你回答专家问答问题「{{target}}」",
   "com_notifications_action_qa_expert_answered": "回答了你在专家问答提出的「{{target}}」",
   "com_notifications_action_qa_answer_commented": "评论了你在专家问答「{{target}}」问题中做出的回答",
-  "com_notifications_action_qa_answer_accepted": "采纳了你在专家问答「{{target}}」问题中做出的回答",
-  "com_qa_expert_detail_load_failed": "加载专家问答详情失败",
-  "com_qa_expert_detail_invalid_question": "问题参数错误",
-  "com_qa_expert_detail_answers_count": "{{count}} 个回答",
-  "com_qa_expert_detail_no_answers": "暂无回答",
-  "com_qa_expert_detail_no_comments": "暂无评论",
-  "com_qa_expert_detail_status_unsolved": "待解决",
-  "com_qa_expert_detail_status_solved": "已解决",
-  "com_qa_expert_detail_status_closed": "已关闭",
-  "com_qa_expert_detail_adopted_label": "已采纳",
-  "com_qa_expert_detail_follow_up": "追问",
-  "com_qa_expert_detail_comments_count": "{{count}} 条评论",
-  "com_qa_expert_detail_attachments": "附件"
+  "com_notifications_action_qa_answer_accepted": "采纳了你在专家问答「{{target}}」问题中做出的回答"
 }

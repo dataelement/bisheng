@@ -314,10 +314,9 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
-  const isQaExpertRoute = /^\/qa-expert(\/|$)/.test(pathname);
-  /** 订阅 / 应用中心 / 专家问答：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  /** 订阅 / 应用中心：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
   const innerScrollShell =
-    isChannelRoute || isQaExpertRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
+    isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
@@ -382,7 +381,6 @@ export default function MainLayout() {
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
     if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
-    if (pathname.startsWith('/qa-expert')) return 'qa_expert_tab';
     if (pathname.startsWith('/menu-unavailable')) return 'menu_unavailable_tab';
     return 'other';
   })();
