@@ -5,6 +5,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 // Import your JSON translations
 import translationEn from './en/translation.json';
 import translationJa from './ja/translation.json';
+import translationKo from './ko/translation.json';
 import translationZh_Hans from './zh-Hans/translation.json';
 
 export const defaultNS = 'translation';
@@ -13,6 +14,7 @@ export const resources = {
   'en': { translation: translationEn },
   'zh-Hans': { translation: translationZh_Hans },
   'ja': { translation: translationJa },
+  'ko': { translation: translationKo },
 } as const;
 
 const config = window.BRAND_CONFIG || {};

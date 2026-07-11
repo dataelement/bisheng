@@ -115,6 +115,10 @@ function AccountSettings() {
                 {localize('com_nav_lang_japanese')}
                 {langcode === 'ja' && <Check size={16} />}
               </DropdownMenuItem>
+              <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('ko')}>
+                {localize('com_nav_lang_korean')}
+                {langcode === 'ko' && <Check size={16} />}
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           {/* <DropdownMenuItem className='select-item text-sm font-normal'>
