@@ -108,7 +108,7 @@ const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
 // QA expert notifications are rendered inside bisheng but the detail page lives
 // in the outer portal (shougang-group-knowledge-portal). Clicking the question
 // title posts this message to window.parent so the portal can navigate.
-// Payload: { type: "shougang-portal:qa-expert-navigate", questionId: string, actionCode: string }
+// Payload: { type: "shougang-portal:qa-expert-navigate", questionId: string, actionCode: string, answerId?: string, commentId?: string }
 const PORTAL_QA_EXPERT_NAVIGATE_MESSAGE = "shougang-portal:qa-expert-navigate";
 
 export function NotificationsDialog({
@@ -545,7 +545,7 @@ export function NotificationsDialog({
         );
     };
 
-    const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space" | "qa_question"; targetId: string } | null => {
+    const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space" | "qa_question"; targetId: string; answerId?: string; commentId?: string } | null => {
         const allBusinessParts = (notification.content ?? []).filter((c: any) => c?.type === "business_url") as any[];
         const systemText = String(notification.content?.find((c: any) => c?.type === "system_text")?.content ?? "");
 
@@ -636,7 +636,22 @@ export function NotificationsDialog({
                 meta?.data?.question_id,
                 meta?.data?.business_id
             );
-            if (questionId) return { targetType: "qa_question", targetId: questionId };
+            const answerId = pickId(
+                data?.answer_id,
+                meta?.data?.answer_id
+            );
+            const commentId = pickId(
+                data?.comment_id,
+                meta?.data?.comment_id
+            );
+            if (questionId) {
+                return {
+                    targetType: "qa_question",
+                    targetId: questionId,
+                    ...(answerId ? { answerId } : {}),
+                    ...(commentId ? { commentId } : {}),
+                };
+            }
         }
 
         // Fallback: backend variants sometimes only provide business_id / id
@@ -888,6 +903,8 @@ export function NotificationsDialog({
                                                     {
                                                         type: PORTAL_QA_EXPERT_NAVIGATE_MESSAGE,
                                                         questionId: target.targetId,
+                                                        ...(target.answerId ? { answerId: target.answerId } : {}),
+                                                        ...(target.commentId ? { commentId: target.commentId } : {}),
                                                         actionCode: getSystemTextCode(notification),
                                                     },
                                                     "*"
@@ -958,6 +975,8 @@ export function NotificationsDialog({
                                                     {
                                                         type: PORTAL_QA_EXPERT_NAVIGATE_MESSAGE,
                                                         questionId: target.targetId,
+                                                        ...(target.answerId ? { answerId: target.answerId } : {}),
+                                                        ...(target.commentId ? { commentId: target.commentId } : {}),
                                                         actionCode: getSystemTextCode(notification),
                                                     },
                                                     "*"

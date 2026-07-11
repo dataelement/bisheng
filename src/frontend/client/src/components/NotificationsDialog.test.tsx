@@ -137,11 +137,15 @@ describe("NotificationsDialog approval jump", () => {
   });
 
   it.each([
-    ["qa_expert_invited"],
-    ["qa_expert_answered"],
-    ["qa_answer_commented"],
-    ["qa_answer_accepted"],
-  ])("posts portal navigate message when clicking a %s notification target", async (actionCode) => {
+    ["qa_expert_invited", null, null],
+    ["qa_expert_answered", "42", null],
+    ["qa_answer_commented", "42", "77"],
+    ["qa_answer_accepted", "99", null],
+  ])("posts portal navigate message when clicking a %s notification target", async (actionCode, expectedAnswerId, expectedCommentId) => {
+    const businessData: Record<string, string> = { question_id: "12345" };
+    if (expectedAnswerId) businessData.answer_id = expectedAnswerId;
+    if (expectedCommentId) businessData.comment_id = expectedCommentId;
+
     jest.mocked(getMessageListApi).mockResolvedValue({
       total: 1,
       data: [{
@@ -162,7 +166,7 @@ describe("NotificationsDialog approval jump", () => {
             content: "--Test Question",
             metadata: {
               business_type: "qa_question",
-              data: { question_id: "12345" },
+              data: businessData,
             },
           },
         ],
@@ -181,14 +185,14 @@ describe("NotificationsDialog approval jump", () => {
     await waitFor(() => {
       expect(markMessageReadApi).toHaveBeenCalledWith([601]);
     });
-    expect(mockParentPostMessage).toHaveBeenCalledWith(
-      {
-        type: "shougang-portal:qa-expert-navigate",
-        questionId: "12345",
-        actionCode,
-      },
-      "*",
-    );
+    const expectedPayload: Record<string, string> = {
+      type: "shougang-portal:qa-expert-navigate",
+      questionId: "12345",
+      actionCode,
+    };
+    if (expectedAnswerId) expectedPayload.answerId = expectedAnswerId;
+    if (expectedCommentId) expectedPayload.commentId = expectedCommentId;
+    expect(mockParentPostMessage).toHaveBeenCalledWith(expectedPayload, "*");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

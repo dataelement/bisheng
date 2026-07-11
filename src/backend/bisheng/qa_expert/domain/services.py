@@ -313,7 +313,7 @@ class QuestionService:
                 "content": f"--{question.title}",
                 "metadata": {
                     "business_type": "qa_question",
-                    "data": {"question_id": str(question.id)},
+                    "data": {"question_id": str(question.id), "answer_id": str(answer.id)},
                 },
             },
             {
@@ -559,7 +559,7 @@ class AnswerService:
                 "content": f"--{question.title}",
                 "metadata": {
                     "business_type": "qa_question",
-                    "data": {"question_id": str(question.id)},
+                    "data": {"question_id": str(question.id), "answer_id": str(answer.id)},
                 },
             },
             {
@@ -681,7 +681,11 @@ class CommentService:
                 "content": f"--{question.title}",
                 "metadata": {
                     "business_type": "qa_question",
-                    "data": {"question_id": str(question.id)},
+                    "data": {
+                        "question_id": str(question.id),
+                        "answer_id": str(answer.id),
+                        "comment_id": str(comment.id),
+                    },
                 },
             },
             {
