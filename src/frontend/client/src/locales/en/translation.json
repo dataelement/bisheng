@@ -1547,7 +1547,7 @@
     "auto_tag_generation": "Auto tag generation",
     "auto_tag_generation_desc": "When enabled, pending-review tags are generated from file content after parsing. When disabled, approved tags are still matched from bound tag libraries.",
     "auto_tag_library": "Tag library",
-    "auto_tag_library_required": "Select a non-empty tag library before enabling auto tag generation",
+    "auto_tag_library_required": "A tag library must be configured for the knowledge space",
     "tag_library_required_on_create": "Select at least one tag library before creating a knowledge space",
     "auto_tag_mode_library": "Built-in Library",
     "auto_tag_mode_custom": "Custom Tags",

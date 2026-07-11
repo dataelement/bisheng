@@ -1467,7 +1467,7 @@
     "auto_tag_generation": "自動タグ生成",
     "auto_tag_generation_desc": "有効にすると、解析成功後にファイル内容から審査待ちタグを生成します。無効でも、紐づけたタグライブラリから承認済みタグは引き続き付与されます。",
     "auto_tag_library": "タグライブラリ",
-    "auto_tag_library_required": "自動タグ生成を有効にするには、空でないタグライブラリを選択してください",
+    "auto_tag_library_required": "ナレッジスペースにはタグライブラリの設定が必要です",
     "tag_library_required_on_create": "ナレッジスペースを作成する前にタグライブラリを選択してください",
     "auto_tag_mode_library": "組み込みタグライブラリ",
     "auto_tag_mode_custom": "カスタムタグ",

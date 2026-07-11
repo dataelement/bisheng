@@ -1475,7 +1475,7 @@
     "auto_tag_generation": "自动标签生成",
     "auto_tag_generation_desc": "开启后，上传文件解析成功会基于文件内容生成待审核标签；关闭后仍会从绑定标签库匹配已审核标签",
     "auto_tag_library": "标签库",
-    "auto_tag_library_required": "开启自动标签生成时必须绑定一个非空标签库",
+    "auto_tag_library_required": "知识库必须设置标签库",
     "tag_library_required_on_create": "创建知识库时必须选择标签库",
     "auto_tag_mode_library": "内置标签库",
     "auto_tag_mode_custom": "自定义标签",

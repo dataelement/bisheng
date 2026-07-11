@@ -524,7 +524,7 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
-        if (effectiveAutoTagEnabled && autoTagLibraryIds.length === 0) {
+        if (autoTagLibraryIds.length === 0) {
             showToast({
                 message: localize("com_knowledge.auto_tag_library_required"),
                 severity: NotificationSeverity.WARNING,
@@ -934,10 +934,10 @@ export function CreateKnowledgeSpaceDrawer({
                                 </RadioGroup.Root>
                             </div>
 
-                           
 
-                             {/* 简介 */}
-                             <div className="space-y-2">
+
+                            {/* 简介 */}
+                            <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
                                     {localize("com_subscription.description")}
                                 </Label>
