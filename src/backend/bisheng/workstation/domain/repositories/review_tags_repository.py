@@ -280,15 +280,31 @@ class ReviewTagsRepositoryImpl:
             return count
         return int(count[0])
 
+    @staticmethod
+    def _resolve_review_tag_library_id(tag_list: list) -> int | None:
+        from bisheng.database.models.tag import TagBusinessTypeEnum
+
+        for tag in tag_list or []:
+            if tag.business_type != TagBusinessTypeEnum.TAG_LIBRARY.value:
+                continue
+            business_id = str(getattr(tag, "business_id", "") or "").strip()
+            if not business_id.isdigit():
+                continue
+            return int(business_id)
+        return None
+
     async def get_review_tag_resource_info_by_tag(
         self, group_tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int
     ):
         tag_list = await self.get_review_tag_list_by_tag_name(group_tag_name, resource_type, tenant_id)
+        tag_library_id = self._resolve_review_tag_library_id(tag_list)
         knowledge_ids = list(
             dict.fromkeys(
                 int(tag.business_id)
                 for tag in (tag_list or [])
-                if tag.business_id is not None and str(tag.business_id).isdigit()
+                if tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE.value
+                and tag.business_id is not None
+                and str(tag.business_id).isdigit()
             )
         )
         if tag_list and len(tag_list) > 0:
@@ -333,6 +349,7 @@ class ReviewTagsRepositoryImpl:
                     "tags_count": len(tag_list),
                     "resource_files": resource_list or [],
                     "knowledge_ids": knowledge_ids,
+                    "tag_library_id": tag_library_id,
                 }
 
         return {
@@ -341,6 +358,7 @@ class ReviewTagsRepositoryImpl:
             "tags_count": len(tag_list or []),
             "resource_files": [],
             "knowledge_ids": knowledge_ids,
+            "tag_library_id": tag_library_id,
         }
 
     async def get_review_tag_link_list_by_tag_id(self, tag_ids: list[int], tenant_id: int):

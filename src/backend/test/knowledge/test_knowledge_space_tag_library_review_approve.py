@@ -232,6 +232,42 @@ async def test_append_review_tag_skips_manual_when_name_already_in_system():
 
 
 @pytest.mark.asyncio
+async def test_append_review_tag_allows_unbound_library_when_not_required():
+    service = KnowledgeSpaceTagLibraryService(_login_user())
+    library = _library(id=10, tenant_id=1)
+
+    with (
+        patch.object(service, "validate_library_bound_to_knowledge", new=AsyncMock()) as validate_bound,
+        patch.object(service, "_ensure_global_tag_names_available", new=AsyncMock()),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=library),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.list_tag_names",
+            new=AsyncMock(return_value=(["合同"], [], [])),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.replace_tags",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aupdate",
+            new=AsyncMock(),
+        ),
+    ):
+        await service.append_review_tag(
+            library_id=10,
+            knowledge_id=100,
+            tag_name="新标签",
+            review_resource_type=TagResourceTypeEnum.AI_AUTO_TAG.value,
+            require_bound_library=False,
+        )
+
+    validate_bound.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_append_review_tag_rejects_unbound_library():
     service = KnowledgeSpaceTagLibraryService(_login_user())
 

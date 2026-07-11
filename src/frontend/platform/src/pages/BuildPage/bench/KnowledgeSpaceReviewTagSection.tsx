@@ -14,6 +14,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
     approveOrRejectReviewTagApi,
     getKnowledgeSpaceReviewTagListApi,
+    getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibrariesByKnowledgeApi,
     type KnowledgeSpaceTagLibraryListItem,
     type ReviewTagItem,
@@ -61,20 +62,40 @@ function ApproveReviewTagDialog({
     const [selectedLibraryId, setSelectedLibraryId] = useState("");
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [usingAllLibraries, setUsingAllLibraries] = useState(false);
 
     useEffect(() => {
         if (!open) {
             setSelectedLibraryId("");
             setLibraries([]);
+            setUsingAllLibraries(false);
             return;
         }
         if (!knowledgeId) return;
         setLoading(true);
-        captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibrariesByKnowledgeApi(knowledgeId)).then((res) => {
-            setLibraries(res || []);
+        const hasTagLibrary = row?.tag_library_id != null && row.tag_library_id > 0;
+        const loadLibraries = async () => {
+            if (hasTagLibrary) {
+                const boundLibraries = await captureAndAlertRequestErrorHoc(
+                    getKnowledgeSpaceTagLibrariesByKnowledgeApi(knowledgeId),
+                );
+                const normalizedBound = boundLibraries || [];
+                if (normalizedBound.length > 0) {
+                    setLibraries(normalizedBound);
+                    setUsingAllLibraries(false);
+                    return;
+                }
+            }
+            const allLibrariesPage = await captureAndAlertRequestErrorHoc(
+                getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 500 }),
+            );
+            setLibraries(allLibrariesPage?.data || []);
+            setUsingAllLibraries(true);
+        };
+        void loadLibraries().finally(() => {
             setLoading(false);
         });
-    }, [open, knowledgeId]);
+    }, [open, knowledgeId, row?.tag_library_id]);
 
     const handleConfirm = async () => {
         if (!row?.tag_name || !knowledgeId || !selectedLibraryId) {
@@ -109,11 +130,17 @@ function ApproveReviewTagDialog({
                 </DialogHeader>
                 <div className="space-y-4 px-6 py-5">
                     <p className="text-sm text-muted-foreground">
-                        {t(
-                            "build.reviewTagApproveDesc",
-                            "将标签「{{tagName}}」导入到该知识空间绑定的标签库中",
-                            { tagName: row?.tag_name || "" },
-                        )}
+                        {usingAllLibraries
+                            ? t(
+                                  "build.reviewTagApproveDescAllLibraries",
+                                  "将标签「{{tagName}}」导入到租户下的标签库中",
+                                  { tagName: row?.tag_name || "" },
+                              )
+                            : t(
+                                  "build.reviewTagApproveDesc",
+                                  "将标签「{{tagName}}」导入到该知识空间绑定的标签库中",
+                                  { tagName: row?.tag_name || "" },
+                              )}
                     </p>
                     <div>
                         <Label className="bisheng-label">
@@ -140,7 +167,7 @@ function ApproveReviewTagDialog({
                         </Select>
                         {!loading && libraries.length === 0 && (
                             <p className="mt-2 text-xs text-muted-foreground">
-                                {t("build.reviewTagNoBoundLibrary", "该知识空间尚未绑定标签库")}
+                                {t("build.reviewTagNoLibraryAvailable", "当前租户暂无可用标签库")}
                             </p>
                         )}
                     </div>

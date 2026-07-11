@@ -132,11 +132,15 @@ class KnowledgeSpaceTagLibraryService:
         knowledge_id: int,
         tag_name: str,
         review_resource_type: str,
+        require_bound_library: bool = True,
     ) -> None:
-        await self.validate_library_bound_to_knowledge(library_id, knowledge_id)
+        if require_bound_library:
+            await self.validate_library_bound_to_knowledge(library_id, knowledge_id)
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
         if not library:
             raise KnowledgeSpaceTagLibraryNotExistError()
+        if int(library.tenant_id) != int(self.login_user.tenant_id):
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="该标签库未关联此知识空间")
 
         normalized_name = (tag_name or "").strip()
         if not normalized_name:

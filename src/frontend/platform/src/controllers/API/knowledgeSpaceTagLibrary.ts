@@ -151,6 +151,8 @@ export interface ReviewTagItem {
   tags_total: number
   resource_files: ReviewTagResourceItem[]
   knowledge_ids?: number[]
+  /** Present when the pending tag is scoped to a tag library. */
+  tag_library_id?: number | null
 }
 
 export interface ReviewTagPage {

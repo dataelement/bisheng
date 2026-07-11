@@ -63,9 +63,23 @@ class WorkStationTagsService(BaseService):
         if data and data.status == ApproveOrRejectEnum.APPROVE:
             if not data.tag_library_id or not data.knowledge_id:
                 raise KnowledgeSpaceTagLibraryInvalidError(msg="请选择导入的标签库")
+            from bisheng.database.models.tag import TagBusinessTypeEnum
             from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
                 KnowledgeSpaceTagLibraryService,
             )
+
+            review_tag_list = await self.review_tags_repository.get_review_tag_list_by_tag_name(
+                data.tag_name,
+                data.resource_type,
+                tenant_id,
+            )
+            bound_ids = await KnowledgeSpaceTagLibraryService.resolve_bound_library_ids(int(data.knowledge_id))
+            tag_has_library = any(
+                getattr(tag, "business_type", None) == TagBusinessTypeEnum.TAG_LIBRARY.value
+                and str(getattr(tag, "business_id", "") or "").strip()
+                for tag in (review_tag_list or [])
+            )
+            require_bound_library = bool(bound_ids) and tag_has_library
 
             tag_library_service = KnowledgeSpaceTagLibraryService(self.login_user)
             await tag_library_service.append_review_tag(
@@ -73,6 +87,7 @@ class WorkStationTagsService(BaseService):
                 knowledge_id=int(data.knowledge_id),
                 tag_name=data.tag_name,
                 review_resource_type=data.resource_type.value,
+                require_bound_library=require_bound_library,
             )
             existed_tag_list = await self.approve_tag_to_move_operation(
                 data.tag_name,

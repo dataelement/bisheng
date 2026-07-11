@@ -67,11 +67,18 @@ async def test_approve_review_tag_imports_to_selected_library():
     service.review_tags_repository.list_submitter_notification_targets = AsyncMock(
         return_value=[(42, 100)],
     )
+    service.review_tags_repository.get_review_tag_list_by_tag_name = AsyncMock(
+        return_value=[SimpleNamespace(business_type="tag_library", business_id="10")],
+    )
 
     with (
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
         ) as library_service_cls,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService.resolve_bound_library_ids",
+            new=AsyncMock(return_value=[10]),
+        ),
         patch(
             "bisheng.workstation.domain.services.review_tag_notification_service.ReviewTagNotificationService.notify_after_decision",
             new=AsyncMock(),
@@ -88,6 +95,7 @@ async def test_approve_review_tag_imports_to_selected_library():
         knowledge_id=100,
         tag_name="AI助手功能",
         review_resource_type=TagResourceTypeEnum.AI_AUTO_TAG.value,
+        require_bound_library=True,
     )
     approve_tag_to_move.assert_awaited_once_with(
         "AI助手功能",
@@ -97,6 +105,49 @@ async def test_approve_review_tag_imports_to_selected_library():
     )
     service.review_tags_repository.approve_review_tag.assert_awaited_once()
     service.session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_approve_review_tag_allows_any_library_when_tag_has_no_library_scope():
+    service = _build_tags_service()
+    data = ApproveOrRejectRequest(
+        tag_name="人工标签",
+        status=ApproveOrRejectEnum.APPROVE,
+        resource_type=TagResourceTypeEnum.MANUAL_TAG,
+        tag_library_id=10,
+        knowledge_id=100,
+    )
+    append_review_tag = AsyncMock()
+    service.approve_tag_to_move_operation = AsyncMock(return_value=[])
+    service.review_tags_repository.approve_review_tag = AsyncMock()
+    service.review_tags_repository.list_submitter_notification_targets = AsyncMock(return_value=[])
+    service.review_tags_repository.get_review_tag_list_by_tag_name = AsyncMock(
+        return_value=[SimpleNamespace(business_type="knowledge_space", business_id="100")],
+    )
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
+        ) as library_service_cls,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService.resolve_bound_library_ids",
+            new=AsyncMock(return_value=[20, 30]),
+        ),
+        patch(
+            "bisheng.workstation.domain.services.review_tag_notification_service.ReviewTagNotificationService.notify_after_decision",
+            new=AsyncMock(),
+        ),
+    ):
+        library_service_cls.return_value.append_review_tag = append_review_tag
+        await service.approve_or_reject_review_tag(data, tenant_id=1)
+
+    append_review_tag.assert_awaited_once_with(
+        library_id=10,
+        knowledge_id=100,
+        tag_name="人工标签",
+        review_resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
+        require_bound_library=False,
+    )
 
 
 @pytest.mark.asyncio
