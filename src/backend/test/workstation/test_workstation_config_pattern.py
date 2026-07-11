@@ -1,18 +1,19 @@
 """Regression tests for WorkstationConfig application-center text fields.
 
-`applicationCenterWelcomeMessage` / `applicationCenterDescription` were added
-with `default=""` but a `pattern` that required at least one char (`...]+$`).
-Any tenant whose stored config left these empty or unset (i.e. the default)
-made `GET /api/v1/workstation/config` raise a pydantic ValidationError -> HTTP
-500 -> the client rendered its full-screen "system maintenance" overlay, so
+`applicationCenterWelcomeMessage` / `applicationCenterDescription` shipped with
+`default=""` but a `pattern` requiring at least one char (`...]+$`). Any tenant
+whose stored config left them empty or unset (the default) made
+`GET /api/v1/workstation/config` raise a pydantic ValidationError -> HTTP 500,
+so the client rendered its full-screen "system maintenance" overlay and
 `/workspace/c/new` looked broken.
 
-The fix relaxes the pattern to allow the empty string (`...]*$`) while keeping
-the character whitelist for non-empty input.
+The pattern was a character whitelist that could not actually stop XSS (it
+allowed `<>/"'&` ...) yet rejected the empty default plus emoji / non-CJK text.
+Real XSS protection lives in the frontend (React escapes text nodes; none of
+the render sites use dangerouslySetInnerHTML), so the whitelist was dead weight.
+Aligned with feat/2.6.0 (commit 72fd1e8f0 "fix: unused pattern"): the pattern
+is removed entirely, matching how these fields are validated on the main branch.
 """
-
-import pytest
-from pydantic import ValidationError
 
 from bisheng.api.v1.schemas import WorkstationConfig
 
@@ -44,8 +45,10 @@ def test_normal_cn_en_content_is_valid():
     assert "description" in cfg.applicationCenterDescription
 
 
-def test_out_of_whitelist_char_still_rejected():
-    # The pattern is a character whitelist (injection guard); relaxing +->*
-    # must NOT weaken it for non-empty input.
-    with pytest.raises(ValidationError):
-        WorkstationConfig(applicationCenterWelcomeMessage="hi🚀")
+def test_arbitrary_chars_accepted_after_pattern_removed():
+    # The character whitelist has been removed (aligned with feat/2.6.0); input
+    # the old pattern rejected (emoji, non-CJK scripts) must now pass. Only
+    # max_length still constrains the field.
+    text = "こんにちは 🚀 Привет"
+    cfg = WorkstationConfig(applicationCenterWelcomeMessage=text)
+    assert cfg.applicationCenterWelcomeMessage == text

@@ -481,13 +481,11 @@ class WorkstationConfig(BaseModel):
     applicationCenterWelcomeMessage: str | None = Field(
         default="",
         max_length=1000,
-        pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]*$',
         description="App Center Welcome Message",
     )
     applicationCenterDescription: str | None = Field(
         default="",
         max_length=1000,
-        pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]*$',
         description="App Center Description",
     )
     recommendedApps: list[str] | None = Field(
