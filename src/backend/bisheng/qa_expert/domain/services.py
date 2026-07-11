@@ -595,7 +595,7 @@ class CommentService:
 
     async def create_comment(self, user_id: int, user_name: str, request: CommentCreateRequest) -> Comment:
         """发布评论"""
-
+        comment = None
         if request.answer_id and request.answer_id != 0:
             answer = await self.answer_repo.get_by_id(request.answer_id)
             if not answer:
@@ -611,7 +611,8 @@ class CommentService:
 
             answer.comment_count += 1
             await self.answer_repo.update(request.answer_id, comment_count=answer.comment_count)
-
+            # 2. 统一执行创建操作
+            comment = await self.repository.create(comment)
             # 3. 发送评论通知 (按需开启)
             await self._send_comment_notification(
                 answer,
@@ -634,8 +635,8 @@ class CommentService:
             )
             question.comment_count += 1
             await self.question_repo.update(request.question_id, comment_count=question.comment_count)
-        # 2. 统一执行创建操作
-        comment = await self.repository.create(comment)
+            # 2. 统一执行创建操作
+            comment = await self.repository.create(comment)
 
         return comment
 
