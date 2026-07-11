@@ -52,7 +52,7 @@ interface ExecutionFlowProps {
 
 export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
-    const { getLinsight, continueConversation } = useLinsightManager();
+    const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
     const { stop, sendInput } = useLinsightWebSocket(versionId);
 
@@ -234,6 +234,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             messageId={linsight?.message_id ?? undefined}
                             liked={linsight?.liked ?? undefined}
                             allowFeedback={!readOnly && !isSharePage}
+                            onLikedChange={(l) => updateLinsight(versionId, { liked: l })}
                         >
                             <ResultSection
                                 answer={linsight?.output_result?.answer}

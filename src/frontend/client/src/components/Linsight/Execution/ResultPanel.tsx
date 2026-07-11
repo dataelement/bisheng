@@ -26,9 +26,14 @@ interface ResultPanelProps {
     liked?: number;
     /** show like/dislike (off for read-only / share view) */
     allowFeedback?: boolean;
+    /** Sync the new verdict back to the linsight store so the highlight survives a
+        switch-away/switch-back: the panel reads `liked` from the store, which is
+        seeded once on hydration and would otherwise go stale after an optimistic
+        click (re-mount then shows the old value until a full page reload). */
+    onLikedChange?: (liked: number) => void;
 }
 
-export function ResultPanel({ children, messageId, liked, allowFeedback }: ResultPanelProps) {
+export function ResultPanel({ children, messageId, liked, allowFeedback, onLikedChange }: ResultPanelProps) {
     const localize = useLocalize();
     // peak-end (§2.6): a DoubleCheck Ink "task completed" header marks the
     // terminal state and lifts the deliverable out of the homogeneous flow; body
@@ -54,7 +59,10 @@ export function ResultPanel({ children, messageId, liked, allowFeedback }: Resul
                 <div className="mt-3">
                     <MessageFeedbackButtons
                         liked={liked}
-                        onLike={(l) => likeChatApi(messageId, l)}
+                        onLike={(l) => {
+                            onLikedChange?.(l);
+                            likeChatApi(messageId, l);
+                        }}
                         onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
                     />
                 </div>
