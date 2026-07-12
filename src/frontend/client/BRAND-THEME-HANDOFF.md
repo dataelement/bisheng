@@ -24,11 +24,11 @@
 
 ```
 --brand-50:228 241 236(#E4F1EC)  --brand-100:204 228 218(#CCE4DA)  --brand-200:163 210 192(#A3D2C0)
---brand-300:111 186 160(#6FBAA0) --brand-400:61 155 120(#3D9B78)   --brand-500:24 124 84(#187C54 主)
+--brand-300:111 186 160(#6FBAA0) --brand-400:61 155 120(#3D9B78)   --brand-500:22 156 71(#169C47 主, 2026-06-29 was #187C54)
 --brand-600:19 99 69(#136345)    --brand-700:15 77 54  --brand-800:10 56 38  --brand-900:6 38 25
---brand-main:24 124 84(#187C54)
+--brand-main:22 156 71(#169C47)
 /* 另外覆盖： */
---primary:154 67% 29%;  --surface-active-alt:rgb(228 241 236);  --surface-primary-alt:#f4faf7;  --search-input:hsla(152,40%,99%,1);
+--primary:142 75% 35%;  --surface-active-alt:rgb(228 241 236);  --surface-primary-alt:#f4faf7;  --search-input:hsla(152,40%,99%,1);
 ```
 （蓝色 `--primary` 默认是 `222 100% 54%`，在 `:root`/`html` 块里。）
 
