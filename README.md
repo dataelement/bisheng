@@ -8,7 +8,7 @@
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
-    <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
+    <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a>
 </p>
 <p align="center">
   <a href="./README_CN.md">简体中文</a> |
@@ -33,9 +33,9 @@ BISHENG is an open LLM application devops platform, focusing on enterprise scena
 "Bi Sheng" was the inventor of movable type printing, which played a vital role in promoting the transmission of human knowledge. We hope that BISHENG can also provide strong support for the widespread implementation of intelligent applications. Everyone is welcome to participate.
 
 
-## Features 
-1. **Lingsight, a general-purpose agent with expert-level taste**: Through the [AGL](https://github.com/dataelement/AgentGuidanceLanguage)(Agent Guidance Language) framework, we embed domain experts’ preferences, experience, and business logic into the AI, enabling the agent to exhibit “expert-level understanding” when handling tasks.  
-<p align="center"><img src="https://dataelem.com/bs/Linsight.png" alt="sence1"></p>   
+## Features
+1. **Lingsight, a general-purpose agent with expert-level taste**: Through the [AGL](https://github.com/dataelement/AgentGuidanceLanguage)(Agent Guidance Language) framework, we embed domain experts’ preferences, experience, and business logic into the AI, enabling the agent to exhibit “expert-level understanding” when handling tasks.
+<p align="center"><img src="https://dataelem.com/bs/Linsight.png" alt="sence1"></p>
 
 2. **Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
    - 🧩 **Independent and comprehensive application orchestration framework**: Enables the execution of various tasks within a single framework (while similar products rely on bot invocation or separate chatflow and workflow modules for different tasks).
@@ -44,7 +44,7 @@ BISHENG is an open LLM application devops platform, focusing on enterprise scena
    - 🖐️ **User-friendly and intuitive**: Operations like loops, parallelism, and batch processing, which require specialized components in similar products, can be easily visualized in BISHENG as a "flowchart" (drawing a loop forms a loop, aligning elements creates parallelism, and selecting multiple items enables batch processing).
    <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="sence0"></p>
 
-3. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more.   
+3. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more.
 The platform supports the construction of <b>highly complex enterprise application scenarios</b> and offers <b>deep optimization</b> 	with hundreds of components and thousands of parameters.
 <p align="center"><img src="https://dataelem.com/bs/chat.png" alt="sence1"></p>
 
@@ -55,7 +55,7 @@ The platform supports the construction of <b>highly complex enterprise applicati
 <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
 
 6. A community for sharing best practices across various enterprise scenarios: An open repository of application cases and best practices.
-## Quick start 
+## Quick start
 
 Please ensure the following conditions are met before installing BISHENG:
 - CPU >= 4 Virtual Cores
@@ -79,13 +79,13 @@ Start BISHENG
 ```bash
 docker compose -f docker-compose.yml -p bisheng up -d
 ```
-After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
+After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration.
 
-By default, the first registered user will become the system admin. 
+By default, the first registered user will become the system admin.
 
 For more installation and deployment issues, refer to:：[Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-## Acknowledgement 
+## Acknowledgement
 This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.
 
 <b>Thank you to our contributors：</b>
@@ -96,7 +96,7 @@ This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [
 
 
 
-## Community & contact 
+## Community & contact
 Welcome to join our discussion group
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">

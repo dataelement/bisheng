@@ -5,7 +5,7 @@
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
     <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
-    <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
+    <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a>
 </p>
 <p align="center">
   <a href="./README_CN.md">简体中文</a> |
@@ -30,12 +30,12 @@ BISHENG毕昇 是一款 <b>开源</b> LLM应用开发平台，主攻<b>企业场
 “毕昇”是活字印刷术的发明人，活字印刷术为人类知识的传递起到了巨大的推动作用。我们希望“BISHENG毕昇”同样能够为智能应用的广泛落地提供有力支撑。欢迎大家一道参与。
 
 
-## 特点 
+## 特点
 1. **具备专家级品味的通用Agent灵思**：通过 [AGL](https://github.com/dataelement/AgentGuidanceLanguage)（Agent Guidance Language）框架，将领域专家的偏好、经验与业务逻辑融入 AI 之中，让 Agent 在处理任务时能具备 「专家级理解」。
-<p align="center"><img src="https://dataelem.com/bs/Linsight.png" alt="sence1"></p>  
+<p align="center"><img src="https://dataelem.com/bs/Linsight.png" alt="sence1"></p>
 
 2. **独具特色的[BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
-   
+
    - 🧩 **独立、完备的应用编排框架**：可在一个框架下实现各类任务（同类产品需要被 bot 调用，或划分成 chatflow 与 workflow 来完成不同类型的任务）。
    - 🔄 **Human in the loop**：支持用户在Workflow执行的中间过程进行干预和反馈（包括多轮对话），而同类产品只能从头执行到尾。
    - 💥 **强大**：支持成环、并行、跑批、判断逻辑以及所有逻辑的任意自由组合；支持多类型输入输出、撰写报告、内容审核等复杂场景。
@@ -55,7 +55,7 @@ BISHENG毕昇 是一款 <b>开源</b> LLM应用开发平台，主攻<b>企业场
 <p align="center"><img src="https://dataelem.com/bs/sence.png" alt="sence4"></p>
 
 
-## 快速安装 
+## 快速安装
 
 安装BISHENG前请先确保满足以下条件：
 - CPU >= 8 Core
@@ -93,7 +93,7 @@ docker compose -f docker-compose.yml -p bisheng up -d
 - [📄BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
 
 
-## 感谢 
+## 感谢
 
 感谢我们的贡献者：
 
@@ -111,7 +111,7 @@ Bisheng 采用了以下依赖库:
 - 感谢开源LLM微调框架 [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) 。
 
 
-## 社区与支持 
+## 社区与支持
 欢迎加入我们的交流群
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">

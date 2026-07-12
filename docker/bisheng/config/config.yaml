@@ -9,9 +9,9 @@ database_url:
 redis_url: "redis://redis:6379/1"
 
 # 集群模式或者哨兵模式（只能选其一）:
-# redis_url: 
+# redis_url:
 #   mode: "cluster"
-#   startup_nodes: 
+#   startup_nodes:
 #     - {"host": "192.168.106.115", "port": 6002}
 #   password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
 #   #sentinel
