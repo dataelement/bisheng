@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
-from bisheng.citation.domain.models.message_citation import MessageCitation
+from bisheng.citation.domain.models.message_citation import MessageCitation, MessageCitationRelation
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 
 
@@ -21,6 +21,14 @@ class MessageCitationRepository(BaseRepository[MessageCitation, int], ABC):
     @abstractmethod
     async def bulk_create(self, citations: List[MessageCitation]) -> List[MessageCitation]:
         """Create citations in batch."""
+        pass
+
+    @abstractmethod
+    async def bulk_create_relations(
+        self,
+        relations: List[MessageCitationRelation],
+    ) -> List[MessageCitationRelation]:
+        """Create message-to-citation relations in batch."""
         pass
 
     @abstractmethod
