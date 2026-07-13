@@ -2055,6 +2055,88 @@ async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_p
 
 
 @pytest.mark.asyncio
+async def test_shougang_portal_file_search_respects_limit(service):
+    space = _make_space(space_id=12, user_id=7)
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name="file1.pdf"),
+        _make_file(file_id=1801, knowledge_id=12, file_name="file2.pdf"),
+        _make_file(file_id=1802, knowledge_id=12, file_name="file3.pdf"),
+        _make_file(file_id=1803, knowledge_id=12, file_name="file4.pdf"),
+    ]
+    file_map = {int(file.id): file for file in files}
+
+    es_chunks = [
+        SimpleNamespace(
+            file_id=file_id,
+            knowledge_id=12,
+            content=f"content {file_id}",
+            source="es",
+            retriever="es",
+            rank=index,
+            score=10.0 - index,
+            metadata={"document_id": file_id},
+        )
+        for index, file_id in enumerate([1580, 1801, 1802, 1803], start=1)
+    ]
+    vector_chunks = []
+
+    async def fake_get_files(**kwargs):
+        return [file_map[file_id] for file_id in kwargs["extra_file_ids"] if file_id in file_map]
+
+    async def fake_enrich(input_files):
+        return [{**file.model_dump(), "tags": []} for file in input_files]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[space],
+        ),
+        patch.object(
+            service,
+            "_search_shougang_portal_es_chunks",
+            new_callable=AsyncMock,
+            return_value=es_chunks,
+            create=True,
+        ),
+        patch.object(
+            service,
+            "_search_shougang_portal_vector_chunks",
+            new_callable=AsyncMock,
+            return_value=vector_chunks,
+            create=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters",
+            new_callable=AsyncMock,
+            side_effect=fake_get_files,
+        ),
+        patch.object(
+            service,
+            "_filter_visible_child_items",
+            new_callable=AsyncMock,
+            side_effect=lambda items, **_: items,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=fake_enrich,
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                q="用户",
+                space_ids=[12],
+                sort="relevance",
+                limit=2,
+            )
+        )
+
+    assert len(result["data"]) == 2
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_search_emits_permission_performance_log(service):
     with (
         patch(

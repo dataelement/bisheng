@@ -4245,11 +4245,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 rerank_model_id=req.rerank_model_id,
                 rerank_model_id_provided=self._is_pydantic_field_set(req, "rerank_model_id"),
             )
+        limit = min(max(int(req.limit or 20), 1), 100)
         visible_candidates = self._sort_shougang_portal_semantic_candidates(
             candidates=visible_candidates,
             sort=req.sort,
             file_map=visible_file_map,
-        )[:PORTAL_SEARCH_FINAL_LIMIT]
+        )[:limit]
         if perf is not None:
             perf.final_count = len(visible_candidates)
             self._set_shougang_portal_search_top_result_debug(visible_candidates, visible_file_map)
@@ -4262,7 +4263,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=req.file_subcategory_code,
             business_domain_code=req.business_domain_code,
         )
-        return self._build_shougang_portal_search_response(items)
+        return self._build_shougang_portal_search_response(items, limit=limit)
 
     async def _collect_visible_shougang_portal_semantic_candidates(
         self,
@@ -5015,8 +5016,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ]
 
     @staticmethod
-    def _build_shougang_portal_search_response(items: list[ShougangPortalFileItemResp]) -> dict:
-        final_items = items[:PORTAL_SEARCH_FINAL_LIMIT]
+    def _build_shougang_portal_search_response(
+        items: list[ShougangPortalFileItemResp],
+        *,
+        limit: int = PORTAL_SEARCH_FINAL_LIMIT,
+    ) -> dict:
+        final_items = items[:limit]
         return {
             "data": [item.model_dump(mode="json") for item in final_items],
             "has_more": False,
