@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Folder, PencilLine } from "lucide-react";
 import {
     FileStatus,
@@ -233,8 +233,16 @@ export function PortalUploadedFilesDrawer({
     const [encodingDrafts, setEncodingDrafts] = useState<Record<string, EncodingDraft>>({});
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+    // Keep prop identities out of loadRecords' deps so it stays stable across parent
+    // re-renders. Otherwise a churned showToast rebuilds loadRecords, which makes the
+    // fetch effect re-run and refetch the whole list, flickering the dialog.
+    const openRef = useRef(open);
+    openRef.current = open;
+    const showToastRef = useRef(showToast);
+    showToastRef.current = showToast;
+
     const loadRecords = useCallback(async (pageToLoad: number) => {
-        if (!open) return;
+        if (!openRef.current) return;
         setLoading(true);
         try {
             const res = await listMyUploadedFilesApi({ page: pageToLoad, pageSize: PAGE_SIZE });
@@ -244,11 +252,11 @@ export function PortalUploadedFilesDrawer({
         } catch {
             setRecords([]);
             setTotal(0);
-            showToast({ message: "上传记录加载失败", severity: NotificationSeverity.ERROR });
+            showToastRef.current({ message: "上传记录加载失败", severity: NotificationSeverity.ERROR });
         } finally {
             setLoading(false);
         }
-    }, [open, showToast]);
+    }, []);
 
     useEffect(() => {
         if (!open) {
@@ -412,7 +420,19 @@ export function PortalUploadedFilesDrawer({
             } else {
                 await updateFileEncoding(record.spaceId, record.id, newEncoding);
             }
-            await loadRecords(page);
+            // Patch the edited row in place instead of refetching the whole list, which
+            // would flicker the whole dialog. The new values are already known locally.
+            setRecords((prev) => prev.map((item) => (
+                item.id === record.id
+                    ? {
+                        ...item,
+                        fileEncoding: newEncoding,
+                        fileSubcategoryCode: normalizedSubcategoryCode !== undefined
+                            ? normalizedSubcategoryCode
+                            : item.fileSubcategoryCode,
+                    }
+                    : item
+            )));
             await onRecordsChanged?.();
             setEncodingDrafts((prev) => {
                 const { [record.id]: _, ...rest } = prev;
@@ -425,7 +445,7 @@ export function PortalUploadedFilesDrawer({
         } finally {
             setSavingEncodingFileId(null);
         }
-    }, [encodingDrafts, encodingPrefix, loadRecords, onRecordsChanged, page, showToast]);
+    }, [encodingDrafts, encodingPrefix, onRecordsChanged, showToast]);
 
     const handleStartTagsEdit = useCallback((record: UploadedFileRecord) => {
         setEditingFileId(null);
