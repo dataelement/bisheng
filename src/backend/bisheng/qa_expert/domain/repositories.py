@@ -199,7 +199,8 @@ class QuestionRepository:
                 if user_id is not None:
                     stmt = stmt.where(Question.invited_experts.contains(user_id))
 
-            count_stmt = select(func.count()).select_from(stmt.subquery())
+            subquery = stmt.subquery()
+            count_stmt = select(func.count()).select_from(subquery)
             total = await session.exec(count_stmt) or 0
 
             # 排序
