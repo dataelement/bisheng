@@ -19,6 +19,7 @@ from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViola
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
     SensitiveWordPolicyService,
 )
+from bisheng.qa_expert.domain.rich_text import question_description_to_plain_text
 from bisheng.qa_expert.domain.schemas import (
     ExpertCreateRequest,
     ExpertUpdateRequest,
@@ -168,18 +169,22 @@ async def get_question_service() -> QuestionService:
     return QuestionService()
 
 
+def check_question_content(tenant_id: int, text: str) -> None:
+    result = SensitiveWordPolicyService.check_text(
+        tenant_id=tenant_id,
+        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        text=text,
+    )
+    if result.enabled and result.hits:
+        raise ContentSafetyViolation(result)
+
+
 @router.post("/check_questions", response_model=QuestionDetailResponse)
 async def check_question(
     request: QuestionCheckRequest,
     user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    result = SensitiveWordPolicyService.check_text(
-        tenant_id=user.tenant_id,
-        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
-        text=request.check_text,
-    )
-    if result.enabled and result.hits:
-        raise ContentSafetyViolation(result)
+    check_question_content(user.tenant_id, request.check_text)
     return resp_200()
 
 @router.post("/questions", response_model=QuestionDetailResponse)
@@ -192,6 +197,10 @@ async def create_question(
     if not user.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
+    check_question_content(
+        user.tenant_id,
+        f"{request.title}\n{question_description_to_plain_text(request.description)}",
+    )
     question = await service.create_question(user.user_id, request, user.user_name)
     return resp_200(data=question)
 
@@ -238,12 +247,17 @@ async def update_question(
     question_id: int,
     request: QuestionUpdateRequest,
     user: UserPayload = Depends(UserPayload.get_login_user),
-    service: ExpertService = Depends(get_question_service),
+    service: QuestionService = Depends(get_question_service),
 ):
-    """更新专家信息"""
-   
-    expert = await service.update_question(question_id, request)
-    return resp_200(data=expert)
+    """更新问题信息"""
+    if request.description is not None:
+        check_question_content(
+            user.tenant_id,
+            f"{request.title or ''}\n{question_description_to_plain_text(request.description)}",
+        )
+
+    question = await service.update_question(question_id, request)
+    return resp_200(data=question)
 
 
 @router.get("/questions/{question_id}", response_model=QuestionDetailResponse)

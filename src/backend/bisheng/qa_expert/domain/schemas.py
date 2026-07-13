@@ -7,6 +7,8 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from bisheng.qa_expert.domain.rich_text import sanitize_question_description
+
 TEXT_ENCODING = "utf-8"
 TEXT_DECODE_ERRORS = "replace"
 BYTE_ORDER_BIG_ENDIAN = "big"
@@ -107,7 +109,7 @@ class ExpertResponse(BaseModel):
 # ==================== 问题 Schemas ====================
 class QuestionCheckRequest(BaseModel):
     """检查问题 - 请求"""
-    check_text: str = Field(..., min_length=0, max_length=100, description="问题文本")
+    check_text: str = Field(..., min_length=0, max_length=10000, description="问题文本")
 
 class QuestionCreateRequest(BaseModel):
     """发起提问 - 请求"""
@@ -123,6 +125,11 @@ class QuestionCreateRequest(BaseModel):
     experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
 
     image_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
+
+    @field_validator("description")
+    @classmethod
+    def sanitize_description(cls, value: str) -> str:
+        return sanitize_question_description(value)
 
     @field_validator("invited_experts", mode="before")
     @classmethod
@@ -161,6 +168,11 @@ class QuestionUpdateRequest(BaseModel):
         default=None, description="状态: unsolved/solved/closed/pending"
     )
     created_by: Optional[str] = Field(default=None, description="创建人")
+
+    @field_validator("description")
+    @classmethod
+    def sanitize_description(cls, value: Optional[str]) -> Optional[str]:
+        return sanitize_question_description(value) if value is not None else None
 
     @field_validator("invited_experts", mode="before")
     @classmethod
