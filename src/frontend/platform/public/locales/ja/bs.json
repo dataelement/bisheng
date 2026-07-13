@@ -1198,6 +1198,8 @@
     "knowledgeSpace": "知識空間",
     "model": "モデル",
     "displayName": "表示名",
+    "modelDescription": "説明",
+    "modelDescriptionPlaceholder": "モデル選択に表示されます",
     "vision": "画像",
     "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。",
     "webSearchPrompt": "Web 検索プロンプト",

@@ -537,7 +537,18 @@ async def get_linsight_session_version_list(
                 model for model in linsight_session_version_models if model.id == shared_version_id
             ]
 
-    return resp_200([model.model_dump() for model in linsight_session_version_models])
+    # Unified like/dislike via ChatMessage: the task result is itself a
+    # category="task" ChatMessage and the verdict lives on that row. Attach each
+    # version's linked task message_id + liked so the standalone linsight page can
+    # rate through the shared /liked endpoint and re-highlight on reload (same as
+    # the in-conversation task turn).
+    version_dumps = [model.model_dump() for model in linsight_session_version_models]
+    feedback_map = await linsight_execute_utils.get_task_feedback_by_version(session_id)
+    for dump in version_dumps:
+        info = feedback_map.get(dump.get("id"))
+        dump["message_id"] = info["message_id"] if info else None
+        dump["liked"] = info["liked"] if info else 0
+    return resp_200(version_dumps)
 
 
 # Get task execution details

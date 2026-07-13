@@ -137,6 +137,9 @@ export interface ChatMessage {
     references?: ReferenceSource[];
     citations?: ChatCitation[] | null;
     files?: any[];
+    /** Persisted 点赞/点踩 verdict on this answer row: 0 none / 1 up / 2 down.
+        Seeds the feedback buttons' highlight on history reload. */
+    liked?: number;
     // --- v2.5 Agent-mode native fields ---
     /** One of question / agent_answer / agent_thinking / agent_tool_call / task / legacy answer. */
     category?: string;
@@ -246,6 +249,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
         category,
         files: Array.isArray(row.files) ? row.files : [],
         citations: Array.isArray(row.citations) ? row.citations : null,
+        liked: row.liked,
     };
 
     if (category === "question" && raw && typeof raw === "object") {
@@ -494,6 +498,7 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         createdAt: raw.create_time,
         error: false,
         flow_name: raw.flow_name,
+        liked: raw.liked,
     };
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
+import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus } from "~/store/linsight";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
@@ -317,6 +317,27 @@ export const useLinsightWebSocket = (versionId) => {
                         status: SopStatus.completed
                     })
                     toggleNav(true)
+                    // Live only: the task answer is now a persisted category="task"
+                    // ChatMessage. Pull its real id (+ liked verdict) into the store so
+                    // like/dislike targets the right row the moment the result panel
+                    // appears — without this the panel showed while the message still
+                    // held its streaming placeholder id, so a like clicked before a
+                    // reload was lost.
+                    // The version-list already carries message_id (backend enrichment);
+                    // history hydration seeds the store from the same endpoint.
+                    {
+                        const sessionId = getLinsight(id)?.session_id;
+                        if (sessionId) {
+                            getLinsightSessionVersionList(sessionId, '')
+                                .then((list: any[]) => {
+                                    const v = (list || []).find((x) => String(x.id) === String(id));
+                                    if (v?.message_id != null) {
+                                        updateLinsight(id, { message_id: v.message_id, liked: v.liked });
+                                    }
+                                })
+                                .catch(() => { /* best-effort: a reload seeds it from the same endpoint */ });
+                        }
+                    }
                     break;
                 case 'task_terminated':
 

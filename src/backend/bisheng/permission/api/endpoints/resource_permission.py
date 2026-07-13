@@ -1538,6 +1538,20 @@ async def authorize_resource(
         and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
     ]
 
+    # Users cannot modify their OWN permission in the member dialog: changing your
+    # own role (e.g. owner→editor) strips your management access and locks you out
+    # of the dialog on the next reload; removing yourself is likewise disallowed.
+    # Managing OTHERS is fine. Creator rows are already locked client-side via
+    # is_creator; this is the server-side backstop for every resource type.
+    self_subject_changes = [
+        item
+        for item in (tuple_grants + tuple_revokes)
+        if getattr(item, "subject_type", None) == "user"
+        and int(getattr(item, "subject_id", 0) or 0) == int(login_user.user_id)
+    ]
+    if self_subject_changes:
+        return PermissionDeniedError.return_resp("不能修改自己的权限")
+
     # Owner and creator are decoupled: an owner may be revoked/downgraded as long
     # as another owner survives, but removing the last owner would orphan the
     # resource (INV-2). Applies to ALL owner revokes (self or someone else's), and

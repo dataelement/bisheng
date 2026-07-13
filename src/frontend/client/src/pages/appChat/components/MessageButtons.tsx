@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { Outlined } from "bisheng-icons";
-import { copyTrackingApi, likeChatApi } from "~/api/apps";
+import { copyTrackingApi, disLikeCommentApi, likeChatApi } from "~/api/apps";
+import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import { cn } from "~/utils";
-
-const enum ThumbsState {
-    Default = 0,
-    ThumbsUp,
-    ThumbsDown
-}
 
 // Shared action-icon button — matches ExportSelectionButton (size-6 hit area,
 // 14px bisheng-icons Outlined glyph, #818181 idle / brand-500 active) so the
@@ -16,19 +10,8 @@ const enum ThumbsState {
 const ACTION_BTN =
     "flex size-6 items-center justify-center rounded-[6px] transition-colors hover:bg-[#F7F7F7]";
 
-export default function MessageButtons({ id, text, onCopy, data, onUnlike, children = null }) {
-    const [state, setState] = useState<ThumbsState>(data)
+export default function MessageButtons({ id, text, onCopy, data, children = null }) {
     const [copied, setCopied] = useState(false)
-
-    const handleClick = (type: ThumbsState) => {
-        setState(_type => {
-            const newType = type === _type ? ThumbsState.Default : type
-            // api
-            likeChatApi(id, newType);
-            return newType
-        })
-        if (state !== ThumbsState.ThumbsDown && type === ThumbsState.ThumbsDown) onUnlike?.(id)
-    }
 
     const handleCopy = (e) => {
         setCopied(true)
@@ -54,31 +37,10 @@ export default function MessageButtons({ id, text, onCopy, data, onUnlike, child
                 ? <Outlined.Copied size={14} className="text-blue-500" />
                 : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
-        <button
-            type="button"
-            className={ACTION_BTN}
-            onClick={() => handleClick(ThumbsState.ThumbsUp)}
-            title="点赞"
-            aria-label="点赞"
-            aria-pressed={state === ThumbsState.ThumbsUp}
-        >
-            <Outlined.ThumbsUp
-                size={14}
-                className={cn(state === ThumbsState.ThumbsUp ? 'text-blue-500' : 'text-[#818181]')}
-            />
-        </button>
-        <button
-            type="button"
-            className={ACTION_BTN}
-            onClick={() => handleClick(ThumbsState.ThumbsDown)}
-            title="点踩"
-            aria-label="点踩"
-            aria-pressed={state === ThumbsState.ThumbsDown}
-        >
-            <Outlined.ThumbsDown
-                size={14}
-                className={cn(state === ThumbsState.ThumbsDown ? 'text-blue-500' : 'text-[#818181]')}
-            />
-        </button>
+        <MessageFeedbackButtons
+            liked={data}
+            onLike={(liked) => likeChatApi(id, liked)}
+            onDislikeComment={(comment) => disLikeCommentApi(id, comment)}
+        />
     </div>
 };

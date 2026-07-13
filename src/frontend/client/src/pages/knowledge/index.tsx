@@ -638,7 +638,11 @@ export default function Knowledge() {
     // Knowledge square view
     if (showKnowledgeSquare) {
         return (
-            <div className="relative flex h-full min-h-0">
+            // Mobile: the MainLayout shell is h-auto/overflow-visible and html/body
+            // scrolling is globally disabled (WebView bottom-strip fix in index.html),
+            // so `h-full` collapses and the square's inner scroller never scrolls.
+            // Pin the wrapper to 100dvh on mobile so the inner overflow-y-auto works.
+            <div className="relative flex h-full min-h-0 max-[767px]:h-[100dvh]">
                 <KnowledgeSquare
                     onBack={() => {
                         setShowKnowledgeSquare(false);

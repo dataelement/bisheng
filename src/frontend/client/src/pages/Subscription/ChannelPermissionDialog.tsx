@@ -28,6 +28,8 @@ import {
     TabsTrigger,
 } from "~/components/ui";
 import { useLocalize } from "~/hooks";
+import { useRecoilValue } from "recoil";
+import store from "~/store";
 
 const CHANNEL_RESOURCE_TYPE = "channel" as const;
 
@@ -54,6 +56,7 @@ export function ChannelPermissionDialog({
     channel,
 }: ChannelPermissionDialogProps) {
     const localize = useLocalize();
+    const currentUser = useRecoilValue(store.user);
     const queryClient = useQueryClient();
     const [refreshKey, setRefreshKey] = useState(0);
     const [currentSubjectType, setCurrentSubjectType] = useState<SubjectType>("user");
@@ -175,6 +178,7 @@ export function ChannelPermissionDialog({
                                     resourceId={channel.id}
                                     refreshKey={refreshKey}
                                     fixedSubjectType={currentSubjectType}
+                                    currentUserId={currentUser?.id}
                                     prefetchedGrantableModels={grantableModels}
                                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                                     skipGrantableModelsRequest

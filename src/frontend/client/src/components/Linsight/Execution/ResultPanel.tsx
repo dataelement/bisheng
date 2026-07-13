@@ -11,14 +11,29 @@
 import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
+import { MessageFeedbackButtons } from '~/components/Chat/MessageFeedbackButtons';
+import { likeChatApi, disLikeCommentApi } from '~/api/apps';
 import { INK } from './execTokens';
 
 interface ResultPanelProps {
     /** the terminal deliverable (typically <ResultSection />) */
     children: ReactNode;
+    /** task-result ChatMessage id — the like/dislike target. The task result is a
+        category="task" ChatMessage, so feedback reuses the shared /liked +
+        /chat/comment endpoints (same as daily / knowledge / channel). */
+    messageId?: string;
+    /** persisted like/dislike verdict: 0 none / 1 up / 2 down */
+    liked?: number;
+    /** show like/dislike (off for read-only / share view) */
+    allowFeedback?: boolean;
+    /** Sync the new verdict back to the linsight store so the highlight survives a
+        switch-away/switch-back: the panel reads `liked` from the store, which is
+        seeded once on hydration and would otherwise go stale after an optimistic
+        click (re-mount then shows the old value until a full page reload). */
+    onLikedChange?: (liked: number) => void;
 }
 
-export function ResultPanel({ children }: ResultPanelProps) {
+export function ResultPanel({ children, messageId, liked, allowFeedback, onLikedChange }: ResultPanelProps) {
     const localize = useLocalize();
     // peak-end (§2.6): a DoubleCheck Ink "task completed" header marks the
     // terminal state and lifts the deliverable out of the homogeneous flow; body
@@ -37,6 +52,21 @@ export function ResultPanel({ children }: ResultPanelProps) {
                 </span>
             </div>
             {children}
+            {/* like/dislike — the task result is a category="task" ChatMessage, so
+                rate it through the shared chatmessage feedback endpoints keyed by
+                message id (rollup to message_session is maintained backend-side). */}
+            {allowFeedback && messageId && (
+                <div className="mt-3">
+                    <MessageFeedbackButtons
+                        liked={liked}
+                        onLike={(l) => {
+                            onLikedChange?.(l);
+                            likeChatApi(messageId, l);
+                        }}
+                        onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
+                    />
+                </div>
+            )}
         </div>
     );
 }

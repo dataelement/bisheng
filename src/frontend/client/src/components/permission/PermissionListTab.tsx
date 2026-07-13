@@ -92,6 +92,10 @@ interface PermissionListTabProps {
   // and locks the list to the given subject type.
   fixedSubjectType?: ListSubjectType;
   permissionApi?: PermissionApiAdapter;
+  // When set, the current user's own row is locked (no modify/remove): you cannot
+  // change your own permission, which would strip your management access and lock
+  // you out of the dialog.
+  currentUserId?: string | number;
   onChanged?: () => void;
 }
 
@@ -118,6 +122,7 @@ export function PermissionListTab({
   skipGrantableModelsRequest = false,
   fixedSubjectType,
   permissionApi,
+  currentUserId,
   onChanged,
 }: PermissionListTabProps) {
   const localize = useLocalize();
@@ -551,8 +556,15 @@ export function PermissionListTab({
                 // The channel creator's permission level is permanent: never
                 // show the modify/remove dropdown — render the level as static text.
                 const isCreatorEntry = entry.is_creator === true;
-                const canModifyEntry = !isCreatorEntry && canManageEntry(entry) && entryModelOptions.length > 0;
-                const canDeleteEntrySubject = !isCreatorEntry && canDeleteSubject(entry);
+                // You cannot modify/remove your OWN permission row — that would
+                // strip your management access and lock you out of the dialog.
+                const isSelfEntry =
+                  entry.subject_type === "user" &&
+                  currentUserId != null &&
+                  String(entry.subject_id) === String(currentUserId);
+                const canModifyEntry =
+                  !isCreatorEntry && !isSelfEntry && canManageEntry(entry) && entryModelOptions.length > 0;
+                const canDeleteEntrySubject = !isCreatorEntry && !isSelfEntry && canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
 

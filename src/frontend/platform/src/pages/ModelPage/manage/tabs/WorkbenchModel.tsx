@@ -76,6 +76,17 @@ export default function WorkbenchModel({ onBack }) {
 
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
+    // Look up the model's own name from the cascader options by id, used as
+    // the default displayName when the admin leaves it empty.
+    const findModelLabel = (id) => {
+        if (!id) return '';
+        for (const group of llmOptions) {
+            const hit = group.children?.find((el) => el.value == id);
+            if (hit) return hit.label;
+        }
+        return '';
+    };
+
     const handleSave = async () => {
         const { linsightDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
         const errors = [];
@@ -93,7 +104,9 @@ export default function WorkbenchModel({ onBack }) {
         setSaveLoad(true);
         try {
             const data = {
-                models,
+                // Empty displayName falls back to the model's own name so the
+                // workspace model picker never renders a blank option.
+                models: models.map((m) => m.displayName ? m : { ...m, displayName: findModelLabel(m.id) }),
                 embedding_model: { id: String(sourceModelId) },
                 // Linsight default executor model: one of the workbench chat models' id.
                 linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
@@ -205,7 +218,7 @@ export default function WorkbenchModel({ onBack }) {
     const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
     const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
-        <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+        <div className="max-w-[720px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">
@@ -223,7 +236,7 @@ export default function WorkbenchModel({ onBack }) {
                     onLinsightDefaultChange={(id) => setForm((prev) => ({ ...prev, linsightDefaultModelId: id }))}
                     onAdd={() => setForm((prev) => ({
                         ...prev,
-                        models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }],
+                        models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', description: '', visual: false }],
                     }))}
                     onRemove={(index) => setForm((prev) => {
                         const removed = prev.models[index];
@@ -244,6 +257,10 @@ export default function WorkbenchModel({ onBack }) {
                     onNameChange={(index, displayName) => setForm((prev) => ({
                         ...prev,
                         models: prev.models.map((item, i) => i === index ? { ...item, displayName } : item),
+                    }))}
+                    onDescriptionChange={(index, description) => setForm((prev) => ({
+                        ...prev,
+                        models: prev.models.map((item, i) => i === index ? { ...item, description } : item),
                     }))}
                     onVisualToggle={(index, visual) => setForm((prev) => ({
                         ...prev,

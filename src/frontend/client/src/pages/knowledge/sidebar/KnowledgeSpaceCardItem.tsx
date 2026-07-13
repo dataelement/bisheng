@@ -18,6 +18,7 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { formatTimeCard } from "../knowledgeUtils";
 
 interface KnowledgeSpaceCardItemProps {
     space: KnowledgeSpace;
@@ -61,8 +62,6 @@ export default function KnowledgeSpaceCardItem({
     const { showToast } = useToastContext();
     const confirm = useConfirm();
 
-    const itemCount = space.totalFileCount ?? space.fileCount ?? 0;
-
     return (
         <div
             className={`group flex cursor-pointer items-center gap-2 rounded-lg py-3 transition-colors ${isActive ? "bg-[#EEEEEE]" : "active:bg-[#F4F4F4] fine-pointer:hover:bg-[#F4F4F4]"
@@ -77,9 +76,11 @@ export default function KnowledgeSpaceCardItem({
                         <Outlined.Pin className="size-3.5 shrink-0 text-[#86909C]" aria-hidden />
                     ) : null}
                 </div>
-                <div className="mt-1 truncate text-[12px] leading-4 text-[#86909C]">
-                    {localize("com_knowledge_items_count", { count: itemCount })}
-                </div>
+                {space.updatedAt && (
+                    <div className="mt-1 truncate text-[12px] leading-4 text-[#86909C] tabular-nums">
+                        {formatTimeCard(space.updatedAt)}
+                    </div>
+                )}
             </div>
 
             <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
