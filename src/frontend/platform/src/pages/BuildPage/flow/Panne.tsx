@@ -49,6 +49,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
         setNodes, onNodesChange, onSelectionChange, onEdgesChange,
         onEdgeSelect, onConnect, onDragOver, onDrop, setEdges, setViewport, createNote
     } = useFlow(reactFlowInstance, flow, takeSnapshot)
+    const workflowBackground = window.ThemeStyle?.bg || 'logo'
 
     /**
      * 监听节点变化，更新flow数据
@@ -158,7 +159,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             maxZoom={8}
                             disableKeyboardA11y={true}
                             // fitView
-                            className={window.ThemeStyle.bg === 'logo' && "flow-bg-logo"}
+                            className={workflowBackground === 'logo' ? "flow-bg-logo" : undefined}
                             onDragOver={onDragOver}
                             onDrop={onDrop}
                             onSelectionChange={onSelectionChange}
@@ -180,8 +181,9 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             // onReconnectStart={onEdgeUpdateStart}
                             // onReconnectEnd={onEdgeUpdateEnd}
                             style={{
-                                backgroundImage: window.ThemeStyle.bg === 'gradient'
-                                    && 'radial-gradient(circle at center bottom, hsl(var(--primary) / 30%) 2%, hsl(var(--primary) / 20%) 25%, hsl(var(--primary) / 5%) 60%, rgba(0, 0, 0, 0) 100%)',
+                                backgroundImage: workflowBackground === 'gradient'
+                                    ? 'radial-gradient(circle at center bottom, hsl(var(--primary) / 30%) 2%, hsl(var(--primary) / 20%) 25%, hsl(var(--primary) / 5%) 60%, rgba(0, 0, 0, 0) 100%)'
+                                    : undefined,
                                 backgroundRepeat: 'no-repeat',
                                 backgroundSize: 'cover',
                             }}
