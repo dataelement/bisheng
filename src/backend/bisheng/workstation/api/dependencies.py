@@ -10,7 +10,27 @@ LoginUserDep = Depends(UserPayload.get_login_user)
 AdminUserDep = Depends(UserPayload.get_admin_user)
 ShareLinkDep = Depends(header_share_token_parser)
 
-__all__ = ['LoginUserDep', 'AdminUserDep', 'ShareLink', 'ShareLinkDep', 'UserPayload', 'get_workstation_tags_service']
+__all__ = [
+    'LoginUserDep',
+    'AdminUserDep',
+    'ShareLink',
+    'ShareLinkDep',
+    'UserPayload',
+    'get_workstation_citation_registry_service',
+    'get_workstation_tags_service',
+]
+
+
+async def get_workstation_citation_registry_service(
+        session: AsyncSession = Depends(get_db_session),
+):
+    """Provide citation history access without coupling workstation to citation API."""
+    from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
+        MessageCitationRepositoryImpl,
+    )
+    from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
+
+    return CitationRegistryService(MessageCitationRepositoryImpl(session))
 
 async def get_tags_repository(
         session: AsyncSession = Depends(get_db_session),
