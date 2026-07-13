@@ -2682,6 +2682,9 @@ export default function PortalKnowledgeWorkbench() {
                 duplicateOverwriting={duplicateOverwriting}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
+                directUploadDuplicateFiles={fileUpload.duplicateFiles}
+                onDirectUploadDuplicateSkip={fileUpload.handleDuplicateSkip}
+                onDirectUploadDuplicateOverwrite={fileUpload.handleDuplicateOverwrite}
             />
             <PortalUploadedFilesDrawer
                 open={uploadedFilesOpen}
