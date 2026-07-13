@@ -184,8 +184,7 @@ class QuestionRepository:
 
             if business_domain:
                 stmt = stmt.where(Question.business_domain == business_domain)
-            if user_id:
-                stmt = stmt.where(Question.user_id == user_id)
+
             if status in (1, 2):
                 # 状态为 1 (未解决) 或 2 (已解决) 时，直接按问题状态过滤
                 stmt = stmt.where(Question.status == status-1)
@@ -193,11 +192,10 @@ class QuestionRepository:
                 # 状态为 3 (我提问的) 时，按提问人 ID 过滤
                 if user_id is not None:
                     stmt = stmt.where(Question.user_id == user_id)
-
             elif status == 4:
                 # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
                 if user_id is not None:
-                    stmt = stmt.where(Question.invited_experts.contains(user_id))
+                    stmt = stmt.where(func.string_to_array(Question.invited_experts, ',').any(str(user_id)))
 
             # 排序相关的过滤条件需要在计算总数之前应用
             if sort_by == "unanswered":
