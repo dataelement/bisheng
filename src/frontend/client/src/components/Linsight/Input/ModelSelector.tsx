@@ -33,6 +33,11 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
         const models = (bsConfig as any)?.models || [];
         const seen = new Set<string>();
         return models.filter((opt: any) => {
+            // Radix <SelectItem> throws when its value is an empty string.
+            // A stale / mis-configured workbench model can carry a blank id
+            // (older backends don't sanitize it out), so drop those here —
+            // never render <SelectItem value="">, which crashes the page.
+            if (opt?.id == null || String(opt.id) === "") return false;
             const id = String(opt.id);
             if (seen.has(id)) return false;
             seen.add(id);
@@ -65,7 +70,7 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
 
     return (
         <Select value={String(value)} disabled={disabled} onValueChange={onChange}>
-            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] touch-mobile:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-black/5 focus:ring-0">
+            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-black/5 focus:ring-0">
                 <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-normal">
                     {label}
                 </span>

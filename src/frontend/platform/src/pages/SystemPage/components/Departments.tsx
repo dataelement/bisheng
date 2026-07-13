@@ -160,7 +160,7 @@ export default function Departments() {
   }, [])
 
   return (
-    <div ref={containerRef} className="flex h-[calc(100vh-140px)]">
+    <div ref={containerRef} className="flex h-[calc(100vh-140px-var(--license-banner-h,0px))]">
       {/* Left tree panel */}
       <div className="flex min-w-[240px] flex-col border-r pr-4 pt-2" style={{ width: leftPaneWidth }}>
         <LazyDepartmentTree

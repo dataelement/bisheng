@@ -52,7 +52,7 @@ interface ExecutionFlowProps {
 
 export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
-    const { getLinsight, continueConversation } = useLinsightManager();
+    const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
     const { stop, sendInput } = useLinsightWebSocket(versionId);
 
@@ -218,6 +218,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             errorType={linsight.taskErrorInfo?.error_type}
                             detail={linsight.taskErrorInfo?.detail}
                             fallbackMessage={linsight.taskError}
+                            // Transient errors show a Retry — re-run this round via the
+                            // same continueConversation path as the follow-up input
+                            // (same SV + agent thread). Off on share/history/no-question.
+                            onRetry={
+                                isSharePage || readOnly || !linsight?.question
+                                    ? undefined
+                                    : () => continueConversation(versionId, linsight.question)
+                            }
                         />
                     )}
                     {stopped && !linsight?.taskError && (
@@ -230,7 +238,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     {/* ── artifacts area (P4): report link / answer markdown / file
                         card — lifted into the terminal ResultPanel (peak-end). ── */}
                     {completed && (
-                        <ResultPanel>
+                        <ResultPanel
+                            messageId={linsight?.message_id ?? undefined}
+                            liked={linsight?.liked ?? undefined}
+                            allowFeedback={!readOnly && !isSharePage}
+                            onLikedChange={(l) => updateLinsight(versionId, { liked: l })}
+                        >
                             <ResultSection
                                 answer={linsight?.output_result?.answer}
                                 files={fileList}

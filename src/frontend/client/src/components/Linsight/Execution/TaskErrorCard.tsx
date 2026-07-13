@@ -12,6 +12,7 @@
 import { ChevronDown, ChevronRight, CircleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
+import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
 
 interface TaskErrorCardProps {
     /** stable classification from the backend (error_message event) */
@@ -20,6 +21,9 @@ interface TaskErrorCardProps {
     detail?: string;
     /** legacy/raw taskError string — fallback when `detail` is absent */
     fallbackMessage?: string;
+    /** transient (retryable) errors only: re-run the task. Wired on the /linsight
+        ExecutionFlow via continueConversation; omitted on /c and history views. */
+    onRetry?: () => void;
 }
 
 // error_type values that have their own localized copy; anything else (or a
@@ -33,7 +37,13 @@ const KNOWN_TYPES = new Set([
     'auth_error',
 ]);
 
-export function TaskErrorCard({ errorType, detail, fallbackMessage }: TaskErrorCardProps) {
+// Transient upstream hiccups (throttling / timeout / 5xx) recover on their own, so
+// they get the calm neutral ServiceBusyNotice (+ optional retry) rather than the red
+// failure card — a rate limit is the model vendor's availability blip, not a fault.
+// Mirrors the classifier's RETRYABLE bucket.
+const TRANSIENT_TYPES = new Set(['rate_limit', 'network_timeout', 'service_unavailable']);
+
+export function TaskErrorCard({ errorType, detail, fallbackMessage, onRetry }: TaskErrorCardProps) {
     const localize = useLocalize();
     const [showDetail, setShowDetail] = useState(false);
 
@@ -43,6 +53,12 @@ export function TaskErrorCard({ errorType, detail, fallbackMessage }: TaskErrorC
     const hint = localize(`com_linsight_error_hint_${key}`);
     const rawDetail = detail || fallbackMessage || '';
 
+    // Transient → calm neutral notice (with retry where the surface wires it).
+    if (TRANSIENT_TYPES.has(key)) {
+        return <ServiceBusyNotice title={title} desc={desc} detail={rawDetail} onRetry={onRetry} />;
+    }
+
+    // Terminal / unknown → the informative (red) failure card.
     return (
         <div className="my-2 rounded-2xl border border-red-100 bg-red-50/60 p-4 text-sm">
             <div className="flex items-start gap-2.5">

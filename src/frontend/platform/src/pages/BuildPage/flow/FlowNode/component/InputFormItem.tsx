@@ -376,9 +376,41 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
     // 处理文件类型变化
     const handleFileTypeChange = (fileType) => {
-        setFormData({ ...formData, fileType });
         // 清空相关错误
         setErrors({});
+
+        setFormData(prev => {
+            const updates: any = { fileType };
+            const fileOptions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
+            const isImageCapable = fileType === 'all' || fileType === 'image';
+
+            // Image variable only exists for image-capable types. Backfill a unique name
+            // when switching into such a type with no value yet — e.g. editing an item
+            // that was saved as document-only, where image_file was cleared on submit and
+            // the new-item auto-fill effect is skipped in edit mode (initialData present).
+            if (isImageCapable && (!prev.imageFile || prev.imageFile.trim() === '')) {
+                let name = 'image_file';
+                let counter = 1;
+                while (fileOptions.some(opt => opt.image_file === name)) {
+                    counter += 1;
+                    name = `image_file${counter}`;
+                }
+                updates.imageFile = name;
+            }
+
+            // File path is always exposed now; backfill if somehow empty (legacy items).
+            if (!prev.filepath || prev.filepath.trim() === '') {
+                let name = 'file_path';
+                let counter = 1;
+                while (fileOptions.some(opt => opt.file_path === name)) {
+                    counter += 1;
+                    name = `file_path${counter}`;
+                }
+                updates.filepath = name;
+            }
+
+            return { ...prev, ...updates };
+        });
     }
 
     // 处理文件处理策略变化（单选 3 项）

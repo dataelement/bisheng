@@ -47,6 +47,10 @@ import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStart
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
     versionId: string;
+    /** persisted like/dislike verdict fallback (store value wins once hydrated) */
+    liked?: number;
+    /** show like/dislike (off for the read-only share view) */
+    allowFeedback?: boolean;
     /** chat id of the hosting conversation (for the history lazy-load) */
     conversationId?: string;
     /** final answer text (fallback shown before the panel hydrates) */
@@ -58,9 +62,9 @@ interface TaskTurnPanelProps {
     onPreviewFile?: (file: ArtifactFile) => void;
 }
 
-export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
+export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
     const localize = useLocalize();
-    const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
+    const { getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
     const { sendInput, stop } = useLinsightWebSocket(versionId);
@@ -250,7 +254,12 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 document link opens it directly in ChatView's inline workspace
                 panel (preview), replacing the legacy right-side drawer. */}
             {completed && (
-                <ResultPanel>
+                <ResultPanel
+                    messageId={linsight?.message_id ?? undefined}
+                    liked={linsight?.liked ?? liked}
+                    allowFeedback={allowFeedback && !readOnly}
+                    onLikedChange={(l) => updateLinsight(versionId, { liked: l })}
+                >
                     <ResultSection
                         answer={linsight.output_result?.answer}
                         files={fileList}

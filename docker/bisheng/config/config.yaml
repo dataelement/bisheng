@@ -12,6 +12,13 @@ database_pool:
   pool_timeout: 30    # 等待空闲连接的超时秒数
   pool_recycle: 3600  # 连接最大存活秒数，超过则回收重建
   pool_pre_ping: true # 取连接前先 ping 检测有效性
+  # MySQL TLS 默认关闭。使用私有 CA 时配置 ca_file；双向 TLS 再同时配置 cert_file 与 key_file。
+  ssl:
+    enabled: false
+    # ca_file: /etc/bisheng/certs/mysql-ca.pem
+    # cert_file: /etc/bisheng/certs/mysql-client-cert.pem
+    # key_file: /etc/bisheng/certs/mysql-client-key.pem
+    # verify_hostname: true
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0

@@ -67,7 +67,7 @@ export const Finetune = () => {
                 <div className="mt-6 text-center text-gray-400">{t('finetune.noData')}</div>
                 : <div className="flex gap-4 mt-4">
                     <div className="w-[40%] relative">
-                        <div className="border-r overflow-y-auto max-h-[calc(100vh-150px)] pb-20">
+                        <div className="border-r overflow-y-auto max-h-[calc(100vh-150px-var(--license-banner-h,0px))] pb-20">
                             <Table className="px-2">
                                 <TableHeader>
                                     <TableRow>
@@ -99,7 +99,7 @@ export const Finetune = () => {
                             />
                         </div>
                     </div>
-                    <div className="flex-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-150px)]">
+                    <div className="flex-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-150px-var(--license-banner-h,0px))]">
                         {taskId ?
                             <FinetuneDetail id={taskId} onDelete={handleDeleteTask} onStatusChange={reload}></FinetuneDetail> :
                             <div className="flex justify-center items-center h-full">

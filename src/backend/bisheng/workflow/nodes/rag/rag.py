@@ -235,7 +235,5 @@ class RagNode(RagUtils):
         # Citation-rule backstop: only inject when the node's own system prompt doesn't
         # already carry the rules (the default template does), so existing nodes keep
         # citations and updated prompts aren't duplicated.
-        if not prompt_has_citation_rules(system_prompt):
-            messages_general.append(SystemMessage(content=CITATION_PROMPT_RULES))
         messages_general.append(HumanMessagePromptTemplate.from_template(user_prompt))
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)

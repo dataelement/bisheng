@@ -260,7 +260,7 @@ export default function PreviewResult({
         fileId={syncChunksSelectId}
         fileSuffix={currentFile?.suffix}
         previewCount={previewCount}
-        className="h-[calc(100vh-284px)]"
+        className="h-[calc(100vh-284px-var(--license-banner-h,0px))]"
         edit={step === 3 || (step === 2 && !showPreview)}
         loading={loading}
         chunks={chunks}

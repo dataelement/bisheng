@@ -116,6 +116,34 @@ def _timeout_exc():
     return make_exc(openai.APITimeoutError, message="request timed out")
 
 
+def _insufficient_quota_exc():
+    """The exact COFCO 图一 payload: HTTP 429, type/code ``insufficient_quota``,
+    message 'You exceeded your current quota'. On MaaS gateways this is TPM/TPS
+    throttling (429-Throttling.AllocationQuota), so it must RETRY, not fail fast."""
+    import openai
+
+    return make_exc(
+        openai.RateLimitError,
+        message="You exceeded your current quota, please check your plan and billing details.",
+        code="insufficient_quota",
+        body={"type": "insufficient_quota", "message": "You exceeded your current quota", "param": "", "code": None},
+        status_code=429,
+    )
+
+
+def _billing_exhaustion_exc():
+    """Genuine balance/arrears exhaustion — retrying is useless (remedy is top-up),
+    so it must FAIL_FAST + label quota_exhausted, unlike the throttling case above."""
+    import openai
+
+    return make_exc(
+        openai.RateLimitError,
+        message="账户余额不足，请充值后重试",
+        code="arrearage",
+        status_code=429,
+    )
+
+
 async def _build_linsight_agent(model):
     from unittest.mock import patch
 
@@ -247,11 +275,104 @@ async def r3_subagent_degrade_continues():
     )
 
 
+# --------------------------------------------------------------------------- #
+# R4 — MaaS insufficient_quota (图一) retried then SILENTLY recovers (Layer A).
+#      The headline win: a transient TPM/TPS throttle never surfaces as an error.
+# --------------------------------------------------------------------------- #
+async def r4_insufficient_quota_retried_then_recovers():
+    from langchain_core.messages import AIMessage
+
+    model = _build_model().configure(
+        [_insufficient_quota_exc(), _insufficient_quota_exc(), AIMessage(content="done")]  # throttled twice, then ok
+    )
+    agent, svid = await _build_linsight_agent(model)
+    raised = None
+    try:
+        await _drive(agent, svid)
+    except Exception as e:
+        raised = e
+    # RETRYABLE now (was FAIL_FAST): the middleware retries past the 429s and the
+    # task completes — the user sees no error at all.
+    record(
+        "R4 insufficient_quota (429) retried then recovers, no error surfaced (real graph)",
+        raised is None and model.calls >= 3,
+        f"raised={type(raised).__name__ if raised else None} model_calls={model.calls}",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# R5 — sustained insufficient_quota → retries exhausted → main graph raises →
+#      classified as the friendly rate_limit (NOT the scary quota card).
+# --------------------------------------------------------------------------- #
+async def r5_insufficient_quota_exhausted_is_rate_limit():
+    model = _build_model().configure([_insufficient_quota_exc()])  # always throttled
+    agent, svid = await _build_linsight_agent(model)
+    raised = None
+    try:
+        await _drive(agent, svid)
+    except Exception as e:
+        raised = e
+
+    # Proof it is now RETRYABLE: model was called MORE THAN ONCE before giving up
+    # (the old FAIL_FAST classification would have raised on the very first call).
+    record(
+        "R5 sustained insufficient_quota retried before failing (was fail-fast, now retryable)",
+        raised is not None and model.calls > 1,
+        f"raised={type(raised).__name__ if raised else None} model_calls={model.calls}",
+    )
+    if raised is not None:
+        from bisheng.common.services.llm_error_classifier import classify_for_event
+
+        wrapped = RuntimeError(f"Agent task execution failed: {raised}")
+        wrapped.__cause__ = raised  # mirror task_exec's `raise ... from e`
+        classified = classify_for_event(wrapped)
+        record(
+            "R5 raised exception classified as rate_limit (friendly '模型服务繁忙' card, code 11090)",
+            classified.error_type == "rate_limit" and classified.error_code == 11090,
+            f"error_type={classified.error_type} code={classified.error_code}",
+        )
+
+
+# --------------------------------------------------------------------------- #
+# R6 — genuine billing exhaustion still FAIL_FAST (1 call, no retry) + labeled
+#      quota_exhausted → the reverse invariant is preserved.
+# --------------------------------------------------------------------------- #
+async def r6_billing_exhaustion_is_quota_fail_fast():
+    model = _build_model().configure([_billing_exhaustion_exc()])  # 余额不足 / arrearage
+    agent, svid = await _build_linsight_agent(model)
+    raised = None
+    try:
+        await _drive(agent, svid)
+    except Exception as e:
+        raised = e
+
+    # FAIL_FAST: exactly one call, no retry (top-up is the only remedy).
+    record(
+        "R6 billing exhaustion fails fast — no retry (exactly 1 call)",
+        raised is not None and model.calls == 1,
+        f"raised={type(raised).__name__ if raised else None} model_calls={model.calls}",
+    )
+    if raised is not None:
+        from bisheng.common.services.llm_error_classifier import classify_for_event
+
+        wrapped = RuntimeError(f"Agent task execution failed: {raised}")
+        wrapped.__cause__ = raised
+        classified = classify_for_event(wrapped)
+        record(
+            "R6 raised exception classified as quota_exhausted ('额度已用尽/联系管理员充值')",
+            classified.error_type == "quota_exhausted" and classified.error_code == 11090,
+            f"error_type={classified.error_type} code={classified.error_code}",
+        )
+
+
 async def main() -> int:
     for name, coro in (
         ("R1", r1_transient_retry),
         ("R2", r2_main_content_filter_raises),
         ("R3", r3_subagent_degrade_continues),
+        ("R4", r4_insufficient_quota_retried_then_recovers),
+        ("R5", r5_insufficient_quota_exhausted_is_rate_limit),
+        ("R6", r6_billing_exhaustion_is_quota_fail_fast),
     ):
         try:
             await coro()

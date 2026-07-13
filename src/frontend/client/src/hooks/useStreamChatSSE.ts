@@ -30,7 +30,7 @@ export interface StreamChatSSESubmission {
      */
     onMessage: (text: string) => void;
     /** Called when the stream ends (type: "end") with final full text */
-    onFinal: (text: string) => void;
+    onFinal: (text: string, messageId?: string | number) => void;
     /** Called on connection or parse errors */
     onError: (error: string) => void;
     /** Called when the SSE lifecycle is fully done */
@@ -80,8 +80,10 @@ export default function useStreamChatSSE(
 
                 if (data.type === "end") {
                     // Stream complete — skip content (it's the full duplicate),
-                    // send final accumulated text
-                    onFinal(buildFullText());
+                    // send final accumulated text plus the real persisted answer id
+                    // (backend end event) so the caller can swap out the temporary
+                    // placeholder id and feedback/like targets the right row.
+                    onFinal(buildFullText(), data?.message?.message_id);
                     onEnd();
                     return;
                 }

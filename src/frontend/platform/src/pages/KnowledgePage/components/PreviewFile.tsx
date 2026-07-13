@@ -361,7 +361,7 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative ${previewScrollClass}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${previewScrollClass}  ${edit ? 'h-[calc(100vh-206px-var(--license-banner-h,0px))]' : 'h-[calc(100vh-284px-var(--license-banner-h,0px))]'}`}>
       {render(file.suffix)}
     </div>
   </div>

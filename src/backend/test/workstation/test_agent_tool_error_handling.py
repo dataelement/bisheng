@@ -18,6 +18,7 @@ from langgraph.prebuilt import ToolNode, create_react_agent
 from bisheng.workstation.domain.services.chat_service import (
     _extract_tool_error,
     _handle_agent_tool_error,
+    _is_nested_tool_event,
 )
 
 
@@ -89,3 +90,18 @@ def test_extract_tool_error_none_on_success():
     assert _extract_tool_error(tm) is None
     assert _extract_tool_error("plain string") is None
     assert _extract_tool_error(None) is None
+
+
+def test_nested_tool_event_detected_from_parent_ids():
+    """Wrapped citation tools should only surface the outer tool callback."""
+    visible_tool_run_ids = {"outer-run"}
+
+    assert _is_nested_tool_event(
+        {"parent_ids": ["graph-run", "tools-node-run", "outer-run"]},
+        visible_tool_run_ids,
+    )
+    assert not _is_nested_tool_event(
+        {"parent_ids": ["graph-run", "tools-node-run"]},
+        visible_tool_run_ids,
+    )
+    assert not _is_nested_tool_event({}, visible_tool_run_ids)

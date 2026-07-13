@@ -51,7 +51,6 @@ type MessageBsProps = {
     logo: React.ReactNode;
     title: string;
     data: ChatMessageType;
-    onUnlike?: any;
     isGuestMode?: boolean;
     readOnly?: any;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
@@ -61,7 +60,6 @@ export default function MessageBs({
     logo,
     title,
     data,
-    onUnlike = () => { },
     readOnly,
     isGuestMode = false,
     onOpenCitationPanel,
@@ -175,7 +173,6 @@ export default function MessageBs({
                         id={data.id}
                         data={data.liked}
                         text={message}
-                        onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                     >
                         <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>

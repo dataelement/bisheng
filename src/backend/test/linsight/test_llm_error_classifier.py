@@ -52,12 +52,15 @@ def test_content_filter_is_degradable():
     assert classify_behavior(exc) is Behavior.DEGRADABLE
 
 
-def test_quota_is_fail_fast_even_on_429():
-    """A quota error can arrive as HTTP 429 — it must NOT be treated as retryable."""
+def test_billing_exhaustion_is_fail_fast_even_on_429():
+    """A genuine billing/balance error can arrive as HTTP 429 — it must NOT retry
+    (remedy is "top up", not "wait"). Only true arrears/balance wording qualifies;
+    the OpenAI ``insufficient_quota`` code is MaaS throttling — see
+    ``test_insufficient_quota_is_maas_throttling``."""
     exc = make_exc(
         openai.RateLimitError,
-        message="You exceeded your current quota, insufficient_quota",
-        code="insufficient_quota",
+        message="账户余额不足，请充值后重试",
+        code="arrearage",
         status_code=429,
     )
     assert classify_behavior(exc) is Behavior.FAIL_FAST
@@ -126,7 +129,7 @@ def test_content_filter_label_across_vendors(kwargs):
 
 
 def test_quota_label():
-    exc = make_exc(openai.RateLimitError, message="insufficient_quota", status_code=429)
+    exc = make_exc(openai.RateLimitError, message="账户余额不足", status_code=429)
     assert label_error(exc) is ErrorType.QUOTA_EXHAUSTED
 
 
@@ -146,7 +149,9 @@ def test_unknown_label_falls_through():
 
 def test_label_text_best_effort():
     assert label_text("Output data may contain inappropriate content") is ErrorType.CONTENT_FILTER
-    assert label_text("insufficient_quota: pay up") is ErrorType.QUOTA_EXHAUSTED
+    assert label_text("账户余额不足，请充值") is ErrorType.QUOTA_EXHAUSTED
+    # OpenAI's insufficient_quota code is MaaS throttling → friendly rate-limit copy.
+    assert label_text("insufficient_quota: you exceeded your current quota") is ErrorType.RATE_LIMIT
     assert label_text("some random failure") is ErrorType.UNKNOWN
 
 
@@ -193,20 +198,35 @@ def test_exceeded_current_quota_is_throttling_not_billing():
     assert classify_behavior(exc) is Behavior.RETRYABLE
 
 
+def test_insufficient_quota_is_maas_throttling():
+    """Regression (COFCO 图一): the OpenAI ``insufficient_quota`` code + "exceeded
+    your current quota" message on HTTP 429 is MaaS TPM/TPS throttling, not billing
+    exhaustion → RETRYABLE + friendly RATE_LIMIT copy, never the scary quota card."""
+    exc = make_exc(
+        openai.RateLimitError,
+        message="You exceeded your current quota, please check your plan and billing details.",
+        code="insufficient_quota",
+        body={"type": "insufficient_quota", "message": "You exceeded your current quota"},
+        status_code=429,
+    )
+    assert classify_behavior(exc) is Behavior.RETRYABLE
+    assert label_error(exc) is ErrorType.RATE_LIMIT
+
+
 def test_genuine_billing_exhaustion_stays_quota():
     """Balance / credit exhaustion must still FAIL_FAST + QUOTA_EXHAUSTED."""
-    for msg in ("insufficient_quota", "账户余额不足", "您已欠费", "额度不足"):
+    for msg in ("arrearage", "insufficient balance", "账户余额不足", "您已欠费"):
         exc = make_exc(openai.RateLimitError, message=msg, status_code=429)
         assert classify_behavior(exc) is Behavior.FAIL_FAST, msg
         assert label_error(exc) is ErrorType.QUOTA_EXHAUSTED, msg
 
 
-def test_quota_beats_rate_limit_when_both_present():
-    """Order invariant: a message carrying BOTH a billing signal and a throttle
+def test_billing_beats_rate_limit_when_both_present():
+    """Order invariant: a message carrying BOTH a true money signal and a throttle
     word must FAIL_FAST as quota, never retry as a transient rate limit."""
     exc = make_exc(
         openai.RateLimitError,
-        message="rate limit hit; also insufficient_quota — please top up",
+        message="rate limit hit; also 余额不足 — please top up",
         status_code=429,
     )
     assert classify_behavior(exc) is Behavior.FAIL_FAST

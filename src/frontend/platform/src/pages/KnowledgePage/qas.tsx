@@ -529,7 +529,7 @@ export default function QasPage() {
                         </div>
                     </div>
                 </div>
-                <div className="overflow-y-auto h-[calc(100vh-132px)] pb-20">
+                <div className="overflow-y-auto h-[calc(100vh-132px-var(--license-banner-h,0px))] pb-20">
                     <Table>
                         <TableHeader>
                             <TableRow>

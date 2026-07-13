@@ -39,7 +39,9 @@ def content_filter_exc():
 
 
 def quota_exc():
-    return make_exc(openai.RateLimitError, message="insufficient_quota", code="insufficient_quota", status_code=429)
+    # Genuine billing/balance exhaustion (not the MaaS ``insufficient_quota``
+    # throttling code, which is now RETRYABLE) → FAIL_FAST, never retried.
+    return make_exc(openai.RateLimitError, message="账户余额不足，请充值", code="arrearage", status_code=429)
 
 
 def make_mw(*, is_subagent=False, max_retries=2, max_degrade=3):

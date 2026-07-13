@@ -536,7 +536,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 </div>
             </div>
 
-            <div className="h-[calc(100vh-180px)] overflow-y-auto pb-20">
+            <div className="h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
                 <Table>
                     <TableHeader>
                         <TableRow>

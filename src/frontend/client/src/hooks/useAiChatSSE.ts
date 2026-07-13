@@ -53,7 +53,9 @@ export interface SSESubmission {
      */
     onAgentUpdate?: (patch: AgentPatch) => void;
     onFinal: (data: any) => void;
-    onError: (error: string) => void;
+    /** `errorCode` is the backend status_code from the SSE error envelope (e.g.
+        12046 = LLM rate limit), used downstream to pick calm-retry vs red-error UI. */
+    onError: (error: string, errorCode?: number) => void;
     onStart: () => void;
     onEnd: () => void;
     /**
@@ -393,7 +395,8 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                 // data }) through the shared api_errors.<code> i18n logic, falling
                 // back to legacy plain-text shapes, then a generic message.
                 const resolved = translateApiErrorMessage(data);
-                onError(resolved || data?.text || data?.message || "Stream error");
+                const code = typeof data?.status_code === "number" ? data.status_code : undefined;
+                onError(resolved || data?.text || data?.message || "Stream error", code);
             } catch {
                 onError("Connection error");
             }

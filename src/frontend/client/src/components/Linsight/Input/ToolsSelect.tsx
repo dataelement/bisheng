@@ -19,9 +19,11 @@ interface ToolsSelectProps {
     tools: TaskModeToolItem[];
     disabled?: boolean;
     onChange: (tools: TaskModeToolItem[]) => void;
+    /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
+    compact?: boolean;
 }
 
-export function ToolsSelect({ tools, disabled = false, onChange }: ToolsSelectProps) {
+export function ToolsSelect({ tools, disabled = false, onChange, compact = false }: ToolsSelectProps) {
     const localize = useLocalize();
     const active = tools.some((tool) => tool.checked);
 
@@ -41,7 +43,7 @@ export function ToolsSelect({ tools, disabled = false, onChange }: ToolsSelectPr
                     )}
                 >
                     <Hammer size={16} />
-                    <span className="truncate max-w-[min(30vw,120px)]">{localize('com_tools_title')}</span>
+                    {!compact && <span className="truncate">{localize('com_tools_title')}</span>}
                     <ChevronDown size={14} className="text-slate-400" />
                 </button>
             </DropdownMenuTrigger>

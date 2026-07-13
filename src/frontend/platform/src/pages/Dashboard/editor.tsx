@@ -46,7 +46,7 @@ export default function EditorPage() {
                 dashboard={currentDashboard}
                 dashboardId={dashboardId}
             />
-            <div className="h-[calc(100vh-64px)]">
+            <div className="h-[calc(100vh-64px-var(--license-banner-h,0px))]">
                 <EditorCanvas isLoading={isLoading} />
             </div>
         </div>

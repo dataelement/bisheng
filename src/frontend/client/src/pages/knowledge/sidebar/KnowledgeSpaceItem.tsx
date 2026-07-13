@@ -1,5 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
 import {
@@ -66,6 +66,9 @@ export default function KnowledgeSpaceItem({
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
     const [menuOpen, setMenuOpen] = useState(false);
+    // Initial expansion mirrors the mount-time active state (deep link / reload
+    // restores the tree). After mount, clicking the space row only selects it —
+    // expansion is exclusively the chevron's job (same rule as folder rows).
     const [expanded, setExpanded] = useState(isActive);
     // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
@@ -77,11 +80,6 @@ export default function KnowledgeSpaceItem({
     const { data: bsConfig } = useGetBsConfig();
     const treeEnabled =
         bsConfig?.knowledge_space?.tree_structured_directory_display ?? true;
-
-    // Auto-expand when this space becomes active
-    useEffect(() => {
-        if (isActive) setExpanded(true);
-    }, [isActive]);
 
     // Only highlight the space row when this space is active AND no folder
     // inside it is selected — folders take over the active styling once chosen

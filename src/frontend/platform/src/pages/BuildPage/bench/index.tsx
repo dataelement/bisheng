@@ -172,7 +172,7 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
         <div className="daily-page h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
-                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide pb-10">
+                    <div className="w-full  max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide pb-10">
                         <ConfigInheritanceBanner meta={configMeta} />
                         {/* <ToggleSection
                             title={t('chatConfig.workstationEntry')}

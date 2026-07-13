@@ -219,6 +219,11 @@ def _message_base_fields(msg: ChatMessage) -> dict:
         "flow_id": msg.flow_id,
         "source": msg.source,
         "sender": msg.sender,
+        # like/dislike echo: 0 none / 1 up / 2 down, plus the dislike reason. The
+        # frontend re-highlights the rated state on reload. Daily answers and task
+        # results are both ChatMessage rows, so they share this one path.
+        "liked": msg.liked,
+        "remark": msg.remark,
         "create_time": msg.create_time.isoformat() if msg.create_time else None,
     }
 

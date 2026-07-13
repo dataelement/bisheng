@@ -2,6 +2,7 @@ import ast
 import json
 import os
 import re
+import ssl
 from typing import Union
 
 from celery.schedules import crontab
@@ -151,7 +152,7 @@ class WorkflowConf(BaseModel):
     """Workflow Configuration"""
 
     max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
-    timeout: int = Field(default=720, description="Node timeout (min）")
+    timeout: int = Field(default=720, description="Node timeout (min)")
 
 
 class CeleryConf(BaseModel):
@@ -624,6 +625,38 @@ class InAppMessageForwardingConf(BaseModel):
     # Future: shougang / longhua etc. as parallel fields
 
 
+class DatabaseSSLConf(BaseModel):
+    """TLS settings for MySQL database connections.
+
+    ``aiomysql`` requires an ``ssl.SSLContext`` rather than the dictionary
+    accepted by PyMySQL's URL parser. The context is created here so the sync
+    and async SQLAlchemy engines receive the same TLS configuration.
+    """
+
+    enabled: bool = Field(default=False, description="Enable TLS for MySQL connections")
+    ca_file: str | None = Field(default=None, description="PEM file containing trusted CA certificates")
+    cert_file: str | None = Field(default=None, description="Client certificate PEM file for mutual TLS")
+    key_file: str | None = Field(default=None, description="Client private-key PEM file for mutual TLS")
+    verify_hostname: bool = Field(default=True, description="Verify the database hostname against its certificate")
+
+    @model_validator(mode="after")
+    def validate_client_certificate(self):
+        if bool(self.cert_file) != bool(self.key_file):
+            raise ValueError("database_pool.ssl.cert_file and key_file must be configured together")
+        return self
+
+    def create_ssl_context(self) -> ssl.SSLContext | None:
+        """Create a verified TLS context, or return ``None`` when disabled."""
+        if not self.enabled:
+            return None
+
+        context = ssl.create_default_context(cafile=self.ca_file)
+        context.check_hostname = self.verify_hostname
+        if self.cert_file:
+            context.load_cert_chain(certfile=self.cert_file, keyfile=self.key_file)
+        return context
+
+
 class DatabasePoolConf(BaseModel):
     """SQLAlchemy connection-pool configuration for the database engine.
 
@@ -639,10 +672,19 @@ class DatabasePoolConf(BaseModel):
     pool_timeout: int = Field(default=30, description="Seconds to wait for a free connection before timing out")
     pool_recycle: int = Field(default=3600, description="Recycle a connection after this many seconds")
     pool_pre_ping: bool = Field(default=True, description="Test connections with a ping before use")
+    ssl: DatabaseSSLConf = Field(default_factory=DatabaseSSLConf, exclude=True)
 
     def as_engine_kwargs(self) -> dict:
-        """Return the kwargs consumed by SQLAlchemy ``create_engine``."""
-        return self.model_dump()
+        """Return the kwargs consumed by SQLAlchemy ``create_engine``.
+
+        The TLS model itself is not an SQLAlchemy keyword. When enabled, pass
+        the concrete ``SSLContext`` through ``connect_args`` so aiomysql does
+        not receive an unsupported dictionary value.
+        """
+        engine_kwargs = self.model_dump()
+        if ssl_context := self.ssl.create_ssl_context():
+            engine_kwargs["connect_args"] = {"ssl": ssl_context}
+        return engine_kwargs
 
 
 class MetricLogConf(BaseModel):
