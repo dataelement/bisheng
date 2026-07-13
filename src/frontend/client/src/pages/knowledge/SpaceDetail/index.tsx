@@ -58,6 +58,14 @@ import type { BusinessDomainOptionItem } from "../portal/uploadMetadata";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 
+export interface ExternalFileActionPermissions {
+    permissionEntryIds: ReadonlySet<string>;
+    renameEntryIds: ReadonlySet<string>;
+    deleteEntryIds: ReadonlySet<string>;
+    downloadEntryIds: ReadonlySet<string>;
+    moveEntryIds: ReadonlySet<string>;
+}
+
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
     files: KnowledgeFile[];
@@ -106,7 +114,11 @@ interface KnowledgeSpaceContentProps {
     hideSpaceInfoTooltip?: boolean;
     hideShareButton?: boolean;
     hideFilePermissionActions?: boolean;
+    /** Public portal supplies a single batch result and skips legacy per-file probes. */
+    externalFileActionPermissions?: ExternalFileActionPermissions;
     enableEncodingClassification?: boolean;
+    /** Optional portal override for file-level metadata editing (tags and encoding fields only). */
+    metadataEditableFileIds?: ReadonlySet<string>;
     fileCategoryOptions?: PortalFileCategoryOption[];
     fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
@@ -161,7 +173,9 @@ export function KnowledgeSpaceContent({
     hideSpaceInfoTooltip = false,
     hideShareButton = false,
     hideFilePermissionActions = false,
+    externalFileActionPermissions,
     enableEncodingClassification = false,
+    metadataEditableFileIds,
     fileCategoryOptions = [],
     fileCategoryGroups,
     businessDomainOptions = [],
@@ -382,6 +396,7 @@ export function KnowledgeSpaceContent({
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
+    const hasExternalFileActionPermissions = externalFileActionPermissions !== undefined;
     // 懒查询：加载时不再对所有文件逐项预检操作权限；仅当用户悬停/交互某一行（真正可能用到
     // 该行的编辑操作）时，才把该文件加入按需集合，触发查询它的 重命名/删除/移动/下载/权限管理 权限。
     const [requestedFilePermIds, setRequestedFilePermIds] = useState<Set<string>>(new Set());
@@ -396,9 +411,15 @@ export function KnowledgeSpaceContent({
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
     const visiblePermissionEntryIds = useMemo(
-        () => hideFilePermissionActions ? new Set<string>() : permissionEntryIds,
-        [hideFilePermissionActions, permissionEntryIds],
+        () => hideFilePermissionActions
+            ? new Set<string>()
+            : externalFileActionPermissions?.permissionEntryIds ?? permissionEntryIds,
+        [externalFileActionPermissions, hideFilePermissionActions, permissionEntryIds],
     );
+    const effectiveRenameEntryIds = externalFileActionPermissions?.renameEntryIds ?? renameEntryIds;
+    const effectiveDeleteEntryIds = externalFileActionPermissions?.deleteEntryIds ?? deleteEntryIds;
+    const effectiveDownloadEntryIds = externalFileActionPermissions?.downloadEntryIds ?? downloadEntryIds;
+    const effectiveMoveEntryIds = externalFileActionPermissions?.moveEntryIds ?? moveEntryIds;
     const canUseAddActions = canCreateFolder && !isSearching;
 
     const { showToast } = useToastContext();
@@ -454,6 +475,7 @@ export function KnowledgeSpaceContent({
     }, [currentFolderId, isAdmin, space.id]);
 
     useEffect(() => {
+        if (hasExternalFileActionPermissions) return;
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
@@ -506,12 +528,14 @@ export function KnowledgeSpaceContent({
         };
     }, [
         hideFilePermissionActions,
+        hasExternalFileActionPermissions,
         isAdmin,
         permissionEntryProbeKey,
         requestedFilePermIds,
     ]);
 
     useEffect(() => {
+        if (hasExternalFileActionPermissions) return;
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
@@ -558,9 +582,10 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
+    }, [hasExternalFileActionPermissions, isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
+        if (hasExternalFileActionPermissions) return;
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
@@ -607,9 +632,10 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
+    }, [hasExternalFileActionPermissions, isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
+        if (hasExternalFileActionPermissions) return;
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
@@ -656,9 +682,10 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
+    }, [hasExternalFileActionPermissions, isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
+        if (hasExternalFileActionPermissions) return;
         let cancelled = false;
         const controller = new AbortController();
         const candidates = displayFiles.filter(
@@ -705,7 +732,7 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
+    }, [hasExternalFileActionPermissions, isAdmin, permissionEntryProbeKey, requestedFilePermIds]);
 
     useEffect(() => {
         const eligibleSourceSpace = space.spaceLevel !== SpaceLevel.PUBLIC;
@@ -986,7 +1013,7 @@ export function KnowledgeSpaceContent({
     const handleBatchDownload = async () => {
         const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
         const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
-            downloadEntryIds.has(file.id)
+            effectiveDownloadEntryIds.has(file.id)
         );
         if (!canDownloadSelected) {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
@@ -1019,7 +1046,7 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
-        if (!downloadEntryIds.has(fileId)) {
+        if (!effectiveDownloadEntryIds.has(fileId)) {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
             return;
         }
@@ -1166,7 +1193,7 @@ export function KnowledgeSpaceContent({
         if (!file) return;
 
         const isFolder = file.type === FileType.FOLDER;
-        if (!deleteEntryIds.has(fileId)) {
+        if (!effectiveDeleteEntryIds.has(fileId)) {
             showToast({ message: localize("com_knowledge.delete_failed"), status: "error" });
             return;
         }
@@ -1247,10 +1274,10 @@ export function KnowledgeSpaceContent({
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
-        deleteEntryIds.has(file.id)
+        effectiveDeleteEntryIds.has(file.id)
     );
     const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
-        downloadEntryIds.has(file.id)
+        effectiveDownloadEntryIds.has(file.id)
     );
 
     return (
@@ -1418,10 +1445,10 @@ export function KnowledgeSpaceContent({
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
                                             onManagePermission={visiblePermissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
-                                            onRequestPermissions={() => requestFilePermissions(file.id)}
-                                            canRename={renameEntryIds.has(file.id)}
-                                            canDelete={deleteEntryIds.has(file.id)}
-                                            canDownload={downloadEntryIds.has(file.id)}
+                                            onRequestPermissions={hasExternalFileActionPermissions ? undefined : () => requestFilePermissions(file.id)}
+                                            canRename={effectiveRenameEntryIds.has(file.id)}
+                                            canDelete={effectiveDeleteEntryIds.has(file.id)}
+                                            canDownload={effectiveDownloadEntryIds.has(file.id)}
                                             canPublish={publishEntryIds.has(file.id)}
                                             onPublishFile={setPublishingFile}
                                             mobileListMode={isH5 && viewMode === "list"}
@@ -1461,14 +1488,14 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={visiblePermissionEntryIds}
-                                    onRequestPermissions={requestFilePermissions}
-                                    renameEntryIds={renameEntryIds}
-                                    deleteEntryIds={deleteEntryIds}
-                                    downloadEntryIds={downloadEntryIds}
+                                    onRequestPermissions={hasExternalFileActionPermissions ? undefined : requestFilePermissions}
+                                    renameEntryIds={effectiveRenameEntryIds}
+                                    deleteEntryIds={effectiveDeleteEntryIds}
+                                    downloadEntryIds={effectiveDownloadEntryIds}
                                     publishEntryIds={publishEntryIds}
                                     onManagePermission={hideFilePermissionActions ? undefined : handleManagePermission}
                                     onMove={onMoveFile ? (file) => setMovingFile(file) : undefined}
-                                    moveEntryIds={moveEntryIds}
+                                    moveEntryIds={effectiveMoveEntryIds}
                                     onPublishFile={setPublishingFile}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
@@ -1480,6 +1507,7 @@ export function KnowledgeSpaceContent({
                                     canRetryFile={canRetryFile}
                                     retryActionLabel={retryActionLabel}
                                     enableEncodingClassification={enableEncodingClassification}
+                                    metadataEditableFileIds={metadataEditableFileIds}
                                     fileCategoryOptions={fileCategoryOptions}
                                     fileCategoryGroups={fileCategoryGroups}
                                     businessDomainOptions={businessDomainOptions}

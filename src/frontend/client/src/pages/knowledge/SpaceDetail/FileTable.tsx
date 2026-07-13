@@ -701,6 +701,8 @@ interface FileTableProps {
     /** Mirrors member-management gating: creators + manage_space_relation holders. */
     canManageMembers?: boolean;
     enableEncodingClassification?: boolean;
+    /** File-level override used by the public portal for metadata editing only. */
+    metadataEditableFileIds?: ReadonlySet<string>;
     fileCategoryOptions?: PortalFileCategoryOption[];
     fileCategoryGroups?: PortalFileCategoryGroupOption[];
     businessDomainOptions?: BusinessDomainOptionItem[];
@@ -710,7 +712,7 @@ interface FileTableProps {
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -756,14 +758,19 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const [encodingDrafts, setEncodingDrafts] = useState<Record<string, EncodingDraft>>({});
     const [savingEncodingFileId, setSavingEncodingFileId] = useState<string | null>(null);
 
-    // Encoding edits are restricted to the space creator or space admin.
-    // currentUserRole carries the user's role within this specific space (not platform-admin).
-    const canEditEncoding =
+    // Non-portal spaces retain their existing creator/admin behavior.  The
+    // public portal supplies a per-file set resolved from rename_file.
+    const canEditEncodingBySpaceRole =
         currentUserRole === SpaceRole.CREATOR ||
         currentUserRole === SpaceRole.ADMIN;
+    const canEditFileMetadata = useCallback((file: KnowledgeFile) => (
+        metadataEditableFileIds
+            ? metadataEditableFileIds.has(String(file.id))
+            : canEditEncodingBySpaceRole
+    ), [canEditEncodingBySpaceRole, metadataEditableFileIds]);
 
     const handleOpenEditEncoding = (file: KnowledgeFile) => {
-        if (!canEditEncoding) return;
+        if (!canEditFileMetadata(file)) return;
         setEditingEncodingFile(file);
     };
 
@@ -798,7 +805,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         fileSubcategoryCode?: string | null,
     ) => {
         if (!showEncodingClassification || file.type === FileType.FOLDER) return;
-        if (!canEditEncoding) return;
+        if (!canEditFileMetadata(file)) return;
 
         const parsed = parseFileEncoding(file.fileEncoding, encodingPrefix);
         const currentDraft = encodingDrafts[file.id] ?? {};
@@ -863,7 +870,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
             setSavingEncodingFileId(null);
         }
     }, [
-        canEditEncoding,
+        canEditFileMetadata,
         showEncodingClassification,
         encodingDrafts,
         encodingPrefix,
@@ -943,7 +950,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 showRightShadow={showRightShadow}
                                 shougangEnabled={shougangEnabled}
                                 enableEncodingClassification={showEncodingClassification}
-                                canEditEncoding={canEditEncoding}
+                                canEditEncoding={canEditFileMetadata(file)}
                                 onEditEncoding={handleOpenEditEncoding}
                                 fileCategoryOptions={fileCategoryOptions}
                                 fileCategoryGroups={fileCategoryGroups}
@@ -1125,7 +1132,7 @@ function FileRow({
     );
     const hasRetryOption = canRetryFile ? canRetryFile(file) : defaultCanRetry;
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
-    const canEditTags = isAdmin && !isFolder;
+    const canEditTags = canEditEncoding && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
     const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || canMove || Boolean(onManagePermission);

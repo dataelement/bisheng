@@ -1970,6 +1970,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(context["public_space_permission_ids"])
         return effective_permissions
 
+    async def get_public_space_file_permissions(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Batch-resolve portal edit actions without changing public-list read semantics.
+
+        The public-space list deliberately exposes only read access.  This
+        endpoint is called after the portal has rendered its current page and
+        uses the same child-item evaluator as read/write operations, including
+        custom relation models, member roles, and child-level overrides.
+        """
+        await self._require_read_permission(space_id)
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        if not scope or self._space_level_value(scope.level) != KnowledgeSpaceLevelEnum.PUBLIC.value:
+            raise SpaceInvalidLevelError()
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+        action_permission_ids = (
+            "rename_file",
+            "download_file",
+            "delete_file",
+            "move_file",
+            "manage_file_relation",
+        )
+        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, "is_admin", None)) else False
+        if is_admin:
+            return {
+                "permissions": [
+                    {"file_id": file_record.id, "permission_ids": list(action_permission_ids)}
+                    for file_record in files
+                ]
+            }
+
+        context = await self._build_child_permission_context(space_id)
+        visible_files = await self._filter_visible_child_items(
+            files,
+            space_id=space_id,
+            context=context,
+        )
+        if len(visible_files) != len(files):
+            # Do not turn this endpoint into a way to probe hidden files.
+            raise SpaceFileNotFoundError()
+
+        permission_sets = await asyncio.gather(
+            *[
+                self._get_child_item_effective_permission_ids(
+                    file_record,
+                    space_id=space_id,
+                    context=context,
+                )
+                for file_record in files
+            ]
+        )
+        return {
+            "permissions": [
+                {
+                    "file_id": file_record.id,
+                    "permission_ids": [
+                        permission_id
+                        for permission_id in action_permission_ids
+                        if permission_id in permission_ids
+                    ],
+                }
+                for file_record, permission_ids in zip(files, permission_sets)
+            ]
+        }
+
     async def _public_space_viewer_permission_ids(self, lineage: list[tuple[str, int]]) -> set[str]:
         space_id = next(
             (lineage_id for lineage_type, lineage_id in lineage if lineage_type == "knowledge_space"),
