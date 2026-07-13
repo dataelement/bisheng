@@ -510,6 +510,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return UserRoleEnum.MEMBER
         return None
 
+    def _resolve_space_list_user_role(
+        self,
+        space: Knowledge,
+        *,
+        membership_map: dict[int, SpaceChannelMember],
+        permission_levels: dict[int, str | None],
+    ) -> UserRoleEnum | None:
+        """Resolve the current user's role for a space list item.
+
+        Mirrors the role assignment in ``_format_accessible_spaces`` without
+        permission filtering or subscription metadata.
+        """
+        if space.user_id == self.login_user.user_id:
+            return UserRoleEnum.CREATOR
+        member_conf = membership_map.get(int(space.id))
+        if member_conf is not None:
+            return member_conf.user_role
+        return self._permission_level_to_space_user_role(
+            permission_levels.get(int(space.id)),
+        )
+
     async def _get_tenant_root_department_id(self) -> int:
         tenant = await TenantDao.aget_by_id(int(self.login_user.tenant_id))
         root_dept_id = int(getattr(tenant, "root_dept_id", 0) or 0) if tenant else 0
@@ -6026,22 +6047,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def get_public_spaces(self, order_by: str = "update_time") -> list[dict[str, Any]]:
-        """List every public knowledge space without user-specific enrichment.
+        """List every public knowledge space with lightweight per-user enrichment.
 
-        The level endpoint keeps its login dependency, but public spaces do not
-        need membership or ReBAC evaluation.  Return the persisted space fields
-        plus the known scope level only; file counts and department metadata are
-        intentionally excluded from this lightweight list response.
+        Returns persisted space fields plus ``space_level`` and the current
+        user's ``user_role``.  File counts, department metadata, and ReBAC
+        visibility filtering remain excluded from this endpoint.
         """
         space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
         spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
-        return [
-            {
+        if not spaces:
+            return []
+
+        memberships = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+        membership_map = {
+            int(member.business_id): member for member in memberships if str(member.business_id).isdigit()
+        }
+
+        permission_level_space_ids = [
+            int(space.id)
+            for space in spaces
+            if space.user_id != self.login_user.user_id and int(space.id) not in membership_map
+        ]
+        permission_levels: dict[int, str | None] = {}
+        if permission_level_space_ids:
+            level_map = await PermissionService.get_permission_levels(
+                user_id=self.login_user.user_id,
+                object_type="knowledge_space",
+                object_ids=permission_level_space_ids,
+                login_user=self.login_user,
+            )
+            permission_levels = {space_id: level_map.get(str(space_id)) for space_id in permission_level_space_ids}
+
+        result: list[dict[str, Any]] = []
+        for space in spaces:
+            payload: dict[str, Any] = {
                 **space.model_dump(),
                 "space_level": KnowledgeSpaceLevelEnum.PUBLIC.value,
             }
-            for space in spaces
-        ]
+            user_role = self._resolve_space_list_user_role(
+                space,
+                membership_map=membership_map,
+                permission_levels=permission_levels,
+            )
+            if user_role is not None:
+                payload["user_role"] = user_role.value
+            result.append(payload)
+        return result
 
     async def global_search_files(
         self,
