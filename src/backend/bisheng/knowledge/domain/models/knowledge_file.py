@@ -312,6 +312,45 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return counts
 
     @classmethod
+    async def async_count_files_by_domain_scopes(cls, domain_space_ids: dict[str, set[int]]) -> dict[str, int]:
+        """Count successful files for each business-domain and knowledge-space scope."""
+        normalized_scopes = {
+            code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
+            for code, space_ids in domain_space_ids.items()
+            if code and code.strip()
+        }
+        counts = {code: 0 for code in normalized_scopes}
+        conditions = [
+            and_(
+                KnowledgeFile.knowledge_id.in_(space_ids),
+                col(KnowledgeFile.file_encoding).like(f'%-{code}-%'),
+            )
+            for code, space_ids in normalized_scopes.items()
+            if space_ids
+        ]
+        if not conditions:
+            return counts
+        statement = (
+            select(KnowledgeFile.knowledge_id, KnowledgeFile.file_encoding)
+            .where(
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                col(KnowledgeFile.file_encoding).is_not(None),
+                or_(*conditions),
+            )
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        for knowledge_id, encoding in rows:
+            parts = (encoding or '').split('-')
+            if len(parts) < 3:
+                continue
+            code = parts[-2].strip().upper()
+            if knowledge_id in normalized_scopes.get(code, set()):
+                counts[code] += 1
+        return counts
+
+    @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))

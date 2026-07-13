@@ -331,10 +331,21 @@ class ShougangPortalTagSearchResp(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class ShougangPortalDomainFileCountItem(BaseModel):
+    code: str = Field(..., max_length=16, description="Business-domain code")
+    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Visible candidate knowledge space IDs")
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: Any):
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError("business domain code is invalid")
+        return normalized
+
+
 class ShougangPortalDomainFileCountReq(BaseModel):
-    codes: list[str] = Field(
-        default_factory=list, max_length=200, description="Business-domain codes, e.g. ['PP','QM']"
-    )
+    domains: list[ShougangPortalDomainFileCountItem] = Field(default_factory=list, max_length=200)
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):

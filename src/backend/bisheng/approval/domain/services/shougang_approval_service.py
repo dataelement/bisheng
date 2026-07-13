@@ -555,22 +555,19 @@ class ShougangApprovalService:
         keyword: str,
         version_service,
         space_service=None,
+        cursor: int = 0,
+        limit: int = 20,
     ) -> ShougangFilePublishDocumentSearchResp:
         await self._ensure_file_publish_query_allowed(
             source_file_id=source_file_id,
             target_space_id=target_space_id,
             space_service=space_service,
         )
-        can_view_file = self._build_file_publish_candidate_permission_checker(
-            space_service=space_service,
-            target_space_id=target_space_id,
-        )
         if hasattr(version_service, 'search_shougang_publish_version_sources'):
             data = await version_service.search_shougang_publish_version_sources(
                 target_space_id,
                 keyword,
                 source_file_id,
-                can_view_file=can_view_file,
             )
         else:
             data = await version_service.search_version_sources(target_space_id, keyword, source_file_id)
@@ -581,7 +578,14 @@ class ShougangApprovalService:
             )
             for item in data
         ]
-        return ShougangFilePublishDocumentSearchResp(data=normalized, total=len(normalized))
+        page = normalized[cursor:cursor + limit]
+        has_more = cursor + len(page) < len(normalized)
+        return ShougangFilePublishDocumentSearchResp(
+            data=page,
+            total=len(normalized),
+            next_cursor=cursor + len(page) if has_more else None,
+            has_more=has_more,
+        )
 
     def _build_file_publish_candidate_permission_checker(self, *, space_service, target_space_id: int):
         async def can_view_file(file_id: int) -> bool:

@@ -113,3 +113,29 @@ async def test_count_files_by_domain_codes_unmatched_code_returns_zero(async_db_
         result = await KnowledgeFileDao.async_count_files_by_domain_codes(['PP', 'ZZ'])
 
     assert result == {'PP': 1, 'ZZ': 0}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_domain_scopes_only_counts_matching_visible_spaces():
+    class FakeResult:
+        def all(self):
+            return [
+                (10, 'GF-STD-PP-001'),
+                (11, 'GF-STD-PP-002'),
+                (20, 'GF-STD-QM-003'),
+                (10, 'GF-PP-QM-004'),
+            ]
+
+    class FakeSession:
+        async def exec(self, statement):
+            self.statement = statement
+            return FakeResult()
+
+    session = FakeSession()
+    with _patch_session_factory(session):
+        result = await KnowledgeFileDao.async_count_files_by_domain_scopes(
+            {'PP': {10}, 'QM': {20}},
+        )
+
+    # 11 不在 PP 可见空间；最后一条的业务域是 QM，但 10 不在 QM 可见空间。
+    assert result == {'PP': 1, 'QM': 1}
