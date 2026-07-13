@@ -15,7 +15,7 @@ from bisheng.database.models.qa_expert import (
     CommentVote,
     QANotification,
 )
-
+import re
 
 RESOLUTION_RATE_PRECISION = 4
 
@@ -195,7 +195,7 @@ class QuestionRepository:
             elif status == 4:
                 # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
                 if user_id is not None:
-                    stmt = stmt.where(func.string_to_array(Question.invited_experts, ',').any(str(user_id)))
+                    stmt = stmt.where(Question.invited_experts.op('~')(f'(^|,){user_id_str}(,|$)'))
 
             # 排序相关的过滤条件需要在计算总数之前应用
             if sort_by == "unanswered":
