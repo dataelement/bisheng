@@ -14,6 +14,7 @@ from loguru import logger
 
 from bisheng.database.models.qa_expert import Expert, Question, Answer, Comment, QANotification
 from bisheng.tenant.domain.services.inbox_helper import send_inbox_notice
+from bisheng.qa_expert.domain.rich_text import question_description_to_plain_text
 from bisheng.qa_expert.domain.schemas import (
     ExpertCreateRequest,
     ExpertUpdateRequest,
@@ -344,11 +345,11 @@ class QuestionService:
         """删除问题"""
         return await self.repository.delete(question_id)
     
-    async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Expert:
+    async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Question:
         """更新问题信息"""
         question = await self.repository.get_by_id(question_id)
         if not question:
-            raise ExpertNotFoundError()
+            raise QuestionNotFoundError()
 
         update_data = request.model_dump(exclude_unset=True)
         new_question = await self.repository.update(question_id, **update_data)
@@ -408,7 +409,7 @@ class QuestionService:
             },
             {
                 "type": "tooltip_text",
-                "content": (question.description or "")[:50],
+                "content": question_description_to_plain_text(question.description)[:50],
             },
         ]
 

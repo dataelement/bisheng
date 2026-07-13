@@ -93,6 +93,7 @@ dependencies = [
     "arxiv>=2.4.0",
     "simhash>=2.1.2",
     "croniter>=6.2.2",
+    "nh3>=0.3.6",
 ]
 
 [project.optional-dependencies]
