@@ -105,6 +105,53 @@ Scope:
 
 ## Permission Scripts
 
+### `reconcile_department_member_tuples.py`
+
+根据业务库 `user_department` 全量核对 OpenFGA 的
+`user:<id> member department:<id>` 关系，并补齐缺失 tuple。默认 dry-run，
+不会写入数据库、Redis 或 OpenFGA；仅传入 `--apply` 时才向 OpenFGA 新增缺失
+tuple。脚本不会删除已有业务关系或 OpenFGA tuple。
+
+Usage:
+
+```bash
+# 全量预检，只输出缺失统计和样例
+bash scripts/reconcile_department_member_tuples.sh
+
+# 先在指定部门验证
+bash scripts/reconcile_department_member_tuples.sh --department-id 190
+
+# 确认预检结果后，全量补齐缺失关系
+bash scripts/reconcile_department_member_tuples.sh --apply
+```
+
+Options:
+
+- `--apply`：执行写入；不传时为只读预检。
+- `--department-id <ID>`：可重复传入，仅处理指定部门。
+- `--batch-size <N>`：每页读取的 `user_department` 记录数，默认 `500`。
+- `--sample-limit <N>`：JSON 中保留的缺失样例数，默认 `20`。
+
+### `diagnose_department_space_access.py`
+
+只读诊断“用户通过部门授权后无法在门户首页看到知识空间”的权限链路。输出 JSON，包含业务数据库中的用户部门归属、目标空间绑定/成员信息、OpenFGA 资源授权 tuple、用户部门 `member` tuple、`check` 与 `list_objects` 结果，以及自动判定的断点。不会写入数据库、Redis 或 OpenFGA。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_space_access.py \
+  --user-id 123 --space-id 3569
+
+bash scripts/diagnose_department_space_access.sh \
+  --user-id 123 --space-id 3569
+```
+
+Exit codes:
+
+- `0`：诊断完成；输出中的 `findings` 可能仍包含权限缺失结论。
+- `2`：用户或知识空间不存在，或参数无效。
+- `3`：OpenFGA 未启用、缺少只读连接所需的 store/model 配置，或查询失败。
+
 ### `migrate_workstation_models_to_workbench.py`
 
 One-off migration for moving the legacy daily-workbench model list from the
