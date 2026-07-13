@@ -677,13 +677,7 @@ export default function PortalKnowledgeWorkbench() {
             setCanEditSelectedFileEncoding(false);
             return;
         }
-        if (isActiveSpacePublic) {
-            const canRename = publicFilePermissionState.spaceId === String(activeSpace.id)
-                && publicFilePermissionState.permissionIdsByFileId[String(file.id)]?.includes("rename_file");
-            setCanEditSelectedFileEncoding(isSystemAdmin || canRename);
-            return;
-        }
-        if (isActiveSpaceAdmin) {
+        if (isSystemAdmin || isActiveSpaceAdmin) {
             setCanEditSelectedFileEncoding(true);
             return;
         }
@@ -691,11 +685,16 @@ export default function PortalKnowledgeWorkbench() {
         let cancelled = false;
         const controller = new AbortController();
         setCanEditSelectedFileEncoding(false);
+        // Editing file category / business domain follows the space-level upload
+        // permission — same source as the upload button. The per-file rename_file
+        // action was subject to nearest-binding overrides that strip space-level
+        // grants from individual files, so managers who could upload still couldn't
+        // edit encoding.
         checkPermission(
-            "knowledge_file",
-            file.id,
+            "knowledge_space",
+            activeSpace.id,
             "can_edit",
-            "rename_file",
+            "upload_file",
             { signal: controller.signal },
         ).then((result) => {
             if (!cancelled) {
@@ -714,9 +713,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [
         activeSpace?.id,
         isActiveSpaceAdmin,
-        isActiveSpacePublic,
         isSystemAdmin,
-        publicFilePermissionState,
         selectedFile?.id,
         selectedFile?.type,
         selectedFile?.isCreating,

@@ -9258,13 +9258,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeFile:
         """Update a file's file_encoding and optional second-level category (shougang feature)."""
         file_record = await self._get_file_for_action(file_id)
-        # Reuse 'rename_file' permission action — that action is owner/admin-only,
-        # matching the required privilege level for editing encoding.
+        # Editing file category / business domain follows the space-level upload
+        # permission, matching the upload flow. The per-file 'rename_file' action was
+        # subject to nearest-binding overrides that strip space-level grants from
+        # individual files, so managers who could upload still couldn't edit encoding.
         await self._require_permission_id(
-            "knowledge_file",
-            file_id,
-            "rename_file",
-            space_id=file_record.knowledge_id,
+            "knowledge_space",
+            file_record.knowledge_id,
+            "upload_file",
         )
 
         cleaned = encoding.strip()
