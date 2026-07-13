@@ -10,7 +10,7 @@ from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     ShougangPortalAdminConfig,
 )
 
-SHOUGANG_PORTAL_CONFIG_KEY = 'shougang_portal_config'
+SHOUGANG_PORTAL_CONFIG_KEY = 'shougang_portal_config1'
 
 
 class ShougangPortalConfigService:

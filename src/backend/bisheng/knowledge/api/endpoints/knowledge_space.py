@@ -174,7 +174,7 @@ async def get_space_info(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     space_info = await svc.get_space_info(space_id)
-    return resp_200(space_info)
+    return resp_200(space_info.model_dump(exclude={"follower_num", "file_num"}))
 
 
 @router.put("/{space_id}")

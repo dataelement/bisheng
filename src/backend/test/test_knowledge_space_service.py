@@ -4466,6 +4466,11 @@ def clear_portal_visible_space_cache():
 
 
 class TestGetSpaceInfo:
+    @pytest.fixture(autouse=True)
+    def mock_auto_tag_decoration(self):
+        with patch.object(_load_service_class(), "_decorate_auto_tag_for_info", new_callable=AsyncMock):
+            yield
+
     @pytest.mark.asyncio
     async def test_raises_not_found_when_space_missing(self, service):
         with patch(
@@ -4552,6 +4557,49 @@ class TestGetSpaceInfo:
 
         assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         assert result.is_followed is False
+
+    @pytest.mark.asyncio
+    async def test_does_not_query_member_or_file_counts(self, service):
+        space = _make_space(user_id=7)
+        member_count = AsyncMock(return_value=3)
+        file_count = AsyncMock(return_value={1: 5})
+
+        with (
+            patch.object(
+                service,
+                "_require_space_info_permission",
+                new_callable=AsyncMock,
+                return_value=(space, True),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members",
+                member_count,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
+                file_count,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                service,
+                "_decorate_auto_tag_for_info",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await service.get_space_info(1)
+
+        member_count.assert_not_awaited()
+        file_count.assert_not_awaited()
+        assert result.id == 1
 
     @pytest.mark.asyncio
     async def test_released_public_space_allows_square_preview_without_rebac(self, service):

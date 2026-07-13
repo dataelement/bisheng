@@ -82,6 +82,8 @@ interface KnowledgeSpaceHeaderProps {
     afterSearchActions?: ReactNode;
     hideNativeAddMenu?: boolean;
     hideNativeStatusFilter?: boolean;
+    /** 门户模式下不展示知识库详情信息浮层。 */
+    hideSpaceInfoTooltip?: boolean;
     // Version management
     versionManagementEnabled?: boolean;
     pendingSimilarCount?: number;
@@ -129,6 +131,7 @@ export function KnowledgeSpaceHeader({
     afterSearchActions,
     hideNativeAddMenu = false,
     hideNativeStatusFilter = false,
+    hideSpaceInfoTooltip = false,
     versionManagementEnabled = false,
     pendingSimilarCount = 0,
     onProcessSimilar,
@@ -478,27 +481,26 @@ export function KnowledgeSpaceHeader({
                                         {localize("com_knowledge.department_badge")}
                                     </span>
                                 )}
-                                <Tooltip>
-                                    <TooltipTrigger className="shrink-0 cursor-pointer">
-                                        <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
-                                    </TooltipTrigger>
-                                    <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
-                                        <div className="space-y-1.5 text-gray-800 text-sm">
-                                            <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
-                                                <p>{space.description || "-"}</p>
+                                {!hideSpaceInfoTooltip ? (
+                                    <Tooltip>
+                                        <TooltipTrigger
+                                            className="shrink-0 cursor-pointer"
+                                            data-testid="active-space-info-tooltip"
+                                        >
+                                            <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
+                                        </TooltipTrigger>
+                                        <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
+                                            <div className="space-y-1.5 text-gray-800 text-sm">
+                                                <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
+                                                    <p>{space.description || "-"}</p>
+                                                </div>
+                                                <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
+                                                    <p>{space.creator}</p>
+                                                </div>
                                             </div>
-                                            <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
-                                                <p>{space.creator}</p>
-                                            </div>
-                                            <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
-                                                <p>{space.memberCount || 0}</p>
-                                            </div>
-                                            <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
-                                                <p>{space.totalFileCount || 0}</p>
-                                            </div>
-                                        </div>
-                                    </TooltipContent>
-                                </Tooltip>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                ) : null}
                             </div>
                         ) : (
                             <>

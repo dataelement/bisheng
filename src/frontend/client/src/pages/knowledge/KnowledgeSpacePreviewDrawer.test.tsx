@@ -134,6 +134,8 @@ describe("KnowledgeSpacePreviewDrawer", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     expect(mockedGetSpaceInfoApi).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("8 篇内容")).not.toBeInTheDocument();
+    expect(screen.queryByText("3 用户")).not.toBeInTheDocument();
   });
 
   test("loads files for unjoined public square spaces", async () => {

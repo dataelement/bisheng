@@ -2309,6 +2309,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     )}
                                                     hideNativeAddMenu
                                                     hideNativeStatusFilter
+                                                    hideSpaceInfoTooltip
                                                     hideShareButton
                                                     hideFilePermissionActions={isActiveSpacePersonal}
                                                     enableEncodingClassification
