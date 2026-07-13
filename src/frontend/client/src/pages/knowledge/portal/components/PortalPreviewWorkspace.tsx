@@ -14,6 +14,7 @@ interface PortalPreviewWorkspaceProps {
     canEditEncoding: boolean;
     canEditTags: boolean;
     canManagePermission: boolean;
+    canDownload: boolean;
     documentPath: string;
     encodingPrefix: string;
     fileCategoryGroups: PortalFileCategoryGroupOption[];
@@ -40,6 +41,7 @@ export function PortalPreviewWorkspace({
     canEditEncoding,
     canEditTags,
     canManagePermission,
+    canDownload,
     documentPath,
     encodingPrefix,
     fileCategoryGroups,
@@ -73,6 +75,7 @@ export function PortalPreviewWorkspace({
                     onOpenTags={onOpenTags}
                     // onOpenShare={() => setActivePanel("share")}
                     onDownload={onDownload}
+                    canDownload={canDownload}
                     canManagePermission={canManagePermission}
                     onOpenPermission={onOpenPermission}
                     onToggleSummary={onToggleSummary}

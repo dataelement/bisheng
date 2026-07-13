@@ -280,6 +280,9 @@ export default function PortalKnowledgeWorkbench() {
         error: "",
         previewData: null,
     });
+    // Download permission for the currently previewed file, returned authoritatively
+    // by the preview endpoint (same gate the download endpoint enforces).
+    const [selectedFileDownloadable, setSelectedFileDownloadable] = useState(false);
     const activeSpaceIdRef = useRef<string | undefined>();
     const currentFolderIdRef = useRef<string | undefined>();
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
@@ -595,6 +598,10 @@ export default function PortalKnowledgeWorkbench() {
     const effectiveDeleteEntryIds = publicFileActionPermissions?.deleteEntryIds ?? deleteEntryIds;
     const canManageSelectedFilePermission = Boolean(
         selectedFile && !isActiveSpacePersonal && (isActiveSpaceAdmin || effectivePermissionEntryIds.has(selectedFile.id)),
+    );
+    const canDownloadSelectedFile = Boolean(
+        selectedFile
+        && (isActiveSpaceAdmin || selectedFileDownloadable || effectiveDownloadEntryIds.has(selectedFile.id)),
     );
     const visiblePermissionEntryIds = useMemo(
         () => isActiveSpacePersonal ? new Set<string>() : effectivePermissionEntryIds,
@@ -1516,6 +1523,7 @@ export default function PortalKnowledgeWorkbench() {
         }
 
         let cancelled = false;
+        setSelectedFileDownloadable(false);
         setPreview({
             loading: true,
             fileUrl: "",
@@ -1527,6 +1535,7 @@ export default function PortalKnowledgeWorkbench() {
         getFilePreviewApi(selectedFile.spaceId || activeSpace.id, selectedFile.id)
             .then((res) => {
                 if (cancelled) return;
+                setSelectedFileDownloadable(Boolean(res.can_download));
                 const resolvedPreview = {
                     ...res,
                     original_url: resolvePreviewUrl(res.original_url),
@@ -2546,6 +2555,7 @@ export default function PortalKnowledgeWorkbench() {
                     canEditEncoding={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
                     canEditTags={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
                     canManagePermission={canManageSelectedFilePermission && !isActiveSpaceFavorite}
+                    canDownload={canDownloadSelectedFile}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}
                     preview={preview}

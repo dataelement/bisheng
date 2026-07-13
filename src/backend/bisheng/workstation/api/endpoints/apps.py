@@ -20,8 +20,8 @@ from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
-from bisheng.shougang_portal_config.domain.services.portal_config_service import ShougangPortalConfigService
 from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
+from bisheng.shougang_portal_config.domain.services.portal_config_service import ShougangPortalConfigService
 from bisheng.workstation.domain.services.constants import PORTAL_AGENT_FAVORITE_TYPE, USED_APP_PIN_TYPE
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -267,7 +267,20 @@ async def list_portal_agent_workflows(login_user=LoginUserDep, data: PortalAgent
     apps = await _filter_portal_agent_workflows_by_use_app(login_user, apps)
     app_order = {workflow_id: idx for idx, workflow_id in enumerate(workflow_ids)}
     apps.sort(key=lambda app: app_order.get(str(app.get('id')), len(workflow_ids)))
-    apps = WorkFlowService.add_extra_field(login_user, apps)
+    if login_user.is_admin():
+        writeable_ids = {str(app['id']) for app in apps}
+    else:
+        permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+            login_user,
+            apps,
+            ['edit_app'],
+        )
+        writeable_ids = {
+            app_id
+            for app_id, permission_ids in permission_map.items()
+            if 'edit_app' in permission_ids
+        }
+    apps = WorkFlowService.add_extra_field(login_user, apps, writeable_ids=writeable_ids)
     return resp_200(data={'workflows': apps})
 
 

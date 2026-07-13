@@ -32,7 +32,7 @@ def _install_apps_endpoint_stubs() -> None:
 
         class _DummyWorkflowService:
             @staticmethod
-            def add_extra_field(login_user, data, managed=False):
+            def add_extra_field(login_user, data, managed=False, writeable_ids=None):
                 return data
 
             @staticmethod
@@ -284,16 +284,17 @@ async def test_list_portal_agent_favorites_dedupes_workflow_ids():
 @pytest.mark.asyncio
 async def test_list_portal_agent_workflows_filters_by_use_app_and_preserves_config_order():
     module = _load_apps_endpoint_module()
-    login_user = SimpleNamespace(user_id=7)
+    login_user = SimpleNamespace(user_id=7, is_admin=lambda: False)
     apps = [
         {'id': 'wf-b', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
         {'id': 'wf-a', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
         {'id': 'wf-c', 'flow_type': module.FlowType.WORKFLOW.value, 'logo': '', 'tags': []},
     ]
 
-    def add_extra_field(user, data):
+    def add_extra_field(user, data, managed=False, writeable_ids=None):
         for app in data:
             app['tags'] = [SimpleNamespace(name=f"{app['id']}-tag")]
+            app['write'] = str(app['id']) in (writeable_ids or set())
         return data
 
     with patch.object(module.FlowDao, 'aget_all_apps', new_callable=AsyncMock, return_value=(apps, False), create=True) as mock_list, \
@@ -301,7 +302,10 @@ async def test_list_portal_agent_workflows_filters_by_use_app_and_preserves_conf
              module.ApplicationPermissionService,
              'get_app_permission_map_async',
              new_callable=AsyncMock,
-             return_value={'wf-a': {'use_app'}, 'wf-b': set(), 'wf-c': {'use_app'}},
+             side_effect=[
+                 {'wf-a': {'use_app'}, 'wf-b': set(), 'wf-c': {'use_app'}},
+                 {'wf-a': {'edit_app'}, 'wf-c': set()},
+             ],
              create=True,
          ) as mock_permission_map, \
          patch.object(module.WorkFlowService, 'add_extra_field', side_effect=add_extra_field):
@@ -317,12 +321,17 @@ async def test_list_portal_agent_workflows_filters_by_use_app_and_preserves_conf
         page=0,
         limit=0,
     )
-    mock_permission_map.assert_awaited_once()
-    assert mock_permission_map.await_args.args[0].user_id == 7
-    assert mock_permission_map.await_args.args[1] == apps
-    assert mock_permission_map.await_args.args[2] == ['use_app']
+    assert mock_permission_map.await_count == 2
+    assert mock_permission_map.await_args_list[0].args[0].user_id == 7
+    assert mock_permission_map.await_args_list[0].args[1] == apps
+    assert mock_permission_map.await_args_list[0].args[2] == ['use_app']
+    assert mock_permission_map.await_args_list[1].args[0] is login_user
+    assert mock_permission_map.await_args_list[1].args[1] == [apps[1], apps[2]]
+    assert mock_permission_map.await_args_list[1].args[2] == ['edit_app']
     assert [one['id'] for one in result['data']['workflows']] == ['wf-a', 'wf-c']
     assert result['data']['workflows'][0]['tags'][0].name == 'wf-a-tag'
+    assert result['data']['workflows'][0]['write'] is True
+    assert result['data']['workflows'][1]['write'] is False
 
 
 @pytest.mark.asyncio
@@ -350,7 +359,11 @@ async def test_list_portal_agent_workflows_does_not_admin_bypass_use_app_permiss
              new_callable=AsyncMock,
              side_effect=AssertionError('portal agent list must not use admin-bypassing app filter'),
          ), \
-         patch.object(module.WorkFlowService, 'add_extra_field', side_effect=lambda user, data: data):
+         patch.object(
+             module.WorkFlowService,
+             'add_extra_field',
+             side_effect=lambda user, data, managed=False, writeable_ids=None: data,
+         ):
         result = await module.list_portal_agent_workflows(
             login_user=login_user,
             data=SimpleNamespace(workflow_ids=['wf-visible', 'wf-hidden']),
