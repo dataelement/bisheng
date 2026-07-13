@@ -42,7 +42,7 @@ class KnowledgeSpaceTagLibraryService:
             if value:
                 normalized.append(value)
         if len(normalized) > MAX_LIBRARY_TAGS:
-            raise KnowledgeSpaceTagLibraryInvalidError(message=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
         return normalized
 
     @classmethod
@@ -179,7 +179,7 @@ class KnowledgeSpaceTagLibraryService:
 
         non_ai = TagLibraryTagService.non_ai_tag_names(system, manual)
         if len(non_ai) + len(ai) > MAX_LIBRARY_TAGS:
-            raise KnowledgeSpaceTagLibraryInvalidError(message=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
 
         await TagLibraryTagService.replace_tags(
             library_id=library_id,
@@ -437,7 +437,7 @@ class KnowledgeSpaceTagLibraryService:
         next_ai = self.normalize_tags(ai_tags) if ai_tags is not None else current_ai
         non_ai = TagLibraryTagService.non_ai_tag_names(next_system, next_manual)
         if len(non_ai) + len(next_ai) > MAX_LIBRARY_TAGS:
-            raise KnowledgeSpaceTagLibraryInvalidError(message=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg=f"单个标签库最多只能包含 {MAX_LIBRARY_TAGS} 个标签")
 
         if tags is not None or manual_tags is not None or ai_tags is not None:
             await self._ensure_global_tag_names_available(
@@ -537,9 +537,9 @@ class KnowledgeSpaceTagLibraryService:
         if not library:
             raise KnowledgeSpaceTagLibraryNotExistError()
         if library.is_builtin:
-            raise KnowledgeSpaceTagLibraryInvalidError(message="内置标签库不能删除")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="内置标签库不能删除")
         if library.owner_knowledge_id is not None:
-            raise KnowledgeSpaceTagLibraryInvalidError(message="私有标签库不能从此入口删除")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="私有标签库不能从此入口删除")
 
         _, tag_count = await self._resolve_library_tags(library)
         if tag_count > 0:

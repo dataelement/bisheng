@@ -66,6 +66,7 @@ const mockShowToast = jest.fn();
 const mockConfirm = jest.fn();
 const mockUseKnowledgeSpaceActionPermissions = jest.fn();
 const mockCheckPermission = jest.fn();
+const mockGetPublicSpaceFilePermissionsApi = jest.fn();
 const mockClipboardWriteText = jest.fn();
 const mockHandleUploadFile = jest.fn();
 const mockUpdateFileTagsApi = jest.fn();
@@ -385,6 +386,7 @@ jest.mock("~/api/knowledge", () => ({
     unsubscribeSpaceApi: jest.fn(),
     pinSpaceApi: jest.fn(),
     getSpaceChildrenApi: jest.fn(),
+    getPublicSpaceFilePermissionsApi: (...args: any[]) => mockGetPublicSpaceFilePermissionsApi(...args),
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
@@ -676,6 +678,7 @@ describe("PortalKnowledgeWorkbench", () => {
             task_ids: [904],
         } as any);
         mockCheckPermission.mockResolvedValue({ allowed: true });
+        mockGetPublicSpaceFilePermissionsApi.mockResolvedValue([]);
         const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
         canOpenPermissionDialog.mockResolvedValue(true);
     });
@@ -1092,6 +1095,62 @@ describe("PortalKnowledgeWorkbench", () => {
         const requestedSpaceIds = mockUseKnowledgeSpaceActionPermissions.mock.calls
             .flatMap((call) => call[0] as string[]);
         expect(requestedSpaceIds).not.toContain("team-1");
+    });
+
+    test("公共知识库文件列表展示后批量升级文件编辑权限", async () => {
+        const publicSpace = makeSpace("public-1", "公共空间01", {
+            spaceLevel: SpaceLevel.PUBLIC,
+        });
+        const file = makeFile("201", "公共文件.md", {
+            spaceId: "public-1",
+            fileEncoding: "RPT-PP-00000001",
+        });
+        let resolvePermissions: ((value: Array<{ fileId: string; permissionIds: string[] }>) => void) | undefined;
+        mockGetPublicSpaceFilePermissionsApi.mockImplementation(() => new Promise((resolve) => {
+            resolvePermissions = resolve;
+        }));
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(publicSpace as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [publicSpace],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench("/knowledge-portal?spaceId=public-1");
+
+        await screen.findByTestId("file-tree-row-201");
+        await waitFor(() => {
+            expect(mockGetPublicSpaceFilePermissionsApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "public-1",
+                file_ids: ["201"],
+            }));
+        });
+        expect(mockCheckPermission).not.toHaveBeenCalled();
+        const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
+        expect(canOpenPermissionDialog).not.toHaveBeenCalled();
+
+        resolvePermissions?.([{
+            fileId: "201",
+            permissionIds: ["rename_file", "download_file", "delete_file", "move_file", "manage_file_relation"],
+        }]);
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        const fileRow = screen.getByTestId("file-tree-row-201");
+        expect(
+            within(fileRow).getByLabelText("修改公共文件.md业务域类型 当前业务域：PP"),
+        ).toBeInTheDocument();
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开公共文件.md" }));
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
+        const drawer = await screen.findByTestId("portal-info-drawer");
+        expect(within(drawer).getByLabelText("修改公共文件.md业务域类型 当前业务域：PP")).toBeInTheDocument();
     });
 
     test("hides create row under a group without create permission", async () => {

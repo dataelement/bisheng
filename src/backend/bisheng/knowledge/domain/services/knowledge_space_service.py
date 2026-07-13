@@ -510,6 +510,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return UserRoleEnum.MEMBER
         return None
 
+    def _resolve_space_list_user_role(
+        self,
+        space: Knowledge,
+        *,
+        membership_map: dict[int, SpaceChannelMember],
+        permission_levels: dict[int, str | None],
+    ) -> UserRoleEnum | None:
+        """Resolve the current user's role for a space list item.
+
+        Mirrors the role assignment in ``_format_accessible_spaces`` without
+        permission filtering or subscription metadata.
+        """
+        if space.user_id == self.login_user.user_id:
+            return UserRoleEnum.CREATOR
+        member_conf = membership_map.get(int(space.id))
+        if member_conf is not None:
+            return member_conf.user_role
+        return self._permission_level_to_space_user_role(
+            permission_levels.get(int(space.id)),
+        )
+
     async def _get_tenant_root_department_id(self) -> int:
         tenant = await TenantDao.aget_by_id(int(self.login_user.tenant_id))
         root_dept_id = int(getattr(tenant, "root_dept_id", 0) or 0) if tenant else 0
@@ -1949,6 +1970,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(context["public_space_permission_ids"])
         return effective_permissions
 
+    async def get_public_space_file_permissions(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Batch-resolve portal edit actions without changing public-list read semantics.
+
+        The public-space list deliberately exposes only read access.  This
+        endpoint is called after the portal has rendered its current page and
+        uses the same child-item evaluator as read/write operations, including
+        custom relation models, member roles, and child-level overrides.
+        """
+        await self._require_read_permission(space_id)
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        if not scope or self._space_level_value(scope.level) != KnowledgeSpaceLevelEnum.PUBLIC.value:
+            raise SpaceInvalidLevelError()
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+        action_permission_ids = (
+            "rename_file",
+            "download_file",
+            "delete_file",
+            "move_file",
+            "manage_file_relation",
+        )
+        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, "is_admin", None)) else False
+        if is_admin:
+            return {
+                "permissions": [
+                    {"file_id": file_record.id, "permission_ids": list(action_permission_ids)}
+                    for file_record in files
+                ]
+            }
+
+        context = await self._build_child_permission_context(space_id)
+        visible_files = await self._filter_visible_child_items(
+            files,
+            space_id=space_id,
+            context=context,
+        )
+        if len(visible_files) != len(files):
+            # Do not turn this endpoint into a way to probe hidden files.
+            raise SpaceFileNotFoundError()
+
+        permission_sets = await asyncio.gather(
+            *[
+                self._get_child_item_effective_permission_ids(
+                    file_record,
+                    space_id=space_id,
+                    context=context,
+                )
+                for file_record in files
+            ]
+        )
+        return {
+            "permissions": [
+                {
+                    "file_id": file_record.id,
+                    "permission_ids": [
+                        permission_id
+                        for permission_id in action_permission_ids
+                        if permission_id in permission_ids
+                    ],
+                }
+                for file_record, permission_ids in zip(files, permission_sets)
+            ]
+        }
+
     async def _public_space_viewer_permission_ids(self, lineage: list[tuple[str, int]]) -> set[str]:
         space_id = next(
             (lineage_id for lineage_type, lineage_id in lineage if lineage_type == "knowledge_space"),
@@ -2135,12 +2224,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_ids,
         )
         if auto_tag_custom_tags is not None and requested_ids:
-            raise KnowledgeSpaceTagLibraryInvalidError(message="不能同时指定标签库与自定义标签")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="不能同时指定标签库与自定义标签")
 
         if auto_tag_custom_tags is not None:
             normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
             if not normalized:
-                raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须提供至少一个自定义标签")
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须提供至少一个自定义标签")
             private = await KnowledgeSpaceTagLibraryDao.aupsert_private(
                 knowledge_id=knowledge.id,
                 tenant_id=tenant_id,
@@ -2216,7 +2305,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if auto_tag_custom_tags is not None:
             normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
             if not normalized:
-                raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须提供至少一个自定义标签")
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须提供至少一个自定义标签")
         else:
             requested_ids = self._resolve_requested_library_ids(
                 auto_tag_library_id,
@@ -6026,22 +6115,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def get_public_spaces(self, order_by: str = "update_time") -> list[dict[str, Any]]:
-        """List every public knowledge space without user-specific enrichment.
+        """List every public knowledge space with lightweight per-user enrichment.
 
-        The level endpoint keeps its login dependency, but public spaces do not
-        need membership or ReBAC evaluation.  Return the persisted space fields
-        plus the known scope level only; file counts and department metadata are
-        intentionally excluded from this lightweight list response.
+        Returns persisted space fields plus ``space_level`` and the current
+        user's ``user_role``.  File counts, department metadata, and ReBAC
+        visibility filtering remain excluded from this endpoint.
         """
         space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
         spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
-        return [
-            {
+        if not spaces:
+            return []
+
+        memberships = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+        membership_map = {
+            int(member.business_id): member for member in memberships if str(member.business_id).isdigit()
+        }
+
+        permission_level_space_ids = [
+            int(space.id)
+            for space in spaces
+            if space.user_id != self.login_user.user_id and int(space.id) not in membership_map
+        ]
+        permission_levels: dict[int, str | None] = {}
+        if permission_level_space_ids:
+            level_map = await PermissionService.get_permission_levels(
+                user_id=self.login_user.user_id,
+                object_type="knowledge_space",
+                object_ids=permission_level_space_ids,
+                login_user=self.login_user,
+            )
+            permission_levels = {space_id: level_map.get(str(space_id)) for space_id in permission_level_space_ids}
+
+        result: list[dict[str, Any]] = []
+        for space in spaces:
+            payload: dict[str, Any] = {
                 **space.model_dump(),
                 "space_level": KnowledgeSpaceLevelEnum.PUBLIC.value,
             }
-            for space in spaces
-        ]
+            user_role = self._resolve_space_list_user_role(
+                space,
+                membership_map=membership_map,
+                permission_levels=permission_levels,
+            )
+            if user_role is not None:
+                payload["user_role"] = user_role.value
+            result.append(payload)
+        return result
 
     async def global_search_files(
         self,

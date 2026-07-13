@@ -770,6 +770,26 @@ class KnowledgeSpaceFolderStatsReq(BaseModel):
     )
 
 
+class KnowledgeSpaceFilePermissionsReq(BaseModel):
+    """Batch action-permission lookup for files already loaded in a public space."""
+
+    file_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="File IDs from the currently loaded portal file list",
+    )
+
+    @field_validator("file_ids")
+    @classmethod
+    def validate_file_ids(cls, file_ids: list[int]) -> list[int]:
+        if any(file_id <= 0 for file_id in file_ids):
+            raise ValueError("file_ids must contain positive integers")
+        if len(set(file_ids)) != len(file_ids):
+            raise ValueError("file_ids must not contain duplicates")
+        return file_ids
+
+
 class KnowledgeSpaceFolderStatsItemResp(BaseModel):
     """Folder statistics item."""
 

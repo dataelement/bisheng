@@ -2055,6 +2055,45 @@ export async function getSpaceChildrenApi(params: {
     };
 }
 
+export interface SpaceFileActionPermission {
+    fileId: string;
+    permissionIds: string[];
+}
+
+/**
+ * Query action permissions for files that the portal has already rendered in
+ * a public knowledge space.  This is intentionally separate from list loading
+ * so the public-space sidebar remains read-only and fast on first paint.
+ */
+export async function getPublicSpaceFilePermissionsApi(params: {
+    space_id: string | number;
+    file_ids: Array<string | number>;
+    signal?: AbortSignal;
+}): Promise<SpaceFileActionPermission[]> {
+    const fileIds = Array.from(new Set(
+        params.file_ids
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0),
+    ));
+    if (!params.space_id || fileIds.length === 0) return [];
+
+    const res = await request.post(
+        `/api/v1/knowledge/space/${params.space_id}/file-permissions`,
+        { file_ids: fileIds },
+        { signal: params.signal },
+    ) as ApiResponse<{ permissions?: any[] }> & { permissions?: any[] };
+    const payload: any = res?.data ?? res ?? {};
+    const permissions = Array.isArray(payload?.permissions) ? payload.permissions : [];
+    return permissions
+        .map((item) => ({
+            fileId: String(item?.file_id ?? item?.fileId ?? ""),
+            permissionIds: Array.isArray(item?.permission_ids ?? item?.permissionIds)
+                ? (item.permission_ids ?? item.permissionIds).map(String)
+                : [],
+        }))
+        .filter((item) => item.fileId);
+}
+
 export async function getSpaceFolderStatsApi(params: {
     space_id: string;
     folder_ids: Array<string | number>;
