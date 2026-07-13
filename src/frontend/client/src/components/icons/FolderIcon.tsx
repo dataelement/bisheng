@@ -22,9 +22,12 @@ export const FolderIcon = ({ className, ...props }: React.SVGProps<SVGSVGElement
     const panelD =
         "M7.66309 8.68262H16.3369C17.1507 8.68262 17.7667 8.67925 18.2568 8.71289C18.7465 8.74651 19.1052 8.81657 19.4062 8.95801C19.9422 9.20996 20.3723 9.60675 20.6445 10.0996C20.7969 10.3757 20.8727 10.7042 20.9092 11.1543C20.9457 11.6054 20.9424 12.1727 20.9424 12.9238V15.5762C20.9424 16.3273 20.9457 16.8946 20.9092 17.3457C20.8727 17.7958 20.7969 18.1243 20.6445 18.4004C20.3723 18.8933 19.9422 19.29 19.4062 19.542C19.1052 19.6834 18.7465 19.7535 18.2568 19.7871C17.7667 19.8208 17.1507 19.8174 16.3369 19.8174H7.66309C6.84925 19.8174 6.23335 19.8208 5.74316 19.7871C5.25352 19.7535 4.89477 19.6834 4.59375 19.542C4.05779 19.29 3.62766 18.8933 3.35547 18.4004C3.20306 18.1243 3.12725 17.7958 3.09082 17.3457C3.05434 16.8946 3.05762 16.3273 3.05762 15.5762V12.9238C3.05762 12.1727 3.05434 11.6054 3.09082 11.1543C3.12725 10.7042 3.20306 10.3757 3.35547 10.0996C3.62766 9.60675 4.05779 9.20996 4.59375 8.95801C4.89477 8.81657 5.25352 8.74651 5.74316 8.71289C6.23335 8.67925 6.84925 8.68262 7.66309 8.68262Z";
 
-    const lightStop = { stopColor: 'rgb(var(--brand-300))' } as React.CSSProperties;
-    const deepStop = { stopColor: 'rgb(var(--brand-600))' } as React.CSSProperties;
-    const bodyFill = { fill: 'rgb(var(--brand-400))' } as React.CSSProperties;
+    // Use the illustration palette so the folder body matches the empty-state
+    // illustrations' main green (green mode illus-500 = #169C47) instead of the
+    // darker UI brand green. Still follows the blue ⇄ green theme.
+    const lightStop = { stopColor: 'rgb(var(--illus-300))' } as React.CSSProperties;
+    const deepStop = { stopColor: 'rgb(var(--illus-500))' } as React.CSSProperties;
+    const bodyFill = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
 
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} {...props}>
