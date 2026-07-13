@@ -442,6 +442,7 @@
   "com_notifications_tab_request": "Requests",
   "com_notifications_title": "Notifications",
   "com_notifications_view_approval": "View Approval",
+  "com_notifications_view_message": "View Message",
   "com_notifications_toast_all_read": "All marked as read",
   "com_notifications_toast_delete_failed": "Failed to delete",
   "com_notifications_toast_deleted": "Message deleted",

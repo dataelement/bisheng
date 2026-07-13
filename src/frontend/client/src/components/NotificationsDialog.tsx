@@ -111,6 +111,13 @@ const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
 // Payload: { type: "shougang-portal:qa-expert-navigate", questionId: string, actionCode: string, answerId?: string, commentId?: string }
 const PORTAL_QA_EXPERT_NAVIGATE_MESSAGE = "shougang-portal:qa-expert-navigate";
 
+const QA_EXPERT_ACTION_CODES = new Set([
+    "qa_expert_invited",
+    "qa_expert_answered",
+    "qa_answer_commented",
+    "qa_answer_accepted",
+]);
+
 export function NotificationsDialog({
     open = false,
     onOpenChange,
@@ -1076,6 +1083,34 @@ export function NotificationsDialog({
                         </button>
                     </div>
                 ) : null}
+
+                {target?.targetType === "qa_question" &&
+                    QA_EXPERT_ACTION_CODES.has(notification.action_code ?? "") && (
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!notification.is_read) markOneAsRead(id);
+                                if (typeof window !== "undefined" && window.parent !== window) {
+                                    window.parent.postMessage(
+                                        {
+                                            type: PORTAL_QA_EXPERT_NAVIGATE_MESSAGE,
+                                            questionId: target.targetId,
+                                            ...(target.answerId ? { answerId: target.answerId } : {}),
+                                            ...(target.commentId ? { commentId: target.commentId } : {}),
+                                            actionCode: getSystemTextCode(notification),
+                                        },
+                                        "*"
+                                    );
+                                }
+                                onOpenChange?.(false);
+                            }}
+                            className="inline-flex h-7 items-center rounded-[6px] border border-[#165dff] px-3 py-0 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"
+                        >
+                            {localize("com_notifications_view_message")}
+                        </button>
+                    </div>
+                )}
 
                 {supplementaryText && (
                     <div className={cn("text-[13px] leading-6 text-[#86909C]", isTouchMobile ? "pl-0" : "pl-12")}>

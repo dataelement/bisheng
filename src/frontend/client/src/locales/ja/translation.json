@@ -422,6 +422,7 @@
   "com_notifications_tab_request": "承認",
   "com_notifications_title": "通知",
   "com_notifications_view_approval": "承認を表示",
+  "com_notifications_view_message": "メッセージを表示",
   "com_notifications_toast_all_read": "すべて既読にしました",
   "com_notifications_toast_delete_failed": "削除に失敗しました",
   "com_notifications_toast_deleted": "メッセージを削除しました",
