@@ -15,7 +15,6 @@ from bisheng.database.models.qa_expert import (
     CommentVote,
     QANotification,
 )
-import re
 
 RESOLUTION_RATE_PRECISION = 4
 
