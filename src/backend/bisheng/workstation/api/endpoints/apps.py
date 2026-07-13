@@ -33,7 +33,7 @@ async def get_recommended_apps(login_user=LoginUserDep):
 
     app_ids = config.recommendedApps
 
-    kwargs: dict = dict(id_list=app_ids, page=0, limit=0)
+    kwargs: dict = {"id_list": app_ids, "page": 0, "limit": 0}
     if not login_user.is_admin():
         kwargs["status"] = FlowStatus.ONLINE.value
     data, _ = FlowDao.get_all_apps(**kwargs)
@@ -84,7 +84,7 @@ async def get_uncategorized_chat(
     limit: int | None = 8,
     keyword: str | None = None,
 ):
-    data, _ = await WorkFlowService.get_uncategorized_flows(login_user, page, limit, keyword)
+    data = await WorkFlowService.get_uncategorized_flows(login_user, page, limit, keyword)
     return resp_200(data=data)
 
 
