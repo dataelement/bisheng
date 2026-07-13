@@ -285,3 +285,33 @@ async def test_append_review_tag_rejects_unbound_library():
                 tag_name="新标签",
                 review_resource_type=TagResourceTypeEnum.AI_AUTO_TAG.value,
             )
+
+
+@pytest.mark.asyncio
+async def test_append_review_tag_rejects_when_library_tag_limit_reached():
+    service = KnowledgeSpaceTagLibraryService(_login_user())
+    library = _library(tags=[], ai_tags=[])
+    existing_tags = [f"标签{i}" for i in range(200)]
+
+    with (
+        patch.object(service, "validate_library_bound_to_knowledge", new=AsyncMock()),
+        patch.object(service, "_ensure_global_tag_names_available", new=AsyncMock()),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryDao.aget",
+            new=AsyncMock(return_value=library),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.TagLibraryTagService.list_tag_names",
+            new=AsyncMock(return_value=(existing_tags, [], [])),
+        ),
+    ):
+        with pytest.raises(KnowledgeSpaceTagLibraryInvalidError) as exc_info:
+            await service.append_review_tag(
+                library_id=10,
+                knowledge_id=100,
+                tag_name="超限标签",
+                review_resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
+            )
+
+    assert exc_info.value.message == "单个标签库最多只能包含 200 个标签"
+    assert str(exc_info.value) == "单个标签库最多只能包含 200 个标签"

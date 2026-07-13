@@ -2156,12 +2156,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_ids,
         )
         if auto_tag_custom_tags is not None and requested_ids:
-            raise KnowledgeSpaceTagLibraryInvalidError(message="不能同时指定标签库与自定义标签")
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="不能同时指定标签库与自定义标签")
 
         if auto_tag_custom_tags is not None:
             normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
             if not normalized:
-                raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须提供至少一个自定义标签")
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须提供至少一个自定义标签")
             private = await KnowledgeSpaceTagLibraryDao.aupsert_private(
                 knowledge_id=knowledge.id,
                 tenant_id=tenant_id,
@@ -2237,7 +2237,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if auto_tag_custom_tags is not None:
             normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
             if not normalized:
-                raise KnowledgeSpaceTagLibraryInvalidError(message="开启自动标签时必须提供至少一个自定义标签")
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须提供至少一个自定义标签")
         else:
             requested_ids = self._resolve_requested_library_ids(
                 auto_tag_library_id,
