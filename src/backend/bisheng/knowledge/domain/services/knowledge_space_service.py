@@ -9399,7 +9399,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not self._is_portal_bff_proxy_request():
             asyncio.create_task(self._log_portal_document_read_success(file_record))  # noqa: RUF006
 
-        return KnowledgeService.get_file_share_detail(file_record)
+        detail = KnowledgeService.get_file_share_detail(file_record)
+        # Expose the download permission so the portal can hide the download entry
+        # for view-only users. Derived from the same effective-permission source the
+        # download endpoint gates on, so it can never drift from actual enforcement.
+        effective_permissions = await self._get_effective_permission_ids(
+            "knowledge_file",
+            file_id,
+            space_id=file_record.knowledge_id,
+        )
+        detail["can_download"] = "download_file" in effective_permissions
+        return detail
 
     def _is_portal_bff_proxy_request(self) -> bool:
         return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))

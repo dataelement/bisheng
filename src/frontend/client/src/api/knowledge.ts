@@ -2613,6 +2613,7 @@ export interface KnowledgeFilePreview {
     web_title: string;
     media_kind: string;
     html_preview_url: string;
+    can_download: boolean;
 }
 
 /**
@@ -2634,6 +2635,7 @@ export async function getFilePreviewApi(
         web_title: data?.web_title ?? "",
         media_kind: data?.media_kind ?? "",
         html_preview_url: data?.html_preview_url ?? "",
+        can_download: data?.can_download ?? false,
     };
 }
 
