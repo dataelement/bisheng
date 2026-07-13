@@ -413,7 +413,7 @@ class QuestionListQuery(BaseModel):
     """问题列表查询条件"""
 
     domain: Optional[str] = Field(None, description="业务域")
-    status: Optional[str] = Field(None, description="状态: unsolved/solved/closed")
+    status: Optional[int] = Field(0, description="状态: unsolved/solved/closed")
     sort_by: str = Field(default="latest", description="排序: latest/hottest/unanswered")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
