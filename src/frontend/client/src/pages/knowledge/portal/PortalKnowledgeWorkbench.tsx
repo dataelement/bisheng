@@ -1212,6 +1212,7 @@ export default function PortalKnowledgeWorkbench() {
         uploadFolderOptions,
         duplicateFiles,
         duplicateOverwriting,
+        sensitiveWordFiles,
         fileSubcategoryCode,
         fileCategoryGroups: resolvedFileCategoryGroups,
         businessDomainCode,
@@ -1240,6 +1241,7 @@ export default function PortalKnowledgeWorkbench() {
         handleStartUploadImport,
         handleDuplicateSkip,
         handleDuplicateOverwrite,
+        handleSensitiveWordDialogClose,
     } = usePortalUploadDialog({
         activeSpace,
         setActiveSpace,
@@ -2679,6 +2681,8 @@ export default function PortalKnowledgeWorkbench() {
                 duplicateOverwriting={duplicateOverwriting}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
+                sensitiveWordFiles={sensitiveWordFiles}
+                onSensitiveWordDialogClose={handleSensitiveWordDialogClose}
                 directUploadDuplicateFiles={fileUpload.duplicateFiles}
                 onDirectUploadDuplicateSkip={fileUpload.handleDuplicateSkip}
                 onDirectUploadDuplicateOverwrite={fileUpload.handleDuplicateOverwrite}

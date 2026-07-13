@@ -113,6 +113,9 @@ export function usePortalUploadDialog({
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
     const [duplicateOverwriting, setDuplicateOverwriting] = useState(false);
+    // Files skipped during upload because they tripped the sensitive-word filter.
+    // Non-empty drives the post-upload notice dialog listing them.
+    const [sensitiveWordFiles, setSensitiveWordFiles] = useState<string[]>([]);
     const [duplicateFileCategoryCode, setDuplicateFileCategoryCode] = useState<string | undefined>();
     const [duplicateUploadMetadataPayload, setDuplicateUploadMetadataPayload] = useState<PortalUploadMetadataPayload>({});
     const [fileSubcategoryCode, setFileSubcategoryCode] = useState("");
@@ -633,21 +636,20 @@ export function usePortalUploadDialog({
                 selectedFileSubcategory,
             );
 
-            // Pre-upload sensitive-word check: filenames (batch)
+            // Pre-upload sensitive-word check. Rather than aborting the whole batch
+            // when any file trips the filter, collect the offending files, upload the
+            // rest normally, and report the skipped ones to the user at the end.
+            const sensitiveFileNames = new Set<string>();
+
+            // Filenames (batch): violated_texts echoes the offending filenames.
             const filenames = uploadFiles.map((item) => item.file.name);
             const filenameCheck = await checkSensitiveWordsApi(activeSpace.id, filenames);
             if (filenameCheck.has_violation) {
-                const violated = filenameCheck.violated_texts.slice(0, 3).join("、");
-                showToast({
-                    message: `文件名包含敏感词（${violated}${filenameCheck.violated_texts.length > 3 ? "…" : ""}），请修改后重试`,
-                    severity: NotificationSeverity.ERROR,
-                });
-                return;
+                for (const text of filenameCheck.violated_texts) sensitiveFileNames.add(text);
             }
 
-            // Pre-upload sensitive-word check: text file content (per file, report
-            // by filename). Runs concurrently so N text files cost one round-trip
-            // window, not N serialized ones.
+            // Text file content (per file, report by filename). Runs concurrently so
+            // N text files cost one round-trip window, not N serialized ones.
             const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "html", "htm"]);
             const textItems = uploadFiles.filter(
                 (item) => TEXT_EXTENSIONS.has(item.file.name.split(".").pop()?.toLowerCase() ?? ""),
@@ -664,13 +666,18 @@ export function usePortalUploadDialog({
                     }
                 }),
             );
-            const violatedContentFiles = contentChecks.filter((name): name is string => name !== null);
-            if (violatedContentFiles.length > 0) {
-                const violated = violatedContentFiles.slice(0, 3).join("、");
-                showToast({
-                    message: `文件内容包含敏感词（${violated}${violatedContentFiles.length > 3 ? "…" : ""}），请修改后重试`,
-                    severity: NotificationSeverity.ERROR,
-                });
+            for (const name of contentChecks) {
+                if (name !== null) sensitiveFileNames.add(name);
+            }
+
+            const sensitiveFileList = Array.from(sensitiveFileNames);
+            const filesToUpload = sensitiveFileNames.size
+                ? uploadFiles.filter((item) => !sensitiveFileNames.has(item.file.name))
+                : uploadFiles;
+
+            // Every selected file tripped the filter — nothing left to upload.
+            if (filesToUpload.length === 0) {
+                setSensitiveWordFiles(sensitiveFileList);
                 return;
             }
 
@@ -695,7 +702,7 @@ export function usePortalUploadDialog({
                 }
 
                 // Build nested folder structure (BFS order: parents before children)
-                const allValidFiles = uploadFiles.map((item) => item.file);
+                const allValidFiles = filesToUpload.map((item) => item.file);
                 const dirPaths = extractSortedDirPaths(allValidFiles);
                 const folderIdMap = new Map<string, string>();
 
@@ -722,7 +729,7 @@ export function usePortalUploadDialog({
 
                 // Group files by their parent directory and upload
                 const filesByDir = new Map<string, typeof uploadFiles>();
-                for (const item of uploadFiles) {
+                for (const item of filesToUpload) {
                     const rel = item.file.webkitRelativePath;
                     const parentPath = rel.split("/").slice(0, -1).join("/");
                     const arr = filesByDir.get(parentPath) ?? [];
@@ -746,19 +753,21 @@ export function usePortalUploadDialog({
                     allRegistered.push(...registered);
                 }
                 await finishUploadedFiles(allRegistered, uploadMetadataPayload);
+                if (sensitiveFileList.length) setSensitiveWordFiles(sensitiveFileList);
                 return;
             }
 
-            const recommendations = await recommendUploadTargetMap(uploadFiles.map((item) => ({
+            const recommendations = await recommendUploadTargetMap(filesToUpload.map((item) => ({
                 id: item.id,
                 name: item.file.name,
             })));
             const uploadResults = await Promise.all(
-                uploadFiles.map((item) => uploadFileToServerApi(activeSpace.id, item.file)),
+                filesToUpload.map((item) => uploadFileToServerApi(activeSpace.id, item.file)),
             );
             const filePaths = uploadResults.map((item) => item.file_path);
-            const registeredFiles = await registerUploadedFiles(uploadFiles, filePaths, recommendations, uploadMetadataPayload);
+            const registeredFiles = await registerUploadedFiles(filesToUpload, filePaths, recommendations, uploadMetadataPayload);
             await finishUploadedFiles(registeredFiles, uploadMetadataPayload);
+            if (sensitiveFileList.length) setSensitiveWordFiles(sensitiveFileList);
         } catch (error) {
             const message = error instanceof Error && error.message ? error.message : "上传失败";
             showToast({ message, severity: NotificationSeverity.ERROR });
@@ -767,6 +776,10 @@ export function usePortalUploadDialog({
             setUploadSubmitting(false);
         }
     }, [activeSpace, businessDomainCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, selectedFileSubcategory, selectedUploadTagValues, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);
+
+    const handleSensitiveWordDialogClose = useCallback(() => {
+        setSensitiveWordFiles([]);
+    }, []);
 
     const handleDuplicateSkip = useCallback(() => {
         setDuplicateFiles([]);
@@ -842,6 +855,7 @@ export function usePortalUploadDialog({
         uploadFolderOptions,
         duplicateFiles,
         duplicateOverwriting,
+        sensitiveWordFiles,
         fileSubcategoryCode,
         fileCategoryGroups,
         businessDomainCode,
@@ -870,5 +884,6 @@ export function usePortalUploadDialog({
         handleStartUploadImport,
         handleDuplicateSkip,
         handleDuplicateOverwrite,
+        handleSensitiveWordDialogClose,
     };
 }

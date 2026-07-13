@@ -58,6 +58,8 @@ type PortalDialogsProps = {
     directUploadDuplicateFiles: DuplicateFile[];
     onDirectUploadDuplicateSkip: () => void;
     onDirectUploadDuplicateOverwrite: () => void;
+    sensitiveWordFiles: string[];
+    onSensitiveWordDialogClose: () => void;
 };
 
 export function PortalDialogs({
@@ -99,6 +101,8 @@ export function PortalDialogs({
     directUploadDuplicateFiles,
     onDirectUploadDuplicateSkip,
     onDirectUploadDuplicateOverwrite,
+    sensitiveWordFiles,
+    onSensitiveWordDialogClose,
 }: PortalDialogsProps) {
     const versionManagementEnabled = useVersionManagementEnabled();
     const hasPortalUploadDuplicates = duplicateFiles.length > 0;
@@ -230,6 +234,32 @@ export function PortalDialogs({
                         </Button>
                         <Button className="h-8" disabled={visibleDuplicateOverwriting} onClick={handleVisibleDuplicateOverwrite}>
                             {visibleDuplicateOverwriting ? "覆盖中…" : "覆盖"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={sensitiveWordFiles.length > 0}
+                onOpenChange={(open) => {
+                    if (!open) onSensitiveWordDialogClose();
+                }}
+            >
+                <DialogContent className="sm:max-w-[460px]">
+                    <DialogHeader>
+                        <DialogTitle>部分文件包含敏感词</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-[#4e5969]">
+                        以下文件包含敏感词，已跳过上传，其余文件已正常上传。请修改后重试：
+                    </p>
+                    <ul className={s.dialogList}>
+                        {sensitiveWordFiles.map((fileName) => (
+                            <li key={fileName} className={s.dialogListItem}>{fileName}</li>
+                        ))}
+                    </ul>
+                    <DialogFooter>
+                        <Button className="h-8" onClick={onSensitiveWordDialogClose}>
+                            我知道了
                         </Button>
                     </DialogFooter>
                 </DialogContent>
