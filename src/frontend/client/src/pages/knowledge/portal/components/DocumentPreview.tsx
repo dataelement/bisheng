@@ -40,6 +40,7 @@ interface DocumentPreviewProps {
     onOpenTags: () => void;
     // onOpenShare: () => void;
     onDownload: () => void;
+    canDownload: boolean;
     canManagePermission: boolean;
     onOpenPermission: () => void;
     onToggleSummary: () => void;
@@ -54,6 +55,7 @@ export function DocumentPreview({
     onOpenTags,
     // onOpenShare,
     onDownload,
+    canDownload,
     canManagePermission,
     onOpenPermission,
     onToggleSummary,
@@ -81,9 +83,11 @@ export function DocumentPreview({
                             {/* <button type="button" className={s.iconAction} title="分享" aria-label="分享" onClick={onOpenShare}>
                                 <Share2 size={16} />
                             </button> */}
-                            <button type="button" className={s.iconAction} title="下载" aria-label="下载" onClick={onDownload}>
-                                <Download size={16} />
-                            </button>
+                            {canDownload ? (
+                                <button type="button" className={s.iconAction} title="下载" aria-label="下载" onClick={onDownload}>
+                                    <Download size={16} />
+                                </button>
+                            ) : null}
                             {canManagePermission ? (
                                 <button type="button" className={s.iconAction} title="权限管理" aria-label="权限管理" onClick={onOpenPermission}>
                                     <ShieldCheck size={16} />
@@ -91,30 +95,34 @@ export function DocumentPreview({
                             ) : null}
                         </div>
                     </div>
-                    <div className={s.divider} />
-                    <button
-                        type="button"
-                        className={`${s.summaryBar} ${summaryExpanded ? s.summaryBarExpanded : ""}`}
-                        aria-label={summaryExpanded ? "收起文档摘要" : "查看文档摘要"}
-                        aria-expanded={summaryExpanded}
-                        aria-controls="portal-summary-content"
-                        onClick={onToggleSummary}
-                    >
-                        <div className={s.summaryHeader} data-testid="portal-summary-header">
-                            <span className={s.summaryIcon}>
-                                <FileText size={16} />
-                            </span>
-                            <span className={s.summaryLabel}>
-                                文档摘要
-                            </span>
-                            <span className={s.summaryToggleIcon}>
-                                {summaryExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </span>
-                        </div>
-                        <div id="portal-summary-content" data-testid="portal-summary-content" className={s.summaryText}>
-                            {selectedFile.summary || "暂无摘要"}
-                        </div>
-                    </button>
+                    {selectedFile.summary ? (
+                        <>
+                            <div className={s.divider} />
+                            <button
+                                type="button"
+                                className={`${s.summaryBar} ${summaryExpanded ? s.summaryBarExpanded : ""}`}
+                                aria-label={summaryExpanded ? "收起文档摘要" : "查看文档摘要"}
+                                aria-expanded={summaryExpanded}
+                                aria-controls="portal-summary-content"
+                                onClick={onToggleSummary}
+                            >
+                                <div className={s.summaryHeader} data-testid="portal-summary-header">
+                                    <span className={s.summaryIcon}>
+                                        <FileText size={16} />
+                                    </span>
+                                    <span className={s.summaryLabel}>
+                                        文档摘要
+                                    </span>
+                                    <span className={s.summaryToggleIcon}>
+                                        {summaryExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    </span>
+                                </div>
+                                <div id="portal-summary-content" data-testid="portal-summary-content" className={s.summaryText}>
+                                    {selectedFile.summary}
+                                </div>
+                            </button>
+                        </>
+                    ) : null}
                     <div className={s.previewHost}>
                         {preview.loading ? (
                             <div className={s.stateBox}>正在加载预览...</div>

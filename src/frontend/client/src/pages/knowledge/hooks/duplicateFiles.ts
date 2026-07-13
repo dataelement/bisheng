@@ -12,19 +12,64 @@ export interface DuplicateFileEntry {
     rawObj: any;
 }
 
+interface DuplicateRemark {
+    newName?: string;
+}
+
+function parseDuplicateRemark(rawObj: any): DuplicateRemark | null {
+    if (rawObj?.repeat === true) {
+        return {
+            newName: typeof rawObj.file_name === "string" ? rawObj.file_name : undefined,
+        };
+    }
+
+    if (typeof rawObj?.remark !== "string" || !rawObj.remark.trim()) {
+        return null;
+    }
+
+    try {
+        const remark = JSON.parse(rawObj.remark);
+        const hasDuplicateNames =
+            typeof remark?.new_name === "string" ||
+            typeof remark?.old_name === "string";
+        if (!hasDuplicateNames) {
+            return null;
+        }
+        return {
+            newName: typeof remark.new_name === "string" ? remark.new_name : undefined,
+        };
+    } catch {
+        return null;
+    }
+}
+
 export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): DuplicateFileEntry[] {
-    // 后端用 old_file_level_path 标记重复文件；根目录重复时该字段可能是空字符串。
-    // 真实解析失败不会带这个字段，所以这里用类型判断保留根目录重复项。
+    // Prefer old_file_level_path, but keep compatibility with responses that only
+    // expose the duplicate marker in remark. Root-level duplicates can use "".
     return registeredFiles
-        .filter((file) => (
-            file.status === FileStatus.FAILED &&
-            typeof file.oldFileLevelPath === "string" &&
-            Boolean((file as any)._raw)
-        ))
-        .map((file) => ({
-            fileId: file.id,
-            fileName: file.name,
-            oldFileLevelPath: file.oldFileLevelPath || "",
-            rawObj: (file as any)._raw,
-        }));
+        .map((file) => {
+            const rawObj = (file as any)._raw;
+            if (file.status !== FileStatus.FAILED || !rawObj) {
+                return null;
+            }
+
+            const duplicateRemark = parseDuplicateRemark(rawObj);
+            const rawOldFileLevelPath = rawObj.old_file_level_path;
+            const hasDuplicatePath =
+                typeof file.oldFileLevelPath === "string" ||
+                typeof rawOldFileLevelPath === "string";
+            if (!hasDuplicatePath && !duplicateRemark) {
+                return null;
+            }
+
+            return {
+                fileId: file.id,
+                fileName: duplicateRemark?.newName || file.name,
+                oldFileLevelPath:
+                    file.oldFileLevelPath ??
+                    (typeof rawOldFileLevelPath === "string" ? rawOldFileLevelPath : ""),
+                rawObj,
+            };
+        })
+        .filter((entry): entry is DuplicateFileEntry => entry !== null);
 }

@@ -23,10 +23,7 @@ const DETAIL_TABS: Array<{ key: Exclude<PanelKey, "share">; label: string }> = [
     { key: "time", label: "时间" },
     { key: "source", label: "来源" },
     { key: "usage", label: "使用" },
-    { key: "permission", label: "权限" },
 ];
-
-const DEFAULT_DEPARTMENT_NAME = "产品研发中心-数智组";
 
 function formatDrawerDateTime(dateString?: string | null) {
     if (!dateString) return "-";
@@ -326,7 +323,6 @@ export function PortalInfoDrawer({
                         {renderFileCategoryItem()}
                         {renderBusinessDomainItem()}
                         {renderFileEncodingItem()}
-                        {renderDetailItem("编码说明", selectedFile?.fileEncoding ? "此处为中文说明占位" : "-")}
                         {renderDetailItem("大小", selectedFile ? formatFileSize(selectedFile.size) : "-")}
                         {renderDetailItem("存储格式", fileFormat)}
                         <div className={s.detailItem}>
@@ -366,7 +362,7 @@ export function PortalInfoDrawer({
                     >
                         {renderDetailItem("创建人", operatorName)}
                         {renderDetailItem("最后修改人", updaterName)}
-                        {renderDetailItem("部门", selectedFile ? DEFAULT_DEPARTMENT_NAME : "-")}
+                        {renderDetailItem("部门", selectedFile ? (activeSpace?.ownerName || "-") : "-")}
                         {renderDetailItem("知识库", sourceSpaceName)}
                         {renderDetailItem("路径", sourcePath)}
                     </div>

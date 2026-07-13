@@ -574,6 +574,34 @@ class CitationRegistryService:
             sourcePayload=source_payload,
         )
 
+    @classmethod
+    def flatten_registry_item(
+            cls,
+            item: CitationRegistryItemSchema,
+    ) -> List[CitationRegistryItemSchema]:
+        """Restore item-level citation keys from one persisted grouped record."""
+        if item.type == CitationType.RAG:
+            payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+            return cls._flatten_rag_payload(item.citationId, payload)
+
+        payload = WebCitationPayloadSchema.model_validate(item.sourcePayload)
+        return cls._flatten_web_payload(item.citationId, payload)
+
+    async def list_messages_citations(
+            self,
+            message_ids: List[int],
+    ) -> Dict[int, List[CitationRegistryItemSchema]]:
+        """List flattened citations for multiple chat messages in one query."""
+        grouped_entities = await self.repository.find_by_message_ids_grouped(message_ids)
+        result: Dict[int, List[CitationRegistryItemSchema]] = {}
+        for message_id, entities in grouped_entities.items():
+            result[message_id] = [
+                flat_item
+                for entity in entities
+                for flat_item in self.flatten_registry_item(self.to_registry_item(entity))
+            ]
+        return result
+
     async def list_message_citations(self, message_id: int) -> List[CitationRegistryItemSchema]:
         """List all normalized citation items for a message."""
         citations = await self.repository.find_by_message_id(message_id)

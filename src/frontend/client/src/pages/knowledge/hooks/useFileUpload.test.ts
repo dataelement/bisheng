@@ -47,6 +47,32 @@ describe("useFileUpload helpers", () => {
     ]);
   });
 
+  test("extractDuplicateFileEntries recognizes duplicate remark when the old path is omitted", () => {
+    const duplicateFile = makeKnowledgeFile({
+      id: "13",
+      name: "dragged-duplicate.docx",
+      status: FileStatus.FAILED,
+    }) as KnowledgeFile & { _raw: Record<string, unknown> };
+    duplicateFile._raw = {
+      id: 13,
+      file_name: "dragged-duplicate.docx",
+      status: 3,
+      remark: JSON.stringify({
+        new_name: "dragged-duplicate.docx",
+        old_name: "dragged-duplicate.docx",
+      }),
+    };
+
+    expect(extractDuplicateFileEntries([duplicateFile])).toEqual([
+      {
+        fileId: "13",
+        fileName: "dragged-duplicate.docx",
+        oldFileLevelPath: "",
+        rawObj: duplicateFile._raw,
+      },
+    ]);
+  });
+
   test("mergeVisibleRegisteredFiles prepends new files without duplicating existing ids", () => {
     const existingFile = makeKnowledgeFile({
       id: "21",

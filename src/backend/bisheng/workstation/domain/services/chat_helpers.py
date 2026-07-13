@@ -289,6 +289,19 @@ def _format_new_message(msg: ChatMessage) -> dict:
     }
 
 
+def format_agent_history_message(msg: ChatMessage, citations: list) -> dict:
+    """Format one Agent history message with item-level citation metadata."""
+    if _is_new_format(msg):
+        formatted = _format_new_message(msg)
+    else:
+        formatted = _convert_legacy_message(msg)
+    formatted['citations'] = [
+        citation.model_dump(mode='json', exclude_none=True)
+        for citation in citations
+    ]
+    return formatted
+
+
 _LEGACY_THINKING_RE = re.compile(r':::thinking\n([\s\S]*?)\n:::')
 _LEGACY_WEB_RE = re.compile(r':::web\n([\s\S]*?)\n:::')
 

@@ -1,7 +1,7 @@
 import asyncio
 from typing import Union
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Depends, Request
 
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.api.v1.schemas import resp_200
@@ -11,11 +11,14 @@ from bisheng.database.models.session import MessageSessionDao
 from bisheng.workstation.domain.schemas import WorkstationMessage
 from bisheng.workstation.domain.services.chat_helpers import (
     _drop_legacy_sibling_branches,
-    _is_new_format,
-    _format_new_message,
-    _convert_legacy_message,
+    format_agent_history_message,
 )
-from ..dependencies import LoginUserDep, ShareLink, ShareLinkDep
+from ..dependencies import (
+    LoginUserDep,
+    ShareLink,
+    ShareLinkDep,
+    get_workstation_citation_registry_service,
+)
 from ...domain.services.chat_service import stream_chat_completion
 
 router = APIRouter()
@@ -53,6 +56,7 @@ async def get_agent_chat_history(
         conversationId: str,
         login_user=LoginUserDep,
         share_link: Union[ShareLink, None] = ShareLinkDep,
+        citation_registry_service=Depends(get_workstation_citation_registry_service),
 ):
     """v2.5: return chat history in the new ChatResponse (Agent-mode) shape.
 
@@ -72,13 +76,14 @@ async def get_agent_chat_history(
     # 1. Drop legacy sibling branches (keep only latest per parentMessageId)
     messages = _drop_legacy_sibling_branches(messages)
 
+    message_ids = [message.id for message in messages if message.id is not None]
+    citations_by_message = await citation_registry_service.list_messages_citations(message_ids)
+
     # 2. Map each row through the appropriate formatter
-    result = []
-    for msg in messages:
-        if _is_new_format(msg):
-            result.append(_format_new_message(msg))
-        else:
-            result.append(_convert_legacy_message(msg))
+    result = [
+        format_agent_history_message(msg, citations_by_message.get(msg.id, []))
+        for msg in messages
+    ]
     return resp_200(result)
 
 
