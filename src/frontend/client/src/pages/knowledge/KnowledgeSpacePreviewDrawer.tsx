@@ -468,13 +468,9 @@ export function KnowledgeSpacePreviewDrawer({
                             </div>
 
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center text-sm text-[#86909c]">
-                                    <span className="mr-3">{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
-                                    <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
-                                </div>
                                 <Button
                                     variant={btn.variant}
-                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
+                                    className={`ml-auto h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
                                         : status === "pending"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"

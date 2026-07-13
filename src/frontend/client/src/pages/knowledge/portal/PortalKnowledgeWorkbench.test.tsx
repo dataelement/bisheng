@@ -837,6 +837,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(screen.getByTestId("active-space-title")).toHaveTextContent("团队空间147");
         });
         expect(screen.getByRole("button", { name: "收起团队知识库" })).toBeInTheDocument();
+        expect(screen.queryByTestId("active-space-info-tooltip")).not.toBeInTheDocument();
         expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
         expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME });
     });

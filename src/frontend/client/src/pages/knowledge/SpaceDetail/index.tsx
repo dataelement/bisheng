@@ -102,6 +102,8 @@ interface KnowledgeSpaceContentProps {
     afterSearchActions?: ReactNode;
     hideNativeAddMenu?: boolean;
     hideNativeStatusFilter?: boolean;
+    /** 门户模式下隐藏知识库标题后的详情信息浮层。 */
+    hideSpaceInfoTooltip?: boolean;
     hideShareButton?: boolean;
     hideFilePermissionActions?: boolean;
     enableEncodingClassification?: boolean;
@@ -156,6 +158,7 @@ export function KnowledgeSpaceContent({
     afterSearchActions,
     hideNativeAddMenu,
     hideNativeStatusFilter,
+    hideSpaceInfoTooltip = false,
     hideShareButton = false,
     hideFilePermissionActions = false,
     enableEncodingClassification = false,
@@ -1327,6 +1330,7 @@ export function KnowledgeSpaceContent({
                 afterSearchActions={afterSearchActions}
                 hideNativeAddMenu={hideNativeAddMenu}
                 hideNativeStatusFilter={hideNativeStatusFilter}
+                hideSpaceInfoTooltip={hideSpaceInfoTooltip}
                 versionManagementEnabled={versionManagementEnabled}
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}

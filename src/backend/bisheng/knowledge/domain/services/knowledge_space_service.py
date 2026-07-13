@@ -2406,8 +2406,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space, has_content_permission = await self._require_space_info_permission(space_id)
 
-        follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
-        total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
         result = KnowledgeSpaceInfoResp(**space.model_dump())
         member_info = None
         if space.user_id != self.login_user.user_id:
@@ -2445,8 +2443,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             if result.user_role is None and has_content_permission:
                 result.user_role = UserRoleEnum.MEMBER
-        result.follower_num = follower_num
-        result.file_num = total_file_num
         result.can_unsubscribe = await self._can_unsubscribe_space(space, member_info)
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)

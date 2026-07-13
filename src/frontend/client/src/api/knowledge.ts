@@ -150,9 +150,9 @@ export interface KnowledgeSpace {
     visibility: VisibilityType;   // mapped from auth_type
     creator: string;              // mapped from user_name
     creatorId: string;            // mapped from user_id
-    memberCount: number;          // mapped from member_count
-    fileCount: number;            // success-indexed file count
-    totalFileCount: number;
+    memberCount?: number;         // mapped from member_count
+    fileCount?: number;           // success-indexed file count
+    totalFileCount?: number;
     role: SpaceRole;
     isPinned: boolean;
     createdAt: string;            // mapped from create_time
@@ -665,10 +665,10 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         visibility: (raw.auth_type as VisibilityType) || VisibilityType.PRIVATE,
         creator: raw.user_name || "",
         creatorId: String(raw.user_id ?? ""),
-        // Some endpoints (e.g. /info) return follower_num/file_num instead of member_count/file_count.
-        memberCount: raw.member_count ?? raw.follower_num ?? 0,
-        fileCount: raw.file_count ?? raw.file_num ?? 0,
-        totalFileCount: raw.total_file_count ?? raw.file_num ?? raw.file_count ?? 0,
+        // 列表接口可能提供统计；详情接口不提供时保留 undefined，避免误显示为 0。
+        memberCount: raw.member_count ?? raw.follower_num,
+        fileCount: raw.file_count ?? raw.file_num,
+        totalFileCount: raw.total_file_count ?? raw.file_num ?? raw.file_count,
         role: (raw.user_role as SpaceRole) || (raw.role as SpaceRole) || SpaceRole.MEMBER,
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",

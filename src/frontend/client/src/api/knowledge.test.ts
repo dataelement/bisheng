@@ -8,10 +8,12 @@ import {
   createFolderApi,
   deleteFolderApi,
   deleteSpaceApi,
+  getSpaceInfoApi,
   getSquareSpacesApi,
   getSpaceFolderStatsApi,
   listMyUploadedFilesApi,
   mapChild,
+  mapSpace,
   moveUploadedFileFolderApi,
   renameFolderApi,
   recommendUploadFoldersApi,
@@ -35,6 +37,56 @@ const mockPost = request.post as jest.Mock;
 const mockPostMultiPart = request.postMultiPart as jest.Mock;
 const mockPut = request.put as jest.Mock;
 const mockDelete = request.delete as jest.Mock;
+
+describe("getSpaceInfoApi", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("keeps omitted statistics undefined for detail responses", async () => {
+    mockGet.mockResolvedValue({
+      status_code: 200,
+      data: {
+        id: 200,
+        name: "目标知识库",
+        auth_type: VisibilityType.PRIVATE,
+        user_name: "创建人",
+        user_id: 1,
+        user_role: "member",
+        space_level: SpaceLevel.TEAM,
+      },
+    });
+
+    const result = await getSpaceInfoApi("200");
+
+    expect(mockGet).toHaveBeenCalledWith("/api/v1/knowledge/space/200/info");
+    expect(result).toMatchObject({
+      id: "200",
+      name: "目标知识库",
+      creator: "创建人",
+      spaceLevel: SpaceLevel.TEAM,
+    });
+    expect(result.memberCount).toBeUndefined();
+    expect(result.fileCount).toBeUndefined();
+    expect(result.totalFileCount).toBeUndefined();
+  });
+});
+
+describe("mapSpace", () => {
+  it("preserves list statistics when the response provides them", () => {
+    const result = mapSpace({
+      id: 201,
+      name: "列表知识库",
+      auth_type: VisibilityType.PUBLIC,
+      follower_num: 2,
+      file_num: 3,
+    } as any);
+
+    expect(result.memberCount).toBe(2);
+    expect(result.fileCount).toBe(3);
+    expect(result.totalFileCount).toBe(3);
+  });
+});
 
 describe("getSquareSpacesApi", () => {
   it("maps pending square items from is_pending when subscription_status is absent", async () => {
