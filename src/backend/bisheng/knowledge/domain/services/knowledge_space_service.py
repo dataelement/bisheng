@@ -9258,15 +9258,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeFile:
         """Update a file's file_encoding and optional second-level category (shougang feature)."""
         file_record = await self._get_file_for_action(file_id)
-        # Editing file category / business domain follows the space-level upload
-        # permission, matching the upload flow. The per-file 'rename_file' action was
-        # subject to nearest-binding overrides that strip space-level grants from
-        # individual files, so managers who could upload still couldn't edit encoding.
-        await self._require_permission_id(
-            "knowledge_space",
-            file_record.knowledge_id,
-            "upload_file",
-        )
+        # Editing file category / business domain follows the upload permission, on the
+        # same container the upload flow checks: the file's parent folder when it lives
+        # in one, otherwise the space. The per-file 'rename_file' action was subject to
+        # nearest-binding overrides that strip container-level grants from individual
+        # files, so managers who could upload still couldn't edit encoding.
+        ancestor_folder_ids = [
+            int(part) for part in (file_record.file_level_path or "").split("/") if part
+        ]
+        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
+        if parent_folder_id:
+            await self._require_permission_id(
+                "folder",
+                parent_folder_id,
+                "upload_file",
+                space_id=file_record.knowledge_id,
+            )
+        else:
+            await self._require_permission_id(
+                "knowledge_space",
+                file_record.knowledge_id,
+                "upload_file",
+            )
 
         cleaned = encoding.strip()
         if not cleaned:

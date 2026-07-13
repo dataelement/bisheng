@@ -191,6 +191,17 @@ const mergeFolderStatsState = (current: KnowledgeFile, incoming: KnowledgeFile):
     };
 };
 
+/**
+ * Resolve the file's own parent folder id from its lineage path ("/3547" → "3547").
+ * Returns null for root-level files (their permission container is the space).
+ */
+const resolveFileParentFolderId = (file: KnowledgeFile): string | null => {
+    const rawPath = file.folderPath ?? (file as { path?: string }).path ?? "";
+    const segments = String(rawPath).split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    return last && /^\d+$/.test(last) ? last : null;
+};
+
 export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -685,14 +696,17 @@ export default function PortalKnowledgeWorkbench() {
         let cancelled = false;
         const controller = new AbortController();
         setCanEditSelectedFileEncoding(false);
-        // Editing file category / business domain follows the space-level upload
-        // permission — same source as the upload button. The per-file rename_file
-        // action was subject to nearest-binding overrides that strip space-level
-        // grants from individual files, so managers who could upload still couldn't
-        // edit encoding.
+        // Editing file category / business domain follows the upload permission of
+        // the file's OWN parent container (folder when it lives in one, else the
+        // space). The per-file rename_file action was subject to nearest-binding
+        // overrides that strip container-level grants from individual files, so
+        // managers who could upload still couldn't edit encoding.
+        const parentFolderId = resolveFileParentFolderId(file);
+        const objectType = parentFolderId ? "folder" : "knowledge_space";
+        const objectId = parentFolderId || activeSpace.id;
         checkPermission(
-            "knowledge_space",
-            activeSpace.id,
+            objectType,
+            objectId,
             "can_edit",
             "upload_file",
             { signal: controller.signal },
@@ -1100,35 +1114,72 @@ export default function PortalKnowledgeWorkbench() {
             : treeRootHasMore;
     const currentFileListLoading = treeLoading || searchLoading || treeRootLoadingMore || Boolean(currentFolderNode?.loading);
     const displayedFiles = searchMode ? searchResults : visibleTreeFiles;
-    const publicMetadataEditableFileIds = useMemo(() => {
-        if (!isActiveSpacePublic) return undefined;
+    // Upload-permission verdicts keyed by container ("folder:<id>" / "space:<id>").
+    // Metadata (category / business domain) editability follows the upload permission
+    // of each file's OWN parent container — not the folder the user happens to be
+    // viewing — so a folder-scoped upload grant never leaks to root-level files.
+    const [uploadPermissionByContainer, setUploadPermissionByContainer] = useState<Record<string, boolean>>({});
+    const fileMetadataContainerKey = useCallback((file: KnowledgeFile) => {
+        const parentFolderId = resolveFileParentFolderId(file);
+        return parentFolderId ? `folder:${parentFolderId}` : `space:${activeSpace?.id}`;
+    }, [activeSpace?.id]);
 
-        if (isSystemAdmin) {
-            const currentFiles = searchMode ? searchResults : currentFolderFiles;
-            return new Set(
-                currentFiles
-                    .filter((file) => !isFolder(file) && !file.isCreating)
-                    .map((file) => String(file.id)),
-            );
-        }
+    useEffect(() => {
+        setUploadPermissionByContainer({});
+    }, [activeSpace?.id]);
 
-        if (publicFilePermissionState.spaceId !== String(activeSpace?.id)) {
-            return new Set<string>();
-        }
-
-        return new Set(
-            Object.entries(publicFilePermissionState.permissionIdsByFileId)
-                .filter(([, permissionIds]) => permissionIds.includes("rename_file"))
-                .map(([fileId]) => fileId),
+    useEffect(() => {
+        if (!activeSpace || isSystemAdmin || isActiveSpaceAdmin) return;
+        const containerKeys = new Set<string>(
+            displayedFiles
+                .filter((file) => !isFolder(file) && !file.isCreating)
+                .map((file) => fileMetadataContainerKey(file)),
         );
+        if (!containerKeys.size) return;
+        let cancelled = false;
+        const controller = new AbortController();
+        Promise.all(Array.from(containerKeys).map(async (key) => {
+            const [containerType, containerId] = key.split(":");
+            const result = await checkPermission(
+                containerType === "folder" ? "folder" : "knowledge_space",
+                containerId,
+                "can_edit",
+                "upload_file",
+                { signal: controller.signal },
+            ).catch(() => ({ allowed: false }));
+            return [key, Boolean(result?.allowed)] as const;
+        })).then((entries) => {
+            if (cancelled) return;
+            setUploadPermissionByContainer((prev) => {
+                const next = { ...prev };
+                for (const [key, allowed] of entries) next[key] = allowed;
+                return next;
+            });
+        });
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [activeSpace?.id, displayedFiles, fileMetadataContainerKey, isActiveSpaceAdmin, isSystemAdmin]);
+
+    const metadataEditableFileIds = useMemo(() => {
+        // Space/system admins edit all metadata — undefined lets FileTable use its
+        // creator/admin role path.
+        if (isSystemAdmin || isActiveSpaceAdmin) return undefined;
+        const editable = new Set<string>();
+        for (const file of displayedFiles) {
+            if (isFolder(file) || file.isCreating) continue;
+            if (uploadPermissionByContainer[fileMetadataContainerKey(file)]) {
+                editable.add(String(file.id));
+            }
+        }
+        return editable;
     }, [
-        activeSpace?.id,
-        currentFolderFiles,
-        isActiveSpacePublic,
+        displayedFiles,
+        fileMetadataContainerKey,
+        isActiveSpaceAdmin,
         isSystemAdmin,
-        publicFilePermissionState,
-        searchMode,
-        searchResults,
+        uploadPermissionByContainer,
     ]);
     const selectedFiles = useMemo(
         () => displayedFiles.filter((file) => selectedFileIds.has(file.id) || selectedFolderIds.has(file.id)),
@@ -2493,7 +2544,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideFilePermissionActions={isActiveSpacePersonal}
                                                     externalFileActionPermissions={publicFileActionPermissions}
                                                     enableEncodingClassification
-                                                    metadataEditableFileIds={publicMetadataEditableFileIds}
+                                                    metadataEditableFileIds={metadataEditableFileIds}
                                                     fileCategoryOptions={fileCategoryOptions}
                                                     fileCategoryGroups={fileCategoryGroups}
                                                     businessDomainOptions={activeSpaceBusinessDomainOptions}
