@@ -1204,6 +1204,8 @@
     "knowledgeSpace": "知识空间",
     "model": "模型",
     "displayName": "显示名称",
+    "modelDescription": "描述信息",
+    "modelDescriptionPlaceholder": "将展示在模型选择器中",
     "vision": "视觉",
     "visionText": "开启后，模型将结合图像内容（支持PNG、JPEG、WEBP、非动画GIF格式）进行回答，注意仅多模态模型支持此能力。",
     "webSearchPrompt": "联网搜索提示词",

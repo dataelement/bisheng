@@ -22,6 +22,8 @@ import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
+import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
+import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
@@ -141,6 +143,9 @@ interface AiMessageBubbleProps {
         homepage/task chat opts in; the lightweight knowledge/file/article docks
         and the share view leave it off. */
     allowExport?: boolean;
+    /** Show the 点赞/点踩 feedback buttons under assistant answers. Default true;
+        the read-only anonymous share view passes false. */
+    allowFeedback?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
@@ -335,6 +340,7 @@ const AiMessageBubble = memo(
         setSiblingIdx,
         knowledgeChatLayout,
         allowExport,
+        allowFeedback = true,
         onOpenCitationPanel,
         activeCitationMessageId,
         onPreviewFile,
@@ -363,6 +369,7 @@ const AiMessageBubble = memo(
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
                 allowExport={allowExport}
+                allowFeedback={allowFeedback}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
                 onPreviewFile={onPreviewFile}
@@ -490,6 +497,7 @@ function AssistantBubble({
     setSiblingIdx,
     knowledgeChatLayout,
     allowExport,
+    allowFeedback = true,
     onOpenCitationPanel,
     activeCitationMessageId,
     onPreviewFile,
@@ -503,6 +511,7 @@ function AssistantBubble({
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
+    allowFeedback?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     onPreviewFile?: (file: ArtifactFile) => void;
@@ -608,6 +617,8 @@ function AssistantBubble({
                 <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
                     <TaskTurnPanel
                         versionId={message.linsightSessionVersionId || ""}
+                        liked={message.liked}
+                        allowFeedback={allowFeedback}
                         conversationId={message.conversationId}
                         answer={message.text}
                         onPreviewFile={onPreviewFile}
@@ -762,6 +773,18 @@ function AssistantBubble({
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />
+                                    {/* 点赞/点踩 — the answer persists as a chatmessage row, so
+                                        reuse the existing /liked + /chat/comment endpoints keyed
+                                        by message_id. Hidden on the read-only share view. */}
+                                    {allowFeedback && message.messageId && (
+                                        <MessageFeedbackButtons
+                                            liked={message.liked}
+                                            onLike={(liked) => likeChatApi(message.messageId, liked)}
+                                            onDislikeComment={(comment) =>
+                                                disLikeCommentApi(message.messageId, comment)
+                                            }
+                                        />
+                                    )}
                                 </>
                             }
                         />

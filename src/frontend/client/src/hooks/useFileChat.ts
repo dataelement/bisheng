@@ -65,13 +65,21 @@ export default function useFileChat(spaceId: string, fileId: string) {
                     return msgs;
                 });
             },
-            onFinal: (fullText) => {
+            onFinal: (fullText, realMessageId) => {
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (idx >= 0) {
+                        // Swap the temporary placeholder id for the real persisted
+                        // ChatMessage id so like/dislike targets the right row before a reload.
+                        msgs[idx] = {
+                            ...msgs[idx],
+                            text: fullText,
+                            ...(realMessageId != null && { messageId: String(realMessageId) }),
+                        };
+                    }
                     return msgs;
                 });
             },

@@ -376,7 +376,7 @@ export function KnowledgeSpaceHeader({
     );
 
     return (
-        <div className="flex min-h-8 items-center justify-between gap-3 pt-5 pb-4 max-[767px]:gap-2 max-[767px]:pt-4 max-[767px]:pb-3">
+        <div className="flex min-h-8 items-center justify-between gap-3 pt-4 pb-4 max-[767px]:gap-2 max-[767px]:pb-3">
 
                     {/* 左侧：根目录显示空间标题 + 信息 + 分享；进入文件夹后显示返回按钮 + 分隔线 + 当前文件夹名（设计稿 11772:70584） */}
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">

@@ -14,6 +14,7 @@ import { OverviewSection } from './sections/OverviewSection';
 import { ModalSection } from './sections/ModalSection';
 import { ConfirmDialogSection } from './sections/ConfirmDialogSection';
 import { ButtonSection } from './sections/ButtonSection';
+import { FeedbackSection } from './sections/FeedbackSection';
 
 interface NavItem {
   id: string;
@@ -26,6 +27,7 @@ const NAV: NavItem[] = [
   { id: 'modal', label: 'Modal 弹窗', status: 'wip' },
   { id: 'confirm', label: '二次确认弹窗', status: 'wip' },
   { id: 'button', label: 'Button 按钮', status: 'todo' },
+  { id: 'feedback', label: '点赞点踩反馈', status: 'done' },
 ];
 
 const STATUS_DOT: Record<NonNullable<NavItem['status']>, string> = {
@@ -81,6 +83,7 @@ export default function GalleryApp() {
           <ModalSection />
           <ConfirmDialogSection />
           <ButtonSection />
+          <FeedbackSection />
         </div>
       </main>
     </div>

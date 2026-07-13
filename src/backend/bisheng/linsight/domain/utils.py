@@ -387,6 +387,32 @@ async def persist_task_turn_message(session_model: LinsightSessionVersion) -> Ch
     )
 
 
+async def get_task_feedback_by_version(session_id: str) -> dict[str, dict]:
+    """Map each linsight session_version id -> its task ChatMessage feedback.
+
+    The task result is a bot ``ChatMessage`` (``category="task"``) in the
+    conversation ``session_id`` carrying ``extra.linsight_session_version_id``.
+    The like/dislike verdict is stored on that ChatMessage row (unified with
+    daily / knowledge / channel), so the standalone linsight page rates and
+    echoes the highlight via the shared chatmessage feedback instead of a
+    linsight-specific column.
+
+    Returns ``{session_version_id: {"message_id": int, "liked": int}}``.
+    """
+    rows = await ChatMessageDao.aget_messages_by_chat_id(chat_id=session_id, category_list=["task"], limit=1000)
+    result: dict[str, dict] = {}
+    for row in rows:
+        if not row.is_bot:
+            continue
+        try:
+            svid = json.loads(row.extra or "{}").get("linsight_session_version_id")
+        except (json.JSONDecodeError, TypeError):
+            svid = None
+        if svid:
+            result[svid] = {"message_id": row.id, "liked": row.liked or 0}
+    return result
+
+
 async def persist_task_user_turn(chat_id: str, user_id: int, question: str, files: list | None = None) -> ChatMessage:
     """F035 Track J (TJ-3): persist the task user turn into the unified conversation.
 

@@ -70,15 +70,25 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
 
     return (
         <Select value={String(value)} disabled={disabled} onValueChange={onChange}>
-            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] touch-mobile:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-black/5 focus:ring-0">
+            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-black/5 focus:ring-0">
                 <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-normal">
                     {label}
                 </span>
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent className="bg-white max-w-[240px]">
                 {options.map((opt: any) => (
-                    <SelectItem key={String(opt.id)} value={String(opt.id)}>
-                        {opt.displayName ?? opt.name}
+                    <SelectItem key={String(opt.id)} value={String(opt.id)} textValue={opt.displayName ?? opt.name}>
+                        <div className="flex min-w-0 items-center py-0.5">
+                            <span className="shrink-0">{opt.displayName ?? opt.name}</span>
+                            {opt.description && (
+                                <>
+                                    <span className="mx-1.5 h-3 w-px shrink-0 bg-[#E5E6EB]" />
+                                    <span className="min-w-0 truncate text-xs font-normal text-[#999999]">
+                                        {opt.description}
+                                    </span>
+                                </>
+                            )}
+                        </div>
                     </SelectItem>
                 ))}
             </SelectContent>

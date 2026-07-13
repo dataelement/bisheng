@@ -2,6 +2,7 @@ export * from './AlertDialog';
 export * from './Breadcrumb';
 export * from './Button';
 export * from './Checkbox';
+export * from './CommentDialog';
 export * from './DataTableColumnHeader';
 export * from './Dialog';
 export * from './ExpandableSearchField';
