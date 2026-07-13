@@ -1001,12 +1001,12 @@ export function CreateKnowledgeSpaceDrawer({
                                         onCompositionEnd={(e) => {
                                             descComposingRef.current = false;
                                             const v = e.currentTarget.value;
-                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
+                                            if (v.length > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
+                                                setDescription(v.slice(0, MAX_SPACE_DESC));
                                             }
                                         }}
                                         onChange={(e) => {
@@ -1015,12 +1015,12 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setDescription(v);
                                                 return;
                                             }
-                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
+                                            if (v.length > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
+                                                setDescription(v.slice(0, MAX_SPACE_DESC));
                                             } else {
                                                 setDescription(v);
                                             }
