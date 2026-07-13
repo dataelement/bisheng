@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import pLimit from "p-limit";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type * as pdfjsLib from "pdfjs-dist";
-import { useLocalize } from "~/hooks";
 import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
+import { useLocalize } from "~/hooks";
+
+const PDF_RENDER_CONCURRENCY = 2;
+const PDF_RENDER_OVERSCAN_PX = 1200;
+const PDF_PAGE_PLACEHOLDER_HEIGHT = 900;
+const PDF_MAX_PIXEL_RATIO = 1.5;
 
 interface PdfViewerProps {
     pdfDoc: pdfjsLib.PDFDocumentProxy | null;
@@ -10,6 +16,184 @@ interface PdfViewerProps {
     highlightBboxes?: CitationPdfBBox[];
     targetBBox?: CitationPdfBBox | null;
     onCurrentPageChange: (page: number) => void;
+}
+
+interface PageSize {
+    width: number;
+    height: number;
+    originalWidth: number;
+}
+
+type RenderLimit = ReturnType<typeof pLimit>;
+
+function releaseCanvas(canvas: HTMLCanvasElement | null) {
+    if (!canvas) return;
+    canvas.width = 0;
+    canvas.height = 0;
+    canvas.removeAttribute("style");
+}
+
+function isCancelledRender(error: unknown, signal: AbortSignal) {
+    if (signal.aborted) return true;
+    return error instanceof Error && (
+        error.name === "RenderingCancelledException" || error.name === "AbortError"
+    );
+}
+
+function PdfPage({
+    pdfDoc,
+    pageNumber,
+    zoomLevel,
+    containerWidth,
+    scrollRootRef,
+    renderLimit,
+    pageSize,
+    highlights,
+    onPageElement,
+    onPageSize,
+}: {
+    pdfDoc: pdfjsLib.PDFDocumentProxy;
+    pageNumber: number;
+    zoomLevel: number;
+    containerWidth: number;
+    scrollRootRef: RefObject<HTMLDivElement>;
+    renderLimit: RenderLimit;
+    pageSize?: PageSize;
+    highlights: CitationPdfBBox[];
+    onPageElement: (pageNumber: number, element: HTMLDivElement | null) => void;
+    onPageSize: (pageNumber: number, size: PageSize) => void;
+}) {
+    const pageRef = useRef<HTMLDivElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
+    const [rendered, setRendered] = useState(false);
+
+    const handlePageRef = useCallback((element: HTMLDivElement | null) => {
+        pageRef.current = element;
+        onPageElement(pageNumber, element);
+    }, [onPageElement, pageNumber]);
+
+    useEffect(() => {
+        const element = pageRef.current;
+        const root = scrollRootRef.current;
+        if (!element || !root || typeof IntersectionObserver === "undefined") {
+            setShouldRender(true);
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => setShouldRender(entry?.isIntersecting ?? false),
+            {
+                root,
+                rootMargin: `${PDF_RENDER_OVERSCAN_PX}px 0px`,
+                threshold: 0,
+            }
+        );
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [scrollRootRef]);
+
+    useEffect(() => {
+        if (shouldRender) return;
+        releaseCanvas(canvasRef.current);
+        setRendered(false);
+    }, [shouldRender]);
+
+    useEffect(() => {
+        if (!shouldRender || containerWidth <= 0) return;
+
+        const controller = new AbortController();
+        let renderTask: pdfjsLib.RenderTask | null = null;
+
+        void renderLimit(async () => {
+            if (controller.signal.aborted) return;
+            const page = await pdfDoc.getPage(pageNumber);
+            if (controller.signal.aborted) return;
+
+            const baseViewport = page.getViewport({ scale: 1 });
+            const availableWidth = Math.max(containerWidth - 32, 240);
+            const displayScale = (availableWidth / baseViewport.width) * (zoomLevel / 100);
+            const pixelRatio = Math.min(window.devicePixelRatio || 1, PDF_MAX_PIXEL_RATIO);
+            const renderViewport = page.getViewport({ scale: displayScale * pixelRatio });
+            const displaySize = {
+                width: renderViewport.width / pixelRatio,
+                height: renderViewport.height / pixelRatio,
+                originalWidth: baseViewport.width,
+            };
+            onPageSize(pageNumber, displaySize);
+
+            const canvas = canvasRef.current;
+            const context = canvas?.getContext("2d");
+            if (!canvas || !context || controller.signal.aborted) return;
+
+            canvas.width = Math.ceil(renderViewport.width);
+            canvas.height = Math.ceil(renderViewport.height);
+            canvas.style.width = `${displaySize.width}px`;
+            canvas.style.height = `${displaySize.height}px`;
+
+            renderTask = page.render({ canvasContext: context, viewport: renderViewport });
+            const cancelRender = () => renderTask?.cancel();
+            controller.signal.addEventListener("abort", cancelRender, { once: true });
+            try {
+                await renderTask.promise;
+                if (!controller.signal.aborted) setRendered(true);
+            } finally {
+                controller.signal.removeEventListener("abort", cancelRender);
+            }
+        }).catch((error: unknown) => {
+            if (!isCancelledRender(error, controller.signal)) {
+                console.warn(`Failed to render PDF page ${pageNumber}`, error);
+            }
+        });
+
+        return () => {
+            controller.abort();
+            renderTask?.cancel();
+        };
+    }, [containerWidth, onPageSize, pageNumber, pdfDoc, renderLimit, shouldRender, zoomLevel]);
+
+    const wrapperHeight = pageSize?.height ?? PDF_PAGE_PLACEHOLDER_HEIGHT;
+    const wrapperWidth = pageSize?.width ?? Math.max(containerWidth - 32, 240);
+
+    return (
+        <div
+            ref={handlePageRef}
+            data-page={pageNumber}
+            className="relative shadow-md bg-white flex items-start justify-center"
+            style={{ minHeight: wrapperHeight, width: wrapperWidth }}
+        >
+            <canvas ref={canvasRef} />
+            {!rendered && (
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-[#c9cdd4]">
+                    {pageNumber}
+                </div>
+            )}
+            {rendered && pageSize && highlights.length > 0 && (
+                <svg
+                    className="pointer-events-none absolute inset-0 z-10"
+                    width={pageSize.width}
+                    height={pageSize.height}
+                >
+                    {highlights.map((item, index) => {
+                        const scale = pageSize.width / pageSize.originalWidth;
+                        const [x1, y1, x2, y2] = item.bbox;
+                        return (
+                            <rect
+                                key={`${item.page}-${index}-${x1}-${y1}`}
+                                x={x1 * scale}
+                                y={y1 * scale}
+                                width={(x2 - x1) * scale}
+                                height={(y2 - y1) * scale}
+                                fill="rgba(255, 236, 61, 0.28)"
+                                stroke="#F7BA1E"
+                                strokeWidth={1}
+                            />
+                        );
+                    })}
+                </svg>
+            )}
+        </div>
+    );
 }
 
 export function PdfViewer({
@@ -23,16 +207,16 @@ export function PdfViewer({
     const localize = useLocalize();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-    const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
-    const renderingPages = useRef<Set<number>>(new Set());
-    const [pageSizes, setPageSizes] = useState<Record<number, { width: number; height: number; originalWidth: number }>>({});
-    // Measured width of the scroll viewport — used to fit-to-width when a PDF
-    // page is wider than the container (e.g., a 1440px page in a 640px panel).
+    const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
     const [containerWidth, setContainerWidth] = useState(0);
+    const renderLimit = useMemo(() => pLimit(PDF_RENDER_CONCURRENCY), [pdfDoc]);
+    const pageVisibilityRef = useRef<Map<number, number>>(new Map());
+    const isProgrammaticScrollRef = useRef(false);
+    const unlockScrollTimerRef = useRef<number | null>(null);
+    const bboxInitialScrollKeyRef = useRef("");
 
     const getPageNumber = useCallback((page: number) => {
         if (!pdfDoc) return Math.max(1, page);
-        // Citation bbox metadata follows the existing PreviewFile convention: page is zero-based.
         if (page >= 0 && page + 1 <= pdfDoc.numPages) return page + 1;
         return Math.min(Math.max(1, page), pdfDoc.numPages);
     }, [pdfDoc]);
@@ -40,154 +224,126 @@ export function PdfViewer({
     const highlightsByPage = useMemo(() => {
         return highlightBboxes.reduce<Record<number, CitationPdfBBox[]>>((acc, item) => {
             const pageNum = getPageNumber(item.page);
-            if (!acc[pageNum]) {
-                acc[pageNum] = [];
-            }
+            if (!acc[pageNum]) acc[pageNum] = [];
             acc[pageNum].push(item);
             return acc;
         }, {});
     }, [getPageNumber, highlightBboxes]);
-    /** Latest intersection ratio per page — observer only reports changed targets per callback */
-    const pageVisibilityRef = useRef<Map<number, number>>(new Map());
-    const isProgrammaticScrollRef = useRef(false);
-    const unlockScrollTimerRef = useRef<number | null>(null);
+    const targetBBoxPageNumber = targetBBox ? getPageNumber(targetBBox.page) : null;
+    const targetBBoxPageSize = targetBBoxPageNumber ? pageSizes[targetBBoxPageNumber] : undefined;
 
-    // Render a single PDF page to canvas
-    const renderPage = useCallback(
-        async (pageNum: number) => {
-            if (!pdfDoc || renderingPages.current.has(pageNum)) return;
-            if (containerWidth === 0) return;
-            const canvas = canvasRefs.current.get(pageNum);
-            if (!canvas) return;
+    const handlePageElement = useCallback((pageNumber: number, element: HTMLDivElement | null) => {
+        if (element) pageRefs.current.set(pageNumber, element);
+        else pageRefs.current.delete(pageNumber);
+    }, []);
 
-            renderingPages.current.add(pageNum);
-            try {
-                const page = await pdfDoc.getPage(pageNum);
-                const userScale = zoomLevel / 100;
-                const baseViewport = page.getViewport({ scale: 1 });
-                // Default scale: always fit to the container width — both shrink
-                // wide pages and upscale narrow ones so the page consistently
-                // matches the panel. User zoom multiplies on top.
-                const fitScale = containerWidth / baseViewport.width;
-                const displayScale = fitScale * userScale;
-                const oversample = 1.5;
-                const viewport = page.getViewport({ scale: displayScale * oversample });
-
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                canvas.style.width = `${viewport.width / oversample}px`;
-                canvas.style.height = `${viewport.height / oversample}px`;
-                setPageSizes((current) => ({
-                    ...current,
-                    [pageNum]: {
-                        width: viewport.width / oversample,
-                        height: viewport.height / oversample,
-                        originalWidth: baseViewport.width,
-                    },
-                }));
-
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    await page.render({ canvasContext: ctx, viewport }).promise;
-                }
-            } finally {
-                renderingPages.current.delete(pageNum);
+    const handlePageSize = useCallback((pageNumber: number, size: PageSize) => {
+        setPageSizes((current) => {
+            const previous = current[pageNumber];
+            if (
+                previous
+                && previous.width === size.width
+                && previous.height === size.height
+                && previous.originalWidth === size.originalWidth
+            ) {
+                return current;
             }
-        },
-        [pdfDoc, zoomLevel, containerWidth]
-    );
+            return { ...current, [pageNumber]: size };
+        });
+    }, []);
 
-    // Track scroll viewport width — drives fit-to-width when the panel resizes
-    // (e.g., AI assistant toggled, citation panel switches list/preview view).
-    // Depends on pdfDoc so the observer attaches once the loading placeholder
-    // is replaced by the real scroll container (the ref is null while loading).
+    const lockProgrammaticScroll = useCallback(() => {
+        isProgrammaticScrollRef.current = true;
+        if (unlockScrollTimerRef.current !== null) {
+            window.clearTimeout(unlockScrollTimerRef.current);
+        }
+        unlockScrollTimerRef.current = window.setTimeout(() => {
+            isProgrammaticScrollRef.current = false;
+        }, 700);
+    }, []);
+
     useEffect(() => {
         if (!pdfDoc) return;
-        const el = scrollContainerRef.current;
-        if (!el) return;
-        setContainerWidth(el.clientWidth);
+        const element = scrollContainerRef.current;
+        if (!element) return;
+        setContainerWidth(element.clientWidth);
         if (typeof ResizeObserver === "undefined") return;
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                setContainerWidth(entry.contentRect.width);
-            }
+        const observer = new ResizeObserver(([entry]) => {
+            if (entry) setContainerWidth(entry.contentRect.width);
         });
-        observer.observe(el);
+        observer.observe(element);
         return () => observer.disconnect();
     }, [pdfDoc]);
 
-    // Re-render all visible pages on zoom or container width change
     useEffect(() => {
-        if (!pdfDoc) return;
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
-            renderPage(i);
-        }
-    }, [pdfDoc, zoomLevel, containerWidth, renderPage]);
+        if (!targetPage) return;
+        const pageElement = pageRefs.current.get(targetPage);
+        if (!pageElement) return;
+        lockProgrammaticScroll();
+        pageElement.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, [lockProgrammaticScroll, targetPage]);
 
-    // Scroll to target page
     useEffect(() => {
-        if (targetPage && pageRefs.current.has(targetPage)) {
-            isProgrammaticScrollRef.current = true;
-            if (unlockScrollTimerRef.current !== null) {
-                window.clearTimeout(unlockScrollTimerRef.current);
-            }
-            pageRefs.current.get(targetPage)?.scrollIntoView({ behavior: "smooth", block: "start" });
-            unlockScrollTimerRef.current = window.setTimeout(() => {
-                isProgrammaticScrollRef.current = false;
-            }, 700);
+        if (!targetBBox) {
+            bboxInitialScrollKeyRef.current = "";
+            return;
         }
-    }, [targetPage]);
+        const pageNumber = targetBBoxPageNumber;
+        if (!pageNumber) return;
+        const scrollKey = `${pageNumber}:${targetBBox.bbox.join(",")}`;
+        if (bboxInitialScrollKeyRef.current === scrollKey) return;
+        const pageElement = pageRefs.current.get(pageNumber);
+        if (!pageElement) return;
+        bboxInitialScrollKeyRef.current = scrollKey;
+        lockProgrammaticScroll();
+        pageElement.scrollIntoView({ behavior: "auto", block: "start" });
+    }, [lockProgrammaticScroll, targetBBox, targetBBoxPageNumber]);
 
-    // Scroll to the requested citation bbox after the page dimensions are known.
     useEffect(() => {
         if (!targetBBox || !scrollContainerRef.current) return;
-
-        const pageNum = getPageNumber(targetBBox.page);
-        const pageEl = pageRefs.current.get(pageNum);
-        const pageSize = pageSizes[pageNum];
-        if (!pageEl || !pageSize) return;
+        const pageNumber = targetBBoxPageNumber;
+        if (!pageNumber) return;
+        const pageElement = pageRefs.current.get(pageNumber);
+        const pageSize = targetBBoxPageSize;
+        if (!pageElement || !pageSize) return;
 
         const scale = pageSize.width / pageSize.originalWidth;
-        const top = pageEl.offsetTop + targetBBox.bbox[1] * scale - 80;
-        scrollContainerRef.current.scrollTo({
-            top: Math.max(0, top),
-            behavior: "smooth",
-        });
-    }, [getPageNumber, pageSizes, targetBBox]);
+        const top = pageElement.offsetTop + targetBBox.bbox[1] * scale - 80;
+        lockProgrammaticScroll();
+        scrollContainerRef.current.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }, [lockProgrammaticScroll, targetBBox, targetBBoxPageNumber, targetBBoxPageSize]);
 
     useEffect(() => {
         return () => {
+            renderLimit.clearQueue();
             if (unlockScrollTimerRef.current !== null) {
                 window.clearTimeout(unlockScrollTimerRef.current);
             }
         };
-    }, []);
+    }, [renderLimit]);
 
-    // IntersectionObserver to track current visible page
     useEffect(() => {
         if (!pdfDoc || !scrollContainerRef.current) return;
-
         pageVisibilityRef.current.clear();
 
         const observer = new IntersectionObserver(
             (entries) => {
                 if (isProgrammaticScrollRef.current) return;
                 for (const entry of entries) {
-                    const pageNum = Number(entry.target.getAttribute("data-page"));
-                    if (!Number.isFinite(pageNum)) continue;
-                    pageVisibilityRef.current.set(pageNum, entry.intersectionRatio);
+                    const pageNumber = Number(entry.target.getAttribute("data-page"));
+                    if (Number.isFinite(pageNumber)) {
+                        pageVisibilityRef.current.set(pageNumber, entry.intersectionRatio);
+                    }
                 }
                 let mostVisiblePage = 1;
                 let maxRatio = 0;
-                pageVisibilityRef.current.forEach((ratio, pageNum) => {
+                pageVisibilityRef.current.forEach((ratio, pageNumber) => {
                     if (ratio > maxRatio) {
                         maxRatio = ratio;
-                        mostVisiblePage = pageNum;
+                        mostVisiblePage = pageNumber;
                     }
                 });
-                if (maxRatio > 0) {
-                    onCurrentPageChange(mostVisiblePage);
-                }
+                if (maxRatio > 0) onCurrentPageChange(mostVisiblePage);
             },
             {
                 root: scrollContainerRef.current,
@@ -195,63 +351,39 @@ export function PdfViewer({
             }
         );
 
-        pageRefs.current.forEach((el) => observer.observe(el));
+        pageRefs.current.forEach((element) => observer.observe(element));
         return () => observer.disconnect();
     }, [pdfDoc, onCurrentPageChange]);
 
     if (!pdfDoc) {
         return (
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                {localize("com_knowledge.loading")}</div>
+                {localize("com_knowledge.loading")}
+            </div>
         );
     }
 
     return (
-        <div
-            ref={scrollContainerRef}
-            className="flex-1 overflow-auto bg-[#fbfbfb]"
-        >
+        <div ref={scrollContainerRef} className="flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="flex flex-col items-center py-4 gap-3">
-                {Array.from({ length: pdfDoc.numPages }, (_, i) => (
-                    <div
-                        key={i + 1}
-                        data-page={i + 1}
-                        ref={(el) => {
-                            if (el) pageRefs.current.set(i + 1, el);
-                        }}
-                        className="relative shadow-md bg-white"
-                    >
-                        <canvas
-                            ref={(el) => {
-                                if (el) canvasRefs.current.set(i + 1, el);
-                            }}
+                {Array.from({ length: pdfDoc.numPages }, (_, index) => {
+                    const pageNumber = index + 1;
+                    return (
+                        <PdfPage
+                            key={pageNumber}
+                            pdfDoc={pdfDoc}
+                            pageNumber={pageNumber}
+                            zoomLevel={zoomLevel}
+                            containerWidth={containerWidth}
+                            scrollRootRef={scrollContainerRef}
+                            renderLimit={renderLimit}
+                            pageSize={pageSizes[pageNumber]}
+                            highlights={highlightsByPage[pageNumber] ?? []}
+                            onPageElement={handlePageElement}
+                            onPageSize={handlePageSize}
                         />
-                        {pageSizes[i + 1] && !!highlightsByPage[i + 1]?.length && (
-                            <svg
-                                className="pointer-events-none absolute inset-0 z-10"
-                                width={pageSizes[i + 1].width}
-                                height={pageSizes[i + 1].height}
-                            >
-                                {highlightsByPage[i + 1].map((item, index) => {
-                                    const scale = pageSizes[i + 1].width / pageSizes[i + 1].originalWidth;
-                                    const [x1, y1, x2, y2] = item.bbox;
-                                    return (
-                                        <rect
-                                            key={`${item.page}-${index}-${x1}-${y1}`}
-                                            x={x1 * scale}
-                                            y={y1 * scale}
-                                            width={(x2 - x1) * scale}
-                                            height={(y2 - y1) * scale}
-                                            fill="rgba(255, 236, 61, 0.28)"
-                                            stroke="#F7BA1E"
-                                            strokeWidth={1}
-                                        />
-                                    );
-                                })}
-                            </svg>
-                        )}
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
