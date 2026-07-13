@@ -430,7 +430,7 @@
   "com_notifications_tab_request": "请求",
   "com_notifications_title": "消息提醒",
   "com_notifications_view_approval": "查看审批",
-  "com_notifications_view_message": "查看消息",
+  "com_notifications_view_message": "查看详情",
   "com_notifications_toast_all_read": "已全部标记为已读",
   "com_notifications_toast_delete_failed": "删除失败",
   "com_notifications_toast_deleted": "消息已删除",
