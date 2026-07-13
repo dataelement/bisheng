@@ -4,8 +4,10 @@ import type { ComponentProps } from "react";
 import { CreateKnowledgeSpaceDrawer } from "./CreateKnowledgeSpaceDrawer";
 import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, getKnowledgeSpaceTagLibrariesApi, getKnowledgeSpaceTagLibrariesByKnowledgeApi, getKnowledgeSpaceTagLibraryDetailApi, getSpaceInfoApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
 
+const mockShowToast = jest.fn();
+
 jest.mock("~/Providers", () => ({
-    useToastContext: () => ({ showToast: jest.fn() }),
+    useToastContext: () => ({ showToast: mockShowToast }),
     useConfirm: () => jest.fn(),
 }));
 
@@ -38,6 +40,8 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.auto_tag_library": "标签库",
             "com_knowledge.select_auto_tag_library": "请选择标签库",
             "com_knowledge.tag_library_required_on_create": "创建知识库时必须选择标签库",
+            "com_knowledge.auto_tag_library_empty": "所选标签库中没有可用标签",
+            "com_knowledge.auto_tag_library_tags_loading": "标签库标签加载中，请稍候",
             "com_knowledge.loading": "加载中...",
         };
         return dict[key] || key;
@@ -223,6 +227,7 @@ async function selectDefaultTagLibrary() {
 describe("CreateKnowledgeSpaceDrawer", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockShowToast.mockReset();
     });
 
     test("审批创建模式下按创建权限隐藏无权限空间层级", async () => {
@@ -701,5 +706,47 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         await waitFor(() => expect(screen.getByText("知识库创建成功")).toBeInTheDocument());
         expect(screen.getByRole("button", { name: "前往知识库" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
+    });
+
+    test("选择空标签库时阻止提交并提示", async () => {
+        const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
+            data: [{ id: 9, name: "空标签库", tag_count: 0, is_builtin: false }],
+        });
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({
+            id: 9,
+            name: "空标签库",
+            tag_count: 0,
+            is_builtin: false,
+            tags: [],
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM, onConfirm });
+
+        await waitFor(() => expect(getKnowledgeSpaceTagLibrariesApi).toHaveBeenCalled());
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
+            target: { value: "空库测试" },
+        });
+        fireEvent.click(await screen.findByRole("button", { name: "空标签库" }));
+        await waitFor(() => {
+            expect(screen.getByText("所选标签库中没有可用标签")).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+                message: "所选标签库中没有可用标签",
+            }));
+        });
+        expect(onConfirm).not.toHaveBeenCalled();
     });
 });

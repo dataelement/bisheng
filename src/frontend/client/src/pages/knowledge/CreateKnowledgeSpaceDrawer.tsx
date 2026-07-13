@@ -169,6 +169,24 @@ export function resolveInitialCreateLevel(
     return enabledLevels[0] ?? SpaceLevel.PERSONAL;
 }
 
+/** True when at least one selected library has tags (matches backend validate_bindable_libraries). */
+export function selectedAutoTagLibrariesHaveTags(
+    libraryIds: number[],
+    tagLibraries: KnowledgeSpaceTagLibraryListItem[],
+    mergedTagNames: string[],
+): boolean {
+    if (mergedTagNames.length > 0) {
+        return true;
+    }
+    if (!libraryIds.length) {
+        return false;
+    }
+    return libraryIds.some((id) => {
+        const library = tagLibraries.find((item) => normalizeTagLibraryId(item.id) === id);
+        return Number(library?.tag_count ?? 0) > 0;
+    });
+}
+
 export function CreateKnowledgeSpaceDrawer({
     open,
     onOpenChange,
@@ -294,6 +312,20 @@ export function CreateKnowledgeSpaceDrawer({
         && spaceLevel === SpaceLevel.TEAM;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
+    const selectedLibrariesHaveTags = useMemo(
+        () => selectedAutoTagLibrariesHaveTags(autoTagLibraryIds, tagLibraries, autoTagLibraryTags),
+        [autoTagLibraryIds, tagLibraries, autoTagLibraryTags],
+    );
+    const allSelectedLibrariesReportZeroTags = useMemo(
+        () => autoTagLibraryIds.length > 0 && autoTagLibraryIds.every((id) => {
+            const library = tagLibraries.find((item) => normalizeTagLibraryId(item.id) === id);
+            return !library || Number(library.tag_count ?? 0) === 0;
+        }),
+        [autoTagLibraryIds, tagLibraries],
+    );
+    const showEmptyLibraryError = autoTagLibraryIds.length > 0
+        && !autoTagLibraryTagsLoading
+        && !selectedLibrariesHaveTags;
 
     const handleAutoTagLibraryIdsChange = (values: string[]) => {
         const normalized = [...new Set(
@@ -531,6 +563,20 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
+        if (autoTagLibraryTagsLoading && allSelectedLibrariesReportZeroTags) {
+            showToast({
+                message: localize("com_knowledge.auto_tag_library_tags_loading"),
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
+        if (!selectedLibrariesHaveTags) {
+            showToast({
+                message: localize("com_knowledge.auto_tag_library_empty"),
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
         const effectiveJoinPolicy: JoinPolicy = mode === "edit" ? originalEditJoinPolicy : "review";
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
@@ -757,6 +803,11 @@ export function CreateKnowledgeSpaceDrawer({
                                         {localize("com_knowledge.no_auto_tag_library")}
                                     </p>
                                 )}
+                                {showEmptyLibraryError ? (
+                                    <p className="text-[12px] text-[#F53F3F]">
+                                        {localize("com_knowledge.auto_tag_library_empty")}
+                                    </p>
+                                ) : null}
                                 {autoTagLibraryIds.length > 0 && (
                                     <div className="space-y-1.5 pt-1">
                                         <div className="text-[12px] text-[#86909C]">
@@ -766,11 +817,11 @@ export function CreateKnowledgeSpaceDrawer({
                                             <div className="text-[12px] text-[#86909C]">
                                                 {localize("com_knowledge.loading")}
                                             </div>
-                                        ) : autoTagLibraryTags.length === 0 ? (
+                                        ) : autoTagLibraryTags.length === 0 && !showEmptyLibraryError ? (
                                             <div className="text-[12px] text-[#86909C]">
                                                 {localize("com_knowledge.auto_tag_library_preview_empty")}
                                             </div>
-                                        ) : (
+                                        ) : autoTagLibraryTags.length === 0 ? null : (
                                             <div className="flex flex-wrap items-center">
                                                 {autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT).map((tag, idx) => (
                                                     <span

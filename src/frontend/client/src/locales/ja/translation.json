@@ -1475,6 +1475,8 @@
     "auto_tag_mode_custom": "カスタムタグ",
     "auto_tag_library_preview": "タグプレビュー",
     "auto_tag_library_preview_empty": "このタグライブラリにはまだタグがありません",
+    "auto_tag_library_empty": "選択したタグライブラリにタグがありません。別のライブラリを選ぶか、管理画面でタグを追加してください。",
+    "auto_tag_library_tags_loading": "タグライブラリのタグを読み込み中です。しばらくお待ちください",
     "auto_tag_custom_tags_placeholder": "1行1タグ、最大200個",
     "auto_tag_custom_tags_required": "カスタムタグを1つ以上入力してください",
     "auto_tag_custom_tags_limit": "最大200個までです",

@@ -1555,6 +1555,8 @@
     "auto_tag_mode_custom": "Custom Tags",
     "auto_tag_library_preview": "Tag Preview",
     "auto_tag_library_preview_empty": "This tag library has no tags yet",
+    "auto_tag_library_empty": "The selected tag library has no tags. Choose another library or add tags in the admin console first.",
+    "auto_tag_library_tags_loading": "Loading tag library tags, please wait",
     "auto_tag_custom_tags_placeholder": "One tag per line, up to 200",
     "auto_tag_custom_tags_required": "Enter at least one custom tag",
     "auto_tag_custom_tags_limit": "Up to 200 tags are allowed",
