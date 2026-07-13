@@ -199,6 +199,10 @@ class QuestionRepository:
                 if user_id is not None:
                     stmt = stmt.where(Question.invited_experts.contains(user_id))
 
+            # 排序相关的过滤条件需要在计算总数之前应用
+            if sort_by == "unanswered":
+                stmt = stmt.where(Question.answer_count == 0)
+
             subquery = stmt.subquery()
             count_stmt = select(func.count()).select_from(subquery)
             total = await session.exec(count_stmt) or 0
@@ -207,7 +211,7 @@ class QuestionRepository:
             if sort_by == "hot":
                 stmt = stmt.order_by(desc(Question.view_count), desc(Question.created_at))
             elif sort_by == "unanswered":
-                stmt = stmt.where(Question.answer_count == 0).order_by(desc(Question.created_at))
+                stmt = stmt.order_by(desc(Question.created_at))
             else:
                 stmt = stmt.order_by(desc(Question.created_at))
 
