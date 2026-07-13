@@ -13,6 +13,15 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
 
+KNOWLEDGE_REMARK_MAX_LENGTH = 4096
+
+
+def _limit_remark(remark: str | None) -> str | None:
+    """Keep persisted knowledge remarks within the configured column length."""
+    if remark is None:
+        return None
+    return remark[:KNOWLEDGE_REMARK_MAX_LENGTH]
+
 
 class KnowledgeFileStatus(int, Enum):
     PROCESSING = 1  # Sedang diproses
@@ -85,7 +94,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     user_metadata: dict[str, Any] | None = Field(
         default_factory=dict, sa_column=Column(JsonType, nullable=True), description="User-defined metadata"
     )
-    remark: str | None = Field(default="", sa_column=Column(String(length=4096)))
+    remark: str | None = Field(default="", sa_column=Column(String(length=KNOWLEDGE_REMARK_MAX_LENGTH)))
     file_encoding: str | None = Field(
         default=None,
         max_length=64,
@@ -132,7 +141,7 @@ class QAKnowledgeBase(SQLModelSerializable):
         description="1: Activate0: Close, the user manually closes;2: Sedang diproses3Failed to insert",
     )
     extra_meta: str | None = Field(default=None, index=False)
-    remark: str | None = Field(default="", sa_column=Column(String(length=4096)))
+    remark: str | None = Field(default="", sa_column=Column(String(length=KNOWLEDGE_REMARK_MAX_LENGTH)))
     tenant_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
@@ -313,6 +322,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def add_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         with get_sync_db_session() as session:
             session.add(knowledge_file)
             session.commit()
@@ -355,6 +365,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def aadd_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         async with get_async_db_session() as session:
             session.add(knowledge_file)
             await session.commit()
@@ -363,6 +374,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def update(cls, knowledge_file):
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         with get_sync_db_session() as session:
             session.add(knowledge_file)
             session.commit()
@@ -371,6 +383,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_update(cls, knowledge_file):
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         async with get_async_db_session() as session:
             session.add(knowledge_file)
             await session.commit()
@@ -381,26 +394,32 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def async_update_batch(cls, knowledge_files: list[KnowledgeFile]) -> bool:
         if not knowledge_files:
             return False
+        for knowledge_file in knowledge_files:
+            knowledge_file.remark = _limit_remark(knowledge_file.remark)
         async with get_async_db_session() as session:
             session.add_all(knowledge_files)
             await session.commit()
             return True
 
     @classmethod
-    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
+    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str | None = None):
         """Batch update file status"""
         statement = (
-            update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value, remark=reason)
+            update(KnowledgeFile)
+            .where(KnowledgeFile.id.in_(file_ids))
+            .values(status=status.value, remark=_limit_remark(reason))
         )
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
-    async def aupdate_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
+    async def aupdate_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str | None = None):
         """Batch update file status"""
         statement = (
-            update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value, remark=reason)
+            update(KnowledgeFile)
+            .where(KnowledgeFile.id.in_(file_ids))
+            .values(status=status.value, remark=_limit_remark(reason))
         )
         async with get_async_db_session() as session:
             await session.exec(statement)
@@ -690,7 +709,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         statement = statement.values(status=status.value)
 
         if remark:
-            statement = statement.values(remark=remark)
+            statement = statement.values(remark=_limit_remark(remark))
 
         with get_sync_db_session() as session:
             session.exec(statement)
@@ -1003,7 +1022,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
         statement = update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
 
-        statement = statement.values(status=status.value).values(remark=remark)
+        statement = statement.values(status=status.value).values(remark=_limit_remark(remark))
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
@@ -1021,7 +1040,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
         statement = update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
 
-        statement = statement.values(status=status.value).values(remark=remark)
+        statement = statement.values(status=status.value).values(remark=_limit_remark(remark))
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
