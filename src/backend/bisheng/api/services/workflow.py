@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 from datetime import datetime
 from time import perf_counter
+from typing import TYPE_CHECKING
 
 from fastapi.encoders import jsonable_encoder
 from langchain_classic.memory import ConversationBufferWindowMemory
@@ -43,10 +44,14 @@ from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
 
+if TYPE_CHECKING:
+    from bisheng.common.schemas.api import PageInfiniteCursorData
+
 # F027: when ReBAC fine-grained filtering shrinks a DB batch, refetch via keyset
 # to fill the requested page_size. Batch size balances DB round-trips against
 # wasted permission lookups when most rows are filtered out.
 _FLOW_PERMISSION_SCAN_BATCH_SIZE = 50
+_APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
 
 
 class WorkFlowService(BaseService):
@@ -146,7 +151,7 @@ class WorkFlowService(BaseService):
             if ot:
                 pairs.append((ot, str(one["id"])))
         if not pairs:
-            for one, ot in entries:
+            for one, _ot in entries:
                 one["can_share"] = False
             return data
         flags = await batch_user_may_share_app(user, pairs)
@@ -408,6 +413,155 @@ class WorkFlowService(BaseService):
             batch_cursor = [last_db["update_time"], last_db["id"]]
 
     @classmethod
+    async def _scan_visible_apps_page(
+        cls,
+        *,
+        user: UserPayload,
+        page: int,
+        page_size: int,
+        name: str | None,
+        status: int | None,
+        id_list: list[str] | None = None,
+        id_list_not_in: list[str] | None = None,
+        flow_type: int | None = None,
+        search_description: bool = False,
+        permission_id: str = "view_app",
+        ranking_user_id: int | None = None,
+    ) -> tuple[list[dict], dict[str, set[str]]]:
+        """Fill a legacy offset page using bounded keyset scans."""
+        normalized_page = max(int(page or 1), 1)
+        normalized_page_size = max(int(page_size or 1), 1)
+        page_start = (normalized_page - 1) * normalized_page_size
+        target_visible = normalized_page * normalized_page_size
+
+        scoped_super_admin = cls._is_scoped_super_admin(user)
+        is_admin_bypass = user.is_admin() and not scoped_super_admin
+        readable_type_ids: dict[int, list[str]] | None = None
+        permission_context = None
+        if not is_admin_bypass:
+            readable_type_ids = await cls._app_type_ids_for_permission(user, permission_id, flow_type)
+            if not cls._has_any_app_type_ids(readable_type_ids):
+                return [], {}
+            permission_context = await ApplicationPermissionService.build_app_permission_context_async(user)
+
+        visible: list[dict] = []
+        visible_permissions: dict[str, set[str]] = {}
+        batch_cursor: list | None = None
+        requested_permissions = list(dict.fromkeys([permission_id, "edit_app", "share_app"]))
+
+        while len(visible) < target_visible:
+            batch, db_has_more = await FlowDao.aget_all_apps(
+                name=name,
+                status=status,
+                id_list=id_list,
+                flow_type=flow_type,
+                id_list_not_in=id_list_not_in,
+                page=0,
+                limit=_APP_COMPAT_PAGE_SCAN_BATCH_SIZE,
+                search_description=search_description,
+                app_type_ids=readable_type_ids,
+                cursor=batch_cursor,
+                ranking_user_id=ranking_user_id,
+            )
+            if not batch:
+                break
+
+            last_db = batch[-1]
+            batch = cls.filter_supported_apps(batch)
+            if is_admin_bypass:
+                kept = batch
+            else:
+                permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+                    user,
+                    batch,
+                    requested_permissions,
+                    context=permission_context,
+                )
+                kept = [item for item in batch if permission_id in permission_map.get(str(item.get("id")), set())]
+                for item in kept:
+                    item_id = str(item.get("id"))
+                    visible_permissions[item_id] = permission_map.get(item_id, set())
+
+            visible.extend(kept)
+            if len(visible) >= target_visible or not db_has_more:
+                break
+            if ranking_user_id is not None:
+                batch_cursor = [last_db["_used_rank"], last_db["_sort_time"], last_db["id"]]
+            else:
+                batch_cursor = [last_db["update_time"], last_db["id"]]
+
+        page_items = visible[page_start:target_visible]
+        for item in page_items:
+            item.pop("_used_rank", None)
+            item.pop("_sort_time", None)
+        page_permissions = {
+            str(item.get("id")): visible_permissions.get(str(item.get("id")), set()) for item in page_items
+        }
+        return page_items, page_permissions
+
+    @classmethod
+    def _apply_page_can_share(
+        cls,
+        user: UserPayload,
+        data: list[dict],
+        permission_map: dict[str, set[str]],
+    ) -> list[dict]:
+        is_admin_bypass = user.is_admin() and not cls._is_scoped_super_admin(user)
+        for item in data:
+            item["can_share"] = is_admin_bypass or "share_app" in permission_map.get(str(item.get("id")), set())
+        return data
+
+    @classmethod
+    async def get_online_flows_page(
+        cls,
+        user: UserPayload,
+        name: str | None,
+        status: int,
+        tag_id: int | None,
+        flow_type: int | None,
+        page: int,
+        page_size: int,
+        *,
+        search_description: bool = False,
+        permission_id: str = "use_app",
+    ) -> list[dict]:
+        """Return the legacy online-app page without materializing all apps."""
+        if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
+            return []
+
+        tagged_ids: list[str] | None = None
+        if tag_id:
+            resource_types = []
+            if flow_type in (None, FlowType.WORKFLOW.value):
+                resource_types.append(ResourceTypeEnum.WORK_FLOW)
+            if flow_type in (None, FlowType.ASSISTANT.value):
+                resource_types.append(ResourceTypeEnum.ASSISTANT)
+            tagged_rows = await asyncio.gather(
+                *[TagDao.aget_resources_by_tags([tag_id], resource_type) for resource_type in resource_types]
+            )
+            tagged_ids = [row.resource_id for rows in tagged_rows for row in rows]
+            if not tagged_ids:
+                return []
+
+        data, permission_map = await cls._scan_visible_apps_page(
+            user=user,
+            page=page,
+            page_size=page_size,
+            name=name,
+            status=status,
+            id_list=tagged_ids,
+            flow_type=flow_type,
+            search_description=search_description,
+            permission_id=permission_id,
+            ranking_user_id=user.user_id,
+        )
+        writeable_ids = None
+        if not (user.is_admin() and not cls._is_scoped_super_admin(user)):
+            writeable_ids = {app_id for app_id, permissions in permission_map.items() if "edit_app" in permissions}
+        data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
+        return cls._apply_page_can_share(user, data, permission_map)
+
+    @classmethod
     async def get_all_flows_envelope(
         cls,
         user: UserPayload,
@@ -577,7 +731,7 @@ class WorkFlowService(BaseService):
         )
 
         app_type_ids: dict[int, list[str]] = {}
-        for (app_type, _), ids in zip(targets, fga_results):
+        for (app_type, _), ids in zip(targets, fga_results, strict=True):
             merged = [
                 *(str(one) for one in (ids or [])),
                 *(str(one) for one in binding_type_ids.get(app_type, [])),
@@ -870,7 +1024,7 @@ class WorkFlowService(BaseService):
 
     @classmethod
     def add_frequently_used_flows(cls, user: UserPayload, user_link_type: str, type_detail: str):
-        user_link, is_new = UserLinkDao.add_user_link(user.user_id, user_link_type, type_detail)
+        _user_link, is_new = UserLinkDao.add_user_link(user.user_id, user_link_type, type_detail)
         return is_new
 
     @classmethod
@@ -880,45 +1034,40 @@ class WorkFlowService(BaseService):
         page: int = 1,
         page_size: int = 8,
         keyword: str | None = None,
-    ) -> tuple[list, int]:
+    ) -> list[dict]:
         """
         Get a list of unsorted skills
         """
-        # SetujutagDapatkanidVertical
-        all_tags = TagDao.search_tags(
-            None, 0, 0, business_type=TagBusinessTypeEnum.APPLICATION, business_id=TagBusinessTypeEnum.APPLICATION.value
+        all_tags = await TagDao.asearch_tags(
+            None,
+            0,
+            0,
+            business_type=TagBusinessTypeEnum.APPLICATION,
+            business_id=TagBusinessTypeEnum.APPLICATION.value,
         )
         tag_id = [tag.id for tag in all_tags]
-        flow_ids_not_in = []
+        flow_ids_not_in: list[str] = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags_batch(tag_id, [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
-            if not ret:
-                return [], 0
-            flow_ids_not_in = [one.resource_id for one in ret]
-
-        # Get a list of skills visible to the user
-        if user.is_admin():
-            data, _ = FlowDao.get_all_apps(
-                keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0
+            tagged_rows = await asyncio.gather(
+                TagDao.aget_resources_by_tags(tag_id, ResourceTypeEnum.WORK_FLOW),
+                TagDao.aget_resources_by_tags(tag_id, ResourceTypeEnum.ASSISTANT),
             )
-        else:
-            data, _ = FlowDao.get_all_apps(
-                keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0
-            )
-        data = cls.filter_supported_apps(data)
-        data = await cls.filter_apps_by_permission_id(user, data, "view_app")
-        total = len(data)
-        start_index = (page - 1) * page_size
-        end_index = start_index + page_size
-        data = data[start_index:end_index]
+            flow_ids_not_in = list({row.resource_id for rows in tagged_rows for row in rows})
 
-        # <g id="Bold">Medical Treatment:</g>logo URL, convert relative paths to full accessible links
+        data, permission_map = await cls._scan_visible_apps_page(
+            user=user,
+            page=page,
+            page_size=page_size,
+            name=keyword,
+            status=FlowStatus.ONLINE.value,
+            id_list_not_in=flow_ids_not_in,
+            permission_id="view_app",
+        )
+
         for one in data:
             one["logo"] = cls.get_logo_share_link(one["logo"])
 
-        data = await cls.aenrich_apps_can_share(user, data)
-
-        return data, total
+        return cls._apply_page_can_share(user, data, permission_map)
 
     @classmethod
     async def get_one_workflow_simple_info(cls, workflow_id: str) -> Flow | None:

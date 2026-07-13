@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao as _UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import UserDepartmentDao as _UserDepartmentDao
 from bisheng.database.models.flow import FlowType
-from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.api.endpoints.resource_permission import (
     _get_bindings,
     _get_relation_models,
@@ -15,6 +16,7 @@ from bisheng.permission.api.endpoints.resource_permission import (
 )
 from bisheng.permission.domain.application_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.domain.services.permission_service import PermissionService as _PermissionService
 
 logger = logging.getLogger(__name__)
@@ -23,17 +25,30 @@ UserDepartmentDao = _UserDepartmentDao
 _APP_PERMISSION_MAP_CONCURRENCY = 20
 
 _PERMISSION_LEVEL_TO_RELATION = {
-    'owner': 'owner',
-    'can_manage': 'manager',
-    'can_edit': 'editor',
-    'can_read': 'viewer',
+    "owner": "owner",
+    "can_manage": "manager",
+    "can_edit": "editor",
+    "can_read": "viewer",
 }
 
 _FLOW_TYPE_TO_OBJECT_TYPE = {
-    FlowType.WORKFLOW.value: 'workflow',
-    FlowType.ASSISTANT.value: 'assistant',
+    FlowType.WORKFLOW.value: "workflow",
+    FlowType.ASSISTANT.value: "assistant",
 }
 _OBJECT_TYPE_TO_FLOW_TYPE = {object_type: flow_type for flow_type, object_type in _FLOW_TYPE_TO_OBJECT_TYPE.items()}
+
+
+@dataclass(slots=True)
+class ApplicationPermissionContext:
+    """Request-local data reused while evaluating multiple app batches."""
+
+    models: dict[str, dict]
+    bindings: list[dict]
+    user_subject_strings: set[str]
+    binding_department_paths: dict[int, str]
+    binding_index: dict[tuple[str, str], list[dict]]
+    tuple_cache: dict[str, list[dict]] = field(default_factory=dict)
+    tuple_department_paths: dict[int, str] = field(default_factory=dict)
 
 
 class ApplicationPermissionService:
@@ -54,20 +69,20 @@ class ApplicationPermissionService:
     @staticmethod
     def _permission_ids_for_relation(relation: str, model: dict | None = None) -> set[str]:
         if model is not None:
-            permissions = model.get('permissions') or []
-            if model.get('permissions_explicit') is True:
+            permissions = model.get("permissions") or []
+            if model.get("permissions_explicit") is True:
                 return set(permissions)
             if permissions:
                 return set(permissions)
-            if model.get('is_system'):
-                return default_permission_ids_for_relation(model.get('relation'))
+            if model.get("is_system"):
+                return default_permission_ids_for_relation(model.get("relation"))
             return set()
         return default_permission_ids_for_relation(relation)
 
     @staticmethod
     async def _get_relation_models_map() -> dict[str, dict]:
         raw_models = await _get_relation_models()
-        return {m['id']: _normalize_model_dict(m) for m in raw_models}
+        return {m["id"]: _normalize_model_dict(m) for m in raw_models}
 
     @staticmethod
     async def _get_current_user_subject_strings(login_user: UserPayload) -> set[str]:
@@ -76,12 +91,12 @@ class ApplicationPermissionService:
     @staticmethod
     async def _get_binding_department_paths(bindings: list[dict]) -> dict[int, str]:
         department_ids = {
-            int(binding['subject_id'])
+            int(binding["subject_id"])
             for binding in bindings
-            if binding.get('subject_type') == 'department' and binding.get('include_children')
+            if binding.get("subject_type") == "department" and binding.get("include_children")
         }
         departments = await DepartmentDao.aget_by_ids(list(department_ids))
-        return {dept.id: dept.path or '' for dept in departments}
+        return {dept.id: dept.path or "" for dept in departments}
 
     @classmethod
     async def get_bound_app_type_ids_async(
@@ -116,13 +131,13 @@ class ApplicationPermissionService:
 
         result: dict[int, list[str]] = {}
         for binding in bindings:
-            resource_type = binding.get('resource_type')
+            resource_type = binding.get("resource_type")
             app_flow_type = _OBJECT_TYPE_TO_FLOW_TYPE.get(resource_type)
             if app_flow_type is None:
                 continue
             if flow_type is not None and app_flow_type != flow_type:
                 continue
-            resource_id = binding.get('resource_id')
+            resource_id = binding.get("resource_id")
             if resource_id is None:
                 continue
             if not FineGrainedPermissionService._binding_matches_current_user(
@@ -133,17 +148,14 @@ class ApplicationPermissionService:
             ):
                 continue
 
-            model = models.get(binding.get('model_id')) if binding.get('model_id') else None
-            granted_permission_ids = cls._permission_ids_for_relation(binding.get('relation') or '', model)
+            model = models.get(binding.get("model_id")) if binding.get("model_id") else None
+            granted_permission_ids = cls._permission_ids_for_relation(binding.get("relation") or "", model)
             if not (granted_permission_ids & permission_id_set):
                 continue
 
             result.setdefault(app_flow_type, []).append(str(resource_id))
 
-        return {
-            app_flow_type: list(dict.fromkeys(resource_ids))
-            for app_flow_type, resource_ids in result.items()
-        }
+        return {app_flow_type: list(dict.fromkeys(resource_ids)) for app_flow_type, resource_ids in result.items()}
 
     @staticmethod
     def _user_matches_binding(binding: dict, tuple_user: str, user_subject_strings: set[str]) -> bool:
@@ -151,7 +163,7 @@ class ApplicationPermissionService:
             return False
         expected = (
             f"user:{binding['subject_id']}"
-            if binding.get('subject_type') == 'user'
+            if binding.get("subject_type") == "user"
             else f"{binding.get('subject_type')}:{binding['subject_id']}#member"
         )
         return tuple_user == expected
@@ -167,42 +179,42 @@ class ApplicationPermissionService:
         binding_department_paths: dict[int, str],
         user_subject_strings: set[str],
     ) -> dict | None:
-        exact_subject_type = 'user'
+        exact_subject_type = "user"
         exact_subject_id = None
-        if tuple_user.startswith('user_group:'):
-            exact_subject_type = 'user_group'
-            exact_subject_id = int(tuple_user.split(':', 1)[1].split('#', 1)[0])
-        elif tuple_user.startswith('department:'):
-            exact_subject_type = 'department'
-            exact_subject_id = int(tuple_user.split(':', 1)[1].split('#', 1)[0])
-        elif tuple_user.startswith('user:'):
-            exact_subject_id = int(tuple_user.split(':', 1)[1])
+        if tuple_user.startswith("user_group:"):
+            exact_subject_type = "user_group"
+            exact_subject_id = int(tuple_user.split(":", 1)[1].split("#", 1)[0])
+        elif tuple_user.startswith("department:"):
+            exact_subject_type = "department"
+            exact_subject_id = int(tuple_user.split(":", 1)[1].split("#", 1)[0])
+        elif tuple_user.startswith("user:"):
+            exact_subject_id = int(tuple_user.split(":", 1)[1])
 
         for binding in bindings:
-            if binding.get('resource_type') != object_type or str(binding.get('resource_id')) != str(resource_id):
+            if binding.get("resource_type") != object_type or str(binding.get("resource_id")) != str(resource_id):
                 continue
-            if binding.get('relation') != relation:
+            if binding.get("relation") != relation:
                 continue
-            if exact_subject_id is not None and not binding.get('include_children'):
+            if exact_subject_id is not None and not binding.get("include_children"):
                 if (
-                    binding.get('subject_type') == exact_subject_type
-                    and int(binding.get('subject_id')) == exact_subject_id
+                    binding.get("subject_type") == exact_subject_type
+                    and int(binding.get("subject_id")) == exact_subject_id
                     and cls._user_matches_binding(binding, tuple_user, user_subject_strings)
                 ):
                     return binding
 
-        if tuple_user.startswith('department:'):
-            tuple_department_id = int(tuple_user.split(':', 1)[1].split('#', 1)[0])
+        if tuple_user.startswith("department:"):
+            tuple_department_id = int(tuple_user.split(":", 1)[1].split("#", 1)[0])
             tuple_department_rows = await DepartmentDao.aget_by_ids([tuple_department_id])
-            tuple_department_path = tuple_department_rows[0].path if tuple_department_rows else ''
+            tuple_department_path = tuple_department_rows[0].path if tuple_department_rows else ""
             for binding in bindings:
-                if binding.get('resource_type') != object_type or str(binding.get('resource_id')) != str(resource_id):
+                if binding.get("resource_type") != object_type or str(binding.get("resource_id")) != str(resource_id):
                     continue
-                if binding.get('relation') != relation:
+                if binding.get("relation") != relation:
                     continue
-                if binding.get('subject_type') != 'department' or not binding.get('include_children'):
+                if binding.get("subject_type") != "department" or not binding.get("include_children"):
                     continue
-                binding_path = binding_department_paths.get(int(binding.get('subject_id')))
+                binding_path = binding_department_paths.get(int(binding.get("subject_id")))
                 if binding_path and tuple_department_path and tuple_department_path.startswith(binding_path):
                     return binding
         return None
@@ -220,6 +232,7 @@ class ApplicationPermissionService:
         user_subject_strings: set[str] | None = None,
         tuple_cache: dict[str, list[dict]] | None = None,
         tuple_department_paths: dict[int, str] | None = None,
+        binding_index: dict[tuple[str, str], list[dict]] | None = None,
     ) -> set[str]:
         if models is None:
             models = await cls._get_relation_models_map()
@@ -240,6 +253,7 @@ class ApplicationPermissionService:
             user_subject_strings=user_subject_strings,
             tuple_cache=tuple_cache,
             tuple_department_paths=tuple_department_paths,
+            binding_index=binding_index,
         )
 
     @classmethod
@@ -248,25 +262,21 @@ class ApplicationPermissionService:
         login_user: UserPayload,
         rows: list[dict],
         permission_ids: Iterable[str],
+        *,
+        context: ApplicationPermissionContext | None = None,
     ) -> dict[str, set[str]]:
         permission_id_set = set(permission_ids)
         if not rows or not permission_id_set:
             return {}
 
-        models, bindings, user_subject_strings = await asyncio.gather(
-            cls._get_relation_models_map(),
-            _get_bindings(),
-            cls._get_current_user_subject_strings(login_user),
-        )
-        binding_department_paths = await cls._get_binding_department_paths(bindings)
-        tuple_cache: dict[str, list[dict]] = {}
-        tuple_department_paths: dict[int, str] = {}
+        if context is None:
+            context = await cls.build_app_permission_context_async(login_user)
 
         semaphore = asyncio.Semaphore(_APP_PERMISSION_MAP_CONCURRENCY)
 
         async def _one(row: dict) -> tuple[str, set[str]]:
-            object_type = _FLOW_TYPE_TO_OBJECT_TYPE.get(row.get('flow_type'))
-            object_id = str(row.get('id'))
+            object_type = _FLOW_TYPE_TO_OBJECT_TYPE.get(row.get("flow_type"))
+            object_id = str(row.get("id"))
             if object_type is None or not object_id:
                 return object_id, set()
             async with semaphore:
@@ -274,17 +284,38 @@ class ApplicationPermissionService:
                     login_user,
                     object_type,
                     object_id,
-                    models=models,
-                    bindings=bindings,
-                    binding_department_paths=binding_department_paths,
-                    user_subject_strings=user_subject_strings,
-                    tuple_cache=tuple_cache,
-                    tuple_department_paths=tuple_department_paths,
+                    models=context.models,
+                    bindings=context.bindings,
+                    binding_department_paths=context.binding_department_paths,
+                    user_subject_strings=context.user_subject_strings,
+                    tuple_cache=context.tuple_cache,
+                    tuple_department_paths=context.tuple_department_paths,
+                    binding_index=context.binding_index,
                 )
             return object_id, perms & permission_id_set
 
         pairs = await asyncio.gather(*[_one(row) for row in rows])
-        return {row_id: perms for row_id, perms in pairs}
+        return dict(pairs)
+
+    @classmethod
+    async def build_app_permission_context_async(
+        cls,
+        login_user: UserPayload,
+    ) -> ApplicationPermissionContext:
+        """Build one permission context for all app batches in a request."""
+        models, bindings, user_subject_strings = await asyncio.gather(
+            cls._get_relation_models_map(),
+            _get_bindings(),
+            cls._get_current_user_subject_strings(login_user),
+        )
+        binding_department_paths = await cls._get_binding_department_paths(bindings)
+        return ApplicationPermissionContext(
+            models=models,
+            bindings=bindings,
+            user_subject_strings=user_subject_strings,
+            binding_department_paths=binding_department_paths,
+            binding_index=FineGrainedPermissionService.build_binding_index(bindings),
+        )
 
     @classmethod
     def get_app_permission_map_sync(
@@ -308,14 +339,16 @@ class ApplicationPermissionService:
             return []
         permission_map = cls.get_app_permission_map_sync(
             login_user,
-            [{'id': object_id, 'flow_type': FlowType.WORKFLOW.value if object_type == 'workflow' else FlowType.ASSISTANT.value} for object_id in normalized_ids],
+            [
+                {
+                    "id": object_id,
+                    "flow_type": FlowType.WORKFLOW.value if object_type == "workflow" else FlowType.ASSISTANT.value,
+                }
+                for object_id in normalized_ids
+            ],
             [permission_id],
         )
-        return [
-            object_id
-            for object_id in normalized_ids
-            if permission_id in permission_map.get(object_id, set())
-        ]
+        return [object_id for object_id in normalized_ids if permission_id in permission_map.get(object_id, set())]
 
     @classmethod
     async def has_any_permission_async(
@@ -334,8 +367,8 @@ class ApplicationPermissionService:
         allowed = bool(required_permissions & effective_permissions)
         if not allowed:
             logger.warning(
-                'application permission denied user=%s object=%s:%s required=%s effective=%s',
-                getattr(login_user, 'user_id', None),
+                "application permission denied user=%s object=%s:%s required=%s effective=%s",
+                getattr(login_user, "user_id", None),
                 object_type,
                 object_id,
                 sorted(required_permissions),
@@ -360,8 +393,8 @@ class ApplicationPermissionService:
         allowed = bool(required_permissions & effective_permissions)
         if not allowed:
             logger.warning(
-                'application permission denied(sync) user=%s object=%s:%s required=%s effective=%s',
-                getattr(login_user, 'user_id', None),
+                "application permission denied(sync) user=%s object=%s:%s required=%s effective=%s",
+                getattr(login_user, "user_id", None),
                 object_type,
                 object_id,
                 sorted(required_permissions),

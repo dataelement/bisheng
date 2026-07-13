@@ -9,11 +9,11 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
-| design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
+| spec.md | ✅ 已评审 | 2026-06-25 初版通过；2026-07-13 F 组增补 AC-32~39，用户确认保持两接口 `page/limit` 裸列表契约。 |
+| design.md | ✅ 已评审 | 2026-06-26 初版通过；2026-07-13 F 组增补通过，Constitution C1–C7 门禁 PASS，INV-6 页码兼容窗口已登记 release-contract。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | ✅ dev 收尾 | T0~T11 全部 ✅（T8a N/A）；T10 静态扫描 ✅、性能压测交 CI；T1b 关单不做、T5方案2 暂缓（D8）。偏差见下方「实际偏差记录」 |
-| code-review | ✅ PASS | 2026-06-26 `/code-review --base feat/2.6.0`（L2 7 维度 + 3 并行专项 agent）。修 2 项：① 频道详情 membership gating 改 `find_membership_split` 取 highest-ACTIVE（修高阶非活跃行遮蔽 ACTIVE 致 fail-closed 误拒，含回归测试）；② 助手 cursor scan `permission_id` 合并一致化。误报已逐一核实（roster 跨租户/前端 resetKey/admin 文件授权均非真 bug）。零新增回归/lint/TS。判定 **PASS** |
+| 实现 | ✅ F 组完成 | T0~T11 初版已完成；T12~T15 已完成 `/chat/online` 与 `/workstation/app/uncategorized` 兼容优化。 |
+| code-review | ✅ PASS | 2026-06-26 初版 PASS；2026-07-13 F 组专项 review PASS：修正权限 binding index 跨批复用，核对权限等价、tenant subquery、默认排序与 DM8 keyset。44 项相关回归通过，ruff/arch-guard 通过。 |
 
 ---
 
@@ -67,6 +67,15 @@
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
 | T10 | **静态扫描 + 性能基线**：按 AC-31 grep 断言（详情不再调 `_calculate_sub_channel_unread_counts`、广场无逐空间 `get_permission_level`、C 组无 `page=0,limit=0` 后切片、侧栏无 mount 期批量 `checkPermission`、E 组 key 含版本/哈希且写路径零失效调用）；用 `seed_load_test_org.sh` 造大用户量数据，压 `/channel/manager/{id}`、`/space/joined`、`/children` 深展开，记录 DB/FGA/ES 往返数 + P95 对比 design §7.1，落 `loadtest-report.md` | `loadtest-report.md` | AC-26, AC-27, AC-28, AC-29, AC-30, AC-31 | T1~T9b | 🔲 |
+
+### Wave 5 — F 组在线 / 未分类列表兼容优化（2026-07-13 增补）
+
+| # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
+|---|---|---|---|---|---|
+| T12 | **DAO 会话排序 + 双库 keyset**：扩展 `FlowDao.aget_all_apps` 可选当前用户最近会话排序；会话 subquery 显式 tenant；使用 `(used_rank ASC, sort_time DESC, id DESC)` 展开式 keyset；无 count/迁移 | `database/models/flow.py` + DAO 单测 | AC-34, AC-36, AC-39 | 无 | ✅ |
+| T13 | **请求级应用权限上下文复用**：`ApplicationPermissionService` 提供一次构建、跨扫描批复用的 context（含 binding index / tuple cache）；每批同时求请求权限/`edit_app`/`share_app`，粗过滤不替代精确复核 | `application_permission_service.py` + 权限单测 | AC-33, AC-38 | 无 | ✅ |
+| T14 | **两接口有界扫描**：新增 service 内部页码兼容扫描；在线默认排序不再 fetch-all/全会话/Python 全排序；未分类标签走异步 DAO、空关联继续查询、页内装饰 | `workflow.py` + `chat.py` + `apps.py` | AC-32~38 | T12, T13 | ✅ |
+| T15 | **回归与门禁**：稀疏权限补批、稳定复合游标、停止扫描、页外不装饰、标签空关联；44 项相关回归通过；ruff/arch-guard 通过。线上 P95 待部署新代码后复测 | `test/workstation/` + 验证记录 | AC-32~39 | T12~T14 | ✅ |
 
 ---
 
