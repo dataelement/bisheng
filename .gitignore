@@ -287,3 +287,4 @@ test.sh
 sg_test.sh
 sg-sync-api-preview.md
 sg-sync-api-内部.md
+mdf_file_read_count.sh
