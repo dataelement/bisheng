@@ -197,9 +197,9 @@ class QuestionRepository:
                     user_id_str = str(user_id)
                     stmt = stmt.where(or_(
                                         Question.invited_experts == user_id_str,
-                                        Question.invited_experts.like(f"{user_id_str},%"),
-                                        Question.invited_experts.like(f"%,{user_id_str},%"),
-                                        Question.invited_experts.like(f"%,{user_id_str}"),
+                                        Question.invited_experts.like(f"{user_id_str};%"),
+                                        Question.invited_experts.like(f"%;{user_id_str};%"),
+                                        Question.invited_experts.like(f"%;{user_id_str}"),
                                     ))
 
             # 排序相关的过滤条件需要在计算总数之前应用
