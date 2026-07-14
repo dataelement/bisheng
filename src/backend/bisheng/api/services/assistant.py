@@ -588,7 +588,7 @@ class AssistantService(BaseService, AssistantUtils):
                 await tmp_agent.init_assistant()
             except Exception as e:
                 logger.exception("online agent init failed")
-                raise AssistantInitError(exception=e)
+                raise AssistantInitError(exception=e, msg=f"Assistant onboarding failed: {e}") from e
         assistant.status = status
         AssistantDao.update_assistant(assistant)
         await telemetry_service.log_event(
