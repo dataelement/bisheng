@@ -36,6 +36,7 @@ from bisheng.knowledge.domain.models.knowledge import (
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalFileBrowseReq,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
     ShougangPortalQaFileSearchReq,
@@ -1553,7 +1554,7 @@ async def test_move_file_folder_replaces_permission_parent_tuple(service):
 
 
 @pytest.mark.asyncio
-async def test_shougang_portal_file_search_uses_batch_file_query(service):
+async def test_shougang_portal_file_browse_uses_batch_file_query(service):
     spaces = [
         _make_space(space_id=12, user_id=7),
         _make_space(space_id=18, user_id=7),
@@ -1604,8 +1605,8 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
             side_effect=AssertionError("shougang portal search should use batch file query"),
         ),
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(
                 space_ids=[12, 18],
                 limit=10,
                 sort="updated_at",
@@ -1626,6 +1627,12 @@ def test_shougang_portal_file_search_request_defaults_to_relevance_sort():
     req = ShougangPortalFileSearchReq(space_ids=[12])
 
     assert req.sort == "relevance"
+
+
+def test_shougang_portal_file_browse_request_defaults_to_updated_time_desc_sort():
+    req = ShougangPortalFileBrowseReq(space_ids=[12])
+
+    assert req.sort == "updated_at_desc"
 
 
 @pytest.mark.asyncio
@@ -1667,8 +1674,8 @@ async def test_latest_selected_explicit_updated_time_sort_bypasses_hot_read_rank
             side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
         ),
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(
                 recommendation="latest_selected",
                 space_ids=[12],
                 sort="updated_at_asc",
@@ -1680,7 +1687,7 @@ async def test_latest_selected_explicit_updated_time_sort_bypasses_hot_read_rank
 
 
 @pytest.mark.asyncio
-async def test_shougang_portal_file_search_filters_document_type_before_pagination(service):
+async def test_shougang_portal_file_browse_filters_document_type_before_pagination(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = "报告知识库"
     old_report = _make_file(file_id=1580, knowledge_id=12, file_name="质量分析报告.pdf")
@@ -1718,8 +1725,8 @@ async def test_shougang_portal_file_search_filters_document_type_before_paginati
             side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
         ),
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(
                 space_ids=[12],
                 document_type="rpt",
                 limit=1,
@@ -1735,7 +1742,7 @@ async def test_shougang_portal_file_search_filters_document_type_before_paginati
 
 
 @pytest.mark.asyncio
-async def test_shougang_portal_file_search_filters_business_domain_code_before_pagination(service):
+async def test_shougang_portal_file_browse_filters_business_domain_code_before_pagination(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = "设备知识库"
     pm_file = _make_file(file_id=1580, knowledge_id=12, file_name="设备点检标准.pdf")
@@ -1777,8 +1784,8 @@ async def test_shougang_portal_file_search_filters_business_domain_code_before_p
             side_effect=fake_enrich,
         ),
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(
                 space_ids=[12],
                 business_domain_code="pm",
                 limit=10,
@@ -2106,7 +2113,7 @@ async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_p
 
 
 @pytest.mark.asyncio
-async def test_shougang_portal_file_search_respects_limit(service):
+async def test_shougang_portal_file_search_ignores_legacy_limit(service):
     space = _make_space(space_id=12, user_id=7)
     files = [
         _make_file(file_id=1580, knowledge_id=12, file_name="file1.pdf"),
@@ -2184,7 +2191,30 @@ async def test_shougang_portal_file_search_respects_limit(service):
             )
         )
 
-    assert len(result["data"]) == 2
+    assert [item["id"] for item in result["data"]] == [1580, 1801, 1802, 1803]
+    assert result["has_more"] is False
+    assert result["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_file_search_delegates_empty_keyword_to_browse(service):
+    expected = {"data": [], "has_more": False, "next_cursor": None}
+    with patch.object(
+        service,
+        "browse_shougang_portal_files",
+        new_callable=AsyncMock,
+        return_value=expected,
+    ) as mock_browse:
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(space_ids=[12], sort="updated_at_desc", limit=7)
+        )
+
+    assert result == expected
+    browse_req = mock_browse.await_args.args[0]
+    assert isinstance(browse_req, ShougangPortalFileBrowseReq)
+    assert browse_req.space_ids == [12]
+    assert browse_req.sort == "updated_at_desc"
+    assert browse_req.limit == 7
 
 
 @pytest.mark.asyncio
@@ -2861,8 +2891,8 @@ async def test_shougang_portal_public_space_fast_path_skips_child_permission_fil
             return_value=[{**file_record.model_dump(), "tags": []}],
         ),
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(space_ids=[12], sort="updated_at")
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(space_ids=[12], sort="updated_at")
         )
 
     assert len(result["data"]) == 1
@@ -2898,8 +2928,8 @@ async def test_shougang_portal_non_public_space_keeps_child_permission_filter(se
             return_value=[],
         ) as mock_filter,
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(space_ids=[12], sort="updated_at")
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(space_ids=[12], sort="updated_at")
         )
 
     assert result["data"] == []
