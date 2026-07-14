@@ -208,25 +208,25 @@ html {
   --brand-200: 163 210 192;  /* #A3D2C0 */
   --brand-300: 111 186 160;  /* #6FBAA0 */
   --brand-400: 61 155 120;   /* #3D9B78 */
-  --brand-500: 24 124 84;    /* #187C54 — main brand green */
+  --brand-500: 22 156 71;    /* #169C47 — main brand green */
   --brand-600: 19 99 69;     /* #136345 — button / pressed */
   --brand-700: 15 77 54;     /* #0F4D36 */
   --brand-800: 10 56 38;     /* #0A3826 */
   --brand-900: 6 38 25;      /* #062619 */
-  --brand-main: 24 124 84;   /* #187C54 */
+  --brand-main: 22 156 71;   /* #169C47 */
   --brand-muted: 92 138 119; /* #5C8A77 — muted/low-sat brand accent (e.g. pin) */
 
   /* Illustration palette — green mode keeps the source SVGs' vivid greens so the
      illustrations match their original artwork (not the darker UI brand green). */
-  --illus-100: 189 230 211;  /* #BDE6D3 */
-  --illus-300: 124 208 177;  /* #7CD0B1 */
-  --illus-500: 25 180 118;   /* #19B476 */
+  --illus-100: 221 240 232;  /* #DDF0E8 */
+  --illus-300: 162 215 181;  /* #A2D7B5 */
+  --illus-500: 22 156 71;    /* #169C47 */
 
   /* Brand-tinted surfaces driven by their own vars (not the blue palette). */
   /* HSL of the brand green #187C54 — 156 68% 29% rounds to rgb(24,124,84), exactly
      matching --brand-500. The old 154 67% 29% rounded to rgb(24,123,81), so
      bg-primary (e.g. picker checkboxes) drifted ~3/255 off the brand green. */
-  --primary: 156 68% 29%;
+  --primary: 142 75% 35%;
   --surface-active-alt: rgb(228 241 236);
   --surface-primary-alt: #f4faf7;
   --search-input: hsla(152, 40%, 99%, 1);
@@ -261,14 +261,14 @@ html {
    <Button> default `bg-primary` — those win on the default state otherwise. Hover/active
    step to progressively darker greens so the state change is visible. */
 .theme-green .btn-brand-primary:not(:disabled) {
-  background-color: #19b476 !important; /* default: green fill */
+  background-color: #169c47 !important; /* default: green fill (matches --primary) */
   color: #fff !important; /* default: white text / icon */
 }
 .theme-green .btn-brand-primary:not(:disabled):hover {
-  background-color: #17a66d !important; /* hover: slightly darker green */
+  background-color: #148f41 !important; /* hover: slightly darker green */
 }
 .theme-green .btn-brand-primary:not(:disabled):active {
-  background-color: #159964 !important; /* active: deeper green on press */
+  background-color: #12813b !important; /* active: deeper green on press */
 }
 /* Force a direct-child icon white too — some send buttons pin `[&>svg]:text-white`
    already, but others inherit; this keeps every primary-button icon white on the fill. */
