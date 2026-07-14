@@ -8,18 +8,45 @@ module.exports = {
   darkMode: ['class'],
   theme: {
     fontFamily: {
-      // -apple-system / BlinkMacSystemFont 在 macOS / iOS / Apple 设备的浏览器里
-      // 解析为系统字体（San Francisco / SF Pro 等），同时 Apple System 字体在
-      // 中文系统下会自动联动 PingFang SC，所以放最前面体验最好。
-      // 非 Apple 系统再回退到 Inter / 系统默认 sans-serif。
-      sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'sans-serif'],
-      mono: ['Roboto Mono', 'monospace'],
+      // font-family-base / font-family-mono in docs-ui-refactor/基础-字体规范.md §1.
+      // Pure system stack, kept in sync with the global body/html rule in src/style.css
+      // (that hardcoded rule is what actually sets the app-wide font; this config only
+      // affects explicit font-sans / font-mono usages).
+      sans: [
+        '-apple-system',
+        'BlinkMacSystemFont',
+        '"Segoe UI"',
+        'Roboto',
+        '"PingFang SC"',
+        '"Hiragino Sans GB"',
+        '"Microsoft YaHei"',
+        '"Noto Sans CJK SC"',
+        'sans-serif',
+      ],
+      mono: ['ui-monospace', '"SF Mono"', '"Cascadia Mono"', 'Consolas', '"Liberation Mono"', 'monospace'],
     },
     // fontFamily: {
     //   sans: ['Söhne', 'sans-serif'],
     //   mono: ['Söhne Mono', 'monospace'],
     // },
     extend: {
+      // Semantic type scale (docs-ui-refactor/基础-字体规范.md §2/§7) — MUST live in
+      // `extend` so Tailwind's default text-xs/sm/base/... classes stay available
+      // (900+ existing usages). Values reference semantic CSS vars defined in
+      // src/style.css :root, which remap under 768px for the mobile ladder, so
+      // classNames never change per breakpoint. Each entry carries its own
+      // font-weight (400 body tier / 500 heading tier) — no extra font-medium needed.
+      fontSize: {
+        caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
+        'body-sm': ['var(--text-body-sm)', { lineHeight: 'var(--leading-body-sm)', fontWeight: '400' }],
+        body: ['var(--text-body)', { lineHeight: 'var(--leading-body)', fontWeight: '400' }],
+        h4: ['var(--text-h4)', { lineHeight: 'var(--leading-h4)', fontWeight: '500' }],
+        h3: ['var(--text-h3)', { lineHeight: 'var(--leading-h3)', fontWeight: '500' }],
+        h2: ['var(--text-h2)', { lineHeight: 'var(--leading-h2)', fontWeight: '500' }],
+        h1: ['var(--text-h1)', { lineHeight: 'var(--leading-h1)', fontWeight: '500' }],
+        display: ['var(--text-display)', { lineHeight: 'var(--leading-display)', fontWeight: '500' }],
+        metric: ['var(--text-metric)', { lineHeight: 'var(--leading-metric)', fontWeight: '500' }],
+      },
       width: {
         authPageWidth: '370px',
       },

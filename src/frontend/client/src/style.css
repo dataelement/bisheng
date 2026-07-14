@@ -48,6 +48,53 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
+
+  /* ============================================================
+   * Typography tokens (docs-ui-refactor/基础-字体规范.md)
+   * Two layers: primitive (--font-size-1..9, numeric source) and
+   * semantic (--text-*, what components use via Tailwind classes
+   * text-caption / text-body / text-h1 ...). Line height = size + 8px.
+   * Components must reference the semantic layer only.
+   * ============================================================ */
+  /* Primitive — desktop scale */
+  --font-size-1: 0.75rem;    --line-height-1: 1.25rem;   /* 12 / 20 */
+  --font-size-2: 0.8125rem;  --line-height-2: 1.3125rem; /* 13 / 21 */
+  --font-size-3: 0.875rem;   --line-height-3: 1.375rem;  /* 14 / 22 */
+  --font-size-4: 1rem;       --line-height-4: 1.5rem;    /* 16 / 24 */
+  --font-size-5: 1.125rem;   --line-height-5: 1.625rem;  /* 18 / 26 */
+  --font-size-6: 1.25rem;    --line-height-6: 1.75rem;   /* 20 / 28 */
+  --font-size-7: 1.5rem;     --line-height-7: 2rem;      /* 24 / 32 */
+  --font-size-8: 1.875rem;   --line-height-8: 2.375rem;  /* 30 / 38 */
+  --font-size-9: 2.25rem;    --line-height-9: 2.75rem;   /* 36 / 44 */
+
+  /* Semantic — referenced by tailwind.config.cjs theme.extend.fontSize */
+  --text-caption: var(--font-size-1);  --leading-caption: var(--line-height-1);
+  --text-body-sm: var(--font-size-2);  --leading-body-sm: var(--line-height-2);
+  --text-body: var(--font-size-3);     --leading-body: var(--line-height-3);
+  --text-h4: var(--font-size-4);       --leading-h4: var(--line-height-4);
+  --text-h3: var(--font-size-5);       --leading-h3: var(--line-height-5);
+  --text-h2: var(--font-size-6);       --leading-h2: var(--line-height-6);
+  --text-h1: var(--font-size-7);       --leading-h1: var(--line-height-7);
+  --text-display: var(--font-size-8);  --leading-display: var(--line-height-8);
+  --text-metric: var(--font-size-9);   --leading-metric: var(--line-height-9);
+}
+
+/* Mobile (narrow viewport ≤768px) remap of the SEMANTIC layer only:
+ * body raised (14→16), headings lowered (24→22) — a flatter ladder.
+ * Component classNames stay unchanged; caption / h4 are identical on
+ * both breakpoints so they are not remapped here.
+ * Some mobile steps (17/25, 22/30, 26/34) are not on the primitive
+ * scale, so they are literal rem values by design. */
+@media (max-width: 768px) {
+  :root {
+    --text-body-sm: var(--font-size-3);  --leading-body-sm: var(--line-height-3); /* 13→14 */
+    --text-body: var(--font-size-4);     --leading-body: var(--line-height-4);    /* 14→16 */
+    --text-h3: 1.0625rem;                --leading-h3: 1.5625rem;                 /* 18→17 / 25 */
+    --text-h2: var(--font-size-5);       --leading-h2: var(--line-height-5);      /* 20→18 */
+    --text-h1: 1.375rem;                 --leading-h1: 1.875rem;                  /* 24→22 / 30 */
+    --text-display: 1.625rem;            --leading-display: 2.125rem;             /* 30→26 / 34 */
+    --text-metric: var(--font-size-8);   --leading-metric: var(--line-height-8);  /* 36→30 */
+  }
 }
 
 html {
@@ -1945,17 +1992,24 @@ html {
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
+/* Global font stack = font-family-base in 基础-字体规范.md §1.
+ * Pure system stack (zero webfont loading): SF Pro + PingFang on Apple,
+ * Segoe UI + Microsoft YaHei on Windows, Roboto + Noto Sans CJK on Android.
+ * Step ① of the two-step swap: @font-face blocks and font files
+ * (Inter / AlibabaPuHuiTi / Roboto Mono / Söhne) are intentionally KEPT
+ * until the Windows regression pass confirms rendering, then removed. */
 body,
 html {
   height: 100%;
   font-family:
     -apple-system,
     BlinkMacSystemFont,
-    "AlibabaPuHuiTi-3-55-Regular",
+    "Segoe UI",
+    Roboto,
+    "PingFang SC",
     "Hiragino Sans GB",
     "Microsoft YaHei",
-    "Helvetica Neue",
-    Arial,
+    "Noto Sans CJK SC",
     sans-serif;
 }
 
