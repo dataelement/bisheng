@@ -3366,6 +3366,49 @@ async def test_shougang_portal_personal_spaces_filters_to_writable_personal_spac
 
 
 @pytest.mark.asyncio
+async def test_system_personal_spaces_are_created_with_private_auth_type(service):
+    favorite_space = _make_space(
+        space_id=7,
+        user_id=service.login_user.user_id,
+        auth_type=AuthTypeEnum.PUBLIC,
+        space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+    )
+    default_space = _make_space(
+        space_id=8,
+        user_id=service.login_user.user_id,
+        auth_type=AuthTypeEnum.PUBLIC,
+        space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+    )
+
+    with (
+        patch.object(
+            service,
+            "create_knowledge_space",
+            new_callable=AsyncMock,
+            side_effect=[favorite_space, default_space],
+        ) as mock_create,
+        patch.object(
+            service,
+            "_find_personal_default_space",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=favorite_space,
+        ),
+    ):
+        await service._create_favorite_space()
+        await service._ensure_personal_default_space()
+
+    assert mock_create.await_count == 2
+    for call in mock_create.await_args_list:
+        assert call.kwargs["space_level"] == KnowledgeSpaceLevelEnum.PERSONAL
+        assert call.kwargs["auth_type"] == AuthTypeEnum.PRIVATE
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_share_link_hashes_password_and_invite_code(service):
     source_space = _make_space(space_id=12, user_id=99)
     source_file = _make_file(file_id=1580, knowledge_id=12, file_name="迁移指南.pdf")
