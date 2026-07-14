@@ -194,12 +194,15 @@ class QuestionRepository:
             elif status == 4:
                 # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
                 if user_id is not None:
-                    user_id_str = str(user_id)
+                    expert = await self.get_by_user_id(user_id)
+                    if not expert:
+                        return [], 0
+                    expert_id_str = str(expert.id)
                     stmt = stmt.where(or_(
-                                        Question.invited_experts == user_id_str,
-                                        Question.invited_experts.like(f"{user_id_str};%"),
-                                        Question.invited_experts.like(f"%;{user_id_str};%"),
-                                        Question.invited_experts.like(f"%;{user_id_str}"),
+                                        Question.invited_experts == expert_id_str,
+                                        Question.invited_experts.like(f"{expert_id_str};%"),
+                                        Question.invited_experts.like(f"%;{expert_id_str};%"),
+                                        Question.invited_experts.like(f"%;{expert_id_str}"),
                                     ))
 
             # 排序相关的过滤条件需要在计算总数之前应用
