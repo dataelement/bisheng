@@ -83,16 +83,10 @@ describe("SpaceSidebar 收藏库操作门控（portal 内嵌工作台）", () =>
         expect(screen.getByText("删除空间")).toBeInTheDocument();
     });
 
-    it("『我的收藏』保留菜单按钮，但隐藏置顶/空间设置/删除空间", async () => {
-        const user = userEvent.setup();
+    it("『我的收藏』不显示菜单按钮", () => {
         renderSidebar();
-        const trigger = screen.getByLabelText("更多我的收藏操作");
-        expect(trigger).toBeInTheDocument();
-        await user.click(trigger);
-        expect(screen.queryByText("置顶空间")).not.toBeInTheDocument();
-        expect(screen.queryByText("取消置顶")).not.toBeInTheDocument();
-        expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
-        expect(screen.queryByText("删除空间")).not.toBeInTheDocument();
+        expect(screen.getByTestId("space-row-117")).toBeInTheDocument();
+        expect(screen.queryByLabelText("更多我的收藏操作")).not.toBeInTheDocument();
     });
 
     it("公共知识库仍显示置顶操作", async () => {

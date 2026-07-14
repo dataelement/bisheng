@@ -402,20 +402,22 @@ export function SpaceSidebar({
                                                                 />
                                                             ) : null}
                                                         </button>
-                                                        <div className={s.spaceMenuArea}>
-                                                            <SpaceMenu
-                                                                space={space}
-                                                                group={group}
-                                                                open={spaceMenuOpenId === space.id}
-                                                                permissions={getSpacePermissions(space)}
-                                                                onOpenChange={(open) => onSpaceMenuOpenChange(space.id, open)}
-                                                                onOpenSpaceSettings={onOpenSpaceSettings}
-                                                                onOpenSpaceMembers={onOpenSpaceMembers}
-                                                                onPinSpace={onPinSpace}
-                                                                onDeleteSpace={onDeleteSpace}
-                                                                onLeaveSpace={onLeaveSpace}
-                                                            />
-                                                        </div>
+                                                        {!isFavoriteSpace(space) ? (
+                                                            <div className={s.spaceMenuArea}>
+                                                                <SpaceMenu
+                                                                    space={space}
+                                                                    group={group}
+                                                                    open={spaceMenuOpenId === space.id}
+                                                                    permissions={getSpacePermissions(space)}
+                                                                    onOpenChange={(open) => onSpaceMenuOpenChange(space.id, open)}
+                                                                    onOpenSpaceSettings={onOpenSpaceSettings}
+                                                                    onOpenSpaceMembers={onOpenSpaceMembers}
+                                                                    onPinSpace={onPinSpace}
+                                                                    onDeleteSpace={onDeleteSpace}
+                                                                    onLeaveSpace={onLeaveSpace}
+                                                                />
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                 ))
                                             ) : (
