@@ -3,6 +3,14 @@ const plugin = require('tailwindcss/plugin');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // 基础-多端适配原则.md §1: hover states are disabled on touch APP-WIDE — every
+  // `hover:` utility compiles wrapped in a hover-capable media query. Press
+  // feedback on touch comes from `active:` styles instead (no sticky hover).
+  // NOTE: components must keep using plain `hover:` (never a custom variant),
+  // so tailwind-merge can still dedupe business-page hover overrides.
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   content: ['./src/**/*.{js,jsx,ts,tsx}'],
   // darkMode: 'class',
   darkMode: ['class'],
@@ -159,6 +167,19 @@ module.exports = {
           900: 'rgb(var(--brand-900) / <alpha-value>)',
         },
         'brand-purple': '#ab68ff',
+        // Button semantic tokens (docs-ui-refactor/组件-Button按钮.md §5.1) —
+        // RGB-channel vars defined in src/style.css :root; channel form keeps
+        // `/<alpha>` modifiers working. Neutral fill ramp is shared Arco grays.
+        'btn-gray-text': 'rgb(var(--btn-gray-text) / <alpha-value>)',
+        'btn-gray-border': 'rgb(var(--btn-gray-border) / <alpha-value>)',
+        'btn-fill-1': 'rgb(var(--btn-fill-1) / <alpha-value>)',
+        'btn-fill-2': 'rgb(var(--btn-fill-2) / <alpha-value>)',
+        'btn-fill-3': 'rgb(var(--btn-fill-3) / <alpha-value>)',
+        'btn-fill-4': 'rgb(var(--btn-fill-4) / <alpha-value>)',
+        'btn-danger': 'rgb(var(--btn-danger) / <alpha-value>)',
+        'btn-danger-hover': 'rgb(var(--btn-danger-hover) / <alpha-value>)',
+        'btn-danger-active': 'rgb(var(--btn-danger-active) / <alpha-value>)',
+        'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
         'presentation': 'var(--presentation)',
         'text-primary': 'var(--text-primary)',
         'text-secondary': 'var(--text-secondary)',

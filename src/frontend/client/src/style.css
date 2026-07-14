@@ -175,6 +175,21 @@ html {
   --brand-main: 22 93 255;   /* #165DFF */
   --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent (e.g. pin) */
 
+  /* Button semantic tokens (docs-ui-refactor/组件-Button按钮.md §5.1).
+     Neutral grays follow the Arco ramp; danger red is FIXED — never themed.
+     RGB channels so the Tailwind `btn-*` colors keep `/<alpha>` working.
+     Light-mode values only for now (dark mode inherits them — known debt). */
+  --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
+  --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
+  --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
+  --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
+  --btn-fill-3: 229 230 235;       /* #E5E6EB — filled hover */
+  --btn-fill-4: 201 205 212;       /* #C9CDD4 — filled active */
+  --btn-danger: 245 63 63;         /* #F53F3F */
+  --btn-danger-hover: 214 55 58;   /* #D6373A */
+  --btn-danger-active: 208 47 51;  /* #D02F33 */
+  --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
+
   /* Illustration palette — empty-state SVG illustrations use --illus-* instead
      of --brand-* so the green theme can render the illustrations' own vivid
      green ramp (#19B476 / #BDE6D3 / #7CD0B1) rather than the darker UI brand
@@ -259,6 +274,22 @@ html {
    already, but others inherit; this keeps every primary-button icon white on the fill. */
 .theme-green .btn-brand-primary:not(:disabled) > svg {
   color: #fff !important;
+}
+
+/* Touch hit-area expansion (组件-Button按钮.md §5.5): medium and icon-only
+   buttons get an invisible ≥44×44 hot zone on touch devices — "跟手不跟屏"
+   (基础-多端适配原则.md §0/§2) — while the visual size stays unchanged.
+   The base Button sets `relative` + this class; never hand-roll per page. */
+@media (hover: none) and (pointer: coarse) {
+  .btn-touch-hit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
 }
 
 .dark {
