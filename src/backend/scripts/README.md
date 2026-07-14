@@ -334,6 +334,24 @@ Safety:
 
 ## Organization Migration Scripts
 
+### `migrate_root_departments_under_default_org.py`
+
+把默认租户中除 `tenant.root_dept_id` 指向节点以外的其他数据库根部门，整体迁移到默认组织下。迁移会级联更新整个部门子树的 `path`，并为 active 根部门补充 OpenFGA `parent` 关系；部门 ID、成员、管理员和知识空间绑定均保持不变。
+
+默认只输出 JSON 迁移计划，不写数据库或 OpenFGA。确认后必须显式传入 `--apply`：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_root_departments_under_default_org.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_root_departments_under_default_org.py --apply
+```
+
+Safety:
+
+- 默认组织通过 `tenant.root_dept_id` 识别，不依赖名称或查询顺序。
+- 执行前会校验默认组织和所有待迁移根部门的物化路径；检测到异常即停止。
+- `--apply` 会再次校验待迁移部门仍是根节点且路径未变化，避免使用过期 dry-run 计划。
+- 数据库提交后通过 `DepartmentChangeHandler` 写入 OpenFGA，失败操作进入现有 `failed_tuple` 补偿机制。
+
 ### `migrate_admin_to_department.py`
 
 将一个明确指定的 admin 账号迁移到指定部门。默认 dry-run；`--apply` 会修改主部门和叶子租户，但保留 admin 在原叶子租户中拥有的资源。

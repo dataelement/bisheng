@@ -828,13 +828,25 @@ class DepartmentDao:
         existing = await cls.aget_by_id(dept_id)
         if existing is None:
             return None
+        new_path = final_path(parent_path, dept_id)
         async with get_async_db_session() as session:
-            await session.execute(
+            old_path = (existing.path or "").strip()
+            if old_path and old_path != new_path:
+                if not old_path.endswith(f"/{dept_id}/"):
+                    raise ValueError(
+                        f"unsafe materialized path for department {dept_id}: {old_path!r}"
+                    )
+                await session.exec(
+                    update(Department)
+                    .where(Department.path.like(f"{old_path}%"))
+                    .values(path=func.replace(Department.path, old_path, new_path))
+                )
+            await session.exec(
                 update(Department)
                 .where(Department.id == dept_id)
                 .values(
                     parent_id=parent_id,
-                    path=final_path(parent_path, dept_id),
+                    path=new_path,
                     sync_parent_external_id=None,
                     last_sync_ts=last_sync_ts,
                 )
@@ -900,13 +912,25 @@ class DepartmentDao:
                 await session.commit()
                 await session.refresh(dept)
                 return dept
-            await session.execute(
+            new_path = final_path(path, int(existing.id))
+            old_path = (existing.path or "").strip()
+            if old_path and old_path != new_path:
+                if not old_path.endswith(f"/{existing.id}/"):
+                    raise ValueError(
+                        f"unsafe materialized path for department {existing.id}: {old_path!r}"
+                    )
+                await session.exec(
+                    update(Department)
+                    .where(Department.path.like(f"{old_path}%"))
+                    .values(path=func.replace(Department.path, old_path, new_path))
+                )
+            await session.exec(
                 update(Department)
                 .where(Department.id == existing.id)
                 .values(
                     name=name,
                     parent_id=parent_id,
-                    path=final_path(path, int(existing.id)),
+                    path=new_path,
                     sort_order=sort_order,
                     status="active",
                     is_deleted=0,

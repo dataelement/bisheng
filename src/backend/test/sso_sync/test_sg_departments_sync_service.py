@@ -16,8 +16,25 @@ from bisheng.sso_sync.domain.schemas.sg_payloads import (
 MODULE = "bisheng.sso_sync.domain.services.sg_departments_sync_service"
 
 
-def _dept(*, dept_id: int = 100, path: str = "/1/100/"):
-    return SimpleNamespace(id=dept_id, path=path)
+def _dept(
+    *,
+    dept_id: int = 100,
+    path: str = "/1/100/",
+    parent_id: int | None = None,
+    status: str = "active",
+    tenant_id: int = 1,
+):
+    return SimpleNamespace(
+        id=dept_id,
+        path=path,
+        parent_id=parent_id,
+        status=status,
+        tenant_id=tenant_id,
+    )
+
+
+def _default_root():
+    return _dept(dept_id=1, path="/1/")
 
 
 def _request(*fields: SgDepartmentFieldItem, mdm_id: int = 42, uuid: str = "batch-uuid"):
@@ -33,7 +50,11 @@ def _enter_dao_patches(stack: ExitStack, **overrides):
     defaults = {
         f"{MODULE}.DepartmentDao.aget_by_source_external_id": AsyncMock(return_value=None),
         f"{MODULE}.DepartmentDao.aget_by_external_id": AsyncMock(return_value=None),
+        f"{MODULE}.DepartmentDao.aget_by_id": AsyncMock(return_value=_default_root()),
         f"{MODULE}.DepartmentDao.alist_by_sync_parent_external_id": AsyncMock(return_value=[]),
+        f"{MODULE}.TenantDao.aget_by_id": AsyncMock(
+            return_value=SimpleNamespace(root_dept_id=1),
+        ),
         "bisheng.department.domain.services.department_change_handler.DepartmentChangeHandler.execute_async": AsyncMock(),
         "bisheng.department.domain.services.department_archive_cleanup_service.DepartmentArchiveCleanupService.arun_for_archived_department": AsyncMock(),
     }
@@ -80,7 +101,69 @@ class TestSgDepartmentsSyncService:
         assert infos[0].code == "D1"
         assert infos[0].version == "42"
         upsert.assert_awaited_once()
+        assert upsert.await_args.kwargs["parent_id"] == 1
+        assert upsert.await_args.kwargs["path"] == "/1/"
+        assert upsert.await_args.kwargs["sync_parent_external_id"] is None
         archive.assert_not_awaited()
+
+    async def test_zero_pid_attaches_root_department_to_default_root(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        payload = _request(
+            SgDepartmentFieldItem(
+                uuid="u1",
+                code="D1",
+                pid="0",
+                remark="Engineering",
+                state="01",
+            ),
+        )
+        with ExitStack() as stack:
+            _enter_dao_patches(stack)
+            upsert = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
+            response = await SgDepartmentsSyncService.execute(payload)
+
+        assert response.esb.code == "0"
+        assert upsert.await_args.kwargs["parent_id"] == 1
+        assert upsert.await_args.kwargs["path"] == "/1/"
+
+    async def test_missing_default_root_returns_row_failure(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        payload = _request(
+            SgDepartmentFieldItem(uuid="u1", code="D1", remark="Engineering", state="01"),
+        )
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "TenantDao.aget_by_id": AsyncMock(
+                        return_value=SimpleNamespace(root_dept_id=None),
+                    ),
+                },
+            )
+            upsert = stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                )
+            )
+            response = await SgDepartmentsSyncService.execute(payload)
+
+        assert response.esb.code == "1"
+        info = response.esb.data.data_infos.data_info[0]
+        assert info.status == "1"
+        assert "default tenant root department is not configured" in info.error_text
+        upsert.assert_not_awaited()
 
     async def test_child_department_resolves_parent_in_same_batch(self):
         from bisheng.sso_sync.domain.services.sg_departments_sync_service import (

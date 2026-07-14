@@ -12,7 +12,7 @@ from bisheng.core.context.tenant import (
     set_current_tenant_id,
 )
 from bisheng.database.models.department import Department, DepartmentDao
-from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
 from bisheng.department.domain.services.department_archive_cleanup_service import (
     DepartmentArchiveCleanupService,
 )
@@ -47,6 +47,7 @@ class SgDepartmentsSyncService:
     """Apply SG department sync to ``department`` table by ``external_id``."""
 
     SOURCE = SG_SOURCE
+    DEFAULT_ROOT_CACHE_KEY = "__bisheng_default_root__"
 
     @classmethod
     async def execute(
@@ -266,7 +267,23 @@ class SgDepartmentsSyncService:
         parent_cache: dict[str, Department],
     ) -> tuple[Department | None, str | None]:
         if not parent_code:
-            return None, None
+            default_root = parent_cache.get(cls.DEFAULT_ROOT_CACHE_KEY)
+            if default_root is None:
+                tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
+                root_dept_id = getattr(tenant, "root_dept_id", None)
+                if root_dept_id is None:
+                    raise ValueError("default tenant root department is not configured")
+                default_root = await DepartmentDao.aget_by_id(int(root_dept_id))
+                if (
+                    default_root is None
+                    or getattr(default_root, "status", "") != "active"
+                    or getattr(default_root, "parent_id", None) is not None
+                    or int(getattr(default_root, "tenant_id", 0) or 0) != ROOT_TENANT_ID
+                    or not (getattr(default_root, "path", "") or "").endswith(f"/{root_dept_id}/")
+                ):
+                    raise ValueError("default tenant root department is unavailable")
+                parent_cache[cls.DEFAULT_ROOT_CACHE_KEY] = default_root
+            return default_root, None
         parent = parent_cache.get(parent_code)
         if parent is None:
             parent = await DepartmentDao.aget_by_external_id(
