@@ -5367,10 +5367,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_global_admin = bool(is_admin())
 
         visible_spaces: list[Knowledge] = []
-        # space_id -> can_download, derived from the same effective-permission pass.
+        # space_id -> can_download, kept consistent with the download endpoint's
+        # 'download_file' enforcement (see _assign_square_preview_download_flags for
+        # how the public fast-path stays both cheap and exact).
         download_map: dict[int, bool] = {}
         permission_checks = []
         permission_spaces: list[Knowledge] = []
+        # Square-preview spaces stay visible without a per-space permission call
+        # (legacy fast path). Their download flag is resolved separately below via a
+        # cheap public-viewer rule, falling back to a real permission eval only for
+        # the rare non-public square-preview spaces.
+        square_preview_spaces: list[Knowledge] = []
         for space in ordered_spaces:
             space_id = int(space.id)
             if is_global_admin or int(space.user_id or 0) == int(self.login_user.user_id):
@@ -5378,9 +5385,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 visible_spaces.append(space)
                 download_map[space_id] = True
                 continue
-            # Square-preview spaces stay visible regardless of the permission result
-            # (legacy behavior), but we still evaluate effective permissions so the
-            # download flag stays exact and consistent with real download enforcement.
+            if self._is_square_preview_space(space):
+                visible_spaces.append(space)
+                square_preview_spaces.append(space)
+                continue
             permission_spaces.append(space)
             permission_checks.append(self._get_effective_permission_ids("knowledge_space", space_id))
 
@@ -5394,21 +5402,83 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         space.id,
                         permission_result,
                     )
-                    # Preserve legacy visibility for square-preview spaces even when the
-                    # permission lookup fails; download stays disabled to be safe.
-                    if self._is_square_preview_space(space):
-                        visible_spaces.append(space)
                     download_map[space_id] = False
                     continue
-                if "view_space" in permission_result or self._is_square_preview_space(space):
+                if "view_space" in permission_result:
                     visible_spaces.append(space)
                 download_map[space_id] = "download_file" in permission_result
+
+        if square_preview_spaces:
+            await self._assign_square_preview_download_flags(square_preview_spaces, download_map)
+
         visible_space_ids = {int(space.id) for space in visible_spaces}
         ordered_visible = [space for space in ordered_spaces if int(space.id) in visible_space_ids]
         visible_download_map = {
             int(space.id): download_map.get(int(space.id), False) for space in ordered_visible
         }
         return ordered_visible, visible_download_map
+
+    async def _assign_square_preview_download_flags(
+        self,
+        square_preview_spaces: list[Knowledge],
+        download_map: dict[int, bool],
+    ) -> None:
+        """Fill download flags for square-preview spaces.
+
+        Public-level spaces grant the viewer role's default permissions (which
+        include ``download_file``) to every visitor, and effective permissions are
+        merged as a union, so a public space is always downloadable regardless of
+        membership — resolved here with a constant, no per-space permission call.
+        Only the rare non-public square-preview spaces (e.g. approval-gated,
+        department-level) need a real effective-permission evaluation.
+        """
+        viewer_can_download = "download_file" in default_permission_ids_for_relation("viewer")
+
+        # Resolve each space's level cheaply: prefer the object attribute, fall back
+        # to a single batched scope lookup for the ones missing it.
+        is_public_by_id: dict[int, bool] = {}
+        need_scope_ids: list[int] = []
+        for space in square_preview_spaces:
+            space_id = int(space.id)
+            space_level = getattr(space, "space_level", None)
+            if space_level is None:
+                need_scope_ids.append(space_id)
+            else:
+                is_public_by_id[space_id] = (
+                    self._space_level_value(space_level) == KnowledgeSpaceLevelEnum.PUBLIC.value
+                )
+        if need_scope_ids:
+            scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(need_scope_ids)
+            for space_id in need_scope_ids:
+                scope = scopes.get(space_id)
+                is_public_by_id[space_id] = bool(
+                    scope and self._space_level_value(scope.level) == KnowledgeSpaceLevelEnum.PUBLIC.value
+                )
+
+        non_public_spaces: list[Knowledge] = []
+        for space in square_preview_spaces:
+            space_id = int(space.id)
+            if is_public_by_id.get(space_id):
+                download_map[space_id] = viewer_can_download
+            else:
+                non_public_spaces.append(space)
+
+        if non_public_spaces:
+            results = await asyncio.gather(
+                *[self._get_effective_permission_ids("knowledge_space", int(space.id)) for space in non_public_spaces],
+                return_exceptions=True,
+            )
+            for space, permission_result in zip(non_public_spaces, results):
+                space_id = int(space.id)
+                if isinstance(permission_result, Exception):
+                    logger.warning(
+                        "skip shougang portal square-preview download check: space_id={} error={}",
+                        space.id,
+                        permission_result,
+                    )
+                    download_map[space_id] = False
+                    continue
+                download_map[space_id] = "download_file" in permission_result
 
     async def _resolve_shougang_portal_search_space_ids(
         self,
