@@ -578,6 +578,9 @@ export function NotificationsDialog({
         return { text, targetName, showApproval };
     };
 
+    const isReviewTagDecisionNotification = (actionCode?: string) =>
+        actionCode === "approved_review_tag" || actionCode === "rejected_review_tag";
+
     const getSupplementaryText = (notification: MessageItem): string => {
         const parts = Array.isArray(notification.content) ? notification.content : [];
         const tooltipPart = parts.find((c: any) => c?.type === "tooltip_text");
@@ -848,7 +851,9 @@ export function NotificationsDialog({
             : null;
         const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
         const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
-        const canNavigateTarget = Boolean(target && target.targetId && targetName);
+        const canNavigateTarget =
+            Boolean(target && target.targetId && targetName)
+            && !isReviewTagDecisionNotification(getSystemTextCode(notification));
         const targetLabel = targetName;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
