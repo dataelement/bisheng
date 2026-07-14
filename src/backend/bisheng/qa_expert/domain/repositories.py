@@ -176,6 +176,7 @@ class QuestionRepository:
         user_id: Optional[int] = None,  # 我提问的
         skip: int = 0,
         limit: int = 20,
+        expert_id: Optional[int] = None,  # 邀请我的专家ID
     ) -> tuple[List[Question], int]:
         """列表查询问题"""
         async with get_async_db_session() as session:
@@ -193,11 +194,8 @@ class QuestionRepository:
                     stmt = stmt.where(Question.user_id == user_id)
             elif status == 4:
                 # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
-                if user_id is not None:
-                    expert = await ExpertRepository.get_by_user_id(user_id)
-                    if not expert:
-                        return [], 0
-                    expert_id_str = str(expert.id)
+                if expert_id is not None:
+                    expert_id_str = str(expert_id)
                     stmt = stmt.where(or_(
                                         Question.invited_experts == expert_id_str,
                                         Question.invited_experts.like(f"{expert_id_str};%"),

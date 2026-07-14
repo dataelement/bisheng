@@ -199,8 +199,16 @@ class QuestionService:
         limit: int = 20,
     ) -> tuple[List[Question], int]:
         """列表查询问题"""
+        expert_id = None
+        if status == 4:
+            # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
+            if user_id is not None:
+                expert = await self.expert_repo.get_by_user_id(user_id)
+                if not expert:
+                    return [], 0
+                expert_id = expert.id
         questions, total = await self.repository.list_all(
-            business_domain=business_domain, status=status, sort_by=sort_by, user_id=user_id, skip=skip, limit=limit
+            business_domain=business_domain, status=status, sort_by=sort_by, user_id=user_id, skip=skip, limit=limit, expert_id=expert_id
         )
         if questions and len(questions) > 0:
             for question in questions:
