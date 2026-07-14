@@ -21,7 +21,7 @@ workstation_tags_service = importlib.reload(
 
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, TagResourceTypeEnum
-from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest
+from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest, ReviewTagSubmitterTarget
 
 WorkStationTagsService = workstation_tags_service.WorkStationTagsService
 
@@ -65,7 +65,11 @@ async def test_approve_review_tag_imports_to_selected_library():
     service.approve_tag_to_move_operation = approve_tag_to_move
     service.review_tags_repository.approve_review_tag = AsyncMock()
     service.review_tags_repository.list_submitter_notification_targets = AsyncMock(
-        return_value=[(42, 100)],
+        return_value=[
+            ReviewTagSubmitterTarget(
+                user_id=42, knowledge_space_id=100, file_id=501, file_name="a.pdf", file_type="pdf"
+            )
+        ],
     )
     service.review_tags_repository.get_review_tag_list_by_tag_name = AsyncMock(
         return_value=[SimpleNamespace(business_type="tag_library", business_id="10")],
@@ -161,7 +165,11 @@ async def test_reject_review_tag_notifies_submitters():
     )
     service.review_tags_repository.reject_review_tag = AsyncMock()
     service.review_tags_repository.list_submitter_notification_targets = AsyncMock(
-        return_value=[(88, 137)],
+        return_value=[
+            ReviewTagSubmitterTarget(
+                user_id=88, knowledge_space_id=137, file_id=900, file_name="b.docx", file_type="docx"
+            )
+        ],
     )
 
     with patch(

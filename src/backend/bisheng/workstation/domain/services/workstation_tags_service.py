@@ -15,10 +15,12 @@ from bisheng.common.services.base import BaseService
 from bisheng.database.models.review_tags import ApproveOrRejectEnum
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.workstation.domain.repositories.review_tags_repository import ReviewTagsRepositoryImpl
-from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest
+from bisheng.workstation.domain.schemas.review_tags_schema import (
+    ApproveOrRejectRequest,
+    ReviewTagSubmitterTarget,
+)
 from bisheng.workstation.domain.services.review_tag_notification_service import (
     ReviewTagNotificationService,
-    ReviewTagSubmitterTarget,
 )
 
 
@@ -51,15 +53,12 @@ class WorkStationTagsService(BaseService):
 
     async def approve_or_reject_review_tag(self, data: ApproveOrRejectRequest, tenant_id: int):
         existed_tag_list = []
-        submitter_targets = [
-            ReviewTagSubmitterTarget(user_id=user_id, knowledge_space_id=space_id)
-            for user_id, space_id in await self.review_tags_repository.list_submitter_notification_targets(
-                data.tag_name,
-                data.resource_type,
-                tenant_id,
-                exclude_user_id=self.login_user.user_id,
-            )
-        ]
+        submitter_targets = await self.review_tags_repository.list_submitter_notification_targets(
+            data.tag_name,
+            data.resource_type,
+            tenant_id,
+            exclude_user_id=self.login_user.user_id,
+        )
         if data and data.status == ApproveOrRejectEnum.APPROVE:
             if not data.tag_library_id or not data.knowledge_id:
                 raise KnowledgeSpaceTagLibraryInvalidError(msg="请选择导入的标签库")
@@ -104,6 +103,19 @@ class WorkStationTagsService(BaseService):
             await self.session.commit()
         else:
             raise ReviewTagTypeMismatchError.http_exception()
+
+        if data.status == ApproveOrRejectEnum.APPROVE and data.knowledge_id:
+            resolved_space_id = int(data.knowledge_id)
+            submitter_targets = [
+                ReviewTagSubmitterTarget(
+                    user_id=target.user_id,
+                    knowledge_space_id=resolved_space_id,
+                    file_id=target.file_id,
+                    file_name=target.file_name,
+                    file_type=target.file_type,
+                )
+                for target in submitter_targets
+            ]
 
         await ReviewTagNotificationService.notify_after_decision(
             sender=self.login_user.user_id,
