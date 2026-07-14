@@ -3980,7 +3980,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return self._build_shougang_portal_search_response([])
 
-        if self._is_shougang_portal_latest_selected_recommendation(req.recommendation):
+        if (
+            self._is_shougang_portal_latest_selected_recommendation(req.recommendation)
+            and not self._is_shougang_portal_updated_at_sort(req.sort)
+        ):
             _set_portal_search_stage("list_hot_read_files")
             return await self._list_shougang_portal_hot_read_files(req=req, spaces=spaces)
 
