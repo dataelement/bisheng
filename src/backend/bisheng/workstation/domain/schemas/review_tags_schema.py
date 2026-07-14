@@ -1,6 +1,17 @@
+from dataclasses import dataclass
+
 from pydantic import BaseModel
 
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, TagResourceTypeEnum
+
+
+@dataclass(frozen=True)
+class ReviewTagSubmitterTarget:
+    user_id: int
+    knowledge_space_id: int | None = None
+    file_id: int | None = None
+    file_name: str | None = None
+    file_type: str | None = None
 
 
 class ApproveOrRejectRequest(BaseModel):
