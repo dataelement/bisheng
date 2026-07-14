@@ -19,10 +19,11 @@ def _dept(*, dept_id: int = 200):
     return SimpleNamespace(id=dept_id, external_id="DEPT1")
 
 
-def _user(*, user_id: int = 9, external_id: str = "U1"):
+def _user(*, user_id: int = 9, external_code: str = "U1"):
     return SimpleNamespace(
         user_id=user_id,
-        external_id=external_id,
+        external_id=None,
+        external_code=external_code,
         user_name="Old Name",
         dept_id="1",
         remark="Old",
@@ -79,7 +80,7 @@ class TestSgUsersSyncService:
                 return_value=_dept(),
             ),
             patch(
-                f"{MODULE}.UserDao.aget_by_source_external_id",
+                f"{MODULE}.UserDao.aget_by_source_external_code",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -118,7 +119,8 @@ class TestSgUsersSyncService:
         assert info.status == "0"
         assert info.code == "U1"
         created = add_user.await_args.args[0]
-        assert created.external_id == "U1"
+        assert created.external_code == "U1"
+        assert getattr(created, "external_id", None) is None
         assert created.user_name == "Alice"
         assert created.dept_id == "200"
         assert created.delete == 0
@@ -151,7 +153,7 @@ class TestSgUsersSyncService:
                 return_value=_dept(),
             ),
             patch(
-                f"{MODULE}.UserDao.aget_by_source_external_id",
+                f"{MODULE}.UserDao.aget_by_source_external_code",
                 new_callable=AsyncMock,
                 return_value=existing,
             ),
@@ -188,6 +190,7 @@ class TestSgUsersSyncService:
         update_user.assert_awaited_once()
         updated = update_user.await_args.args[0]
         assert updated.remark == "Alice Updated"
+        assert updated.external_code == "U1"
         assert updated.dept_id == "200"
         assert updated.delete == 0
         assert updated.disable_source is None
@@ -224,7 +227,7 @@ class TestSgUsersSyncService:
                 return_value=_dept(),
             ),
             patch(
-                f"{MODULE}.UserDao.aget_by_source_external_id",
+                f"{MODULE}.UserDao.aget_by_source_external_code",
                 new_callable=AsyncMock,
                 return_value=existing,
             ),

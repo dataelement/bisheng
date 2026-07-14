@@ -122,7 +122,7 @@ class SgSsoAccountSyncResultItem(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    result: str = Field(default="0", alias="Result")
+    result: str = Field(default="S", alias="Result")
     user_name: str = Field(default="", alias="UserName")
     description: str = Field(default="success", alias="Description")
     guid: str = Field(default="", alias="Guid")
