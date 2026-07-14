@@ -267,8 +267,13 @@ html {
 .theme-green .btn-brand-primary:not(:disabled):hover {
   background-color: #148f41 !important; /* hover: slightly darker green */
 }
-.theme-green .btn-brand-primary:not(:disabled):active {
-  background-color: #12813b !important; /* active: deeper green on press */
+/* Press feedback is TOUCH-ONLY (组件-Button按钮.md §5.2): on hover-capable
+   devices a pressed button keeps its hover color (no click flash); on touch,
+   where hover is disabled, the deeper step is the only press feedback. */
+@media not ((hover: hover) and (pointer: fine)) {
+  .theme-green .btn-brand-primary:not(:disabled):active {
+    background-color: #12813b !important; /* active: deeper green on press */
+  }
 }
 /* Force a direct-child icon white too — some send buttons pin `[&>svg]:text-white`
    already, but others inherit; this keeps every primary-button icon white on the fill. */

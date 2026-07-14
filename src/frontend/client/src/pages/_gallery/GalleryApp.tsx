@@ -13,6 +13,7 @@
 import { ComponentType, useState } from 'react';
 import { cn } from '~/utils';
 import { OverviewSection } from './sections/OverviewSection';
+import { ResponsiveSection } from './sections/ResponsiveSection';
 import { TypographySection } from './sections/TypographySection';
 import { ModalSection } from './sections/ModalSection';
 import { ConfirmDialogSection } from './sections/ConfirmDialogSection';
@@ -32,6 +33,7 @@ interface PageDef {
 /** Registry — one entry per component page. Grouped like antd's sidebar. */
 const PAGES: PageDef[] = [
   { id: 'overview', label: '总览', group: '开始', Page: OverviewSection },
+  { id: 'responsive', label: '多端适配 Responsive', group: '开始', Page: ResponsiveSection },
   { id: 'typography', label: '字体 Typography', group: '基础 Foundation', status: 'wip', Page: TypographySection },
   { id: 'button', label: 'Button 按钮', group: '通用 General', status: 'todo', Page: ButtonSection },
   { id: 'modal', label: 'Modal 弹窗', group: '反馈 Feedback', status: 'wip', Page: ModalSection },

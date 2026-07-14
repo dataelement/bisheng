@@ -111,7 +111,7 @@ export function ButtonSection() {
 
       <ExampleGroup
         title="color × variant 全矩阵"
-        subtitle="15 种组合全部成立；直接在此悬停/按下体验 hover、active 状态色板（§5.2）。"
+        subtitle="15 种组合全部成立；直接在此悬停体验 hover 色板（§5.2）。active 深一档仅触屏生效——桌面按下沿用 hover 色，不闪。"
       >
         <CompareTable
           head={['variant \\ color', 'primary 品牌', 'default 中性', 'danger 危险']}
@@ -217,7 +217,7 @@ export function ButtonSection() {
 
       <ExampleGroup
         title="状态 state（§5）"
-        subtitle="hover / active 请在上方矩阵直接体验；disabled 与 loading 全类型统一；focus 环仅键盘（Tab）可见，环色随 color。"
+        subtitle="hover 请在上方矩阵直接体验；active 深一档仅触屏生效（桌面按下=hover 色，避免点击闪动）；disabled 与 loading 全类型统一；focus 环仅键盘（Tab）可见，环色随 color。"
       >
         <ExampleGrid cols={2}>
           <ExampleCard

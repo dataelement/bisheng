@@ -85,96 +85,101 @@ const buttonStyles = cva(
     },
     compoundVariants: [
       /* ---- color × variant matrix (§5.2; combos the spec leaves implicit
-             follow the same ramp logic: hover one step, active one deeper) ---- */
+             follow the same ramp logic: hover one step, active one deeper).
+             Active steps are TOUCH-ONLY (coarse-pointer): on hover-capable
+             devices a pressed button keeps its hover color — no click flash;
+             on touch, where hover is disabled, active is the only feedback. ---- */
       {
         color: 'primary',
         variant: 'solid',
         // btn-brand-primary = green-theme !important override (style.css) —
         // kept as agreed tech debt until the theme mechanism is reworked (§6.2).
         class:
-          'btn-brand-primary bg-blue-500 text-white hover:bg-blue-400 active:bg-blue-600',
+          'btn-brand-primary bg-blue-500 text-white hover:bg-blue-400 coarse-pointer:active:bg-blue-600',
       },
       {
         color: 'primary',
         variant: 'outlined',
-        class:
-          'border-blue-500 text-blue-500 hover:border-blue-400 hover:text-blue-400 active:border-blue-600 active:text-blue-600',
+        // Outlined hover is a faint tint of the button's own palette, border/
+        // text unchanged (§5.2) — same shape as default outlined's gray tint.
+        class: 'border-blue-500 text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
       },
       {
         color: 'primary',
         variant: 'filled',
-        class: 'bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200',
+        class: 'bg-blue-50 text-blue-600 hover:bg-blue-100 coarse-pointer:active:bg-blue-200',
       },
       {
         color: 'primary',
         variant: 'text',
-        class: 'text-blue-500 hover:bg-blue-50 active:bg-blue-100',
+        class: 'text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
       },
       {
         color: 'primary',
         variant: 'link',
         class:
-          'text-blue-500 hover:text-blue-400 hover:underline active:text-blue-600',
+          'text-blue-500 hover:text-blue-400 hover:underline coarse-pointer:active:text-blue-600',
       },
       {
         color: 'default',
         variant: 'solid',
         class:
-          'bg-btn-gray-text text-white hover:bg-btn-gray-text/90 active:bg-btn-gray-text/80',
+          'bg-btn-gray-text text-white hover:bg-btn-gray-text/90 coarse-pointer:active:bg-btn-gray-text/80',
       },
       {
         color: 'default',
         variant: 'outlined',
         class:
-          'border-btn-gray-border text-btn-gray-text hover:bg-btn-fill-1 active:bg-btn-fill-2',
+          'border-btn-gray-border text-btn-gray-text hover:bg-btn-fill-1 coarse-pointer:active:bg-btn-fill-2',
       },
       {
         color: 'default',
         variant: 'filled',
         class:
-          'bg-btn-fill-2 text-btn-gray-text hover:bg-btn-fill-3 active:bg-btn-fill-4',
+          'bg-btn-fill-2 text-btn-gray-text hover:bg-btn-fill-3 coarse-pointer:active:bg-btn-fill-4',
       },
       {
         color: 'default',
         variant: 'text',
         class:
-          'text-btn-gray-text hover:bg-btn-fill-1 active:bg-btn-fill-2',
+          'text-btn-gray-text hover:bg-btn-fill-1 coarse-pointer:active:bg-btn-fill-2',
       },
       {
         color: 'default',
         variant: 'link',
         class:
-          'text-btn-gray-text hover:text-btn-gray-text/80 hover:underline active:text-btn-gray-text',
+          'text-btn-gray-text hover:text-btn-gray-text/80 hover:underline coarse-pointer:active:text-btn-gray-text',
       },
       {
         color: 'danger',
         variant: 'solid',
         class:
-          'bg-btn-danger text-white hover:bg-btn-danger-hover active:bg-btn-danger-active',
+          'bg-btn-danger text-white hover:bg-btn-danger-hover coarse-pointer:active:bg-btn-danger-active',
       },
       {
         color: 'danger',
         variant: 'outlined',
+        // Same faint-tint hover as primary outlined, on the red alpha ladder.
         class:
-          'border-btn-danger text-btn-danger hover:border-btn-danger-hover hover:text-btn-danger-hover active:border-btn-danger-active active:text-btn-danger-active',
+          'border-btn-danger text-btn-danger hover:bg-btn-danger/10 coarse-pointer:active:bg-btn-danger/[0.15]',
       },
       {
         color: 'danger',
         variant: 'filled',
         class:
-          'bg-btn-danger/10 text-btn-danger hover:bg-btn-danger/[0.15] active:bg-btn-danger/20',
+          'bg-btn-danger/10 text-btn-danger hover:bg-btn-danger/[0.15] coarse-pointer:active:bg-btn-danger/20',
       },
       {
         color: 'danger',
         variant: 'text',
         class:
-          'text-btn-danger hover:bg-btn-danger/10 active:bg-btn-danger/[0.15]',
+          'text-btn-danger hover:bg-btn-danger/10 coarse-pointer:active:bg-btn-danger/[0.15]',
       },
       {
         color: 'danger',
         variant: 'link',
         class:
-          'text-btn-danger hover:text-btn-danger-hover hover:underline active:text-btn-danger-active',
+          'text-btn-danger hover:text-btn-danger-hover hover:underline coarse-pointer:active:text-btn-danger-active',
       },
       /* ---- bordered padding 7/15/15 incl. 1px border (§2 visual parity) ---- */
       { variant: 'outlined', size: 'small', class: 'px-[7px]' },
