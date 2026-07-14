@@ -226,6 +226,11 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples',
                 'schedule': 30.0,  # Every 30 seconds
             }
+        if 'dispatch_approval_notifications' not in self.beat_schedule:
+            self.beat_schedule['dispatch_approval_notifications'] = {
+                'task': 'bisheng.worker.approval.notification_tasks.dispatch_approval_notifications',
+                'schedule': 30.0,
+            }
         if 'check_org_sync_schedules' not in self.beat_schedule:
             self.beat_schedule['check_org_sync_schedules'] = {
                 'task': 'bisheng.worker.org_sync.tasks.check_org_sync_schedules',

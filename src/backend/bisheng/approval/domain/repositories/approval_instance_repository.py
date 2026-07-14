@@ -81,9 +81,34 @@ class ApprovalInstanceRepository:
         return row
 
     @classmethod
+    async def create_tasks(cls, rows: list[ApprovalTask]) -> list[ApprovalTask]:
+        if not rows:
+            return []
+        async with get_async_db_session() as session:
+            session.add_all(rows)
+            try:
+                await session.flush()
+                saved_rows = [row.model_copy(deep=True) for row in rows]
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+        return saved_rows
+
+    @classmethod
     async def get_task(cls, task_id: int) -> ApprovalTask | None:
         async with get_async_db_session() as session:
             return await session.get(ApprovalTask, task_id)
+
+    @classmethod
+    async def get_tasks_by_ids(cls, task_ids: list[int]) -> list[ApprovalTask]:
+        if not task_ids:
+            return []
+        statement = select(ApprovalTask).where(ApprovalTask.id.in_(task_ids))
+        async with get_async_db_session() as session:
+            rows = list((await session.exec(statement)).all())
+        by_id = {int(row.id): row for row in rows}
+        return [by_id[task_id] for task_id in task_ids if task_id in by_id]
 
     @classmethod
     async def update_task(cls, row: ApprovalTask) -> ApprovalTask:

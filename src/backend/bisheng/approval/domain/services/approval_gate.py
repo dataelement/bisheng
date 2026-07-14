@@ -237,9 +237,8 @@ class ApprovalGate:
                 current_node_name=first_node.node_name,
             )
         )
-        task_ids: list[int] = []
-        for approver_user_id in approvers:
-            task = await self.instance_repository.create_task(
+        tasks = await self.instance_repository.create_tasks(
+            [
                 ApprovalTask(
                     tenant_id=req.tenant_id,
                     instance_id=instance.id,
@@ -252,8 +251,10 @@ class ApprovalGate:
                     node_mode=first_node.node_mode,
                     status=ApprovalTaskStatus.PENDING,
                 )
-            )
-            task_ids.append(task.id)
+                for approver_user_id in approvers
+            ]
+        )
+        task_ids = [task.id for task in tasks]
         await self.instance_repository.create_action_log(
             ApprovalActionLog(
                 tenant_id=req.tenant_id,

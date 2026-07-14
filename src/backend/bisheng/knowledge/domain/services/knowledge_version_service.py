@@ -1200,6 +1200,78 @@ class KnowledgeVersionService:
             )
         return out
 
+    async def get_shougang_publish_version_target(
+        self,
+        knowledge_id: int,
+        current_file_id: int,
+        *,
+        target_document_id: int | None = None,
+        target_file_id: int | None = None,
+    ):
+        """Validate and return one selected Shougang publish target."""
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
+            ShougangFilePublishDocumentEntry,
+        )
+
+        if bool(target_document_id) == bool(target_file_id):
+            return None
+
+        if target_document_id is not None:
+            doc = await self.doc_repo.find_by_id(target_document_id)
+            if doc is None or int(doc.knowledge_id) != int(knowledge_id):
+                return None
+            if doc.primary_version_id is None:
+                return None
+
+            current_version = await self.version_repo.find_by_knowledge_file_id(current_file_id)
+            if current_version is not None and int(current_version.document_id) == int(doc.id):
+                return None
+
+            chain = await self.version_repo.find_by_document_id(int(doc.id))
+            if len(chain) != 1:
+                return None
+            primary_version = chain[0]
+            if int(primary_version.id) != int(doc.primary_version_id):
+                return None
+
+            primary_file = await self.knowledge_file_repo.find_by_id(int(primary_version.knowledge_file_id))
+            if (
+                primary_file is None
+                or int(primary_file.knowledge_id) != int(knowledge_id)
+                or primary_file.status != KnowledgeFileStatus.SUCCESS.value
+            ):
+                return None
+            return ShougangFilePublishDocumentEntry(
+                document_id=int(doc.id),
+                title=primary_file.file_name,
+                doc_code=getattr(primary_file, "file_encoding", None),
+                current_primary_version_no=primary_version.version_no,
+                primary_uploader_name=primary_file.user_name,
+                primary_upload_time=primary_file.create_time,
+            )
+
+        target_file = await self.knowledge_file_repo.find_by_id(int(target_file_id))
+        if (
+            target_file is None
+            or int(target_file.id) == int(current_file_id)
+            or int(target_file.knowledge_id) != int(knowledge_id)
+            or target_file.file_type != FileType.FILE.value
+            or target_file.status != KnowledgeFileStatus.SUCCESS.value
+        ):
+            return None
+        existing_version = await self.version_repo.find_by_knowledge_file_id(int(target_file.id))
+        if existing_version is not None:
+            return None
+        return ShougangFilePublishDocumentEntry(
+            document_id=None,
+            target_file_id=int(target_file.id),
+            title=target_file.file_name,
+            doc_code=getattr(target_file, "file_encoding", None),
+            current_primary_version_no=1,
+            primary_uploader_name=target_file.user_name,
+            primary_upload_time=target_file.create_time,
+        )
+
     async def ensure_shougang_publish_document_for_file(self, knowledge_file_id: int) -> int:
         """Create the missing V1 document chain for a Shougang publish target file."""
         await self._require_version_management_enabled()
