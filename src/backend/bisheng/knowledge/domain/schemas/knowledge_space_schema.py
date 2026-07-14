@@ -442,6 +442,12 @@ class ShougangPortalFileItemResp(BaseModel):
         description="Readable document source path '<source space>><folder>/<file>'; "
         "root-level source files use only '<source space>'.",
     )
+    can_download: bool = Field(
+        default=False,
+        description="Whether the current user may download this file. Derived from the "
+        "same per-space effective 'download_file' permission the download endpoint "
+        "enforces, so the portal can hide the download entry for view-only users.",
+    )
 
 
 class ShougangPortalFileSearchResp(BaseModel):
