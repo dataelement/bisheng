@@ -2635,6 +2635,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await self.create_knowledge_space(
             name=self.FAVORITE_SPACE_NAME,
             description="系统默认收藏知识库",
+            auth_type=AuthTypeEnum.PRIVATE,
             space_level=KnowledgeSpaceLevelEnum.PERSONAL,
             skip_user_limit=True,
             system_managed=True,
@@ -2689,6 +2690,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return await self.create_knowledge_space(
                 name=self.personal_default_space_name(),
                 description="个人默认知识库",
+                auth_type=AuthTypeEnum.PRIVATE,
                 space_level=KnowledgeSpaceLevelEnum.PERSONAL,
                 skip_user_limit=True,
                 system_managed=True,
