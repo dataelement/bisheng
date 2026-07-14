@@ -120,6 +120,12 @@ class DatabaseConnectionManager:
             config = self._get_default_engine_config()
             config.update(self.engine_kwargs)
 
+            # StaticPool rejects QueuePool sizing options. Keep SQLite usable
+            # when the application-level pool configuration is always passed.
+            if config.get('poolclass') is StaticPool:
+                for key in ('pool_size', 'max_overflow', 'pool_timeout'):
+                    config.pop(key, None)
+
             sync_url = self.database_url
             if "dm+dmPython" in sync_url:
                 sync_url = self._dm_sync_url(sync_url)
@@ -154,6 +160,10 @@ class DatabaseConnectionManager:
 
         # Remove Synchronization Engine Specific Configuration
         config.pop('poolclass', None)
+
+        if self.database_url.startswith('sqlite'):
+            for key in ('pool_size', 'max_overflow', 'pool_timeout'):
+                config.pop(key, None)
 
         if 'mysql+aiomysql' in self.async_database_url:
             _patch_aiomysql_pre_ping()

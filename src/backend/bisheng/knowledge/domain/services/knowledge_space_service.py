@@ -143,6 +143,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
+    ShougangPortalDomainFileCountItem,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
     ShougangPortalFavoriteFileItem,
@@ -152,7 +153,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteStatusReq,
     ShougangPortalFavoriteStatusResp,
     ShougangPortalFavoriteStatusResultItem,
-    ShougangPortalDomainFileCountItem,
+    ShougangPortalFileBrowseReq,
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
@@ -3773,6 +3774,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return {"updated": updated}
 
     async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> dict:
+        if not (req.q or "").strip():
+            logger.warning("empty portal file search is deprecated; delegating to browse")
+            browse_req = ShougangPortalFileBrowseReq.model_validate(
+                req.model_dump(exclude={"q", "rerank_model_id"})
+            )
+            return await self.browse_shougang_portal_files(browse_req)
+
         perf = PortalSearchPerfContext(started_at=time.monotonic())
         perf.keyword = (req.q or "").strip()
         perf.sort = req.sort
@@ -3822,6 +3830,50 @@ class KnowledgeSpaceService(KnowledgeUtils):
             }
             try:
                 logger.info("[perf][portal.search] {}", payload)
+            except Exception:
+                pass
+            _portal_search_perf_var.reset(perf_token)
+
+    async def browse_shougang_portal_files(self, req: ShougangPortalFileBrowseReq) -> dict:
+        perf = PortalSearchPerfContext(started_at=time.monotonic())
+        perf.sort = req.sort
+        perf.tag_enabled = bool(req.tag)
+        perf.file_ext = str(req.file_ext or "")
+        perf.document_type = self._normalize_shougang_document_type_code(req.document_type)
+        perf.file_subcategory_code = self._normalize_shougang_file_subcategory_code(req.file_subcategory_code)
+        perf_token = _portal_search_perf_var.set(perf)
+        fga_token = begin_fga_read_stats()
+        try:
+            result = await self._browse_shougang_portal_files_impl(req)
+            perf.success = True
+            return result
+        except Exception as exc:
+            perf.error = type(exc).__name__
+            raise
+        finally:
+            fga_stats = finish_fga_read_stats(fga_token)
+            duration_ms = int((time.monotonic() - perf.started_at) * 1000)
+            payload = {
+                "sort": perf.sort,
+                "tag_enabled": perf.tag_enabled,
+                "file_ext": perf.file_ext,
+                "document_type": perf.document_type,
+                "file_subcategory_code": perf.file_subcategory_code,
+                "space_count": perf.space_count,
+                "visible_candidate_count": perf.visible_candidate_count,
+                "final_count": perf.final_count,
+                "visible_check_count": perf.visible_check_count,
+                "fga_read_count": fga_stats.read_count,
+                "cache_hit_count": fga_stats.cache_hit_count,
+                "singleflight_wait_count": fga_stats.singleflight_wait_count,
+                "fast_path_public_space_count": perf.fast_path_public_space_count,
+                "duration_ms": duration_ms,
+                "success": perf.success,
+                "stage": perf.stage,
+                "error": perf.error,
+            }
+            try:
+                logger.info("[perf][portal.browse] {}", payload)
             except Exception:
                 pass
             _portal_search_perf_var.reset(perf_token)
@@ -3990,6 +4042,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return self._build_shougang_portal_search_response([])
 
+        _set_portal_search_stage("resolve_tag")
+        space_ids = [int(space.id) for space in spaces]
+        tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
+        if req.tag and not tag_file_ids:
+            return self._build_shougang_portal_search_response([])
+
+        _set_portal_search_stage("semantic_search")
+        return await self._semantic_search_shougang_portal_files(
+            req=req,
+            spaces=spaces,
+            tag_file_ids=tag_file_ids,
+        )
+
+    async def _browse_shougang_portal_files_impl(self, req: ShougangPortalFileBrowseReq) -> dict:
+        _set_portal_search_stage("resolve_spaces")
+        spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
+        perf = _get_portal_search_perf()
+        if perf is not None:
+            perf.space_count = len(spaces)
+        if not spaces:
+            return self._build_shougang_portal_search_response([])
+
         if (
             self._is_shougang_portal_latest_selected_recommendation(req.recommendation)
             and not self._is_shougang_portal_updated_at_sort(req.sort)
@@ -4003,14 +4077,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if req.tag and not tag_file_ids:
             return self._build_shougang_portal_search_response([])
 
-        if req.q and req.q.strip():
-            _set_portal_search_stage("semantic_search")
-            return await self._semantic_search_shougang_portal_files(
-                req=req,
-                spaces=spaces,
-                tag_file_ids=tag_file_ids,
-            )
-
         _set_portal_search_stage("list_files")
         return await self._list_shougang_portal_files_without_keyword(
             req=req,
@@ -4021,7 +4087,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _list_shougang_portal_hot_read_files(
         self,
         *,
-        req: ShougangPortalFileSearchReq,
+        req: ShougangPortalFileBrowseReq,
         spaces: list[Knowledge],
     ) -> dict:
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
@@ -4188,7 +4254,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _list_shougang_portal_files_without_keyword(
         self,
         *,
-        req: ShougangPortalFileSearchReq,
+        req: ShougangPortalFileBrowseReq,
         spaces: list[Knowledge],
         tag_file_ids: list[int] | None,
     ) -> dict:
@@ -4343,12 +4409,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 rerank_model_id=req.rerank_model_id,
                 rerank_model_id_provided=self._is_pydantic_field_set(req, "rerank_model_id"),
             )
-        limit = min(max(int(req.limit or 20), 1), 100)
         visible_candidates = self._sort_shougang_portal_semantic_candidates(
             candidates=visible_candidates,
             sort=req.sort,
             file_map=visible_file_map,
-        )[:limit]
+        )[:PORTAL_SEARCH_FINAL_LIMIT]
         if perf is not None:
             perf.final_count = len(visible_candidates)
             self._set_shougang_portal_search_top_result_debug(visible_candidates, visible_file_map)
@@ -4361,7 +4426,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=req.file_subcategory_code,
             business_domain_code=req.business_domain_code,
         )
-        return self._build_shougang_portal_search_response(items, limit=limit)
+        return self._build_shougang_portal_search_response(items)
 
     async def _collect_visible_shougang_portal_semantic_candidates(
         self,
@@ -5158,7 +5223,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @classmethod
     def _shougang_portal_file_cursor_context(
         cls,
-        req: ShougangPortalFileSearchReq,
+        req: ShougangPortalFileBrowseReq,
         space_ids: list[int],
     ) -> str:
         payload = {
@@ -5179,7 +5244,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @classmethod
     def _shougang_portal_hot_read_cursor_context(
         cls,
-        req: ShougangPortalFileSearchReq,
+        req: ShougangPortalFileBrowseReq,
         space_ids: list[int],
     ) -> str:
         payload = {

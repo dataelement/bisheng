@@ -70,7 +70,10 @@ class ApplicationContextManager:
         try:
 
             from bisheng.core.database.manager import DatabaseManager
-            self.register_context(DatabaseManager(database_url=config.database_url))
+            self.register_context(DatabaseManager(
+                database_url=config.database_url,
+                engine_config=config.database_pool.as_engine_kwargs(),
+            ))
 
             from bisheng.core.cache.redis_manager import RedisManager
             self.register_context(RedisManager(redis_url=config.redis_url))
