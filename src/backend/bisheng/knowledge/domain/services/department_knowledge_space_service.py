@@ -489,4 +489,33 @@ class DepartmentKnowledgeSpaceService:
     async def list_departments(cls, login_user) -> list:
         cls._ensure_super_admin(login_user)
         rows = await DepartmentDao.aget_all_active()
-        return [{"id": d.id, "name": d.name} for d in rows]
+        nodes: dict[int, dict] = {}
+        parent_ids: dict[int, int | None] = {}
+        for department in rows:
+            if department.id is None:
+                continue
+            department_id = int(department.id)
+            nodes[department_id] = {
+                "id": department_id,
+                "name": department.name,
+                "children": [],
+                "_sort_order": getattr(department, "sort_order", 0),
+            }
+            parent_ids[department_id] = getattr(department, "parent_id", None)
+
+        roots: list[dict] = []
+        for department_id, node in nodes.items():
+            parent_id = parent_ids[department_id]
+            if parent_id in nodes:
+                nodes[parent_id]["children"].append(node)
+            else:
+                roots.append(node)
+
+        def sort_tree(items: list[dict]) -> None:
+            items.sort(key=lambda item: (item["_sort_order"], item["name"], item["id"]))
+            for item in items:
+                sort_tree(item["children"])
+                item.pop("_sort_order", None)
+
+        sort_tree(roots)
+        return roots

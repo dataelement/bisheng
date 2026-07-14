@@ -1629,6 +1629,57 @@ def test_shougang_portal_file_search_request_defaults_to_relevance_sort():
 
 
 @pytest.mark.asyncio
+async def test_latest_selected_explicit_updated_time_sort_bypasses_hot_read_ranking(service):
+    space = _make_space(space_id=12, user_id=7)
+    old_file = _make_file(file_id=1580, knowledge_id=12, file_name="较早文档.pdf")
+    old_file.update_time = datetime(2026, 4, 13, 10, 30, 0)
+    new_file = _make_file(file_id=1582, knowledge_id=12, file_name="较新文档.pdf")
+    new_file.update_time = datetime(2026, 4, 15, 10, 30, 0)
+    files = [old_file, new_file]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor",
+            new_callable=AsyncMock,
+            return_value=files,
+        ) as mock_batch_files,
+        patch.object(
+            service,
+            "_list_shougang_portal_hot_read_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("explicit time sorting must bypass hot-read ranking"),
+        ),
+        patch.object(
+            service,
+            "_filter_visible_child_items",
+            new_callable=AsyncMock,
+            side_effect=lambda items, **_: items,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                space_ids=[12],
+                sort="updated_at_asc",
+            )
+        )
+
+    assert mock_batch_files.await_args.kwargs["order_sort"] == "asc"
+    assert [item["id"] for item in result["data"]] == [1580, 1582]
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_file_search_filters_document_type_before_pagination(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = "报告知识库"

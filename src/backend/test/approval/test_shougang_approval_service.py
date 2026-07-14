@@ -1483,12 +1483,11 @@ async def test_file_publish_similar_candidates_filters_by_file_view_permission(m
 
 
 @pytest.mark.asyncio
-async def test_file_publish_document_search_filters_by_file_view_permission(monkeypatch):
+async def test_file_publish_document_search_does_not_filter_by_file_view_permission(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
-    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
-    from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
+    from bisheng.knowledge.domain.schemas.knowledge_version_schema import ShougangFilePublishDocumentEntry
 
     service = ShougangApprovalService()
     monkeypatch.setattr(
@@ -1514,26 +1513,19 @@ async def test_file_publish_document_search_filters_by_file_view_permission(monk
     monkeypatch.setattr(service, "_ensure_publish_target_space", AsyncMock(return_value=SimpleNamespace(id=20)))
 
     async def require_permission(object_type, object_id, permission_id, *, space_id=None):
-        if object_type == "knowledge_file" and object_id == 201:
-            raise SpacePermissionDeniedError()
+        if object_type == "knowledge_file":
+            raise AssertionError("目标文档搜索不应执行逐文件 view_file 校验")
 
     space_service = SimpleNamespace(_require_permission_id=AsyncMock(side_effect=require_permission))
 
-    async def search_sources(target_space_id, keyword, source_file_id, *, can_view_file, **kwargs):
+    async def search_sources(target_space_id, keyword, source_file_id, **kwargs):
         assert target_space_id == 20
         assert keyword == "制度"
         assert source_file_id == 100
-        out = []
-        for document_id, knowledge_file_id in [(1, 200), (2, 201)]:
-            if await can_view_file(knowledge_file_id):
-                out.append(
-                    AssociableDocumentEntry(
-                        document_id=document_id,
-                        title=f"文件{knowledge_file_id}",
-                        current_primary_version_no=1,
-                    )
-                )
-        return out
+        return [
+            ShougangFilePublishDocumentEntry(document_id=1, title="文件200", current_primary_version_no=1),
+            ShougangFilePublishDocumentEntry(document_id=2, title="文件201", current_primary_version_no=1),
+        ]
 
     version_service = SimpleNamespace(search_shougang_publish_version_sources=AsyncMock(side_effect=search_sources))
 
@@ -1545,7 +1537,38 @@ async def test_file_publish_document_search_filters_by_file_view_permission(monk
         space_service=space_service,
     )
 
-    assert [one.document_id for one in result.data] == [1]
+    assert [one.document_id for one in result.data] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_file_publish_document_search_returns_cursor_page(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.knowledge.domain.schemas.knowledge_version_schema import ShougangFilePublishDocumentEntry
+
+    service = ShougangApprovalService()
+    monkeypatch.setattr(service, "_ensure_file_publish_query_allowed", AsyncMock(return_value=None))
+    version_service = SimpleNamespace(
+        search_shougang_publish_version_sources=AsyncMock(
+            return_value=[
+                ShougangFilePublishDocumentEntry(document_id=index, title=f"文件{index}")
+                for index in range(1, 26)
+            ]
+        )
+    )
+
+    result = await service.search_file_publish_documents(
+        source_file_id=100,
+        target_space_id=20,
+        keyword="制度",
+        cursor=20,
+        limit=20,
+        version_service=version_service,
+    )
+
+    assert [one.document_id for one in result.data] == [21, 22, 23, 24, 25]
+    assert result.total == 25
+    assert result.has_more is False
+    assert result.next_cursor is None
 
 
 @pytest.mark.asyncio

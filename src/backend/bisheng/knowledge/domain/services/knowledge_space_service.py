@@ -152,6 +152,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteStatusReq,
     ShougangPortalFavoriteStatusResp,
     ShougangPortalFavoriteStatusResultItem,
+    ShougangPortalDomainFileCountItem,
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
@@ -1970,6 +1971,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(context["public_space_permission_ids"])
         return effective_permissions
 
+    async def get_public_space_file_permissions(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Batch-resolve portal edit actions without changing public-list read semantics.
+
+        The public-space list deliberately exposes only read access.  This
+        endpoint is called after the portal has rendered its current page and
+        uses the same child-item evaluator as read/write operations, including
+        custom relation models, member roles, and child-level overrides.
+        """
+        await self._require_read_permission(space_id)
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        if not scope or self._space_level_value(scope.level) != KnowledgeSpaceLevelEnum.PUBLIC.value:
+            raise SpaceInvalidLevelError()
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+        action_permission_ids = (
+            "rename_file",
+            "download_file",
+            "delete_file",
+            "move_file",
+            "manage_file_relation",
+        )
+        is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, "is_admin", None)) else False
+        if is_admin:
+            return {
+                "permissions": [
+                    {"file_id": file_record.id, "permission_ids": list(action_permission_ids)}
+                    for file_record in files
+                ]
+            }
+
+        context = await self._build_child_permission_context(space_id)
+        visible_files = await self._filter_visible_child_items(
+            files,
+            space_id=space_id,
+            context=context,
+        )
+        if len(visible_files) != len(files):
+            # Do not turn this endpoint into a way to probe hidden files.
+            raise SpaceFileNotFoundError()
+
+        permission_sets = await asyncio.gather(
+            *[
+                self._get_child_item_effective_permission_ids(
+                    file_record,
+                    space_id=space_id,
+                    context=context,
+                )
+                for file_record in files
+            ]
+        )
+        return {
+            "permissions": [
+                {
+                    "file_id": file_record.id,
+                    "permission_ids": [
+                        permission_id
+                        for permission_id in action_permission_ids
+                        if permission_id in permission_ids
+                    ],
+                }
+                for file_record, permission_ids in zip(files, permission_sets)
+            ]
+        }
+
     async def _public_space_viewer_permission_ids(self, lineage: list[tuple[str, int]]) -> set[str]:
         space_id = next(
             (lineage_id for lineage_type, lineage_id in lineage if lineage_type == "knowledge_space"),
@@ -3270,8 +3339,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
         return sorted({str(tag.name) for tag in all_tags if int(tag.id) in visible_tag_ids and tag.name})
 
-    async def count_shougang_portal_domain_files(self, codes: list[str]) -> dict[str, int]:
-        return await KnowledgeFileDao.async_count_files_by_domain_codes(codes)
+    async def count_shougang_portal_domain_files(
+        self,
+        domains: list[ShougangPortalDomainFileCountItem],
+    ) -> dict[str, int]:
+        visible_scopes: dict[str, set[int]] = {}
+        for domain in domains:
+            spaces = await self._get_shougang_portal_visible_search_spaces(domain.space_ids, None)
+            visible_scopes.setdefault(domain.code, set()).update(
+                int(space.id) for space in spaces if space.id is not None
+            )
+        return await KnowledgeFileDao.async_count_files_by_domain_scopes(visible_scopes)
 
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> dict:
         spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
@@ -3912,7 +3990,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return self._build_shougang_portal_search_response([])
 
-        if self._is_shougang_portal_latest_selected_recommendation(req.recommendation):
+        if (
+            self._is_shougang_portal_latest_selected_recommendation(req.recommendation)
+            and not self._is_shougang_portal_updated_at_sort(req.sort)
+        ):
             _set_portal_search_stage("list_hot_read_files")
             return await self._list_shougang_portal_hot_read_files(req=req, spaces=spaces)
 
@@ -9180,14 +9261,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeFile:
         """Update a file's file_encoding and optional second-level category (shougang feature)."""
         file_record = await self._get_file_for_action(file_id)
-        # Reuse 'rename_file' permission action — that action is owner/admin-only,
-        # matching the required privilege level for editing encoding.
-        await self._require_permission_id(
-            "knowledge_file",
-            file_id,
-            "rename_file",
-            space_id=file_record.knowledge_id,
-        )
+        # Editing file category / business domain follows the upload permission, on the
+        # same container the upload flow checks: the file's parent folder when it lives
+        # in one, otherwise the space. The per-file 'rename_file' action was subject to
+        # nearest-binding overrides that strip container-level grants from individual
+        # files, so managers who could upload still couldn't edit encoding.
+        ancestor_folder_ids = [
+            int(part) for part in (file_record.file_level_path or "").split("/") if part
+        ]
+        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
+        if parent_folder_id:
+            await self._require_permission_id(
+                "folder",
+                parent_folder_id,
+                "upload_file",
+                space_id=file_record.knowledge_id,
+            )
+        else:
+            await self._require_permission_id(
+                "knowledge_space",
+                file_record.knowledge_id,
+                "upload_file",
+            )
 
         cleaned = encoding.strip()
         if not cleaned:
@@ -9331,7 +9426,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not self._is_portal_bff_proxy_request():
             asyncio.create_task(self._log_portal_document_read_success(file_record))  # noqa: RUF006
 
-        return KnowledgeService.get_file_share_detail(file_record)
+        detail = KnowledgeService.get_file_share_detail(file_record)
+        # Expose the download permission so the portal can hide the download entry
+        # for view-only users. Derived from the same effective-permission source the
+        # download endpoint gates on, so it can never drift from actual enforcement.
+        effective_permissions = await self._get_effective_permission_ids(
+            "knowledge_file",
+            file_id,
+            space_id=file_record.knowledge_id,
+        )
+        detail["can_download"] = "download_file" in effective_permissions
+        return detail
 
     def _is_portal_bff_proxy_request(self) -> bool:
         return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))

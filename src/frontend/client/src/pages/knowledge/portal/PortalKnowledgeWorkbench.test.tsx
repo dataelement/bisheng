@@ -66,11 +66,34 @@ const mockShowToast = jest.fn();
 const mockConfirm = jest.fn();
 const mockUseKnowledgeSpaceActionPermissions = jest.fn();
 const mockCheckPermission = jest.fn();
+const mockGetPublicSpaceFilePermissionsApi = jest.fn();
 const mockClipboardWriteText = jest.fn();
 const mockHandleUploadFile = jest.fn();
+const mockHandleDirectDuplicateSkip = jest.fn();
+const mockHandleDirectDuplicateOverwrite = jest.fn();
+const mockUseFileUpload = jest.fn();
 const mockUpdateFileTagsApi = jest.fn();
 let mockSearchParams = "";
 let mockCreateSpaceConfirmResult: any;
+
+function createMockFileUpload(overrides: Record<string, any> = {}) {
+    return {
+        creatingFolder: null,
+        uploadingFiles: [],
+        duplicateFiles: [],
+        handleCreateFolder: jest.fn(),
+        handleUploadFile: mockHandleUploadFile,
+        handleUploadFolder: jest.fn(),
+        handleCancelCreateFolder: jest.fn(),
+        handleRenameFile: jest.fn(),
+        handleDeleteFile: jest.fn(),
+        handleMoveFile: jest.fn(),
+        handleEditTags: jest.fn(),
+        handleDuplicateSkip: mockHandleDirectDuplicateSkip,
+        handleDuplicateOverwrite: mockHandleDirectDuplicateOverwrite,
+        ...overrides,
+    };
+}
 
 jest.mock("react-router-dom", () => ({
     ...jest.requireActual("react-router-dom"),
@@ -293,20 +316,7 @@ jest.mock("../hooks/useFileManager", () => ({
 }));
 
 jest.mock("../hooks/useFileUpload", () => ({
-    useFileUpload: () => ({
-        creatingFolder: null,
-        uploadingFiles: [],
-        duplicateFiles: [],
-        handleCreateFolder: jest.fn(),
-        handleUploadFile: mockHandleUploadFile,
-        handleUploadFolder: jest.fn(),
-        handleCancelCreateFolder: jest.fn(),
-        handleRenameFile: jest.fn(),
-        handleDeleteFile: jest.fn(),
-        handleEditTags: jest.fn(),
-        handleDuplicateSkip: jest.fn(),
-        handleDuplicateOverwrite: jest.fn(),
-    }),
+    useFileUpload: (...args: any[]) => mockUseFileUpload(...args),
 }));
 
 jest.mock("~/api/permission", () => ({
@@ -385,6 +395,7 @@ jest.mock("~/api/knowledge", () => ({
     unsubscribeSpaceApi: jest.fn(),
     pinSpaceApi: jest.fn(),
     getSpaceChildrenApi: jest.fn(),
+    getPublicSpaceFilePermissionsApi: (...args: any[]) => mockGetPublicSpaceFilePermissionsApi(...args),
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
@@ -588,6 +599,7 @@ function selectPortalSubcategory(
 describe("PortalKnowledgeWorkbench", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockUseFileUpload.mockReturnValue(createMockFileUpload());
         mockUpdateFileTagsApi.mockResolvedValue(undefined);
         localStorage.removeItem("knowledge-view-mode");
         mockCreateSpaceConfirmResult = undefined;
@@ -676,6 +688,7 @@ describe("PortalKnowledgeWorkbench", () => {
             task_ids: [904],
         } as any);
         mockCheckPermission.mockResolvedValue({ allowed: true });
+        mockGetPublicSpaceFilePermissionsApi.mockResolvedValue([]);
         const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
         canOpenPermissionDialog.mockResolvedValue(true);
     });
@@ -1092,6 +1105,62 @@ describe("PortalKnowledgeWorkbench", () => {
         const requestedSpaceIds = mockUseKnowledgeSpaceActionPermissions.mock.calls
             .flatMap((call) => call[0] as string[]);
         expect(requestedSpaceIds).not.toContain("team-1");
+    });
+
+    test("公共知识库文件列表展示后批量升级文件编辑权限", async () => {
+        const publicSpace = makeSpace("public-1", "公共空间01", {
+            spaceLevel: SpaceLevel.PUBLIC,
+        });
+        const file = makeFile("201", "公共文件.md", {
+            spaceId: "public-1",
+            fileEncoding: "RPT-PP-00000001",
+        });
+        let resolvePermissions: ((value: Array<{ fileId: string; permissionIds: string[] }>) => void) | undefined;
+        mockGetPublicSpaceFilePermissionsApi.mockImplementation(() => new Promise((resolve) => {
+            resolvePermissions = resolve;
+        }));
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(publicSpace as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [publicSpace],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench("/knowledge-portal?spaceId=public-1");
+
+        await screen.findByTestId("file-tree-row-201");
+        await waitFor(() => {
+            expect(mockGetPublicSpaceFilePermissionsApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "public-1",
+                file_ids: ["201"],
+            }));
+        });
+        expect(mockCheckPermission).not.toHaveBeenCalled();
+        const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
+        expect(canOpenPermissionDialog).not.toHaveBeenCalled();
+
+        resolvePermissions?.([{
+            fileId: "201",
+            permissionIds: ["rename_file", "download_file", "delete_file", "move_file", "manage_file_relation"],
+        }]);
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        const fileRow = screen.getByTestId("file-tree-row-201");
+        expect(
+            within(fileRow).getByLabelText("修改公共文件.md业务域类型 当前业务域：PP"),
+        ).toBeInTheDocument();
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开公共文件.md" }));
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
+        const drawer = await screen.findByTestId("portal-info-drawer");
+        expect(within(drawer).getByLabelText("修改公共文件.md业务域类型 当前业务域：PP")).toBeInTheDocument();
     });
 
     test("hides create row under a group without create permission", async () => {
@@ -3431,6 +3500,50 @@ describe("PortalKnowledgeWorkbench", () => {
         const selectedFilesLabel = within(dialog).getByText("已选择的文件 (1)");
         const fileCategoryLabel = within(dialog).getByText("文件分类");
         expect(selectedFilesLabel.compareDocumentPosition(fileCategoryLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    test("shows duplicate choices returned by a file dragged onto the portal list", async () => {
+        mockUseFileUpload.mockReturnValue(createMockFileUpload({
+            duplicateFiles: [{
+                fileId: "duplicate-1",
+                fileName: "重复文件.pdf",
+                oldFileLevelPath: "/制度库",
+                rawObj: { id: "duplicate-1" },
+            }],
+        }));
+
+        renderWorkbench();
+
+        expect(mockUseFileUpload).toHaveBeenCalled();
+        expect(mockUseFileUpload.mock.results.at(-1)?.value.duplicateFiles).toHaveLength(1);
+        expect(await screen.findByText("发现重复文件")).toBeInTheDocument();
+        expect(screen.getByText("重复文件.pdf（/制度库）")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "覆盖" }));
+        expect(mockHandleDirectDuplicateOverwrite).toHaveBeenCalledTimes(1);
+        expect(mockHandleDirectDuplicateSkip).not.toHaveBeenCalled();
+    });
+
+    test("passes files dropped on the portal list to the direct uploader", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+
+        renderWorkbench();
+
+        const file = new File(["pdf"], "重复文件.pdf", { type: "application/pdf" });
+        fireEvent.drop(await screen.findByRole("button", { name: "上传" }), {
+            dataTransfer: { files: [file], items: [] },
+        });
+
+        expect(mockHandleUploadFile).toHaveBeenCalledWith([file]);
     });
 
     test("loads existing and bound library tags in portal upload dialog", async () => {

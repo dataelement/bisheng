@@ -57,6 +57,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.workstation.domain.models.tenant_workstation_config",
     "bisheng.org_sync.domain.models.org_sync",
     "bisheng.approval.domain.models.approval_request",
+    "bisheng.citation.domain.models.message_citation",
     # Previously *not* on any auto-imported chain — silent tenant-id leaks.
     "bisheng.database.models.failed_tuple",
     "bisheng.database.models.flow_version",

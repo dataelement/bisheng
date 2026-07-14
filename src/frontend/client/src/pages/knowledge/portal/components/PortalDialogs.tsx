@@ -55,6 +55,11 @@ type PortalDialogsProps = {
     duplicateOverwriting?: boolean;
     onDuplicateSkip: () => void;
     onDuplicateOverwrite: () => void;
+    directUploadDuplicateFiles: DuplicateFile[];
+    onDirectUploadDuplicateSkip: () => void;
+    onDirectUploadDuplicateOverwrite: () => void;
+    sensitiveWordFiles: string[];
+    onSensitiveWordDialogClose: () => void;
 };
 
 export function PortalDialogs({
@@ -93,8 +98,24 @@ export function PortalDialogs({
     duplicateOverwriting = false,
     onDuplicateSkip,
     onDuplicateOverwrite,
+    directUploadDuplicateFiles,
+    onDirectUploadDuplicateSkip,
+    onDirectUploadDuplicateOverwrite,
+    sensitiveWordFiles,
+    onSensitiveWordDialogClose,
 }: PortalDialogsProps) {
     const versionManagementEnabled = useVersionManagementEnabled();
+    const hasPortalUploadDuplicates = duplicateFiles.length > 0;
+    const visibleDuplicateFiles = hasPortalUploadDuplicates
+        ? duplicateFiles
+        : directUploadDuplicateFiles;
+    const visibleDuplicateOverwriting = hasPortalUploadDuplicates && duplicateOverwriting;
+    const handleVisibleDuplicateSkip = hasPortalUploadDuplicates
+        ? onDuplicateSkip
+        : onDirectUploadDuplicateSkip;
+    const handleVisibleDuplicateOverwrite = hasPortalUploadDuplicates
+        ? onDuplicateOverwrite
+        : onDirectUploadDuplicateOverwrite;
 
     return (
         <>
@@ -185,10 +206,10 @@ export function PortalDialogs({
             <PortalUploadDialog {...uploadDialogProps} />
 
             <Dialog
-                open={duplicateFiles.length > 0}
+                open={visibleDuplicateFiles.length > 0}
                 onOpenChange={(open) => {
-                    if (!open && !duplicateOverwriting) {
-                        onDuplicateSkip();
+                    if (!open && !visibleDuplicateOverwriting) {
+                        handleVisibleDuplicateSkip();
                     }
                 }}
             >
@@ -197,22 +218,48 @@ export function PortalDialogs({
                         <DialogTitle>发现重复文件</DialogTitle>
                     </DialogHeader>
                     <ul className={s.dialogList}>
-                        {duplicateFiles.map((entry) => (
+                        {visibleDuplicateFiles.map((entry) => (
                             <li key={entry.fileId} className={s.dialogListItem}>
                                 {entry.fileName}
                                 {entry.oldFileLevelPath ? `（${entry.oldFileLevelPath}）` : ""}
                             </li>
                         ))}
                     </ul>
-                    {duplicateOverwriting ? (
+                    {visibleDuplicateOverwriting ? (
                         <p className="text-sm text-[#86909c]">正在覆盖，大文件可能需要数分钟，请勿重复点击…</p>
                     ) : null}
                     <DialogFooter>
-                        <Button variant="outline" className="h-8" disabled={duplicateOverwriting} onClick={onDuplicateSkip}>
+                        <Button variant="outline" className="h-8" disabled={visibleDuplicateOverwriting} onClick={handleVisibleDuplicateSkip}>
                             取消覆盖
                         </Button>
-                        <Button className="h-8" disabled={duplicateOverwriting} onClick={onDuplicateOverwrite}>
-                            {duplicateOverwriting ? "覆盖中…" : "覆盖"}
+                        <Button className="h-8" disabled={visibleDuplicateOverwriting} onClick={handleVisibleDuplicateOverwrite}>
+                            {visibleDuplicateOverwriting ? "覆盖中…" : "覆盖"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={sensitiveWordFiles.length > 0}
+                onOpenChange={(open) => {
+                    if (!open) onSensitiveWordDialogClose();
+                }}
+            >
+                <DialogContent className="sm:max-w-[460px]">
+                    <DialogHeader>
+                        <DialogTitle>部分文件包含敏感词</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-[#4e5969]">
+                        以下文件包含敏感词，已跳过上传，其余文件已正常上传。请修改后重试：
+                    </p>
+                    <ul className={s.dialogList}>
+                        {sensitiveWordFiles.map((fileName) => (
+                            <li key={fileName} className={s.dialogListItem}>{fileName}</li>
+                        ))}
+                    </ul>
+                    <DialogFooter>
+                        <Button className="h-8" onClick={onSensitiveWordDialogClose}>
+                            我知道了
                         </Button>
                     </DialogFooter>
                 </DialogContent>

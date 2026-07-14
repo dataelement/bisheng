@@ -137,9 +137,9 @@ describe("FilePublishDialog", () => {
         expect(screen.queryByRole("option", { name: "推荐：推荐文件" })).not.toBeInTheDocument();
     });
 
-    test("搜索时展示加载态并在结果弹窗选择 target_file_id", async () => {
+    test("关键字防抖搜索并在内嵌结果中选择 target_file_id", async () => {
         mockGetSimilarCandidates.mockResolvedValue({ data: [] });
-        const search = deferred<{ data: any[] }>();
+        const search = deferred<{ data: any[]; has_more: boolean }>();
         mockSearchDocuments.mockReturnValue(search.promise);
 
         render(
@@ -154,21 +154,18 @@ describe("FilePublishDialog", () => {
 
         await waitFor(() => expect(mockGetSimilarCandidates).toHaveBeenCalledWith(100, "20"));
         fireEvent.change(screen.getByPlaceholderText("搜索目标空间文档..."), { target: { value: "桃" } });
-        fireEvent.click(screen.getByRole("button", { name: "搜索" }));
-
-        expect(screen.getByRole("button", { name: "搜索中..." })).toBeDisabled();
+        await waitFor(() => {
+            expect(mockSearchDocuments).toHaveBeenCalledWith(100, "20", "桃", 0);
+        });
 
         search.resolve({
             data: [{ target_file_id: 300, title: "桃新品种经济效益分析.pdf", doc_code: "SGGF-STD-PP-20260500000004" }],
+            has_more: false,
         });
 
-        await screen.findByRole("heading", { name: "选择版本管理目标" });
-        const result = await screen.findByRole("button", { name: /搜索 桃新品种经济效益分析\.pdf/ });
+        const result = await screen.findByRole("button", { name: "桃新品种经济效益分析.pdf" });
         expect(screen.getByText("SGGF-STD-PP-20260500000004")).toBeInTheDocument();
         fireEvent.click(result);
-        await waitFor(() => {
-            expect(screen.queryByRole("heading", { name: "选择版本管理目标" })).not.toBeInTheDocument();
-        });
         expect(screen.getByText("已选择：桃新品种经济效益分析.pdf")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
 

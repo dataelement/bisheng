@@ -26,6 +26,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileRenameReq,
     FolderCreateReq,
     FolderRenameReq,
+    KnowledgeSpaceFilePermissionsReq,
     KnowledgeSpaceCreateReq,
     KnowledgeSpaceFolderStatsReq,
     KnowledgeSpaceUpdateReq,
@@ -501,6 +502,17 @@ async def get_space_folder_stats(
         keyword=req.keyword,
         tag_ids=req.tag_ids,
     )
+    return resp_200(result)
+
+
+@router.post("/{space_id}/file-permissions")
+async def get_public_space_file_permissions(
+    space_id: int,
+    req: KnowledgeSpaceFilePermissionsReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Return action permissions for files already displayed in a public space."""
+    result = await svc.get_public_space_file_permissions(space_id, req.file_ids)
     return resp_200(result)
 
 

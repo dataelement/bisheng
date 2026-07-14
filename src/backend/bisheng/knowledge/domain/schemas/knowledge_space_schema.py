@@ -331,10 +331,21 @@ class ShougangPortalTagSearchResp(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class ShougangPortalDomainFileCountItem(BaseModel):
+    code: str = Field(..., max_length=16, description="Business-domain code")
+    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Visible candidate knowledge space IDs")
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: Any):
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError("business domain code is invalid")
+        return normalized
+
+
 class ShougangPortalDomainFileCountReq(BaseModel):
-    codes: list[str] = Field(
-        default_factory=list, max_length=200, description="Business-domain codes, e.g. ['PP','QM']"
-    )
+    domains: list[ShougangPortalDomainFileCountItem] = Field(default_factory=list, max_length=200)
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):
@@ -768,6 +779,26 @@ class KnowledgeSpaceFolderStatsReq(BaseModel):
         default=None,
         description="Optional tag ID filter applied to folder statistics",
     )
+
+
+class KnowledgeSpaceFilePermissionsReq(BaseModel):
+    """Batch action-permission lookup for files already loaded in a public space."""
+
+    file_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="File IDs from the currently loaded portal file list",
+    )
+
+    @field_validator("file_ids")
+    @classmethod
+    def validate_file_ids(cls, file_ids: list[int]) -> list[int]:
+        if any(file_id <= 0 for file_id in file_ids):
+            raise ValueError("file_ids must contain positive integers")
+        if len(set(file_ids)) != len(file_ids):
+            raise ValueError("file_ids must not contain duplicates")
+        return file_ids
 
 
 class KnowledgeSpaceFolderStatsItemResp(BaseModel):

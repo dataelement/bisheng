@@ -67,6 +67,8 @@ class ShougangFilePublishSimilarCandidatesResp(BaseModel):
 class ShougangFilePublishDocumentSearchResp(BaseModel):
     data: list[ShougangFilePublishDocumentEntry] = Field(default_factory=list)
     total: int = 0
+    next_cursor: int | None = None
+    has_more: bool = False
 
 
 class ShougangFilePublishSubmitReq(BaseModel):

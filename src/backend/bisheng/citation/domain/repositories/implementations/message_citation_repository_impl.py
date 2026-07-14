@@ -4,7 +4,7 @@ from typing import DefaultDict, Dict, List, Optional
 from sqlmodel import Session, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.citation.domain.models.message_citation import MessageCitation
+from bisheng.citation.domain.models.message_citation import MessageCitation, MessageCitationRelation
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 
@@ -18,22 +18,30 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
     async def find_by_message_id(self, message_id: int) -> List[MessageCitation]:
         """Find all citations for a single message."""
         query = (
-            select(MessageCitation)
-            .where(MessageCitation.message_id == message_id)
-            .order_by(MessageCitation.id.asc())
+            select(MessageCitationRelation, MessageCitation)
+            .join(
+                MessageCitation,
+                MessageCitation.citation_id == MessageCitationRelation.citation_id,
+            )
+            .where(MessageCitationRelation.message_id == message_id)
+            .order_by(MessageCitationRelation.id.asc())
         )
         result = await self.session.exec(query)
-        return list(result.all())
+        return [citation for _, citation in result.all()]
 
     def find_by_message_id_sync(self, message_id: int) -> List[MessageCitation]:
         """Find all citations for a single message synchronously."""
         query = (
-            select(MessageCitation)
-            .where(MessageCitation.message_id == message_id)
-            .order_by(MessageCitation.id.asc())
+            select(MessageCitationRelation, MessageCitation)
+            .join(
+                MessageCitation,
+                MessageCitation.citation_id == MessageCitationRelation.citation_id,
+            )
+            .where(MessageCitationRelation.message_id == message_id)
+            .order_by(MessageCitationRelation.id.asc())
         )
         result = self.session.exec(query)
-        return list(result.all())
+        return [citation for _, citation in result.all()]
 
     async def find_by_citation_id(self, citation_id: str) -> Optional[MessageCitation]:
         """Find one citation by its business citation ID."""
@@ -53,6 +61,32 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
             return []
         return self.bulk_save_sync(citations)
 
+    async def bulk_create_relations(
+        self,
+        relations: List[MessageCitationRelation],
+    ) -> List[MessageCitationRelation]:
+        """Create message-to-citation relations in batch."""
+        if not relations:
+            return []
+        self.session.add_all(relations)
+        await self.session.commit()
+        for relation in relations:
+            await self.session.refresh(relation)
+        return relations
+
+    def bulk_create_relations_sync(
+        self,
+        relations: List[MessageCitationRelation],
+    ) -> List[MessageCitationRelation]:
+        """Create message-to-citation relations in batch synchronously."""
+        if not relations:
+            return []
+        self.session.add_all(relations)
+        self.session.commit()
+        for relation in relations:
+            self.session.refresh(relation)
+        return relations
+
     async def find_by_citation_ids(self, citation_ids: List[str]) -> List[MessageCitation]:
         """Find citations by multiple business citation IDs."""
         if not citation_ids:
@@ -66,20 +100,37 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
         result = await self.session.exec(query)
         return list(result.all())
 
+    def find_by_citation_ids_sync(self, citation_ids: List[str]) -> List[MessageCitation]:
+        """Find citations by multiple business citation IDs synchronously."""
+        if not citation_ids:
+            return []
+
+        query = (
+            select(MessageCitation)
+            .where(col(MessageCitation.citation_id).in_(citation_ids))
+            .order_by(MessageCitation.id.asc())
+        )
+        result = self.session.exec(query)
+        return list(result.all())
+
     async def find_by_message_ids_grouped(self, message_ids: List[int]) -> Dict[int, List[MessageCitation]]:
         """Find citations for multiple messages and group them by message ID."""
         if not message_ids:
             return {}
 
         query = (
-            select(MessageCitation)
-            .where(col(MessageCitation.message_id).in_(message_ids))
-            .order_by(MessageCitation.message_id.asc(), MessageCitation.id.asc())
+            select(MessageCitationRelation, MessageCitation)
+            .join(
+                MessageCitation,
+                MessageCitation.citation_id == MessageCitationRelation.citation_id,
+            )
+            .where(col(MessageCitationRelation.message_id).in_(message_ids))
+            .order_by(MessageCitationRelation.message_id.asc(), MessageCitationRelation.id.asc())
         )
         result = await self.session.exec(query)
 
         grouped_citations: DefaultDict[int, List[MessageCitation]] = defaultdict(list)
-        for citation in result.all():
-            grouped_citations[citation.message_id].append(citation)
+        for relation, citation in result.all():
+            grouped_citations[relation.message_id].append(citation)
 
         return dict(grouped_citations)

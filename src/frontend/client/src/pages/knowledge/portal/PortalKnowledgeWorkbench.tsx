@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
+import { useRecoilValue } from "recoil";
 import {
     FileStatus,
     FileType,
@@ -17,6 +18,7 @@ import {
     deleteSpaceApi,
     getFileDownloadApi,
     getFilePreviewApi,
+    getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
@@ -41,6 +43,7 @@ import {
 import { useGetBsConfig, useGetPortalMetadataConfig } from "~/hooks/queries/endpoints/queries";
 import { useConfirm, useToastContext } from "~/Providers";
 import { usePrefersMobileLayout } from "~/hooks";
+import store from "~/store";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
 import { extractKnowledgeActionErrorMessage } from "../errorUtils";
@@ -75,7 +78,7 @@ import {
     toStatusNumbers,
     updateTreeNode,
 } from "./utils";
-import { KnowledgeSpaceContent } from "../SpaceDetail";
+import { KnowledgeSpaceContent, type ExternalFileActionPermissions } from "../SpaceDetail";
 import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { isFavoriteSpace } from "./favoriteView";
@@ -102,6 +105,11 @@ const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 const PORTAL_LOCATION_MESSAGE = "shougang-portal:knowledge-location";
+
+type PublicFilePermissionState = {
+    spaceId: string | null;
+    permissionIdsByFileId: Record<string, string[]>;
+};
 
 interface PortalLocationPayload {
     spaceId: string;
@@ -183,10 +191,22 @@ const mergeFolderStatsState = (current: KnowledgeFile, incoming: KnowledgeFile):
     };
 };
 
+/**
+ * Resolve the file's own parent folder id from its lineage path ("/3547" → "3547").
+ * Returns null for root-level files (their permission container is the space).
+ */
+const resolveFileParentFolderId = (file: KnowledgeFile): string | null => {
+    const rawPath = file.folderPath ?? (file as { path?: string }).path ?? "";
+    const segments = String(rawPath).split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    return last && /^\d+$/.test(last) ? last : null;
+};
+
 export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const queryClient = useQueryClient();
+    const currentUser = useRecoilValue(store.user);
     const [searchParams] = useSearchParams();
     const portalDeepLinkTarget = useMemo(
         () => resolvePortalDeepLinkTarget(searchParams),
@@ -252,6 +272,10 @@ export default function PortalKnowledgeWorkbench() {
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [canEditSelectedFileEncoding, setCanEditSelectedFileEncoding] = useState(false);
+    const [publicFilePermissionState, setPublicFilePermissionState] = useState<PublicFilePermissionState>({
+        spaceId: null,
+        permissionIdsByFileId: {},
+    });
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
     const [canCreateFolder, setCanCreateFolder] = useState(false);
@@ -267,6 +291,9 @@ export default function PortalKnowledgeWorkbench() {
         error: "",
         previewData: null,
     });
+    // Download permission for the currently previewed file, returned authoritatively
+    // by the preview endpoint (same gate the download endpoint enforces).
+    const [selectedFileDownloadable, setSelectedFileDownloadable] = useState(false);
     const activeSpaceIdRef = useRef<string | undefined>();
     const currentFolderIdRef = useRef<string | undefined>();
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
@@ -535,18 +562,125 @@ export default function PortalKnowledgeWorkbench() {
         selectedFile?.spaceId,
     ]);
     const isActiveSpacePersonal = getPortalSpaceLevel(activeSpace) === SpaceLevel.PERSONAL;
+    const isActiveSpacePublic = getPortalSpaceLevel(activeSpace) === SpaceLevel.PUBLIC;
+    const isSystemAdmin = currentUser?.role === "admin";
+    const loadedPublicFileIds = useMemo(() => {
+        if (!isActiveSpacePublic) return [];
+        const files = searchMode ? searchResults : flattenTreeFiles(treeNodes);
+        return Array.from(new Set(
+            files
+                .filter((file) => !isFolder(file) && !file.isCreating)
+                .map((file) => String(file.id))
+                .filter(Boolean),
+        ));
+    }, [isActiveSpacePublic, searchMode, searchResults, treeNodes]);
+    const activePublicSpaceId = isActiveSpacePublic && activeSpace?.id
+        ? String(activeSpace.id)
+        : null;
     const isActiveSpaceFavorite = isFavoriteSpace(activeSpace);
     const statusFilterNumbers = useMemo(
         () => toStatusNumbers(statusFilter),
         [statusFilter],
     );
+    const publicFileActionPermissions = useMemo<ExternalFileActionPermissions | undefined>(() => {
+        if (!isActiveSpacePublic) return undefined;
+
+        const resolvedPermissionIds = publicFilePermissionState.spaceId === String(activeSpace?.id)
+            ? publicFilePermissionState.permissionIdsByFileId
+            : {};
+        const idsWithPermission = (permissionId: string) => new Set(
+            isSystemAdmin
+                ? loadedPublicFileIds
+                : Object.entries(resolvedPermissionIds)
+                    .filter(([, permissionIds]) => permissionIds.includes(permissionId))
+                    .map(([fileId]) => fileId),
+        );
+
+        return {
+            permissionEntryIds: idsWithPermission("manage_file_relation"),
+            renameEntryIds: idsWithPermission("rename_file"),
+            deleteEntryIds: idsWithPermission("delete_file"),
+            downloadEntryIds: idsWithPermission("download_file"),
+            moveEntryIds: idsWithPermission("move_file"),
+        };
+    }, [activeSpace?.id, isActiveSpacePublic, isSystemAdmin, loadedPublicFileIds, publicFilePermissionState]);
+    const effectivePermissionEntryIds = publicFileActionPermissions?.permissionEntryIds ?? permissionEntryIds;
+    const effectiveDownloadEntryIds = publicFileActionPermissions?.downloadEntryIds ?? downloadEntryIds;
+    const effectiveDeleteEntryIds = publicFileActionPermissions?.deleteEntryIds ?? deleteEntryIds;
     const canManageSelectedFilePermission = Boolean(
-        selectedFile && !isActiveSpacePersonal && (isActiveSpaceAdmin || permissionEntryIds.has(selectedFile.id)),
+        selectedFile && !isActiveSpacePersonal && (isActiveSpaceAdmin || effectivePermissionEntryIds.has(selectedFile.id)),
+    );
+    const canDownloadSelectedFile = Boolean(
+        selectedFile
+        && (isActiveSpaceAdmin || selectedFileDownloadable || effectiveDownloadEntryIds.has(selectedFile.id)),
     );
     const visiblePermissionEntryIds = useMemo(
-        () => isActiveSpacePersonal ? new Set<string>() : permissionEntryIds,
-        [isActiveSpacePersonal, permissionEntryIds],
+        () => isActiveSpacePersonal ? new Set<string>() : effectivePermissionEntryIds,
+        [effectivePermissionEntryIds, isActiveSpacePersonal],
     );
+
+    useEffect(() => {
+        if (!activePublicSpaceId || isSystemAdmin) {
+            if (publicFilePermissionState.spaceId !== activePublicSpaceId
+                || Object.keys(publicFilePermissionState.permissionIdsByFileId).length > 0) {
+                setPublicFilePermissionState({
+                    spaceId: activePublicSpaceId,
+                    permissionIdsByFileId: {},
+                });
+            }
+            return;
+        }
+
+        const resolvedPermissions = publicFilePermissionState.spaceId === activePublicSpaceId
+            ? publicFilePermissionState.permissionIdsByFileId
+            : {};
+        const unresolvedFileIds = loadedPublicFileIds.filter((fileId) => !(fileId in resolvedPermissions));
+        if (unresolvedFileIds.length === 0) return;
+        // 后端请求体限制为 100 个文件；普通列表页只有一个批次，已加载更多节点时顺序补齐。
+        const fileIdsInBatch = unresolvedFileIds.slice(0, 100);
+
+        let cancelled = false;
+        const controller = new AbortController();
+        getPublicSpaceFilePermissionsApi({
+            space_id: activePublicSpaceId,
+            file_ids: fileIdsInBatch,
+            signal: controller.signal,
+        }).then((permissions) => {
+            if (cancelled) return;
+            const permissionIdsByFileId = Object.fromEntries(fileIdsInBatch.map((fileId) => [fileId, []]));
+            for (const permission of permissions) {
+                if (permission.fileId in permissionIdsByFileId) {
+                    permissionIdsByFileId[permission.fileId] = permission.permissionIds;
+                }
+            }
+            setPublicFilePermissionState((previous) => ({
+                spaceId: activePublicSpaceId,
+                permissionIdsByFileId: previous.spaceId === activePublicSpaceId
+                    ? { ...previous.permissionIdsByFileId, ...permissionIdsByFileId }
+                    : permissionIdsByFileId,
+            }));
+        }).catch(() => {
+            if (cancelled || controller.signal.aborted) return;
+            // Permission lookup errors fail closed, but never block the file list.
+            const permissionIdsByFileId = Object.fromEntries(fileIdsInBatch.map((fileId) => [fileId, []]));
+            setPublicFilePermissionState((previous) => ({
+                spaceId: activePublicSpaceId,
+                permissionIdsByFileId: previous.spaceId === activePublicSpaceId
+                    ? { ...previous.permissionIdsByFileId, ...permissionIdsByFileId }
+                    : permissionIdsByFileId,
+            }));
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [
+        activePublicSpaceId,
+        isSystemAdmin,
+        loadedPublicFileIds,
+        publicFilePermissionState,
+    ]);
 
     useEffect(() => {
         const file = selectedFile;
@@ -554,7 +688,7 @@ export default function PortalKnowledgeWorkbench() {
             setCanEditSelectedFileEncoding(false);
             return;
         }
-        if (isActiveSpaceAdmin) {
+        if (isSystemAdmin || isActiveSpaceAdmin) {
             setCanEditSelectedFileEncoding(true);
             return;
         }
@@ -562,11 +696,19 @@ export default function PortalKnowledgeWorkbench() {
         let cancelled = false;
         const controller = new AbortController();
         setCanEditSelectedFileEncoding(false);
+        // Editing file category / business domain follows the upload permission of
+        // the file's OWN parent container (folder when it lives in one, else the
+        // space). The per-file rename_file action was subject to nearest-binding
+        // overrides that strip container-level grants from individual files, so
+        // managers who could upload still couldn't edit encoding.
+        const parentFolderId = resolveFileParentFolderId(file);
+        const objectType = parentFolderId ? "folder" : "knowledge_space";
+        const objectId = parentFolderId || activeSpace.id;
         checkPermission(
-            "knowledge_file",
-            file.id,
+            objectType,
+            objectId,
             "can_edit",
-            "rename_file",
+            "upload_file",
             { signal: controller.signal },
         ).then((result) => {
             if (!cancelled) {
@@ -582,7 +724,14 @@ export default function PortalKnowledgeWorkbench() {
             cancelled = true;
             controller.abort();
         };
-    }, [activeSpace?.id, isActiveSpaceAdmin, selectedFile?.id, selectedFile?.type, selectedFile?.isCreating]);
+    }, [
+        activeSpace?.id,
+        isActiveSpaceAdmin,
+        isSystemAdmin,
+        selectedFile?.id,
+        selectedFile?.type,
+        selectedFile?.isCreating,
+    ]);
 
     const setRootFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
         setTreeNodes((prev) => {
@@ -965,13 +1114,80 @@ export default function PortalKnowledgeWorkbench() {
             : treeRootHasMore;
     const currentFileListLoading = treeLoading || searchLoading || treeRootLoadingMore || Boolean(currentFolderNode?.loading);
     const displayedFiles = searchMode ? searchResults : visibleTreeFiles;
+    // Upload-permission verdicts keyed by container ("folder:<id>" / "space:<id>").
+    // Metadata (category / business domain) editability follows the upload permission
+    // of each file's OWN parent container — not the folder the user happens to be
+    // viewing — so a folder-scoped upload grant never leaks to root-level files.
+    const [uploadPermissionByContainer, setUploadPermissionByContainer] = useState<Record<string, boolean>>({});
+    const fileMetadataContainerKey = useCallback((file: KnowledgeFile) => {
+        const parentFolderId = resolveFileParentFolderId(file);
+        return parentFolderId ? `folder:${parentFolderId}` : `space:${activeSpace?.id}`;
+    }, [activeSpace?.id]);
+
+    useEffect(() => {
+        setUploadPermissionByContainer({});
+    }, [activeSpace?.id]);
+
+    useEffect(() => {
+        if (!activeSpace || isSystemAdmin || isActiveSpaceAdmin) return;
+        const containerKeys = new Set<string>(
+            displayedFiles
+                .filter((file) => !isFolder(file) && !file.isCreating)
+                .map((file) => fileMetadataContainerKey(file)),
+        );
+        if (!containerKeys.size) return;
+        let cancelled = false;
+        const controller = new AbortController();
+        Promise.all(Array.from(containerKeys).map(async (key) => {
+            const [containerType, containerId] = key.split(":");
+            const result = await checkPermission(
+                containerType === "folder" ? "folder" : "knowledge_space",
+                containerId,
+                "can_edit",
+                "upload_file",
+                { signal: controller.signal },
+            ).catch(() => ({ allowed: false }));
+            return [key, Boolean(result?.allowed)] as const;
+        })).then((entries) => {
+            if (cancelled) return;
+            setUploadPermissionByContainer((prev) => {
+                const next = { ...prev };
+                for (const [key, allowed] of entries) next[key] = allowed;
+                return next;
+            });
+        });
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [activeSpace?.id, displayedFiles, fileMetadataContainerKey, isActiveSpaceAdmin, isSystemAdmin]);
+
+    const metadataEditableFileIds = useMemo(() => {
+        // Space/system admins edit all metadata — undefined lets FileTable use its
+        // creator/admin role path.
+        if (isSystemAdmin || isActiveSpaceAdmin) return undefined;
+        const editable = new Set<string>();
+        for (const file of displayedFiles) {
+            if (isFolder(file) || file.isCreating) continue;
+            if (uploadPermissionByContainer[fileMetadataContainerKey(file)]) {
+                editable.add(String(file.id));
+            }
+        }
+        return editable;
+    }, [
+        displayedFiles,
+        fileMetadataContainerKey,
+        isActiveSpaceAdmin,
+        isSystemAdmin,
+        uploadPermissionByContainer,
+    ]);
     const selectedFiles = useMemo(
         () => displayedFiles.filter((file) => selectedFileIds.has(file.id) || selectedFolderIds.has(file.id)),
         [displayedFiles, selectedFileIds, selectedFolderIds],
     );
     const selectedCount = selectedFiles.length;
-    const selectedDownloadable = selectedFiles.length > 0 && selectedFiles.every((file) => downloadEntryIds.has(file.id));
-    const selectedDeletable = selectedFiles.length > 0 && selectedFiles.every((file) => deleteEntryIds.has(file.id));
+    const selectedDownloadable = selectedFiles.length > 0 && selectedFiles.every((file) => effectiveDownloadEntryIds.has(file.id));
+    const selectedDeletable = selectedFiles.length > 0 && selectedFiles.every((file) => effectiveDeleteEntryIds.has(file.id));
     const retryableSelectedFiles = selectedFiles.filter(isRetryable);
     const canBatchRetry = Boolean(isActiveSpaceAdmin && retryableSelectedFiles.length > 0);
     const uploadTargetSpace = activeSpace ?? selectableSpaces[0] ?? null;
@@ -1047,6 +1263,7 @@ export default function PortalKnowledgeWorkbench() {
         uploadFolderOptions,
         duplicateFiles,
         duplicateOverwriting,
+        sensitiveWordFiles,
         fileSubcategoryCode,
         fileCategoryGroups: resolvedFileCategoryGroups,
         businessDomainCode,
@@ -1075,6 +1292,7 @@ export default function PortalKnowledgeWorkbench() {
         handleStartUploadImport,
         handleDuplicateSkip,
         handleDuplicateOverwrite,
+        handleSensitiveWordDialogClose,
     } = usePortalUploadDialog({
         activeSpace,
         setActiveSpace,
@@ -1214,6 +1432,11 @@ export default function PortalKnowledgeWorkbench() {
             setPermissionEntryIds(new Set());
             return;
         }
+        if (isActiveSpacePublic) {
+            // 公共库由 file-permissions 批量接口提供文件级操作权限。
+            setPermissionEntryIds(new Set());
+            return;
+        }
         if (isActiveSpaceAdmin) {
             const ids = new Set(candidates.map((file) => file.id));
             setPermissionEntryIds(ids);
@@ -1239,7 +1462,7 @@ export default function PortalKnowledgeWorkbench() {
             cancelled = true;
             controller.abort();
         };
-    }, [activeSpace?.id, isActiveSpaceAdmin, isActiveSpacePersonal, permissionProbeKey]);
+    }, [activeSpace?.id, isActiveSpaceAdmin, isActiveSpacePersonal, isActiveSpacePublic, permissionProbeKey]);
 
     useEffect(() => {
         if (!isActiveSpacePersonal) return;
@@ -1250,6 +1473,11 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         const candidates = displayedFiles.filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)));
+        if (isActiveSpacePublic) {
+            setDownloadEntryIds(new Set());
+            setDeleteEntryIds(new Set());
+            return;
+        }
         if (isActiveSpaceAdmin) {
             const ids = new Set(candidates.map((file) => file.id));
             setDownloadEntryIds(ids);
@@ -1285,7 +1513,7 @@ export default function PortalKnowledgeWorkbench() {
             cancelled = true;
             controller.abort();
         };
-    }, [activeSpace?.id, isActiveSpaceAdmin, permissionProbeKey]);
+    }, [activeSpace?.id, isActiveSpaceAdmin, isActiveSpacePublic, permissionProbeKey]);
 
     useEffect(() => {
         const eligibleSourceSpace = Boolean(activeSpace && activeSpace.spaceLevel !== SpaceLevel.PUBLIC);
@@ -1345,6 +1573,7 @@ export default function PortalKnowledgeWorkbench() {
         }
 
         let cancelled = false;
+        setSelectedFileDownloadable(false);
         setPreview({
             loading: true,
             fileUrl: "",
@@ -1356,6 +1585,7 @@ export default function PortalKnowledgeWorkbench() {
         getFilePreviewApi(selectedFile.spaceId || activeSpace.id, selectedFile.id)
             .then((res) => {
                 if (cancelled) return;
+                setSelectedFileDownloadable(Boolean(res.can_download));
                 const resolvedPreview = {
                     ...res,
                     original_url: resolvePreviewUrl(res.original_url),
@@ -2018,7 +2248,7 @@ export default function PortalKnowledgeWorkbench() {
 
         const target = searchResults.find((file) => file.id === fileId);
         if (!target) return;
-        if (!deleteEntryIds.has(fileId)) {
+        if (!effectiveDeleteEntryIds.has(fileId)) {
             showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
             return;
         }
@@ -2047,7 +2277,7 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [
         activeSpace,
-        deleteEntryIds,
+        effectiveDeleteEntryIds,
         fileUpload,
         loadRootTree,
         searchMode,
@@ -2312,7 +2542,9 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideSpaceInfoTooltip
                                                     hideShareButton
                                                     hideFilePermissionActions={isActiveSpacePersonal}
+                                                    externalFileActionPermissions={publicFileActionPermissions}
                                                     enableEncodingClassification
+                                                    metadataEditableFileIds={metadataEditableFileIds}
                                                     fileCategoryOptions={fileCategoryOptions}
                                                     fileCategoryGroups={fileCategoryGroups}
                                                     businessDomainOptions={activeSpaceBusinessDomainOptions}
@@ -2373,6 +2605,7 @@ export default function PortalKnowledgeWorkbench() {
                     canEditEncoding={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
                     canEditTags={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
                     canManagePermission={canManageSelectedFilePermission && !isActiveSpaceFavorite}
+                    canDownload={canDownloadSelectedFile}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}
                     preview={preview}
@@ -2499,6 +2732,11 @@ export default function PortalKnowledgeWorkbench() {
                 duplicateOverwriting={duplicateOverwriting}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
+                sensitiveWordFiles={sensitiveWordFiles}
+                onSensitiveWordDialogClose={handleSensitiveWordDialogClose}
+                directUploadDuplicateFiles={fileUpload.duplicateFiles}
+                onDirectUploadDuplicateSkip={fileUpload.handleDuplicateSkip}
+                onDirectUploadDuplicateOverwrite={fileUpload.handleDuplicateOverwrite}
             />
             <PortalUploadedFilesDrawer
                 open={uploadedFilesOpen}

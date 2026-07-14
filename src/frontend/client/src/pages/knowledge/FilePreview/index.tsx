@@ -75,20 +75,38 @@ export default function FilePreview({
     useEffect(() => {
         if (viewerType !== "pdf" || !fileUrl) return;
 
+        let active = true;
+        setPdfDoc(null);
+        setTotalPages(0);
+        setError(null);
+
         pdfjsLib.GlobalWorkerOptions.workerSrc =
             // @ts-ignore
             __APP_ENV__.BASE_URL + "/pdf.worker.min.js";
 
-        pdfjsLib
-            .getDocument(fileUrl)
-            .promise.then((doc) => {
+        const loadingTask = pdfjsLib.getDocument({
+            url: fileUrl,
+            rangeChunkSize: 1024 * 1024,
+            disableStream: true,
+            disableAutoFetch: true,
+        });
+
+        void loadingTask.promise
+            .then((doc) => {
+                if (!active) return;
                 setPdfDoc(doc);
                 setTotalPages(doc.numPages);
             })
             .catch((e) => {
+                if (!active) return;
                 console.error("Failed to load PDF:", e);
                 setError(localize("com_knowledge.load_pdf_failed"));
             });
+
+        return () => {
+            active = false;
+            void loadingTask.destroy();
+        };
     }, [fileUrl, viewerType]);
 
     // Update document title
@@ -202,6 +220,7 @@ export default function FilePreview({
             case "pdf":
                 return (
                     <PdfViewer
+                        key={fileUrl}
                         pdfDoc={pdfDoc}
                         zoomLevel={zoomLevel}
                         targetPage={targetPage}
@@ -250,6 +269,7 @@ export default function FilePreview({
             <div className="flex flex-1 min-h-0">
                 {hasSidebar && (
                     <Sidebar
+                        key={fileUrl}
                         open={sidebarOpen}
                         pdfDoc={pdfDoc}
                         currentPage={currentPage}
