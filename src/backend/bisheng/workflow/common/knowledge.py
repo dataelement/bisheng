@@ -325,9 +325,13 @@ class RagUtils(BaseNode):
                     one.metadata["update_time"] = self.format_timestamp(one.metadata["update_time"])
                 file_id = one.metadata.get("document_id") or one.metadata.get("file_id")
                 if file_id and file_map.get(file_id):
+                    file_user_metadata = file_map[file_id].user_metadata or {}
                     for user_key, user_value in one.metadata.get("user_metadata", {}).items():
-                        field_info = file_map[file_id].user_metadata.get(user_key)
-                        if field_info and field_info.get("field_type") == MetadataFieldType.TIME.value:
+                        field_info = file_user_metadata.get(user_key)
+                        if (
+                            isinstance(field_info, dict)
+                            and field_info.get("field_type") == MetadataFieldType.TIME.value
+                        ):
                             one.metadata["user_metadata"][user_key] = self.format_timestamp(user_value)
         return finally_docs
 
