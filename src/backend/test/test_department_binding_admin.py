@@ -97,6 +97,15 @@ async def test_list_bindable_team_spaces_excludes_bound_and_filters_keyword():
 @pytest.mark.asyncio
 async def test_list_departments_returns_active():
     with patch(f"{MOD}.DepartmentDao.aget_all_active", new=AsyncMock(return_value=[
-             SimpleNamespace(id=3, name="科室B"), SimpleNamespace(id=4, name="科室C")])):
+             SimpleNamespace(id=3, name="科室B", parent_id=1, sort_order=2),
+             SimpleNamespace(id=1, name="集团", parent_id=None, sort_order=1),
+             SimpleNamespace(id=4, name="科室C", parent_id=1, sort_order=1)])):
         result = await Svc.list_departments(_admin())
-    assert result == [{"id": 3, "name": "科室B"}, {"id": 4, "name": "科室C"}]
+    assert result == [{
+        "id": 1,
+        "name": "集团",
+        "children": [
+            {"id": 4, "name": "科室C", "children": []},
+            {"id": 3, "name": "科室B", "children": []},
+        ],
+    }]
