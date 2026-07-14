@@ -214,10 +214,26 @@ function isApprovedRecommendedTag(item: KnowledgeSpaceTagLibraryTagItem, spaceTa
     return !!existing && isApprovedSpaceTag(existing);
 }
 
+function isVisibleRecommendedTag(
+    item: KnowledgeSpaceTagLibraryTagItem,
+    spaceTags: SpaceTag[],
+    reviewTagEnabled: boolean,
+): boolean {
+    const existing = findSpaceTagByName(spaceTags, item.name);
+    if (existing && isPendingReviewSpaceTag(existing)) {
+        return false;
+    }
+    if (!reviewTagEnabled) {
+        return isApprovedRecommendedTag(item, spaceTags);
+    }
+    return true;
+}
+
 function spaceTagsToRecommendedItems(tags: SpaceTag[]): KnowledgeSpaceTagLibraryTagItem[] {
     return mergeRecommendedTags(
         tags
             .filter(isLibrarySpaceTag)
+            .filter((tag) => !isPendingReviewSpaceTag(tag))
             .map((tag) => ({
                 name: tag.name,
                 resource_type: tag.resource_type || "manual_tag",
@@ -382,6 +398,8 @@ export function EditTagsModal({
 
     const canSelectRecommendedTag = (item: KnowledgeSpaceTagLibraryTagItem) => {
         if (spaceTagsLoading) return false;
+        const existing = findSpaceTagByName(spaceTags, item.name);
+        if (existing && isPendingReviewSpaceTag(existing)) return false;
         if (!reviewTagEnabled) {
             return isApprovedRecommendedTag(item, spaceTags);
         }
@@ -389,13 +407,12 @@ export function EditTagsModal({
     };
 
     const visibleRecommendedTags = useMemo(() => {
-        if (reviewTagEnabled || reviewTagConfigLoading) {
-            return recommendedTags;
-        }
-        if (spaceTagsLoading) {
+        if (reviewTagConfigLoading || spaceTagsLoading) {
             return [];
         }
-        return recommendedTags.filter((item) => isApprovedRecommendedTag(item, spaceTags));
+        return recommendedTags.filter((item) =>
+            isVisibleRecommendedTag(item, spaceTags, reviewTagEnabled),
+        );
     }, [recommendedTags, reviewTagEnabled, reviewTagConfigLoading, spaceTagsLoading, spaceTags]);
 
     const recommendedTagsLoading = reviewTagConfigLoading || spaceTagsLoading;

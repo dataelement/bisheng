@@ -20,16 +20,17 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteRemoveResp,
     ShougangPortalFavoriteStatusReq,
     ShougangPortalFavoriteStatusResp,
+    ShougangPortalFileBrowseReq,
     ShougangPortalFileDetailResp,
     ShougangPortalFileSearchReq,
     ShougangPortalFileSearchResp,
     ShougangPortalHomeReq,
     ShougangPortalHomeResp,
     ShougangPortalHomeStatsResp,
+    ShougangPortalPersonalSpacesResp,
     ShougangPortalQaFileSearchReq,
     ShougangPortalQaFileSearchResp,
     ShougangPortalRelatedFilesResp,
-    ShougangPortalPersonalSpacesResp,
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkCreateReq,
     ShougangPortalShareLinkCreateResp,
@@ -257,6 +258,15 @@ async def search_shougang_portal_files(
         svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_shougang_portal_files(req)
+    return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode='json'))
+
+
+@router.post('/files/browse')
+async def browse_shougang_portal_files(
+        req: ShougangPortalFileBrowseReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.browse_shougang_portal_files(req)
     return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode='json'))
 
 

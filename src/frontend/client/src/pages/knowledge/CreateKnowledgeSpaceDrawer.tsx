@@ -22,6 +22,7 @@ import {
     getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibrariesByKnowledgeApi,
     getKnowledgeSpaceTagLibraryDetailApi,
+    extractTagLibraryPreviewNames,
     getSpaceInfoApi,
     SpaceLevel,
     VisibilityType,
@@ -507,7 +508,7 @@ export function CreateKnowledgeSpaceDrawer({
                 const seen = new Set<string>();
                 const merged: string[] = [];
                 for (const result of results) {
-                    for (const tag of result.tags || []) {
+                    for (const tag of extractTagLibraryPreviewNames(result)) {
                         if (seen.has(tag)) continue;
                         seen.add(tag);
                         merged.push(tag);
@@ -812,6 +813,9 @@ export function CreateKnowledgeSpaceDrawer({
                                     <div className="space-y-1.5 pt-1">
                                         <div className="text-[12px] text-[#86909C]">
                                             {localize("com_knowledge.auto_tag_library_preview")}
+                                            {!autoTagLibraryTagsLoading && autoTagLibraryTags.length > 0
+                                                ? ` (${autoTagLibraryTags.length})`
+                                                : ""}
                                         </div>
                                         {autoTagLibraryTagsLoading ? (
                                             <div className="text-[12px] text-[#86909C]">
@@ -822,15 +826,22 @@ export function CreateKnowledgeSpaceDrawer({
                                                 {localize("com_knowledge.auto_tag_library_preview_empty")}
                                             </div>
                                         ) : autoTagLibraryTags.length === 0 ? null : (
-                                            <div className="flex flex-wrap items-center">
-                                                {autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT).map((tag, idx) => (
-                                                    <span
-                                                        key={`${tag}-${idx}`}
-                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
-                                                    >
-                                                        {tag}
-                                                    </span>
-                                                ))}
+                                            <div className="max-h-[240px] overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#E5E6EB] bg-[#FAFBFC] p-2">
+                                                <div className="flex flex-wrap items-center">
+                                                    {autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT).map((tag, idx) => (
+                                                        <span
+                                                            key={`${tag}-${idx}`}
+                                                            className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
+                                                        >
+                                                            {tag}
+                                                        </span>
+                                                    ))}
+                                                    {autoTagLibraryTags.length > AUTO_TAG_PREVIEW_LIMIT ? (
+                                                        <span className="mb-1.5 mr-1.5 text-[12px] text-[#86909C]">
+                                                            +{autoTagLibraryTags.length - AUTO_TAG_PREVIEW_LIMIT}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </div>
                                         )}
                                     </div>

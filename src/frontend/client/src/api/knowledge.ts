@@ -1531,6 +1531,24 @@ export interface KnowledgeSpaceTagLibraryDetail extends KnowledgeSpaceTagLibrary
     tag_items?: KnowledgeSpaceTagLibraryTagItem[];
 }
 
+/** Collect unique tag names for preview chips (includes ai_auto_tag via tag_items). */
+export function extractTagLibraryPreviewNames(
+    detail: Pick<KnowledgeSpaceTagLibraryDetail, "tags" | "tag_items">,
+): string[] {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    const items = detail.tag_items?.length
+        ? detail.tag_items
+        : (detail.tags ?? []).map((name) => ({ name }));
+    for (const item of items) {
+        const name = String(typeof item === "string" ? item : item.name ?? "").trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        names.push(name);
+    }
+    return names;
+}
+
 /** Fetch a single tag library with its full tag list, used for the preview chips. */
 export async function getKnowledgeSpaceTagLibraryDetailApi(
     library_id: number,

@@ -291,7 +291,7 @@ async def test_append_review_tag_rejects_unbound_library():
 async def test_append_review_tag_rejects_when_library_tag_limit_reached():
     service = KnowledgeSpaceTagLibraryService(_login_user())
     library = _library(tags=[], ai_tags=[])
-    existing_tags = [f"标签{i}" for i in range(200)]
+    existing_tags = [f"标签{i}" for i in range(999)]
 
     with (
         patch.object(service, "validate_library_bound_to_knowledge", new=AsyncMock()),
@@ -313,5 +313,5 @@ async def test_append_review_tag_rejects_when_library_tag_limit_reached():
                 review_resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
             )
 
-    assert exc_info.value.message == "单个标签库最多只能包含 200 个标签"
-    assert str(exc_info.value) == "单个标签库最多只能包含 200 个标签"
+    assert exc_info.value.message == "单个标签库最多只能包含 999 个标签"
+    assert str(exc_info.value) == "单个标签库最多只能包含 999 个标签"

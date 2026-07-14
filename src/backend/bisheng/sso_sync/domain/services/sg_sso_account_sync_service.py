@@ -40,19 +40,19 @@ class SgSsoAccountSyncService:
                 row = cls._normalize_row(raw)
                 user = await cls._resolve_target_user(row)
                 if user is None:
-                    raise ValueError("user not found by PersonNO or Guid")
+                    raise ValueError("user not found by PersonNO (external_code) or Guid")
 
                 target_guid = await cls._resolve_target_guid(row, user)
                 await cls._assert_guid_bindable(target_guid, user)
 
-                user.user_name = row.user_name
+                user.external_id = row.user_name
                 user.guid = target_guid
                 await UserDao.aupdate_user(user)
 
                 results.append(
                     SgSsoAccountSyncResultItem(
-                        Result="0",
-                        UserName=user.user_name,
+                        Result="S",
+                        UserName=user.external_id or row.user_name,
                         Description="success",
                         Guid=user.guid or "",
                     )
@@ -61,7 +61,7 @@ class SgSsoAccountSyncService:
                 logger.warning("SG SSO account sync row failed: %s", exc)
                 results.append(
                     SgSsoAccountSyncResultItem(
-                        Result="1",
+                        Result="E",
                         UserName=(raw.user_name or "").strip(),
                         Description=str(exc),
                         Guid=(raw.guid or "").strip(),
@@ -72,7 +72,7 @@ class SgSsoAccountSyncService:
 
     @classmethod
     async def _resolve_target_user(cls, row: _NormalizedRow) -> User | None:
-        user = await UserDao.aget_by_external_id(row.person_no)
+        user = await UserDao.aget_by_external_code(row.person_no)
         if user is not None:
             return user
         if row.guid:

@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class _NormalizedUserItem:
     index: int
     payload: SgUserFieldItem
-    external_id: str
+    external_code: str
     dept_external_id: str
     remark: str
     delete_flag: int
@@ -57,8 +57,8 @@ class SgUsersSyncService:
 
         for idx, item in enumerate(payload.fields):
             try:
-                external_id = (item.code or "").strip()
-                if not external_id:
+                external_code = (item.code or "").strip()
+                if not external_code:
                     raise ValueError("code is required")
                 dept_external_id = (item.desc34 or "").strip()
                 if not dept_external_id:
@@ -67,7 +67,7 @@ class SgUsersSyncService:
                     _NormalizedUserItem(
                         index=idx,
                         payload=item,
-                        external_id=external_id,
+                        external_code=external_code,
                         dept_external_id=dept_external_id,
                         remark=(item.desc1 or "").strip(),
                         delete_flag=cls._parse_delete_flag(item.desc185),
@@ -124,19 +124,19 @@ class SgUsersSyncService:
                     f"department external_id={row.dept_external_id} not found",
                 )
 
-            user = await UserDao.aget_by_source_external_id(
+            user = await UserDao.aget_by_source_external_code(
                 cls.SOURCE,
-                row.external_id,
+                row.external_code,
             )
             if user is None:
                 user = User(
-                    user_name=row.remark or row.external_id,
+                    user_name=row.remark or row.external_code,
                     email=None,
                     phone_number=None,
                     dept_id=str(int(dept.id)),
                     remark=row.remark or None,
                     source=cls.SOURCE,
-                    external_id=row.external_id,
+                    external_code=row.external_code,
                     password="",
                     delete=row.delete_flag,
                     disable_source=(cls.DISABLE_SOURCE if row.delete_flag == 1 else None),
@@ -145,6 +145,7 @@ class SgUsersSyncService:
             else:
                 user.dept_id = str(int(dept.id))
                 user.remark = row.remark or None
+                user.external_code = row.external_code
                 user.delete = row.delete_flag
                 user.disable_source = cls.DISABLE_SOURCE if row.delete_flag == 1 else None
                 await UserDao.aupdate_user(user)
@@ -159,7 +160,7 @@ class SgUsersSyncService:
 
             return SgDataInfoItem(
                 uuid=row.payload.uuid,
-                code=row.external_id,
+                code=row.external_code,
                 status="0",
                 version=str(mdm_id),
                 errorText="",
@@ -167,12 +168,12 @@ class SgUsersSyncService:
         except Exception as exc:
             logger.warning(
                 "SG user sync failed for code=%s: %s",
-                row.external_id,
+                row.external_code,
                 exc,
             )
             return cls._failed_info(
                 item=row.payload,
-                code=row.external_id,
+                code=row.external_code,
                 mdm_id=mdm_id,
                 message=str(exc),
             )

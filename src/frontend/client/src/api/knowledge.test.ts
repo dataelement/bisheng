@@ -652,3 +652,28 @@ describe("isPendingReviewTagStatus", () => {
     expect(isPendingReviewTagStatus(undefined)).toBe(false);
   });
 });
+
+describe("extractTagLibraryPreviewNames", () => {
+  it("includes ai_auto_tag names from tag_items", async () => {
+    const { extractTagLibraryPreviewNames } = await import("./knowledge");
+    expect(
+      extractTagLibraryPreviewNames({
+        tags: ["手动标签"],
+        tag_items: [
+          { name: "手动标签", resource_type: "manual_tag" },
+          { name: "AI标签", resource_type: "ai_auto_tag" },
+        ],
+      }),
+    ).toEqual(["手动标签", "AI标签"]);
+  });
+
+  it("falls back to tags when tag_items is empty", async () => {
+    const { extractTagLibraryPreviewNames } = await import("./knowledge");
+    expect(
+      extractTagLibraryPreviewNames({
+        tags: ["系统A", "系统B"],
+        tag_items: [],
+      }),
+    ).toEqual(["系统A", "系统B"]);
+  });
+});

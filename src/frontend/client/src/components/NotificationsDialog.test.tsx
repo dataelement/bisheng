@@ -241,7 +241,7 @@ describe("NotificationsDialog approval jump", () => {
     expect(mockParentPostMessage).not.toHaveBeenCalled();
   });
 
-  it("opens file preview when clicking an approved review tag notification target", async () => {
+  it("does not navigate when clicking an approved review tag notification target name", async () => {
     const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
     jest.mocked(getMessageListApi).mockResolvedValue({
       total: 1,
@@ -284,13 +284,8 @@ describe("NotificationsDialog approval jump", () => {
 
     fireEvent.click(await screen.findByText("「测试哈哈哈」"));
 
-    await waitFor(() => {
-      expect(openSpy).toHaveBeenCalled();
-    });
-    const openedUrl = String(openSpy.mock.calls[0]?.[0] ?? "");
-    expect(openedUrl).toContain("/knowledge/file/501");
-    expect(openedUrl).toContain("spaceId=214");
-    expect(openedUrl).toContain("name=report.pdf");
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
     openSpy.mockRestore();
   });
 });

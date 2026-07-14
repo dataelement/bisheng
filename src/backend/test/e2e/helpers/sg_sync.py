@@ -162,7 +162,7 @@ def assert_sso_success(body: dict[str, Any]) -> list[dict[str, Any]]:
     assert "TIEM" in body, f"missing TIEM envelope: {body}"
     rows = body["TIEM"]
     assert isinstance(rows, list) and rows, "TIEM must be a non-empty list"
-    assert rows[0].get("Result") == "0", rows
+    assert rows[0].get("Result") == "S", rows
     return rows
 
 

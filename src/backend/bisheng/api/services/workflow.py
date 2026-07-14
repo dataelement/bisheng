@@ -654,7 +654,9 @@ class WorkFlowService(BaseService):
                 _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False,
                              10,
                              10,
-                             None)
+                             None,
+                             tenant_id=db_flow.tenant_id,
+                             workflow_owner_id=db_flow.user_id)
             except Exception as e:
                 raise WorkFlowInitError(msg=str(e))
 

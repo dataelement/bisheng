@@ -1063,7 +1063,7 @@
     "tagLibraryNameMaxLength": "标签库名称不能超过20个字符",
     "tagLibraryNameDuplicate": "标签库名称已存在",
     "tagLibraryNamePlaceholder": "请输入标签库名称",
-    "tagLibraryLimit": "单个标签库最多 200 个标签",
+    "tagLibraryLimit": "单个标签库最多 999 个标签",
     "autoTagGenerationTitle": "待审核标签",
     "autoTagGenerationDesc": "审核AI打标推荐、词表中尚不存在的标签名；采纳后写入词表并挂到对应知识。",
     "searchReviewTag": "搜索待审核标签",
