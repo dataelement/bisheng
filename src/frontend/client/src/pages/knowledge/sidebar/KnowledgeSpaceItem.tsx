@@ -68,8 +68,10 @@ export default function KnowledgeSpaceItem({
     const navigate = useNavigate();
     const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
     const showDangerAction = canDeleteSpace || Boolean(space.canUnsubscribe);
-    // 『我的收藏』为系统知识库：只可查看/取消收藏，不提供设置、置顶、删除、重命名等任何操作
+    // 『我的收藏』为系统知识库：只可查看/取消收藏，不提供设置、删除、重命名等操作。
+    // 所有个人知识库均不支持置顶。
     const isFavorite = isFavoriteSpace(space);
+    const canPin = type !== SpaceLevel.PERSONAL && space.spaceLevel !== SpaceLevel.PERSONAL;
 
     const { data: bsConfig } = useGetBsConfig();
     const treeEnabled =
@@ -205,22 +207,24 @@ export default function KnowledgeSpaceItem({
                                     </span>
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem
-                                onClick={() => onPin(space.id, !space.isPinned)}
-                                className={sidebarListMoreMenuItemClassName}
-                            >
-                                {space.isPinned ? (
-                                    <>
-                                        <PinOff className={sidebarListMoreMenuIconClassName} />
-                                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Pin className={sidebarListMoreMenuIconClassName} />
-                                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
-                                    </>
-                                )}
-                            </DropdownMenuItem>
+                            {canPin && (
+                                <DropdownMenuItem
+                                    onClick={() => onPin(space.id, !space.isPinned)}
+                                    className={sidebarListMoreMenuItemClassName}
+                                >
+                                    {space.isPinned ? (
+                                        <>
+                                            <PinOff className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Pin className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
+                                        </>
+                                    )}
+                                </DropdownMenuItem>
+                            )}
 
                             {showDangerAction && !isFavorite && <SidebarListMoreMenuDivider />}
 

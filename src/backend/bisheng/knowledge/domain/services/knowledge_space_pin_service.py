@@ -1,0 +1,78 @@
+from typing import Any
+
+from bisheng.common.errcode.knowledge_space import SpacePinLimitError
+from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+from bisheng.knowledge.domain.repositories.implementations.knowledge_space_pin_repository_impl import (
+    KnowledgeSpacePinRepositoryImpl,
+)
+
+KNOWLEDGE_SPACE_PIN_TYPE = "knowledge_space_pin"
+MAX_PINS_PER_LEVEL = 5
+
+
+class KnowledgeSpacePinService:
+    @staticmethod
+    async def get_pinned_space_ids(user_id: int, visible_space_ids: set[int]) -> set[int]:
+        if not visible_space_ids:
+            return set()
+        async with get_async_db_session() as session:
+            pinned_ids = await KnowledgeSpacePinRepositoryImpl(session).list_for_user(user_id)
+        return pinned_ids & visible_space_ids
+
+    @classmethod
+    async def set_pin(
+        cls,
+        *,
+        user_id: int,
+        space_id: int,
+        visible_space_ids: set[int],
+        is_pinned: bool,
+    ) -> bool:
+        async with get_async_db_session() as session:
+            repository = KnowledgeSpacePinRepositoryImpl(session)
+            await repository.lock_user(user_id)
+            pinned_ids = await repository.list_for_user(user_id)
+            current_ids = pinned_ids & visible_space_ids
+            if not is_pinned:
+                await repository.remove_pin(user_id, space_id)
+                await session.commit()
+                return True
+            if space_id in current_ids:
+                return True
+            if len(current_ids) >= MAX_PINS_PER_LEVEL:
+                raise SpacePinLimitError()
+            await repository.add_pin(user_id, space_id)
+            await session.commit()
+            return True
+
+    @classmethod
+    async def apply_pins(cls, spaces: list[Any], user_id: int) -> list[Any]:
+        if not spaces:
+            return spaces
+        visible_ids = {
+            int(item.get("id") if isinstance(item, dict) else item.id)
+            for item in spaces
+            if (item.get("id") if isinstance(item, dict) else getattr(item, "id", None)) is not None
+        }
+        pinned_ids = await cls.get_pinned_space_ids(user_id, visible_ids)
+        pinned: list[Any] = []
+        normal: list[Any] = []
+        for item in spaces:
+            item_id = int(item.get("id") if isinstance(item, dict) else item.id)
+            level = item.get("space_level") if isinstance(item, dict) else getattr(item, "space_level", None)
+            level_value = getattr(level, "value", level)
+            is_pinned = level_value != KnowledgeSpaceLevelEnum.PERSONAL.value and item_id in pinned_ids
+            if isinstance(item, dict):
+                item["is_pinned"] = is_pinned
+            else:
+                item.is_pinned = is_pinned
+            (pinned if is_pinned else normal).append(item)
+        return pinned + normal
+
+    @staticmethod
+    async def delete_space_pins(space_id: int) -> int:
+        async with get_async_db_session() as session:
+            count = await KnowledgeSpacePinRepositoryImpl(session).delete_by_space_id(space_id)
+            await session.commit()
+            return count

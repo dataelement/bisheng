@@ -60,6 +60,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
     SpacePersonalCreateForbiddenError,
+    SpacePersonalPinForbiddenError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -193,6 +194,7 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
     KnowledgeAuditTelemetryService,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_pin_service import KnowledgeSpacePinService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
@@ -1005,6 +1007,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_created: bool = False,
         required_permission_id: str | None = None,
         include_file_count: bool = True,
+        apply_user_pins: bool = True,
     ) -> list[KnowledgeRead]:
         t0 = time.perf_counter()
         if not space_ids:
@@ -1052,7 +1055,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             effective_ms = (time.perf_counter() - _t_effective) * 1000
             permission_ids_map = {space_id: ids for space_id, ids in zip(permission_id_space_ids, permission_ids)}
 
-        pinned_spaces = []
         normal_spaces = []
         for space in spaces:
             # 『我的收藏』是每个用户私有的系统知识库，只对归属者本人可见，
@@ -1062,7 +1064,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
                 **space.model_dump(),
-                is_pinned=bool(member_conf and member_conf.is_pinned),
+                is_pinned=False,
             )
 
             if space.user_id == self.login_user.user_id:
@@ -1091,12 +1093,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     continue
                 self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
 
-            if result.is_pinned:
-                pinned_spaces.append(result)
-            else:
-                normal_spaces.append(result)
+            normal_spaces.append(result)
 
-        ordered_spaces = pinned_spaces + normal_spaces
+        ordered_spaces = normal_spaces
         file_count_ms = 0.0
         if include_file_count and ordered_spaces:
             _t_file_count = time.perf_counter()
@@ -1114,6 +1113,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         _t_decorate = time.perf_counter()
         result = await self._decorate_department_metadata(ordered_spaces)
+        if apply_user_pins:
+            result = await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
         decorate_ms = (time.perf_counter() - _t_decorate) * 1000
 
         _logger.info(
@@ -5813,6 +5814,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+        await KnowledgeSpacePinService.delete_space_pins(space_id)
         await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
         if not force:
             await self._send_space_event_notification(
@@ -5997,37 +5999,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         members_map = {int(one.business_id): one for one in members}
         res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
-        pinned_spaces = []
-        normal_spaces = []
+        spaces = []
         for one in res:
             member_conf = members_map.get(one.id)
             if not member_conf:
                 continue
             can_unsubscribe = await self._can_unsubscribe_space(one, member_conf)
 
-            if member_conf.is_pinned:
-                pinned_spaces.append(
-                    KnowledgeSpaceInfoResp(
-                        **one.model_dump(),
-                        is_pinned=True,
-                        user_role=member_conf.user_role,
-                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
-                        is_followed=True,
-                        can_unsubscribe=can_unsubscribe,
-                    )
+            spaces.append(
+                KnowledgeSpaceInfoResp(
+                    **one.model_dump(),
+                    is_pinned=False,
+                    user_role=member_conf.user_role,
+                    subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                    is_followed=True,
+                    can_unsubscribe=can_unsubscribe,
                 )
-            else:
-                normal_spaces.append(
-                    KnowledgeSpaceInfoResp(
-                        **one.model_dump(),
-                        is_pinned=False,
-                        user_role=member_conf.user_role,
-                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
-                        is_followed=True,
-                        can_unsubscribe=can_unsubscribe,
-                    )
-                )
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+            )
+        result = await self._decorate_department_metadata(spaces)
+        return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
@@ -6096,7 +6086,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self.login_user.user_id,
                 len(cached),
             )
-            return cached
+            return await KnowledgeSpacePinService.apply_pins(cached, self.login_user.user_id)
 
         _t = time.perf_counter()
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
@@ -6134,9 +6124,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_by,
             memberships=members,
             required_permission_id="view_space",
+            apply_user_pins=False,
         )
         await SpaceListCache.set(self.login_user.user_id, order_by, formatted)
-        return formatted
+        return await KnowledgeSpacePinService.apply_pins(formatted, self.login_user.user_id)
 
     async def get_grouped_spaces(
         self,
@@ -6240,7 +6231,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if user_role is not None:
                 payload["user_role"] = user_role.value
             result.append(payload)
-        return result
+        return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def global_search_files(
         self,
@@ -6360,7 +6351,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
-        return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        level = self._normalize_space_level(scope.level if scope is not None else None)
+        if level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpacePersonalPinForbiddenError()
+
+        if level == KnowledgeSpaceLevelEnum.PUBLIC:
+            visible_spaces = await self.get_public_spaces()
+        else:
+            visible_spaces = await self.get_spaces_by_level(level)
+        visible_space_ids = {
+            int(item.get("id") if isinstance(item, dict) else item.id)
+            for item in visible_spaces
+        }
+        if space_id not in visible_space_ids:
+            raise SpacePermissionDeniedError()
+
+        return await KnowledgeSpacePinService.set_pin(
+            user_id=self.login_user.user_id,
+            space_id=space_id,
+            visible_space_ids=visible_space_ids,
+            is_pinned=is_pinned,
+        )
 
     async def get_knowledge_square(self, keyword: str = None, page: int = 1, page_size: int = 20) -> dict:
         from bisheng.user.domain.services.user import UserService
