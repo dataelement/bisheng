@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type UIEvent } from "react";
 import {
     getShougangFilePublishSimilarCandidatesApi,
     getShougangFilePublishTargetSpacesApi,
     searchShougangFilePublishDocumentsApi,
     submitShougangFilePublishApprovalApi,
+    type ShougangFilePublishDocumentEntry,
     type ShougangFilePublishTargetSpace,
 } from "~/api/approval";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { useDebounce } from "~/hooks/Input";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import { FilePublishTargetTree } from "./FilePublishTargetTree";
 
@@ -53,10 +55,12 @@ export function FilePublishDialog({
     const [candidatesLoading, setCandidatesLoading] = useState(false);
     const [candidateError, setCandidateError] = useState(false);
     const [searchKeyword, setSearchKeyword] = useState("");
-    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchResults, setSearchResults] = useState<ShougangFilePublishDocumentEntry[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
-    const [searchResultsOpen, setSearchResultsOpen] = useState(false);
+    const [searchHasMore, setSearchHasMore] = useState(false);
+    const [nextSearchCursor, setNextSearchCursor] = useState<number | null>(null);
     const [versionTarget, setVersionTarget] = useState<VersionTarget | null>(null);
+    const debouncedSearchKeyword = useDebounce(searchKeyword, 300);
 
     useEffect(() => {
         if (!open) {
@@ -70,7 +74,8 @@ export function FilePublishDialog({
             setSearchKeyword("");
             setSearchResults([]);
             setSearchLoading(false);
-            setSearchResultsOpen(false);
+            setSearchHasMore(false);
+            setNextSearchCursor(null);
             setVersionTarget(null);
             return;
         }
@@ -143,22 +148,47 @@ export function FilePublishDialog({
         setCandidates([]);
         setSearchResults([]);
         setSearchLoading(false);
-        setSearchResultsOpen(false);
+        setSearchHasMore(false);
+        setNextSearchCursor(null);
         setCandidatesLoading(false);
         setCandidateError(false);
     }, [versionManagementEnabled]);
 
-    const handleSearchDocuments = async () => {
-        if (!file || !targetSpaceId || !versionManagementEnabled || searchLoading) return;
+    const loadSearchPage = useCallback(async (cursor: number, append: boolean) => {
+        if (!file || !targetSpaceId || !versionManagementEnabled) return;
         setSearchLoading(true);
         try {
-            const res = await searchShougangFilePublishDocumentsApi(file.id, targetSpaceId, searchKeyword);
-            setSearchResults(res.data || []);
-            setSearchResultsOpen(true);
+            const res = await searchShougangFilePublishDocumentsApi(
+                file.id,
+                targetSpaceId,
+                debouncedSearchKeyword,
+                cursor,
+            );
+            setSearchResults((previous) => append ? [...previous, ...(res.data || [])] : (res.data || []));
+            setSearchHasMore(res.has_more);
+            setNextSearchCursor(res.next_cursor ?? null);
         } catch {
             showToast({ message: "搜索目标文档失败", severity: NotificationSeverity.ERROR });
         } finally {
             setSearchLoading(false);
+        }
+    }, [debouncedSearchKeyword, file, showToast, targetSpaceId, versionManagementEnabled]);
+
+    useEffect(() => {
+        if (!open || !file || !targetSpaceId || !versionManagementEnabled || !debouncedSearchKeyword.trim()) {
+            setSearchResults([]);
+            setSearchHasMore(false);
+            setNextSearchCursor(null);
+            return;
+        }
+        void loadSearchPage(0, false);
+    }, [debouncedSearchKeyword, file, loadSearchPage, open, targetSpaceId, versionManagementEnabled]);
+
+    const handleSearchResultsScroll = (event: UIEvent<HTMLDivElement>) => {
+        const element = event.currentTarget;
+        const reachedBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 8;
+        if (reachedBottom && searchHasMore && nextSearchCursor !== null && !searchLoading) {
+            void loadSearchPage(nextSearchCursor, true);
         }
     };
 
@@ -167,7 +197,8 @@ export function FilePublishDialog({
         setCandidates([]);
         setCandidateError(false);
         setSearchResults([]);
-        setSearchResultsOpen(false);
+        setSearchHasMore(false);
+        setNextSearchCursor(null);
     };
 
     const handleSelectTargetRoot = (spaceId: string | number) => {
@@ -246,7 +277,6 @@ export function FilePublishDialog({
 
     const selectVersionOption = (option: VersionOption) => {
         setVersionTarget({ type: option.type, id: option.id });
-        setSearchResultsOpen(false);
     };
 
     const versionEmptyText = candidatesLoading
@@ -325,19 +355,49 @@ export function FilePublishDialog({
                             placeholder="搜索目标空间文档..."
                             disabled={!versionManagementEnabled}
                             onChange={(event) => setSearchKeyword(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === "Enter") void handleSearchDocuments();
-                            }}
                         />
-                        <Button
-                            variant="outline"
-                            type="button"
-                            disabled={!versionManagementEnabled || searchLoading}
-                            onClick={() => void handleSearchDocuments()}
-                        >
+                        <Button variant="outline" type="button" disabled={!versionManagementEnabled || searchLoading}>
                             {searchLoading ? "搜索中..." : "搜索"}
                         </Button>
                     </div>
+                    {debouncedSearchKeyword.trim() ? (
+                        <div className="rounded-md border border-[#e5e6eb] bg-white">
+                            <div className="max-h-56 overflow-y-auto" onScroll={handleSearchResultsScroll}>
+                                {searchResults.map((item) => {
+                                    const option: VersionOption = {
+                                        key: item.target_file_id ? `file:${item.target_file_id}` : `document:${item.document_id}`,
+                                        type: item.target_file_id ? "file" : "document",
+                                        id: item.target_file_id ?? item.document_id ?? 0,
+                                        title: item.title,
+                                        source: "搜索",
+                                        docCode: item.doc_code,
+                                        versionNo: item.current_primary_version_no,
+                                        uploaderName: item.primary_uploader_name,
+                                        uploadTime: item.primary_upload_time,
+                                    };
+                                    const selected = versionTarget?.type === option.type && versionTarget.id === option.id;
+                                    return (
+                                        <button
+                                            key={option.key}
+                                            type="button"
+                                            aria-label={option.title}
+                                            className={`w-full border-b border-[#f2f3f5] px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[#f2f6ff]" : "hover:bg-[#f7f8fa]"}`}
+                                            onClick={() => selectVersionOption(option)}
+                                        >
+                                            <div className="truncate font-medium text-[#1d2129]">{option.title}</div>
+                                            <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-[#86909c]">
+                                                {option.docCode && <span>{option.docCode}</span>}
+                                                <span>{option.type === "file" ? "待补建版本文档" : `当前版本 V${option.versionNo ?? 1}`}</span>
+                                                {option.uploaderName && <span>{option.uploaderName}</span>}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                                {searchLoading && <div className="px-3 py-3 text-center text-sm text-[#86909c]">搜索中...</div>}
+                                {!searchLoading && searchResults.length === 0 && <div className="px-3 py-3 text-center text-sm text-[#86909c]">未搜索到可关联文档</div>}
+                            </div>
+                        </div>
+                    ) : null}
                     {selectedVersionOption && (
                         <div className="rounded-md border border-[#e5e6eb] bg-[#f7f8fa] px-3 py-2 text-sm text-[#4e5969]">
                             已选择：{selectedVersionOption.title}
@@ -363,60 +423,6 @@ export function FilePublishDialog({
                     </Button>
                 </DialogFooter>
             </DialogContent>
-            <Dialog open={searchResultsOpen} onOpenChange={setSearchResultsOpen}>
-                <DialogContent className="w-[min(720px,calc(100vw-48px))] max-w-none">
-                    <DialogHeader>
-                        <DialogTitle>选择版本管理目标</DialogTitle>
-                    </DialogHeader>
-                    <div className="max-h-[70vh] overflow-y-auto py-2">
-                        {searchResults.length === 0 ? (
-                            <div className="rounded-md border border-[#e5e6eb] bg-[#f7f8fa] px-3 py-8 text-center text-sm text-[#86909c]">
-                                未搜索到可关联文档
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                {versionOptions
-                                    .filter((option) => option.source === "搜索")
-                                    .map((option) => {
-                                        const selected = versionTarget?.type === option.type && versionTarget?.id === option.id;
-                                        return (
-                                            <button
-                                                key={option.key}
-                                                type="button"
-                                                aria-label={`${option.source} ${option.title}`}
-                                                className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                                                    selected
-                                                        ? "border-[#165dff] bg-[#f2f6ff]"
-                                                        : "border-[#e5e6eb] bg-white hover:border-[#165dff]"
-                                                }`}
-                                                onClick={() => selectVersionOption(option)}
-                                            >
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <span className="min-w-0 flex-1 truncate font-medium text-[#1d2129]">
-                                                        {option.title}
-                                                    </span>
-                                                    <span className="shrink-0 rounded-sm bg-[#f2f3f5] px-1.5 py-0.5 text-xs text-[#4e5969]">
-                                                        {option.source}
-                                                    </span>
-                                                </div>
-                                                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#86909c]">
-                                                    {option.docCode && <span>{option.docCode}</span>}
-                                                    <span>{option.type === "file" ? "待补建版本文档" : `当前版本 V${option.versionNo ?? 1}`}</span>
-                                                    {option.uploaderName && <span>{option.uploaderName}</span>}
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" className="h-8" onClick={() => setSearchResultsOpen(false)}>
-                            关闭
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </Dialog>
     );
 }

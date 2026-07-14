@@ -85,6 +85,8 @@ async def search_file_publish_documents(
     source_file_id: int,
     target_space_id: int,
     keyword: str = '',
+    cursor: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=20),
     _: UserPayload = Depends(UserPayload.get_login_user),
     space_service=Depends(get_knowledge_space_service),
     version_service=Depends(get_knowledge_version_service),
@@ -94,6 +96,8 @@ async def search_file_publish_documents(
         source_file_id=source_file_id,
         target_space_id=target_space_id,
         keyword=keyword,
+        cursor=cursor,
+        limit=limit,
         version_service=version_service,
         space_service=space_service,
     )

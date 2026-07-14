@@ -275,6 +275,13 @@ export interface ShougangFilePublishDocumentEntry {
   primary_upload_time?: string | null;
 }
 
+export interface ShougangFilePublishDocumentSearchPage {
+  data: ShougangFilePublishDocumentEntry[];
+  total: number;
+  next_cursor?: number | null;
+  has_more: boolean;
+}
+
 export async function validateShougangKnowledgeSpaceCreateApprovalApi(
   data: Omit<ShougangKnowledgeSpaceCreateApprovalPayload, "reason">,
 ): Promise<{ approval_required: boolean }> {
@@ -338,18 +345,21 @@ export async function searchShougangFilePublishDocumentsApi(
   sourceFileId: string | number,
   targetSpaceId: string | number,
   keyword: string,
-): Promise<{ data: ShougangFilePublishDocumentEntry[]; total: number }> {
-  const response = await request.get<ApiResponse<{ data: ShougangFilePublishDocumentEntry[]; total: number }>>(
+  cursor = 0,
+): Promise<ShougangFilePublishDocumentSearchPage> {
+  const response = await request.get<ApiResponse<ShougangFilePublishDocumentSearchPage>>(
     "/api/v1/approval/shougang/file-publish/document-search",
     {
       params: {
         source_file_id: sourceFileId,
         target_space_id: targetSpaceId,
         keyword,
+        cursor,
+        limit: 20,
       },
     },
   );
-  return unwrapPaged<ShougangFilePublishDocumentEntry>(response);
+  return unwrapPayload(response);
 }
 
 export async function submitShougangFilePublishApprovalApi(data: {

@@ -152,6 +152,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteStatusReq,
     ShougangPortalFavoriteStatusResp,
     ShougangPortalFavoriteStatusResultItem,
+    ShougangPortalDomainFileCountItem,
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
@@ -3338,8 +3339,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
         return sorted({str(tag.name) for tag in all_tags if int(tag.id) in visible_tag_ids and tag.name})
 
-    async def count_shougang_portal_domain_files(self, codes: list[str]) -> dict[str, int]:
-        return await KnowledgeFileDao.async_count_files_by_domain_codes(codes)
+    async def count_shougang_portal_domain_files(
+        self,
+        domains: list[ShougangPortalDomainFileCountItem],
+    ) -> dict[str, int]:
+        visible_scopes: dict[str, set[int]] = {}
+        for domain in domains:
+            spaces = await self._get_shougang_portal_visible_search_spaces(domain.space_ids, None)
+            visible_scopes.setdefault(domain.code, set()).update(
+                int(space.id) for space in spaces if space.id is not None
+            )
+        return await KnowledgeFileDao.async_count_files_by_domain_scopes(visible_scopes)
 
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> dict:
         spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
@@ -9251,14 +9261,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeFile:
         """Update a file's file_encoding and optional second-level category (shougang feature)."""
         file_record = await self._get_file_for_action(file_id)
-        # Reuse 'rename_file' permission action — that action is owner/admin-only,
-        # matching the required privilege level for editing encoding.
-        await self._require_permission_id(
-            "knowledge_file",
-            file_id,
-            "rename_file",
-            space_id=file_record.knowledge_id,
-        )
+        # Editing file category / business domain follows the upload permission, on the
+        # same container the upload flow checks: the file's parent folder when it lives
+        # in one, otherwise the space. The per-file 'rename_file' action was subject to
+        # nearest-binding overrides that strip container-level grants from individual
+        # files, so managers who could upload still couldn't edit encoding.
+        ancestor_folder_ids = [
+            int(part) for part in (file_record.file_level_path or "").split("/") if part
+        ]
+        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
+        if parent_folder_id:
+            await self._require_permission_id(
+                "folder",
+                parent_folder_id,
+                "upload_file",
+                space_id=file_record.knowledge_id,
+            )
+        else:
+            await self._require_permission_id(
+                "knowledge_space",
+                file_record.knowledge_id,
+                "upload_file",
+            )
 
         cleaned = encoding.strip()
         if not cleaned:
