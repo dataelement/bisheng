@@ -194,7 +194,7 @@ class QuestionRepository:
             elif status == 4:
                 # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
                 if user_id is not None:
-                    expert = await self.get_by_user_id(user_id)
+                    expert = await ExpertRepository.get_by_user_id(user_id)
                     if not expert:
                         return [], 0
                     expert_id_str = str(expert.id)
