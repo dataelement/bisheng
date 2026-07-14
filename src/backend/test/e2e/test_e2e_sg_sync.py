@@ -283,5 +283,5 @@ class TestSgSsoAccountSyncRemote:
         resp = post_sg(sg_client, SSO_SG_PATH, payload)
         assert resp.status_code == 200
         body = resp.json()
-        assert body["TIEM"][0]["Result"] == "1"
+        assert body["TIEM"][0]["Result"] == "E"
         assert "user not found" in body["TIEM"][0]["Description"]

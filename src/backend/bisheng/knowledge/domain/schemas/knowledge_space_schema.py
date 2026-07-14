@@ -365,8 +365,7 @@ class ShougangPortalSpaceBusinessDomainCodesSyncResp(BaseModel):
     updated: int = 0
 
 
-class ShougangPortalFileSearchReq(BaseModel):
-    q: str | None = Field(default=None, description="Search keyword")
+class ShougangPortalFileBrowseReq(BaseModel):
     tag: str | None = Field(default=None, description="Space tag name")
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
@@ -380,10 +379,7 @@ class ShougangPortalFileSearchReq(BaseModel):
     )
     recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
     sort: str = Field(
-        default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc"
-    )
-    rerank_model_id: str | None = Field(
-        default=None, description="Optional rerank model ID for this portal search request"
+        default="updated_at_desc", description="Sort mode: updated_at / updated_at_desc / updated_at_asc"
     )
     cursor: str | None = Field(default=None, description="Cursor returned by the previous request")
     limit: int = Field(default=20, ge=1, le=100)
@@ -405,6 +401,16 @@ class ShougangPortalFileSearchReq(BaseModel):
             return None
         normalized = str(value).strip().upper()
         return normalized or None
+
+
+class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
+    q: str | None = Field(default=None, description="Search keyword")
+    sort: str = Field(
+        default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc"
+    )
+    rerank_model_id: str | None = Field(
+        default=None, description="Optional rerank model ID for this portal search request"
+    )
 
 
 class ShougangPortalFileTagResp(BaseModel):

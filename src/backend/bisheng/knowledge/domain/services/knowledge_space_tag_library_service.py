@@ -338,15 +338,21 @@ class KnowledgeSpaceTagLibraryService:
         library: KnowledgeSpaceTagLibrary,
     ) -> KnowledgeSpaceTagLibraryDetail:
         tag_items = await self._build_tag_items_detail(library)
-        system = [item.name for item in tag_items if item.resource_type == TagResourceTypeEnum.SYSTEM_TAG.value]
-        manual = [item.name for item in tag_items if item.resource_type == TagResourceTypeEnum.MANUAL_TAG.value]
+        seen: set[str] = set()
+        tags: list[str] = []
+        for item in tag_items:
+            name = (item.name or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            tags.append(name)
         return KnowledgeSpaceTagLibraryDetail(
             id=library.id,
             name=library.name,
             description=library.description,
             tag_count=len(tag_items),
             is_builtin=library.is_builtin,
-            tags=[*system, *manual],
+            tags=tags,
             tag_items=tag_items,
         )
 
