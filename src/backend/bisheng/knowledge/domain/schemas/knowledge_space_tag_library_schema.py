@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class KnowledgeSpaceTagLibraryCreateReq(BaseModel):
     name: str = Field(..., min_length=1, max_length=20, description="标签库名称")
     description: str | None = Field(default=None, max_length=1000, description="标签库说明")
-    tags: list[str] = Field(default_factory=list, description="标签列表，最多 200 个")
+    tags: list[str] = Field(default_factory=list, description="标签列表，最多 999 个")
     is_builtin: bool = Field(
         default=False,
         description="是否后台配置的内置库；普通用户不能删除",
@@ -16,7 +16,7 @@ class KnowledgeSpaceTagLibraryCreateReq(BaseModel):
 class KnowledgeSpaceTagLibraryUpdateReq(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=20, description="标签库名称")
     description: str | None = Field(default=None, max_length=1000, description="标签库说明")
-    tags: list[str] | None = Field(default=None, description="系统标签列表，最多 200 个")
+    tags: list[str] | None = Field(default=None, description="系统标签列表，最多 999 个")
     manual_tags: list[str] | None = Field(default=None, description="人工标签列表")
     ai_tags: list[str] | None = Field(default=None, description="AI 标签列表")
 

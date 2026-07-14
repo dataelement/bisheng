@@ -24,7 +24,7 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import (
 )
 from bisheng.user.domain.models.user import UserDao
 
-MAX_LIBRARY_TAGS = 200
+MAX_LIBRARY_TAGS = 999
 MAX_LIBRARY_NAME_LENGTH = 20
 
 
