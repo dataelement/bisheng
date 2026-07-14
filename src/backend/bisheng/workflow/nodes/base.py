@@ -34,6 +34,8 @@ class BaseNode(ABC):
         # Global State Management
         self.workflow_id = workflow_id
         self.workflow_name = kwargs.get('workflow_name')
+        # The workflow owner can differ from the user executing the workflow.
+        self.workflow_owner_id: Optional[int] = kwargs.get('workflow_owner_id')
         self.graph_state = graph_state
         # Owner tenant of the Flow — set by GraphEngine from FlowDao at
         # task entry; downstream nodes pass this to LLMService.get_*_llm

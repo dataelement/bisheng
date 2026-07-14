@@ -55,6 +55,7 @@ class GraphEngine:
         max_steps: int = 0,
         callback: BaseCallback = None,
         tenant_id: int = None,
+        workflow_owner_id: int = None,
     ):
         self.user_id = user_id
         self.workflow_id = workflow_id
@@ -67,6 +68,7 @@ class GraphEngine:
         # Owner tenant of the Flow — passed to BaseNode so workflow nodes
         # resolve F022 system-config rows against the Flow's tenant (INV-T18).
         self.tenant_id = tenant_id
+        self.workflow_owner_id = workflow_owner_id
 
         # node_id: NodeInstance
         self.nodes_map = {}
@@ -242,6 +244,7 @@ class GraphEngine:
                 callback=self.callback,
                 workflow_name=self.workflow_name,
                 tenant_id=self.tenant_id,
+                workflow_owner_id=self.workflow_owner_id,
             )
             if node_instance.is_condition_node():
                 self.condition_nodes.append(node_instance.id)

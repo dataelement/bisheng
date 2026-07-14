@@ -18,7 +18,8 @@ class Workflow:
                  max_steps: int = 0,
                  timeout: int = 0,
                  callback: BaseCallback = None,
-                 tenant_id: int = None):
+                 tenant_id: int = None,
+                 workflow_owner_id: int = None):
 
         # Unique identifier of the run, unique saved to the databaseID
         self.workflow_id = workflow_id
@@ -40,7 +41,8 @@ class Workflow:
                                         workflow_data=workflow_data,
                                         max_steps=max_steps,
                                         callback=callback,
-                                        tenant_id=tenant_id)
+                                        tenant_id=tenant_id,
+                                        workflow_owner_id=workflow_owner_id)
 
     def save_user_input_history(self, input_data: dict | None):
         if not input_data:

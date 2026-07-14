@@ -17,6 +17,7 @@ from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.schemas.telemetry.event_data_schema import PortalQaEventData
 from bisheng.common.telemetry.portal_event_service import (
     PORTAL_BFF_TELEMETRY_SOURCE_HEADER,
@@ -564,6 +565,7 @@ class KnowledgeSpaceChatService:
         kb_filters: dict[int, dict[str, Any]] | None = None,
         top_k: int = 10,
         max_content: int = 15000,
+        skip_unauthorized: bool = False,
     ) -> list[tuple[int, Document]]:
         """Retrieve chunks across one or more knowledge bases without LLM generation.
 
@@ -575,6 +577,7 @@ class KnowledgeSpaceChatService:
                 ``"ANY"`` raises HTTP 400.
             top_k: Hard cap on returned chunks across all KBs.
             max_content: Per-KB combined-content size limit handed to KnowledgeRetrieverTool.
+            skip_unauthorized: Skip knowledge spaces that the permission subject cannot view.
 
         Returns:
             Up to ``top_k`` ``(knowledge_id, Document)`` pairs.
@@ -609,11 +612,21 @@ class KnowledgeSpaceChatService:
                     max_content=max_content,
                 )
                 for kb_id in knowledge_base_ids
-            )
+            ),
+            return_exceptions=skip_unauthorized,
         )
 
         flattened: list[tuple[int, Document]] = []
-        for chunks in per_kb_results:
+        for kb_id, chunks in zip(knowledge_base_ids, per_kb_results, strict=True):
+            if isinstance(chunks, SpacePermissionDeniedError) and skip_unauthorized:
+                logger.info(
+                    "skip unauthorized knowledge space during retrieval: user_id={} space_id={}",
+                    self.login_user.user_id,
+                    kb_id,
+                )
+                continue
+            if isinstance(chunks, BaseException):
+                raise chunks
             flattened.extend(chunks)
         return flattened[:top_k]
 

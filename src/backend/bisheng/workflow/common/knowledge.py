@@ -76,6 +76,7 @@ def retrieve_knowledge_space_documents_sync(
                 kb_filters=kb_filters,
                 top_k=top_k,
                 max_content=max_content,
+                skip_unauthorized=True,
             )
 
     try:
@@ -346,9 +347,17 @@ class RagUtils(BaseNode):
                 for knowledge_id, file_ids in file_filters.items()
             }
         knowledge_base_ids = knowledge_base_ids or [int(one) for one in self._knowledge_value]
+        permission_user = self.user_info
+        if not getattr(self, "_knowledge_auth", True):
+            from bisheng.user.domain.models.user import UserDao
+
+            owner_id = getattr(self, "workflow_owner_id", None) or self.user_id
+            permission_user = UserDao.get_user(int(owner_id))
+            if permission_user is None:
+                raise ValueError(f"workflow owner {owner_id} does not exist")
         chunks = retrieve_knowledge_space_documents_sync(
             request=getattr(self, "request", None),
-            login_user=self.user_info,
+            login_user=permission_user,
             query=question,
             knowledge_base_ids=knowledge_base_ids,
             kb_filters=kb_filters,

@@ -73,7 +73,8 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
                             workflow_conf.max_steps,
                             workflow_conf.timeout,
                             redis_callback,
-                            tenant_id=flow_tenant_id)
+                            tenant_id=flow_tenant_id,
+                            workflow_owner_id=getattr(workflow_info, 'user_id', None))
         redis_callback.workflow = workflow
         status, reason = workflow.run()
         _judge_workflow_status(redis_callback, workflow)

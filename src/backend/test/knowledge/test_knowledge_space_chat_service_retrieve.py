@@ -16,6 +16,7 @@ import pytest
 from fastapi import HTTPException
 from langchain_core.documents import Document
 
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.developer_token.api.dependencies import get_developer_token_user
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -414,6 +415,24 @@ async def test_aretrieve_chunks_merges_results_and_tags_knowledge_id():
     assert {c.args[0] for c in calls} == {1, 2}
     for c in calls:
         assert c.kwargs["tag_names"] == []
+
+
+async def test_aretrieve_chunks_skips_unauthorized_kb_and_keeps_authorized_results():
+    svc = _make_service()
+    svc._aretrieve_chunks_for_kb = AsyncMock(
+        side_effect=[
+            SpacePermissionDeniedError(),
+            [(2, _doc("allowed", document_id=20, document_name="B.pdf", chunk_index=1))],
+        ]
+    )
+
+    result = await svc.aretrieve_chunks(
+        query="hello",
+        knowledge_base_ids=[1, 2],
+        skip_unauthorized=True,
+    )
+
+    assert [(kb_id, doc.page_content) for kb_id, doc in result] == [(2, "allowed")]
 
 
 async def test_aretrieve_chunks_truncates_to_top_k():

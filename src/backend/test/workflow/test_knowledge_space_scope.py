@@ -8,6 +8,7 @@ import pytest
 from langchain_core.documents import Document
 
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.workflow.common.knowledge import (
     RagUtils,
     ensure_knowledge_space_login_user,
@@ -91,6 +92,7 @@ def test_knowledge_retriever_space_errors_are_node_errors():
 def test_retrieve_space_question_uses_space_service(monkeypatch):
     obj = object.__new__(RagUtils)
     obj._knowledge_value = [12]
+    obj._knowledge_auth = True
     obj._retriever_kwargs = {"k": 100}
     obj._max_chunk_size = 4096
     obj.user_info = SimpleNamespace(user_id=7, user_name="tester")
@@ -114,6 +116,33 @@ def test_retrieve_space_question_uses_space_service(monkeypatch):
     assert captured["max_content"] == 4096
     assert docs[0].page_content == "chunk"
     assert docs[0].metadata["knowledge_space_id"] == 12
+
+
+def test_retrieve_space_question_uses_workflow_owner_when_user_auth_disabled(monkeypatch):
+    obj = object.__new__(RagUtils)
+    obj._knowledge_value = [12]
+    obj._knowledge_auth = False
+    obj.workflow_owner_id = 88
+    obj.user_id = 7
+    obj._retriever_kwargs = {"k": 100}
+    obj._max_chunk_size = 4096
+    obj.user_info = SimpleNamespace(user_id=7, user_name="runner")
+    owner = SimpleNamespace(user_id=88, user_name="owner")
+
+    captured = {}
+    monkeypatch.setattr(UserDao, "get_user", lambda user_id: owner if user_id == 88 else None)
+
+    def _fake_retrieve(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        "bisheng.workflow.common.knowledge.retrieve_knowledge_space_documents_sync",
+        _fake_retrieve,
+    )
+
+    assert obj.retrieve_space_question("question") == []
+    assert captured["login_user"] is owner
 
 
 def test_knowledge_space_login_user_adapter_accepts_orm_user():
@@ -203,6 +232,7 @@ def test_knowledge_space_retrieve_helper_injects_version_repo(monkeypatch):
     assert created["kwargs"]["knowledge_base_ids"] == [12]
     assert created["kwargs"]["top_k"] == 5
     assert created["kwargs"]["max_content"] == 1024
+    assert created["kwargs"]["skip_unauthorized"] is True
 
 
 def test_normalize_qa_knowledge_value_preserves_old_array_shape():
