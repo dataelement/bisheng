@@ -210,6 +210,30 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
+    it("does not show pending review tags in recommended section when review feature is enabled", async () => {
+        jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: true });
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+            { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag", business_type: "tag_library" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("人工C")).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText("待审核")).not.toBeInTheDocument();
+    });
+
     it("saves both approved and pending tags when both are selected", async () => {
         const user = userEvent.setup();
         const onSaved = jest.fn();
@@ -235,7 +259,7 @@ describe("EditTagsModal recommended tags", () => {
 
         await waitFor(() => {
             expect(screen.getByText("人工C")).toBeInTheDocument();
-            expect(screen.getAllByText("待审核").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("待审核")).toHaveLength(1);
         });
 
         await user.click(screen.getByText("com_knowledge.confirm"));
