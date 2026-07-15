@@ -77,6 +77,60 @@
   --text-h1: var(--font-size-7);       --leading-h1: var(--line-height-7);
   --text-display: var(--font-size-8);  --leading-display: var(--line-height-8);
   --text-metric: var(--font-size-9);   --leading-metric: var(--line-height-9);
+
+  /* ============================================================
+   * Color tokens (docs-ui-refactor/基础-色彩规范.md §2/§3/§7)
+   * Two layers: primitive --arco-gray-1..10 (Arco gray ramp, the
+   * numeric source) and semantic --text-1..4 / --fill-1..4 /
+   * --border-base|-deep / --success|warning|danger-* — components use
+   * the semantic layer only, via Tailwind (text-text-1 / bg-fill-1 /
+   * border-border-base / bg-success ...). RGB channel triplets so
+   * Tailwind `/<alpha>` modifiers keep working.
+   * Naming constraints: --gray-N / --red-N / --green-N belong to the
+   * legacy LibreChat ramps above and must NOT be overwritten; --border
+   * belongs to shadcn (HSL) — hence --arco-gray-N and --border-base.
+   * success/warning/danger are theme-INDEPENDENT: they never follow
+   * the blue⇄green brand switch. Light-mode values only for now
+   * (dark mode inherits them — known debt, same as --btn-*).
+   * ============================================================ */
+  /* Primitive — Arco gray 1-10 */
+  --arco-gray-1: 247 248 250;   /* #F7F8FA */
+  --arco-gray-2: 242 243 245;   /* #F2F3F5 */
+  --arco-gray-3: 229 230 235;   /* #E5E6EB */
+  --arco-gray-4: 201 205 212;   /* #C9CDD4 */
+  --arco-gray-5: 169 174 184;   /* #A9AEB8 */
+  --arco-gray-6: 134 144 156;   /* #86909C */
+  --arco-gray-7: 107 119 133;   /* #6B7785 */
+  --arco-gray-8: 78 89 105;     /* #4E5969 */
+  --arco-gray-9: 39 46 59;      /* #272E3B */
+  --arco-gray-10: 29 33 41;     /* #1D2129 */
+
+  /* Semantic — neutral text / fill / border */
+  --text-1: var(--arco-gray-10);      /* primary text: titles, body */
+  --text-2: var(--arco-gray-8);       /* secondary text */
+  --text-3: var(--arco-gray-6);       /* hint / timestamp / placeholder */
+  --text-4: var(--arco-gray-4);       /* disabled text */
+  --fill-1: var(--arco-gray-1);       /* hover bg / light page bg */
+  --fill-2: var(--arco-gray-2);       /* active bg / filled control base */
+  --fill-3: var(--arco-gray-3);       /* filled hover */
+  --fill-4: var(--arco-gray-4);       /* filled active */
+  --border-base: var(--arco-gray-3);  /* regular border ("border" in the spec) */
+  --border-deep: var(--arco-gray-4);  /* emphasized divider / hover border */
+
+  /* Semantic — functional (never themed) */
+  --success: 0 180 42;          /* #00B42A (Arco green-6) */
+  --success-hover: 35 195 67;   /* #23C343 */
+  --success-active: 0 154 41;   /* #009A29 */
+  --success-tint: 232 255 234;  /* #E8FFEA (Arco green-1) — tag / light bg */
+  --warning: 255 125 0;         /* #FF7D00 (Arco orange-6) */
+  --warning-hover: 255 154 46;  /* #FF9A2E */
+  --warning-active: 210 95 0;   /* #D25F00 */
+  --warning-tint: 255 247 232;  /* #FFF7E8 (Arco orange-1) — tag / light bg */
+  --danger: 245 63 63;          /* #F53F3F (= --btn-danger) */
+  --danger-hover: 214 55 58;    /* #D6373A (= --btn-danger-hover) */
+  --danger-active: 208 47 51;   /* #D02F33 (= --btn-danger-active) */
+  --danger-tint: 255 236 232;   /* #FFECE8 (Arco red-1) — TAG bg only; buttons
+                                   use alpha over the main red (bg-danger/10 …) */
 }
 
 /* Mobile (narrow viewport ≤768px) remap of the SEMANTIC layer only:

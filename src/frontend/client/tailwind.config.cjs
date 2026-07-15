@@ -180,6 +180,42 @@ module.exports = {
         'btn-danger-hover': 'rgb(var(--btn-danger-hover) / <alpha-value>)',
         'btn-danger-active': 'rgb(var(--btn-danger-active) / <alpha-value>)',
         'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
+        // Arco color tokens (docs-ui-refactor/基础-色彩规范.md §2/§3/§7) — semantic
+        // layer only; the --arco-gray-* primitives are intentionally NOT wired so
+        // components can't bypass the semantic names. RGB-channel vars live in
+        // src/style.css :root; channel form keeps `/<alpha>` modifiers working.
+        // Classes: text-text-1…4 / bg-fill-1…4 / border-border-base|-deep /
+        // bg-success|warning|danger(+-hover/-active/-tint). "border-base" because
+        // the plain `border` color key is taken by shadcn below. success/warning/
+        // danger never follow the blue⇄green brand theme.
+        'text-1': 'rgb(var(--text-1) / <alpha-value>)',
+        'text-2': 'rgb(var(--text-2) / <alpha-value>)',
+        'text-3': 'rgb(var(--text-3) / <alpha-value>)',
+        'text-4': 'rgb(var(--text-4) / <alpha-value>)',
+        'fill-1': 'rgb(var(--fill-1) / <alpha-value>)',
+        'fill-2': 'rgb(var(--fill-2) / <alpha-value>)',
+        'fill-3': 'rgb(var(--fill-3) / <alpha-value>)',
+        'fill-4': 'rgb(var(--fill-4) / <alpha-value>)',
+        'border-base': 'rgb(var(--border-base) / <alpha-value>)',
+        'border-deep': 'rgb(var(--border-deep) / <alpha-value>)',
+        success: {
+          DEFAULT: 'rgb(var(--success) / <alpha-value>)',
+          hover: 'rgb(var(--success-hover) / <alpha-value>)',
+          active: 'rgb(var(--success-active) / <alpha-value>)',
+          tint: 'rgb(var(--success-tint) / <alpha-value>)',
+        },
+        warning: {
+          DEFAULT: 'rgb(var(--warning) / <alpha-value>)',
+          hover: 'rgb(var(--warning-hover) / <alpha-value>)',
+          active: 'rgb(var(--warning-active) / <alpha-value>)',
+          tint: 'rgb(var(--warning-tint) / <alpha-value>)',
+        },
+        danger: {
+          DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
+          hover: 'rgb(var(--danger-hover) / <alpha-value>)',
+          active: 'rgb(var(--danger-active) / <alpha-value>)',
+          tint: 'rgb(var(--danger-tint) / <alpha-value>)',
+        },
         'presentation': 'var(--presentation)',
         'text-primary': 'var(--text-primary)',
         'text-secondary': 'var(--text-secondary)',
