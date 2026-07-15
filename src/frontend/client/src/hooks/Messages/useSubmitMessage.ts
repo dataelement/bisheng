@@ -52,6 +52,12 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
           tools: data.tools,
           // empty -> backend falls back to the tenant's linsight default model
           model: '',
+          // F035 Track H: this daily-chat entry has no skill picker, so send an
+          // explicit empty list rather than omitting the field. A missing skills
+          // key is persisted as NULL, which the backend treats as "no skills";
+          // being explicit keeps the contract legible and independent of that
+          // default (no reliance on the `|| []` guard downstream).
+          skills: [],
           enableWebSearch: false,
           useKnowledgeBase: true,
           orgKnowledgeBaseIds: data.knowledge?.orgKbIds ?? [],
