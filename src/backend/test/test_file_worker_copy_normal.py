@@ -2,6 +2,9 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
@@ -88,6 +91,53 @@ def _load_file_worker():
 
 
 file_worker = _load_file_worker()
+
+
+def test_insert_milvus_uses_target_schema_field_order():
+    insert = Mock(return_value=SimpleNamespace(primary_keys=[101, 102]))
+    target = SimpleNamespace(
+        col=SimpleNamespace(
+            schema=SimpleNamespace(
+                fields=[
+                    SimpleNamespace(name='text'),
+                    SimpleNamespace(name='pk'),
+                    SimpleNamespace(name='abstract'),
+                    SimpleNamespace(name='knowledge_id'),
+                ]
+            ),
+            insert=insert,
+        )
+    )
+    source_fields = ['text', 'knowledge_id', 'abstract']
+    rows = [
+        {'text': 'chunk-1', 'knowledge_id': 149, 'abstract': 'summary-1'},
+        {'text': 'chunk-2', 'knowledge_id': 149, 'abstract': 'summary-2'},
+    ]
+
+    file_worker.insert_milvus(rows, source_fields, target)
+
+    insert.assert_called_once_with(
+        [
+            ['chunk-1', 'chunk-2'],
+            ['summary-1', 'summary-2'],
+            [149, 149],
+        ],
+        timeout=100,
+    )
+
+
+def test_insert_milvus_rejects_missing_target_field():
+    target = SimpleNamespace(
+        col=SimpleNamespace(
+            schema=SimpleNamespace(fields=[SimpleNamespace(name='text'), SimpleNamespace(name='abstract')]),
+            insert=Mock(),
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"missing target fields: \['abstract'\]"):
+        file_worker.insert_milvus([{'text': 'chunk'}], ['text'], target)
+
+    target.col.insert.assert_not_called()
 
 
 def _make_space(space_id: int) -> Knowledge:

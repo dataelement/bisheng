@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 
 
 def _pending_approval_gate(instance_id: int = 101):
@@ -1826,6 +1827,7 @@ async def test_file_publish_handler_reuses_existing_copied_file(monkeypatch):
     handler = KnowledgeSpaceFilePublishApprovalHandler()
     copied_file = SimpleNamespace(
         id=188,
+        status=KnowledgeFileStatus.SUCCESS.value,
         user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
     )
     monkeypatch.setattr(
@@ -1855,12 +1857,99 @@ async def test_file_publish_handler_reuses_existing_copied_file(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_file_publish_handler_ignores_failed_copied_file_on_retry(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    failed_file = SimpleNamespace(
+        id=187,
+        status=KnowledgeFileStatus.FAILED.value,
+        user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.aget_file_by_filters",
+        AsyncMock(return_value=[failed_file]),
+    )
+
+    result = await handler._find_copied_file(instance_id=102, target_space_id=20)
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_stops_before_version_link_when_copy_fails(monkeypatch):
+    from bisheng.approval.domain.services import shougang_approval_handler as handler_mod
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    monkeypatch.setattr(handler, "_find_copied_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        handler_mod.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(
+            side_effect=[
+                SimpleNamespace(id=10, type=KnowledgeTypeEnum.SPACE.value),
+                SimpleNamespace(id=20, type=KnowledgeTypeEnum.SPACE.value, business_domain_codes=[]),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        handler_mod.KnowledgeFileDao,
+        "query_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=100, knowledge_id=10, status=KnowledgeFileStatus.SUCCESS.value)),
+    )
+    monkeypatch.setattr(
+        handler,
+        "_space_level",
+        AsyncMock(side_effect=[KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.PUBLIC]),
+    )
+    monkeypatch.setattr(
+        handler,
+        "_copy_file",
+        Mock(
+            return_value=SimpleNamespace(
+                id=188,
+                status=KnowledgeFileStatus.FAILED.value,
+                remark=(
+                    '{"status_code":10953,"status_message":"File parsing failed: {exception}",'
+                    '"data":{"exception":"Milvus abstract type mismatch"}}'
+                ),
+            )
+        ),
+    )
+    copy_tags = AsyncMock()
+    link_file = AsyncMock()
+    monkeypatch.setattr(handler_mod, "_copy_file_tags", copy_tags)
+    monkeypatch.setattr(handler_mod, "_link_file_as_version", link_file)
+
+    with pytest.raises(RuntimeError, match="Milvus abstract type mismatch"):
+        await handler.on_approved(
+            102,
+            {
+                "tenant_id": 1,
+                "applicant_user_id": 11,
+                "applicant_user_name": "申请人",
+                "source_space_id": 10,
+                "source_file_id": 100,
+                "target_space_id": 20,
+                "target_document_id": 300,
+            },
+        )
+
+    copy_tags.assert_not_awaited()
+    link_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_file_publish_handler_links_existing_file_version_once(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
 
     handler = KnowledgeSpaceFilePublishApprovalHandler()
     copied_file = SimpleNamespace(
         id=188,
+        status=KnowledgeFileStatus.SUCCESS.value,
         user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
     )
     monkeypatch.setattr(
@@ -1902,6 +1991,7 @@ async def test_file_publish_handler_builds_document_for_target_file_before_link(
     handler = KnowledgeSpaceFilePublishApprovalHandler()
     copied_file = SimpleNamespace(
         id=188,
+        status=KnowledgeFileStatus.SUCCESS.value,
         user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
     )
     monkeypatch.setattr(
@@ -2066,7 +2156,11 @@ async def test_file_publish_handler_links_version_with_selected_folder_path(monk
             ]
         ),
     )
-    monkeypatch.setattr(handler, "_copy_file", Mock(return_value=SimpleNamespace(id=188)))
+    monkeypatch.setattr(
+        handler,
+        "_copy_file",
+        Mock(return_value=SimpleNamespace(id=188, status=KnowledgeFileStatus.SUCCESS.value)),
+    )
     monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeDao.async_update_knowledge_update_time_by_id",
         AsyncMock(),
@@ -2178,7 +2272,11 @@ async def test_file_publish_handler_copies_tags_on_approved(monkeypatch):
             ]
         ),
     )
-    monkeypatch.setattr(handler, "_copy_file", Mock(return_value=SimpleNamespace(id=188)))
+    monkeypatch.setattr(
+        handler,
+        "_copy_file",
+        Mock(return_value=SimpleNamespace(id=188, status=KnowledgeFileStatus.SUCCESS.value)),
+    )
     monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeDao.async_update_knowledge_update_time_by_id",
         AsyncMock(),
@@ -2221,6 +2319,7 @@ async def test_file_publish_handler_copies_tags_on_idempotent_retry(monkeypatch)
     monkeypatch.setattr(handler_mod, "_copy_file_tags", copy_tags)
     copied_file = SimpleNamespace(
         id=188,
+        status=KnowledgeFileStatus.SUCCESS.value,
         user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
     )
     monkeypatch.setattr(

@@ -244,11 +244,15 @@ def insert_milvus(li: List, fields: list, target: Milvus):
     total_count = len(li)
     batch_size = 1000
     res_list = []
+    target_fields = [field.name for field in target.col.schema.fields if field.name != "pk"]
+    missing_fields = [field for field in target_fields if field not in fields]
+    if missing_fields:
+        raise ValueError(f"source Milvus schema is missing target fields: {missing_fields}")
     for i in range(0, total_count, batch_size):
         # Grab end index
         end = min(i + batch_size, total_count)
-        # Convert dict to list of lists batch for insertion
-        insert_list = [[data[x] for data in li[i:end]] for x in fields]
+        # Milvus column inserts are positional, so values must follow the target schema order.
+        insert_list = [[data[field] for data in li[i:end]] for field in target_fields]
         # Insert into the collection.
         try:
             res: Collection

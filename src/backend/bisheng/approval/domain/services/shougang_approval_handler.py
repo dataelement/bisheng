@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -233,6 +234,22 @@ def _approval_instance_id_from_metadata(metadata: Any) -> int | None:
     return None
 
 
+def _copied_file_error_summary(copied_file: KnowledgeFile) -> str:
+    remark = str(getattr(copied_file, "remark", "") or "").strip()
+    if not remark:
+        return "copy file failed"
+    try:
+        payload = json.loads(remark)
+    except (TypeError, ValueError):
+        return remark
+    error_data = payload.get("data") if isinstance(payload, dict) else None
+    if isinstance(error_data, dict) and error_data.get("exception"):
+        return str(error_data["exception"])
+    if isinstance(payload, dict) and payload.get("status_message"):
+        return str(payload["status_message"])
+    return remark
+
+
 def _metadata_with_approval_instance(metadata: Any, instance_id: int) -> list[dict]:
     items = list(metadata or []) if isinstance(metadata, list) else []
     return [
@@ -396,7 +413,10 @@ class KnowledgeSpaceFilePublishApprovalHandler:
     async def _find_copied_file(self, instance_id: int, target_space_id: int) -> KnowledgeFile | None:
         files = await KnowledgeFileDao.aget_file_by_filters(target_space_id)
         for file in files:
-            if _approval_instance_id_from_metadata(file.user_metadata) == int(instance_id):
+            if (
+                _approval_instance_id_from_metadata(file.user_metadata) == int(instance_id)
+                and file.status == KnowledgeFileStatus.SUCCESS.value
+            ):
                 return file
         return None
 
@@ -505,6 +525,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         )
         if not copied_file or not copied_file.id:
             raise ValueError("copy file failed")
+        if copied_file.status != KnowledgeFileStatus.SUCCESS.value:
+            raise RuntimeError(_copied_file_error_summary(copied_file))
 
         await _copy_file_tags(
             source_file_id=source_file_id,
