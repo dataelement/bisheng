@@ -2031,4 +2031,7 @@ def _to_linsight_submit(data: APIChatCompletion):
         model=data.model or None,
         files=submit_files,
         tools=submit_tools,
+        # F035 Track H: thread the daily task-mode skill picker onto the submit so
+        # only the user's explicit selection is materialized (None/[] = no skills).
+        skills=data.skills,
     )
