@@ -323,7 +323,7 @@ PORTAL_SEARCH_TITLE_MATCH_STOPWORDS = (
     "的",
 )
 _PORTAL_VISIBLE_SPACE_CACHE_TTL = 5.0
-_PORTAL_VISIBLE_SPACE_CACHE: dict[tuple, tuple[float, list[Knowledge]]] = {}
+_PORTAL_VISIBLE_SPACE_CACHE: dict[tuple, tuple[float, list[Knowledge], dict[int, bool]]] = {}
 _PORTAL_VISIBLE_SPACE_CACHE_LOCK = asyncio.Lock()
 
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
@@ -433,6 +433,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             int,
             tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
         ] = {}
+        # space_id -> whether the current user may download files in that space.
+        # Derived from the same per-space effective-permission pass used for portal
+        # search visibility, so it never drifts from actual download enforcement.
+        # Populated by _get_shougang_portal_visible_search_spaces and read back when
+        # building each portal file item's can_download flag.
+        self._portal_space_download_map: dict[int, bool] = {}
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -5287,9 +5293,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cache_key = self._shougang_portal_visible_space_cache_key(requested_space_ids, space_level)
         cached = await self._get_cached_shougang_portal_visible_spaces(cache_key)
         if cached is not None:
-            return cached
-        spaces = await self._compute_shougang_portal_visible_search_spaces(requested_space_ids, space_level)
-        await self._set_cached_shougang_portal_visible_spaces(cache_key, spaces)
+            spaces, download_map = cached
+            self._portal_space_download_map = download_map
+            return spaces
+        spaces, download_map = await self._compute_shougang_portal_visible_search_spaces(
+            requested_space_ids, space_level
+        )
+        self._portal_space_download_map = download_map
+        await self._set_cached_shougang_portal_visible_spaces(cache_key, spaces, download_map)
         return spaces
 
     def _shougang_portal_visible_space_cache_key(
@@ -5306,27 +5317,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             str(self._space_level_value(space_level) or ""),
         )
 
-    async def _get_cached_shougang_portal_visible_spaces(self, cache_key: tuple) -> list[Knowledge] | None:
+    async def _get_cached_shougang_portal_visible_spaces(
+        self, cache_key: tuple
+    ) -> tuple[list[Knowledge], dict[int, bool]] | None:
         try:
             async with _PORTAL_VISIBLE_SPACE_CACHE_LOCK:
                 cached = _PORTAL_VISIBLE_SPACE_CACHE.get(cache_key)
                 if cached is None:
                     return None
-                expires_at, spaces = cached
+                expires_at, spaces, download_map = cached
                 if expires_at <= time.monotonic():
                     _PORTAL_VISIBLE_SPACE_CACHE.pop(cache_key, None)
                     return None
-                return list(spaces)
+                return list(spaces), dict(download_map)
         except Exception as exc:
             logger.warning("skip shougang portal visible space cache read: error={}", exc)
             return None
 
-    async def _set_cached_shougang_portal_visible_spaces(self, cache_key: tuple, spaces: list[Knowledge]) -> None:
+    async def _set_cached_shougang_portal_visible_spaces(
+        self, cache_key: tuple, spaces: list[Knowledge], download_map: dict[int, bool]
+    ) -> None:
         try:
             async with _PORTAL_VISIBLE_SPACE_CACHE_LOCK:
                 _PORTAL_VISIBLE_SPACE_CACHE[cache_key] = (
                     time.monotonic() + _PORTAL_VISIBLE_SPACE_CACHE_TTL,
                     list(spaces),
+                    dict(download_map),
                 )
         except Exception as exc:
             logger.warning("skip shougang portal visible space cache write: error={}", exc)
@@ -5335,15 +5351,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         requested_space_ids: list[int],
         space_level: KnowledgeSpaceLevelEnum | None,
-    ) -> list[Knowledge]:
+    ) -> tuple[list[Knowledge], dict[int, bool]]:
         space_ids = await self._resolve_shougang_portal_search_space_ids(requested_space_ids, space_level)
         if not space_ids:
-            return []
+            return [], {}
         spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by="update_time")
         space_map = {int(space.id): space for space in spaces if int(space.type) == KnowledgeTypeEnum.SPACE.value}
         ordered_spaces = [space_map[space_id] for space_id in space_ids if space_id in space_map]
         if not ordered_spaces:
-            return []
+            return [], {}
 
         is_global_admin = False
         is_admin = getattr(self.login_user, "is_admin", None)
@@ -5351,33 +5367,53 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_global_admin = bool(is_admin())
 
         visible_spaces: list[Knowledge] = []
+        # space_id -> can_download, derived from the same per-space effective
+        # 'download_file' permission the download endpoint enforces, so it never
+        # drifts from actual download enforcement (and matches file preview).
+        download_map: dict[int, bool] = {}
         permission_checks = []
         permission_spaces: list[Knowledge] = []
         for space in ordered_spaces:
-            if (
-                is_global_admin
-                or int(space.user_id or 0) == int(self.login_user.user_id)
-                or self._is_square_preview_space(space)
-            ):
+            space_id = int(space.id)
+            if is_global_admin or int(space.user_id or 0) == int(self.login_user.user_id):
+                # Global admin / space owner: always visible and downloadable.
                 visible_spaces.append(space)
+                download_map[space_id] = True
                 continue
+            # Every other space (including square-preview ones) needs its real
+            # effective-permission set: square-preview spaces stay visible regardless
+            # of the result, but the download flag must reflect the actual grant — a
+            # viewer-role user, for instance, may see a space without being allowed to
+            # download its files.
             permission_spaces.append(space)
-            permission_checks.append(self._get_effective_permission_ids("knowledge_space", int(space.id)))
+            permission_checks.append(self._get_effective_permission_ids("knowledge_space", space_id))
 
         if permission_checks:
             permission_results = await asyncio.gather(*permission_checks, return_exceptions=True)
             for space, permission_result in zip(permission_spaces, permission_results):
+                space_id = int(space.id)
                 if isinstance(permission_result, Exception):
                     logger.warning(
                         "skip shougang portal space search permission check: space_id={} error={}",
                         space.id,
                         permission_result,
                     )
+                    # Preserve legacy visibility for square-preview spaces even when the
+                    # permission lookup fails; download stays disabled to be safe.
+                    if self._is_square_preview_space(space):
+                        visible_spaces.append(space)
+                    download_map[space_id] = False
                     continue
-                if "view_space" in permission_result:
+                if "view_space" in permission_result or self._is_square_preview_space(space):
                     visible_spaces.append(space)
+                download_map[space_id] = "download_file" in permission_result
+
         visible_space_ids = {int(space.id) for space in visible_spaces}
-        return [space for space in ordered_spaces if int(space.id) in visible_space_ids]
+        ordered_visible = [space for space in ordered_spaces if int(space.id) in visible_space_ids]
+        visible_download_map = {
+            int(space.id): download_map.get(int(space.id), False) for space in ordered_visible
+        }
+        return ordered_visible, visible_download_map
 
     async def _resolve_shougang_portal_search_space_ids(
         self,
@@ -5600,6 +5636,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=self._get_shougang_file_subcategory_code(item),
             folder_path=str(item.get("folder_path") or ""),
             source_path=str(item.get("source_path") or ""),
+            can_download=bool(self._portal_space_download_map.get(int(space_id), False)),
         )
 
     @staticmethod
