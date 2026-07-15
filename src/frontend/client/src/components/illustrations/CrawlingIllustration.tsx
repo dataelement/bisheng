@@ -20,8 +20,8 @@ export const CrawlingIllustration = ({ className, grey, ...props }: React.SVGPro
     const maskId = `crawling-mask-${uid}`;
 
     const fill100 = { fill: 'rgb(var(--illus-100))' } as React.CSSProperties;
-    const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
     const fill300 = { fill: 'rgb(var(--illus-300))' } as React.CSSProperties;
+    const fill500 = { fill: 'rgb(var(--illus-500))' } as React.CSSProperties;
     const lens = { fill: 'rgb(var(--illus-500))', stroke: 'rgb(var(--illus-500))' } as React.CSSProperties;
 
     return (

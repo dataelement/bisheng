@@ -296,7 +296,7 @@ html {
    opacity, e.g. 60%, still applies). */
 .illus-grey {
   --illus-100: 229 229 229;  /* #E5E5E5 */
-  --illus-300: 255 255 255;  /* #FFFFFF */
+  --illus-300: 229 229 229;  /* #E5E5E5 — was #FFFFFF, but pure white washed out on white bg (e.g. CrawlingIllustration magnifier halo); grey-only override, green/blue keep the mid tone */
   --illus-500: 188 188 188;  /* #BCBCBC */
 }
 .illus-grey.brand-illustration,
