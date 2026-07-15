@@ -439,6 +439,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Populated by _get_shougang_portal_visible_search_spaces and read back when
         # building each portal file item's can_download flag.
         self._portal_space_download_map: dict[int, bool] = {}
+        # file_id -> whether the current user may download that specific file,
+        # captured file-level (respects the actual granted permissions, no tier
+        # fallback) during the per-file visibility check, so search matches preview.
+        self._portal_file_download_map: dict[int, bool] = {}
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -5531,6 +5535,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if space_id in public_space_ids:
                 visible_files.extend(items)
                 _increment_portal_search_perf("fast_path_public_space_count", len(items))
+                # 公共库:下载权限统一按公共 viewer 默认,每库算一次
+                public_perms = await self._public_space_viewer_permission_ids(
+                    [("knowledge_space", space_id)]
+                )
+                public_can_download = "download_file" in public_perms
+                for _pf in items:
+                    self._portal_file_download_map[int(_pf.id)] = public_can_download
                 continue
             try:
                 visible_files.extend(await self._filter_visible_child_items(items, space_id=space_id))
@@ -5636,7 +5647,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=self._get_shougang_file_subcategory_code(item),
             folder_path=str(item.get("folder_path") or ""),
             source_path=str(item.get("source_path") or ""),
-            can_download=bool(self._portal_space_download_map.get(int(space_id), False)),
+            can_download=bool(self._portal_file_download_map.get(int(item.get("id") or 0), False)),
         )
 
     @staticmethod
@@ -7640,6 +7651,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     space_id=space_id,
                     context=permission_context,
                 )
+                if item.file_type != FileType.DIR.value:
+                    self._portal_file_download_map[int(item.id)] = "download_file" in effective_permissions
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
