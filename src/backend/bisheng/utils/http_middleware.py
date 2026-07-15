@@ -1,5 +1,6 @@
 # Define a custom middleware class
 import http.cookies
+from collections.abc import Iterable
 from time import time
 
 from fastapi import Request
@@ -141,7 +142,11 @@ async def _validate_token_version(
     return int(current) == int(payload_token_version)
 
 
-async def _check_is_global_super(user_id: int) -> bool:
+async def _check_is_global_super(
+    user_id: int,
+    *,
+    role_ids: Iterable[int] | None = None,
+) -> bool:
     """FGA check: ``user:{id} super_admin system:global`` with Redis caching.
 
     Used by the middleware to decide whether to inject an IN-list filter
@@ -179,10 +184,15 @@ async def _check_is_global_super(user_id: int) -> bool:
     if not is_super:
         try:
             from bisheng.database.constants import AdminRole
-            from bisheng.user.domain.models.user_role import UserRoleDao
 
-            roles = await UserRoleDao.aget_user_roles(user_id)
-            is_super = any(int(role.role_id) == AdminRole for role in roles)
+            if role_ids is None:
+                from bisheng.user.domain.models.user_role import UserRoleDao
+
+                roles = await UserRoleDao.aget_user_roles(user_id)
+                resolved_role_ids = [role.role_id for role in roles]
+            else:
+                resolved_role_ids = role_ids
+            is_super = any(int(role_id) == AdminRole for role_id in resolved_role_ids)
         except Exception as exc:
             logger.debug("legacy AdminRole fallback failed for user %d: %s", user_id, exc)
 

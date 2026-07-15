@@ -246,16 +246,16 @@ class LoginUser(BaseModel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        provided_user_role = kwargs.get("user_role")
         self.user_id = kwargs.get("user_id")
         self.user_name = kwargs.get("user_name")
-        self.user_role = kwargs.get("user_role")
+        self.user_role = provided_user_role or []
         self.group_cache = kwargs.get("group_cache", {})
         self.tenant_id = kwargs.get("tenant_id", DEFAULT_TENANT_ID)
         self.is_global_super = bool(kwargs.get("is_global_super", False))
         # token_version is validated by Pydantic Field(default=0) above.
 
-        if not self.user_role:
-            self.user_role = []
+        if provided_user_role is None:
             user_role = UserRoleDao.get_user_roles(self.user_id)
             self.user_role = [user_role.role_id for user_role in user_role]
 
@@ -568,6 +568,7 @@ class LoginUser(BaseModel):
         user_name: str,
         tenant_id: int = None,
         token_version: int = 0,
+        role_ids: Iterable[int] | None = None,
     ) -> Self:
         # Pre-resolve global-super so downstream gates (mount/unmount/
         # migrate, also serialised to /user/info & login response) read
@@ -580,16 +581,16 @@ class LoginUser(BaseModel):
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.utils.http_middleware import _check_is_global_super
 
+        resolved_role_ids = list(role_ids) if role_ids is not None else None
         with bypass_tenant_filter():
-            user_roles, is_global_super = await asyncio.gather(
-                UserRoleDao.aget_user_roles(user_id),
-                _check_is_global_super(user_id),
-            )
-        role_ids = [user_role.role_id for user_role in user_roles]
+            if resolved_role_ids is None:
+                user_roles = await UserRoleDao.aget_user_roles(user_id)
+                resolved_role_ids = [user_role.role_id for user_role in user_roles]
+            is_global_super = await _check_is_global_super(user_id, role_ids=resolved_role_ids)
         login_user = cls(
             user_id=user_id,
             user_name=user_name,
-            user_role=role_ids,
+            user_role=resolved_role_ids,
             tenant_id=tenant_id or DEFAULT_TENANT_ID,
             token_version=token_version,
             is_global_super=is_global_super,
@@ -669,6 +670,7 @@ class LoginUser(BaseModel):
         user: User,
         *,
         is_department_admin: bool = False,
+        role_ids: Iterable[int] | None = None,
     ) -> (list[int] | str, list[str]):
         """Resolve role key(s) and web_menu.
 
@@ -677,18 +679,22 @@ class LoginUser(BaseModel):
         - ``system_config`` is only granted via super-admin or department-admin; it is
           stripped for other users even if legacy role_access rows exist.
         """
-        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+        if role_ids is None:
+            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
+        else:
+            resolved_role_ids = list(role_ids)
         role = ""
-        role_ids = []
-        for user_role in db_user_role:
-            if user_role.role_id == AdminRole:
+        non_admin_role_ids = []
+        for role_id in resolved_role_ids:
+            if role_id == AdminRole:
                 role = "admin"
             else:
-                role_ids.append(user_role.role_id)
+                non_admin_role_ids.append(role_id)
         if role != "admin":
-            role = role_ids
+            role = non_admin_role_ids
             # AC-13: union of all roles' menu permissions
-            web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
+            web_menu = await RoleAccessDao.aget_role_access(non_admin_role_ids, AccessType.WEB_MENU)
             web_menu = list({one.third_id for one in web_menu})
             personal_menu = await UserMenuAccessService.list_effective_menu_grants(
                 get_current_tenant_id() or DEFAULT_TENANT_ID,
@@ -706,22 +712,47 @@ class LoginUser(BaseModel):
         return role, web_menu
 
     @classmethod
-    async def effective_workbench_admin_flags(cls, user: User) -> tuple[bool, bool]:
+    async def effective_workbench_admin_flags(
+        cls,
+        user: User,
+        *,
+        role_ids: Iterable[int] | None = None,
+        is_department_admin: bool | None = None,
+    ) -> tuple[bool, bool]:
         """Effective (has_workbench, has_admin_console) after orphan strip and dept-admin merge."""
-        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-        if any(ur.role_id == AdminRole for ur in db_user_role):
+        if role_ids is None:
+            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
+        else:
+            resolved_role_ids = list(role_ids)
+        if AdminRole in resolved_role_ids:
             return True, True
-        is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
-        _, web_menu = await cls.get_roles_web_menu(user, is_department_admin=is_department_admin)
+        if is_department_admin is None:
+            is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
+        _, web_menu = await cls.get_roles_web_menu(
+            user,
+            is_department_admin=is_department_admin,
+            role_ids=resolved_role_ids,
+        )
         wm = set(web_menu)
         has_wb = bool(wm & _WEB_MENU_WORKBENCH_ALL)
         has_adm = bool(wm & _WEB_MENU_ADMIN_ALL)
         return has_wb, has_adm
 
     @classmethod
-    async def user_has_workbench_or_admin_effective_menu(cls, user: User) -> bool:
+    async def user_has_workbench_or_admin_effective_menu(
+        cls,
+        user: User,
+        *,
+        role_ids: Iterable[int] | None = None,
+        is_department_admin: bool | None = None,
+    ) -> bool:
         """True if effective web_menu grants workbench or admin-console area (incl. parent-only keys)."""
-        has_wb, has_adm = await cls.effective_workbench_admin_flags(user)
+        has_wb, has_adm = await cls.effective_workbench_admin_flags(
+            user,
+            role_ids=role_ids,
+            is_department_admin=is_department_admin,
+        )
         return has_wb or has_adm
 
     @classmethod
@@ -743,15 +774,31 @@ class LoginUser(BaseModel):
         return "platform"
 
     @classmethod
-    async def user_entry_payload_for_read(cls, user: User) -> dict:
-        hw, ha = await cls.effective_workbench_admin_flags(user)
+    async def user_entry_payload_for_read(
+        cls,
+        user: User,
+        *,
+        role_ids: Iterable[int] | None = None,
+        is_department_admin: bool | None = None,
+    ) -> dict:
+        if role_ids is None:
+            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
+        else:
+            resolved_role_ids = list(role_ids)
+        is_super = AdminRole in resolved_role_ids
+        if not is_super and is_department_admin is None:
+            is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
+        hw, ha = await cls.effective_workbench_admin_flags(
+            user,
+            role_ids=resolved_role_ids,
+            is_department_admin=is_department_admin,
+        )
         # Regular users (neither super-admin nor department admin) prefer 工作台
         # when they have workbench access — even if their role also carries
         # admin-console menus (e.g. legacy default roles) — so login doesn't drop
         # them into 管理后台. `and` short-circuits the dept-admin FGA call for supers.
-        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-        is_super = any(ur.role_id == AdminRole for ur in db_user_role)
-        prefer_workbench = (not is_super) and not bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
+        prefer_workbench = (not is_super) and not bool(is_department_admin)
         return {
             "has_workbench": hw,
             "has_admin_console": ha,
@@ -759,7 +806,12 @@ class LoginUser(BaseModel):
         }
 
     @classmethod
-    async def compute_menu_approval_modes(cls, user: User) -> tuple[bool, bool]:
+    async def compute_menu_approval_modes(
+        cls,
+        user: User,
+        *,
+        role_ids: Iterable[int] | None = None,
+    ) -> tuple[bool, bool]:
         """Per-area "show unauthorized menus (apply)" flags: ``(workbench, admin)``.
 
         True when any assigned (non-super-admin) role enables the corresponding
@@ -768,11 +820,15 @@ class LoginUser(BaseModel):
         ``menu_approval_mode``; reads fall back to the legacy key so existing
         roles keep their current behavior until re-saved.
         """
-        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-        role_ids = [ur.role_id for ur in db_user_role if ur.role_id != AdminRole]
-        if not role_ids:
+        if role_ids is None:
+            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
+        else:
+            resolved_role_ids = list(role_ids)
+        non_admin_role_ids = [role_id for role_id in resolved_role_ids if role_id != AdminRole]
+        if not non_admin_role_ids:
             return False, False
-        roles = await RoleDao.aget_role_by_ids(role_ids)
+        roles = await RoleDao.aget_role_by_ids(non_admin_role_ids)
 
         def _truthy(v: object) -> bool:
             return v is True or v == 1 or str(v).lower() in ("true", "1")
