@@ -50,6 +50,16 @@ Scope:
 
 ## Export Scripts
 
+### `get_knowledge_file_chunks.py`
+
+按 `knowledge_file_id` 查询一个知识文件在 Elasticsearch 中的全部 chunk，并将文本和元数据以 JSON 输出到标准输出。脚本只读，不会修改数据库或索引。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/get_knowledge_file_chunks.py --knowledge-file-id 123
+```
+
 ### `export_daily_chat_messages.py`
 
 Export 日常模式（`flow_type = 15`）对话内容，默认导出最近 30 天消息并按会话聚合为 JSON。

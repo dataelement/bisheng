@@ -210,6 +210,7 @@ class BaseFilePipeline(BasePipeline):
             return Etl4lmLoader(
                 **self._get_loader_common_params(),
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
+                retain_images=self.file_split_rule.retain_images == 1,
                 **knowledge_conf.etl4lm.model_dump()
             )
         elif knowledge_conf.loader_provider == ParseType.MINERU.value and knowledge_conf.mineru.url:

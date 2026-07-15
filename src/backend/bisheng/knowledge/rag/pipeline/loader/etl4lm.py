@@ -1,5 +1,6 @@
 import base64
 import os
+import time
 
 import cv2
 import fitz
@@ -9,6 +10,7 @@ from loguru import logger
 from PIL import Image
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
+from bisheng.knowledge.rag.pipeline.loader.utils.pdf_image_extractor import PdfImageExtractor
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 from bisheng.utils.exceptions import EtlException
 
@@ -16,7 +18,8 @@ from bisheng.utils.exceptions import EtlException
 class Etl4lmLoader(BaseBishengLoader):
     def __init__(self, url: str, ocr_sdk_url: str, enable_formular: bool = True, force_ocr: bool = True,
                  filter_page_header_footer: bool = False, start: int = 0, n: int = None, timeout: int = 60,
-                 retain_images: bool = True, *args, **kwargs):
+                 retain_images: bool = True, image_extraction_strategy: str = "original_first",
+                 image_fallback_dpi: int = 200, image_max_pixels: int = 16_000_000, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.url = url
         self.ocr_sdk_url = ocr_sdk_url
@@ -27,6 +30,9 @@ class Etl4lmLoader(BaseBishengLoader):
         self.n = n
         self.timeout = timeout
         self.retain_images = retain_images
+        self.image_extraction_strategy = image_extraction_strategy
+        self.image_fallback_dpi = image_fallback_dpi
+        self.image_max_pixels = image_max_pixels
 
     def parse_bbox_list(self, partitions: list[dict]):
         """Resolve BuildbboxCorrespondence with text"""
@@ -163,21 +169,56 @@ class Etl4lmLoader(BaseBishengLoader):
         if len(image_parts) == 0:
             return {}
 
-        pdf_page_dir = os.path.join(self.tmp_dir, "pdf_page")
-        os.makedirs(pdf_page_dir, exist_ok=True)
         self.ensure_local_image_dir()
 
+        if self.image_extraction_strategy == "legacy" or self.file_extension.lower() != "pdf":
+            return self._extract_images_legacy(image_parts)
+
+        extractor = PdfImageExtractor(
+            strategy=self.image_extraction_strategy,
+            fallback_dpi=self.image_fallback_dpi,
+            max_pixels=self.image_max_pixels,
+        )
         result = {}
-        pdf_document = fitz.open(self.file_path)
-        for page_number, items in image_parts.items():
-            pdf_page_image_path = f"{pdf_page_dir}/{page_number}.png"
-            if not os.path.exists(pdf_page_image_path):
-                page = pdf_document[page_number]
-                pix = page.get_pixmap()
-                image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                image.save(pdf_page_image_path)
-            for item in items:
-                result[item["element_id"]] = self.crop_image(pdf_page_image_path, item)
+        with fitz.open(self.file_path) as pdf_document:
+            for page_number, items in image_parts.items():
+                for item in items:
+                    extracted = extractor.extract(
+                        document=pdf_document,
+                        page_number=page_number,
+                        bbox=item["bboxes"],
+                        element_id=item["element_id"],
+                        output_dir=self.local_image_dir,
+                    )
+                    result[item["element_id"]] = self.build_image_url(extracted.filename)
+        return result
+
+    def _extract_images_legacy(self, image_parts: dict) -> dict:
+        pdf_page_dir = os.path.join(self.tmp_dir, "pdf_page")
+        os.makedirs(pdf_page_dir, exist_ok=True)
+
+        result = {}
+        with fitz.open(self.file_path) as pdf_document:
+            for page_number, items in image_parts.items():
+                pdf_page_image_path = f"{pdf_page_dir}/{page_number}.png"
+                if not os.path.exists(pdf_page_image_path):
+                    page = pdf_document[page_number]
+                    pix = page.get_pixmap()
+                    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                    image.save(pdf_page_image_path)
+                for item in items:
+                    started_at = time.perf_counter()
+                    result[item["element_id"]] = self.crop_image(pdf_page_image_path, item)
+                    x1, y1, x2, y2 = item["bboxes"]
+                    logger.info(
+                        "act=etl4lm_extract_image page={} element_id={} source_type=legacy matched_xref=None "
+                        "width={} height={} effective_dpi=None fallback_reason=None duration_ms={:.2f}",
+                        page_number,
+                        item["element_id"],
+                        x2 - x1,
+                        y2 - y1,
+                        (time.perf_counter() - started_at) * 1000,
+                    )
         return result
 
     def merge_partitions(self, partitions: list[dict]) -> tuple[str, dict]:

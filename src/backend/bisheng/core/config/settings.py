@@ -2,12 +2,12 @@ import ast
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from celery.schedules import crontab
 from cryptography.fernet import Fernet
 from loguru import logger
-from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
@@ -426,6 +426,22 @@ class Etl4lmConf(BaseModel):
     url: str = Field(default='', description='etl4lmService Address')
     timeout: int = Field(default=600, description='etl4lmService Request Timeout (sec)')
     ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdkService Address')
+    image_extraction_strategy: Literal['legacy', 'render_only', 'original_first'] = Field(
+        default='original_first',
+        description='PDF image extraction strategy',
+    )
+    image_fallback_dpi: int = Field(
+        default=200,
+        ge=72,
+        le=300,
+        description='DPI used to render a PDF image region when embedded extraction is unavailable',
+    )
+    image_max_pixels: int = Field(
+        default=16_000_000,
+        ge=1_000_000,
+        le=100_000_000,
+        description='Maximum pixels allowed for one extracted PDF image',
+    )
 
 
 class MineruConf(BaseModel):
