@@ -116,8 +116,14 @@ VALID_PATTERN = re.compile(VALID_PATTERN_TEXT)
 DEFAULT_COMPANY_CODE = "SGGF"
 FALLBACK = "STD-PP"
 SEQ_CAP = 99999999
-DEFAULT_USER_CONTENT_TEMPLATE = "标题: {file_name}\n摘要: {abstract}"
+DEFAULT_USER_CONTENT_TEMPLATE = "标题: {file_name}\n摘要: {abstract}\n正文开头: {content_head}"
 FILE_CATEGORY_CODE_KEY = "file_category_code"
+# Chars of leading document text fed to the classifier. Title+abstract alone
+# proved too thin a signal: near-identical files classified into different
+# business domains, and the LLM-generated abstract varies run-to-run. Leading
+# body text is deterministic for identical content and richer for borderline
+# cases.
+CONTENT_HEAD_CHARS = 1500
 
 
 @dataclass(frozen=True)
@@ -149,12 +155,14 @@ class FileEncodingTransformer(BaseDocumentTransformer):
     def __init__(self, invoke_user_id: int, knowledge_file: KnowledgeFile) -> None:
         self.invoke_user_id = invoke_user_id
         self.knowledge_file = knowledge_file
+        self.content_head: str = ""
 
     def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         # Sync entry point. Pipeline.run calls this directly. Pipeline.arun's
         # default atransform_documents wraps us in a thread executor. In Celery,
         # run_async_safe routes the work to the registered worker bridge loop so
         # process-wide async Redis/DB clients stay on one event loop.
+        self.content_head = self._extract_content_head(documents)
         try:
             run_async_safe(self._do_work(), timeout=120.0)
         except Exception as e:
@@ -381,17 +389,28 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             {"role": "user", "content": self._format_user_content(encoding_config.user_content_template)},
         ]
 
+    @staticmethod
+    def _extract_content_head(documents: Sequence[Document]) -> str:
+        # Deterministic classifier input: leading body text of the parsed
+        # documents, whitespace-normalized so page breaks/layout noise don't
+        # perturb the prompt for byte-identical content.
+        text = "\n".join((d.page_content or "") for d in documents)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text[:CONTENT_HEAD_CHARS]
+
     def _format_user_content(self, template: str) -> str:
         file_name = self.knowledge_file.file_name or ""
         abstract = self.knowledge_file.abstract or ""
         try:
-            return template.format(file_name=file_name, abstract=abstract)
+            return template.format(file_name=file_name, abstract=abstract, content_head=self.content_head)
         except Exception as e:
             logger.warning(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
                 f"invalid user_content_template, fallback to default: {e}"
             )
-            return DEFAULT_USER_CONTENT_TEMPLATE.format(file_name=file_name, abstract=abstract)
+            return DEFAULT_USER_CONTENT_TEMPLATE.format(
+                file_name=file_name, abstract=abstract, content_head=self.content_head
+            )
 
     def _resolve_user_content_template(self, raw_config: Any) -> str:
         template = self._resolve_nonempty_str(
@@ -400,7 +419,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             DEFAULT_USER_CONTENT_TEMPLATE,
         )
         try:
-            template.format(file_name="", abstract="")
+            template.format(file_name="", abstract="", content_head="")
             return template
         except Exception as e:
             logger.warning(
@@ -572,7 +591,8 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             f"一级分类: {options[0].parent_label} ({options[0].parent_code})\n"
             f"候选二级分类:\n{option_lines}\n\n"
             f"文件标题: {self.knowledge_file.file_name or ''}\n"
-            f"文件摘要: {self.knowledge_file.abstract or ''}"
+            f"文件摘要: {self.knowledge_file.abstract or ''}\n"
+            f"正文开头: {self.content_head}"
         )
         return [
             {"role": "system", "content": "你是企业知识库文件二级分类助手。"},

@@ -154,7 +154,7 @@ def test_encoding_config_falls_back_per_invalid_field():
     assert config.valid_pattern.match("STD-PP")
     assert config.fallback_code == "STD-PP"
     assert config.seq_cap == 99999999
-    assert messages[1]["content"] == "标题: x.pdf\n摘要: x"
+    assert messages[1]["content"] == "标题: x.pdf\n摘要: x\n正文开头: "
 
 
 def test_encoding_config_restricts_business_domain_fallback_to_bound_codes():
