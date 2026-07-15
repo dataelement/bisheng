@@ -12,7 +12,7 @@ import { OGDialog, OGDialogTrigger } from '~/components/ui/OriginalDialog';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { Label } from '~/components/ui/Label';
 import { useConfirm } from '~/Providers';
-import { Section, Demo, DemoGrid, CompareTable } from '../components/kit';
+import { ComponentPage, ExampleGroup, Demo, DemoGrid, CompareTable } from '../components/kit';
 
 /** Demos for the app-wide `useConfirm()` service (ConfirmContext, AlertDialog-based). */
 function UseConfirmDemos() {
@@ -87,7 +87,7 @@ function ConfirmDemo({
           title={title}
           className="max-w-[450px]"
           main={
-            <Label className="text-left text-sm font-medium">{body}</Label>
+            <Label className="text-left text-body font-medium">{body}</Label>
           }
           selection={{
             selectHandler: () => undefined,
@@ -103,10 +103,10 @@ function ConfirmDemo({
 
 export function ConfirmDialogSection() {
   return (
-    <Section
-      id="confirm"
+    <ComponentPage
       title="二次确认弹窗"
-      subtitle={
+      eng="Confirm Dialog"
+      description={
         <>
           删除/危险操作时的「确认 / 取消」小弹窗。两套体系：旧页面走{' '}
           <code>OGDialogTemplate selection</code>（剩 13 文件：7 处死 UI 确认 + 6 处表单弹窗），新页面走{' '}
@@ -116,9 +116,14 @@ export function ConfirmDialogSection() {
           （另有 9 个文件手拼 <code>AlertDialog</code> —— 属于普通弹窗，归 Modal 改造范围，本期不动。）
         </>
       }
+      whenToUse={[
+        <>危险操作（删除等）用 <code>useConfirm()</code>：<code>variant: destructive</code>（红）/ <code>default</code>（橙色警示）。</>,
+        <>确认按钮只两档：danger <code>#f53f3f</code> / primary 主色（<code>selectVariant</code> 指定）；特例走 <code>selectClasses</code> 口子。</>,
+        <>壳：圆角 16 / p-5 / 灰底毛玻璃；取消按钮白底描边。B 套已对齐 C 套基准。</>,
+      ]}
     >
-      {/* The three coexisting confirm-dialog systems */}
-      <div className="mb-6">
+      {/* The two coexisting confirm-dialog systems */}
+      <ExampleGroup title="现状：两套确认体系">
         <CompareTable
           head={['体系', '实现', '业务文件数', '用在哪', '样式一致性']}
           rows={[
@@ -142,10 +147,10 @@ export function ConfirmDialogSection() {
             ],
           ]}
         />
-      </div>
+      </ExampleGroup>
 
       {/* Inventory table: every selectClasses variant found in business code */}
-      <div className="mb-6">
+      <ExampleGroup title="确认按钮 selectClasses 清单（9 种历史写法）">
         <CompareTable
           head={['#', '确认按钮 selectClasses（原文）', '用处', '文件数']}
           rows={[
@@ -209,10 +214,10 @@ export function ConfirmDialogSection() {
             ],
           ]}
         />
-      </div>
+      </ExampleGroup>
 
       {/* Anatomy after step-1 convergence — B shell/buttons now mirror the C look */}
-      <div className="mb-6">
+      <ExampleGroup title="对齐后的规格（B 套 = C 套）">
         <CompareTable
           head={['部位', '对齐后的值（B 套 = C 套）', '备注']}
           rows={[
@@ -251,9 +256,10 @@ export function ConfirmDialogSection() {
             ],
           ]}
         />
-      </div>
+      </ExampleGroup>
 
-      <DemoGrid cols={3}>
+      <ExampleGroup title="逐个打开对比（旧写法现应呈现统一外观）">
+        <DemoGrid cols={3}>
         <UseConfirmDemos />
         <ConfirmDemo
           label="① red-700 系（6 处，原 8）"
@@ -317,6 +323,7 @@ export function ConfirmDialogSection() {
           selectClasses="btn btn-primary"
         />
       </DemoGrid>
-    </Section>
+      </ExampleGroup>
+    </ComponentPage>
   );
 }

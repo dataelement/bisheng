@@ -34,12 +34,12 @@ import {
 import DialogTemplate from '~/components/ui/DialogTemplate';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useConfirm } from '~/Providers';
-import { Section, Demo, DemoGrid, CompareTable } from '../components/kit';
+import { ComponentPage, ExampleGroup, Demo, DemoGrid, CompareTable } from '../components/kit';
 
 /** Identical body for every shell so only the shell itself differs. */
 const demoBody = (
   <div className="flex flex-col gap-3">
-    <p className="text-sm text-text-primary">
+    <p className="text-body text-text-primary">
       这里是弹窗正文示例。观察内边距、行距与正文和标题/按钮的间距。
     </p>
     <Input placeholder="示例输入框" />
@@ -68,22 +68,24 @@ function ConfirmReferenceDemo() {
 
 export function ModalSection() {
   return (
-    <Section
-      id="modal"
+    <ComponentPage
       title="Modal 弹窗"
-      subtitle={
+      eng="Modal"
+      description={
         <>
           2026-07-09 重新盘点：全站普通弹窗共 <b>5 个并行体系、约 64 个业务文件</b>
           。二次确认期已把 B 套壳对齐 C 套视觉，但 A 套（原语直接拼 22 处 + 模板 3
           处）与手拼 AlertDialog（7 处）仍是另外两种壳。逐个打开对比，定统一标准。
         </>
       }
+      whenToUse={[
+        <>本页是<b>现状盘点</b>，统一标准尚未定稿（见文末"④ 待设计师定夺"）。</>,
+        <>已定：二次确认（C 套）壳为基准候选——圆角 16 / p-5 / 灰底毛玻璃；B 套已对齐。</>,
+        <>待定：A 套（最大人群 22 处）的遮罩 / 圆角 / 标题字重是否并入基准。</>,
+      ]}
     >
       {/* ① Population overview */}
-      <h3 className="mb-3 mt-2 text-base font-semibold text-text-primary">
-        ① 用量盘子（当前精确扫描，排除 ui/ 与画廊）
-      </h3>
-      <div className="mb-8">
+      <ExampleGroup title="① 用量盘子（当前精确扫描，排除 ui/ 与画廊）">
         <CompareTable
           head={['体系', '实现', '业务文件数', '用在哪 / 备注']}
           rows={[
@@ -125,13 +127,10 @@ export function ModalSection() {
             ],
           ]}
         />
-      </div>
+      </ExampleGroup>
 
       {/* ② Shell anatomy */}
-      <h3 className="mb-3 text-base font-semibold text-text-primary">
-        ② 壳样式解剖（源码当前真实值）
-      </h3>
-      <div className="mb-8">
+      <ExampleGroup title="② 壳样式解剖（源码当前真实值）">
         <CompareTable
           head={['维度', 'A 套 Dialog', 'B 套 OriginalDialog（已对齐 C 套）', 'AlertDialog（手拼底座）']}
           rows={[
@@ -182,13 +181,10 @@ export function ModalSection() {
             ],
           ]}
         />
-      </div>
+      </ExampleGroup>
 
       {/* ③ Side-by-side demos — identical content, different shells */}
-      <h3 className="mb-3 text-base font-semibold text-text-primary">
-        ③ 同一内容装进各个壳（逐个打开对比）
-      </h3>
-      <div className="mb-8">
+      <ExampleGroup title="③ 同一内容装进各个壳（逐个打开对比）">
         <DemoGrid cols={3}>
           {/* A-set raw primitives — the largest population */}
           <Demo label="A 套 · 原语直接拼（22 处）" note="ui/Dialog.tsx · 浅黑毛玻璃 · 圆角8 · p-5">
@@ -278,7 +274,7 @@ export function ModalSection() {
               </AlertDialogTrigger>
               <AlertDialogContent className="max-w-md">
                 {/* Business pages hand-roll header/footer like this (ChannelMemberDialog etc.) */}
-                <h3 className="text-base font-medium text-text-primary">弹窗标题</h3>
+                <h3 className="text-h4 text-text-primary">弹窗标题</h3>
                 {demoBody}
                 <div className="flex justify-end gap-2">
                   <Button variant="outline">取消</Button>
@@ -296,11 +292,11 @@ export function ModalSection() {
             <ConfirmReferenceDemo />
           </Demo>
         </DemoGrid>
-      </div>
+      </ExampleGroup>
 
       {/* ④ Decision checklist */}
-      <h3 className="mb-3 text-base font-semibold text-text-primary">④ 待设计师定夺</h3>
-      <div className="rounded-xl border border-border-light bg-muted/20 p-5 text-sm leading-7 text-text-primary">
+      <ExampleGroup title="④ 待设计师定夺">
+      <div className="rounded-xl border border-border-light bg-muted/20 p-5 text-body text-text-primary">
         <ol className="list-decimal space-y-1 pl-5">
           <li>
             <b>遮罩</b>：A 套浅黑毛玻璃（black/40+blur） vs B/C 套灰白毛玻璃（gray-500/90+blur）？
@@ -330,6 +326,7 @@ export function ModalSection() {
           </li>
         </ol>
       </div>
-    </Section>
+      </ExampleGroup>
+    </ComponentPage>
   );
 }

@@ -77,7 +77,7 @@ export default function GalleryApp() {
                   key={p.id}
                   onClick={() => setActiveId(p.id)}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-sm transition-colors',
+                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body transition-colors',
                     activeId === p.id
                       ? 'bg-blue-500/[0.08] font-medium text-text-primary'
                       : 'text-muted-foreground hover:bg-muted/60',

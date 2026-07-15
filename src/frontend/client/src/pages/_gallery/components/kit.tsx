@@ -49,7 +49,7 @@ export function ComponentPage({
           <h2 className="mb-3 text-h3 text-text-primary">何时使用 / 规则</h2>
           <ul className="space-y-2 rounded-xl border border-border-light bg-muted/20 p-5">
             {whenToUse.map((item, i) => (
-              <li key={i} className="flex gap-2 text-body-sm text-text-primary">
+              <li key={i} className="flex gap-2 text-body text-text-primary">
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-blue-500" />
                 <span>{item}</span>
               </li>
@@ -168,9 +168,9 @@ export function CompareTable({
 }
 
 /* ------------------------------------------------------------------ *
- * Legacy aliases — kept so not-yet-migrated sections still compile.
- * New pages should use ComponentPage / ExampleGroup / ExampleCard / ExampleGrid.
- * TODO(gallery): migrate Modal / ConfirmDialog sections to the new template.
+ * Legacy aliases — Demo / DemoGrid are still used by migrated pages
+ * (they now forward to ExampleCard / ExampleGrid). Section is unused by
+ * gallery pages (all migrated to ComponentPage) but kept as a safety net.
  * ------------------------------------------------------------------ */
 
 /** @deprecated use ExampleGroup inside a ComponentPage. */
