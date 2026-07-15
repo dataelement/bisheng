@@ -1381,7 +1381,7 @@ export function KnowledgeSpaceContent({
                         // pb-[112px] reserves room for the floating AI dock so the empty state
                         // centers in the visible region above it, matching the card grid.
                         <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
-                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
                             <p className="text-[14px] font-normal leading-6 text-[#999999]">
                                 {searchQuery ? localize("com_knowledge.no_matched_file") : canUploadFile ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
                                 {canUploadFile && !searchQuery && (

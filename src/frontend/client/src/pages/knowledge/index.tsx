@@ -913,7 +913,7 @@ export default function Knowledge() {
                            bottom bar and center an illustration with two actions
                            (mirrors the subscription channel empty state). */
                         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-16">
-                            <EmptyStateIllustration className="size-[120px] opacity-90" />
+                            <EmptyStateIllustration className="size-[120px]" />
                             <p className="mt-6 text-[14px] leading-6 text-[#999999]">
                                 {localize("com_knowledge.no_related_content_you_can")}
                             </p>
@@ -969,7 +969,7 @@ export default function Knowledge() {
             ) : (
                 /* PC empty state when no space is selected — illustration + two actions */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                    <EmptyStateIllustration className="size-[120px] opacity-90" />
+                    <EmptyStateIllustration className="size-[120px]" />
                     <p className="mt-6 text-[14px] font-normal leading-6 text-[#999999]">
                         {localize("com_knowledge.no_related_content_you_can")}
                     </p>
