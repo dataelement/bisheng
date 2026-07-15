@@ -27,7 +27,7 @@
 - [x] **T-03→e2e**〔后端测试〕部门空间 `grant-subjects/departments` 仅绑定部门+子部门；普通空间全租户（回归）。覆盖 AC: AC-02, AC-05 ✅ e2e `test_ac02_*` + `test_ac05_normal_space_departments_tenant_wide`
 - [x] **T-04**〔后端实现〕`_list_knowledge_space_grant_departments` 增 `restrict_dept_ids`（`Department.id.in_(...)`）+ `get_grant_subject_departments` 端点透传（design B2/B4）。✅
 - [x] **T-05→e2e**〔后端测试〕部门空间 `grant-subjects/users` 仅子树成员、严格子集；普通空间回归。覆盖 AC: AC-03, AC-05 ✅ e2e `test_ac03_*`
-- [x] **T-06**〔后端实现〕`_list_knowledge_space_grant_users` 增 `restrict_dept_ids`（`join UserDepartment` + `distinct`，先过滤后分页）+ 端点透传（design B3/B4）。✅
+- [x] **T-06**〔后端实现〕`_list_knowledge_space_grant_users` 初版以 `restrict_dept_ids` 做 `join UserDepartment` + `distinct`；2026-07-15 修订为 `restrict_dept_path` + 相关 `EXISTS`，仍保持先过滤后分页及多部门任一命中语义（design B3/B4）。✅
 - [x] **T-07→e2e**〔后端测试〕部门空间 `grant-subjects/user-groups` 返回空数组；普通空间回归。覆盖 AC: AC-01(数据面), AC-05 ✅ e2e `test_ac04_user_groups_disabled_*` + `test_ac05_normal_space_lists_user_groups`
 - [x] **T-08**〔后端实现〕`get_grant_subject_user_groups` 部门空间短路 `resp_200([])`（design B5）。✅
 
@@ -53,7 +53,8 @@
 
 > 实现中若偏离 design，在此记录并回写 design.md（改了系统认知的偏差必须回写）。
 
-- **2026-06-10 / T-02**：`_DepartmentSpaceScope` 只保留 `department_id` + `subtree_dept_ids`，**去掉 design B1 写的 `path` 字段**——B2/B3/B6 实际只用 `subtree_dept_ids`，`path` 在 `aget_subtree_ids` 内部消化，对外无用。复用既有 `DepartmentDao.aget_subtree_ids`（已含 `status='active'` 过滤）而非自写 `path.like`，少一处 SQL 重复。design §4.3 B1 已同步。
+- **2026-06-10 / T-02**：`_DepartmentSpaceScope` 初版只保留 `department_id` + `subtree_dept_ids`，去掉了原稿的 `path` 字段。
+- **2026-07-15 / 达梦性能修订**：空间 27 的用户候选查询把约 3.4 万个 `subtree_dept_ids` 展开为单条大 `.in_()`，触发达梦 `CODE:-608`。恢复 `department_path`，并给 resolver 增加 `load_subtree_ids`：只读候选路径使用 path 相关 `EXISTS`、不加载整棵 ID 集；授权写入校验继续加载 ID 集，业务准入语义不变。design §4.3 B1/B3、§5 #5 已同步。
 - **2026-06-10 / 测试策略**：Wave 2-3 的后端测试由「每任务 SQLite seed 单测（T-03/05/07/09）」改为**统一真库 e2e**（`test/e2e/test_e2e_department_space_scope.py`，10 用例）。原因：本地中间件 + config.yaml 可用，e2e 是 ReBAC/多租户/部门子树行为的正确测试层级，避免给 `test/fixtures/table_definitions.py` 补一堆部门相关表。Wave 1 的纯逻辑 resolver 仍保留 SQLite 单测。
 - **2026-06-10 / e2e 取舍**：① 普通空间对照**复用**管理员已有的普通空间（创建配额已满，且 grant-then-revoke 不留痕）；② AC-03 成员包含用「管理员（user 1，确定的租户活跃成员）+ 严格子集」断言——新建用户经 `/user/create` 默认未必是 `UserTenant` 活跃成员，不能用作 list 包含断言（但其 `UserDepartment` 成立，故 AC-04 校验用之有效）。这是**测试环境特性**，非产品缺陷。
 - **2026-06-10 / T-13 脚本位置**：清理脚本从 design 原稿的 `permission/migration/` 改放 `src/backend/scripts/`——一次性数据清理归 `scripts/`，`migration/` 只放 schema 迁移（用户确认 + `src/backend/CLAUDE.md`「Migration vs. script」已成文规约）。脚本入口须 `initialize_app_context`（DB+OpenFGA）否则 `--apply` 的 FGA 写报 `FGAClient not available`（scripts/CLAUDE.md §6 已把本脚本列为正确参考）。design §4.5 已同步。
