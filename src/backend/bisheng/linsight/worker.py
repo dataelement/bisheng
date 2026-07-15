@@ -80,7 +80,7 @@ class LinsightQueue(object):
     async def put(self, data, timeout=None):
         await self.__db.arpush(self.key, data, expiration=timeout)  # Add a new element to the far right of the queue
 
-    async def get_wait(self, timeout=None):
+    async def get_wait(self, timeout=1):
         # Returns the first element of the queue, if empty, wait until an element is queued (the timeout threshold istimeout, if isNonehas been waiting)
         item = await self.__db.ablpop(self.key, timeout=timeout)
         return item
@@ -155,7 +155,7 @@ class ScheduleCenterProcess(Process):
             try:
                 session_version_id = await self.queue.get_wait()
                 if session_version_id is None:
-                    logger.info("No session_version_id found in queue, waiting...")
+                    logger.debug("No session_version_id found in queue, waiting...")
                     self.semaphore.release()
                     continue
 

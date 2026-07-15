@@ -1,12 +1,13 @@
 
 import { Button } from "@/components/bs-ui/button";
-import { Textarea } from "@/components/bs-ui/input";
+import { Input as BaseInput, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { runWorkflowNodeApi } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { FileParamValue, readFileParam } from "@/pages/BuildPage/utils/apiFileParam";
 import { WorkflowNode } from "@/types/flow";
 import { copyText } from "@/utils";
 import { Copy, CopyCheck } from "lucide-react";
@@ -20,8 +21,9 @@ interface Input {
     key: string,
     required: boolean,
     label: string,
-    value: string,
-    autoFill: boolean
+    value: string | FileParamValue,
+    autoFill: boolean,
+    type?: string
 }
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
@@ -100,7 +102,7 @@ export const RunTest = forwardRef((props, ref) => {
                     if (param.test === 'input') { // 遍历value[] ,每一项作为一个test输入
                         if (node.type === "tool") {
                             return setInputs((prev) => {
-                                return [...prev, appendAutoFillin({ key: param.label, required: false, label: param.label, value: '' })]
+                                return [...prev, appendAutoFillin({ key: param.label, required: param.required, label: param.label, value: '', type: param.type })]
                             })
                         }
                         // if (param.type === 'code_input') {
@@ -143,7 +145,7 @@ export const RunTest = forwardRef((props, ref) => {
 
     const [results, setResults] = useState<any[]>([])
     const handleRunClick = async () => {
-        inputs.some(input => {
+        const hasMissingRequired = inputs.some(input => {
             if (input.required && !input.value) {
                 message({
                     variant: "warning",
@@ -152,6 +154,7 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
+        if (hasMissingRequired) return
 
         // save cache
         const cacheData = inputs.reduce((res, input) => {
@@ -248,9 +251,23 @@ export const RunTest = forwardRef((props, ref) => {
                                 {input.required && <span className="text-red-500">*</span>}
                                 {input.label}
                             </Label>
-                            <Textarea
+                            {input.type === 'api_file_upload' ? <>
+                                <BaseInput
+                                    type="file"
+                                    onChange={async (e) => {
+                                        const file = e.currentTarget.files?.[0];
+                                        const value = file ? await readFileParam(file) : '';
+                                        setInputs((prev) =>
+                                            prev.map((item) =>
+                                                item.key === input.key ? { ...item, value } : item
+                                            )
+                                        );
+                                    }}
+                                />
+                                {typeof input.value === 'object' && input.value?.name && <p className="bisheng-label text-xs mt-1">{input.value.name}</p>}
+                            </> : <Textarea
                                 className=""
-                                defaultValue={input.value}
+                                defaultValue={input.value as string}
                                 onChange={(e) => {
                                     setInputs((prev) =>
                                         prev.map((item) =>
@@ -258,7 +275,7 @@ export const RunTest = forwardRef((props, ref) => {
                                         )
                                     );
                                 }}
-                            />
+                            />}
                         </div>
                     ))}
 

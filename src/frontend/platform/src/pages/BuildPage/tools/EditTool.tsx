@@ -13,6 +13,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { userContext } from "@/contexts/userContext"
 import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { FileParamValue, isBinaryOpenApiParam, readFileParam } from "@/pages/BuildPage/utils/apiFileParam"
 import { Plus } from "lucide-react"
 import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -31,7 +32,7 @@ export const TestDialog = forwardRef<{
     const toolRef = useRef<any>({})
 
     const formRef = useRef<{
-        values: Record<string, string>;
+        values: Record<string, string | FileParamValue>;
         rules: Record<string, boolean>;
         state?: any;
     }>({ values: {}, rules: {} });
@@ -115,9 +116,16 @@ export const TestDialog = forwardRef<{
                                     <TableRow key={param.id}>
                                         <TableCell>{param.name}{param.required && <span className="text-red-500">*</span>}</TableCell>
                                         <TableCell>
-                                            <Input onChange={(e) => {
+                                            {isBinaryOpenApiParam(param) ? <Input type="file" onChange={async (e) => {
+                                                const file = e.currentTarget.files?.[0];
+                                                if (!file) {
+                                                    formRef.current.values[param.name] = '';
+                                                    return;
+                                                }
+                                                formRef.current.values[param.name] = await readFileParam(file);
+                                            }}></Input> : <Input onChange={(e) => {
                                                 formRef.current.values[param.name] = e.target.value;
-                                            }}></Input>
+                                            }}></Input>}
                                         </TableCell>
                                     </TableRow>
                                 )

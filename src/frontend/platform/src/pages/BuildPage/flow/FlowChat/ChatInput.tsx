@@ -22,9 +22,11 @@ import { useFileDropAndPaste } from "./useFileDropAndPaste";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
-    ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
+    ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX', '.MP3', '.WAV', '.M4A', '.AAC', '.OGG', '.FLAC', '.MP4', '.AVI', '.MOV', '.WMV', '.FLV', '.MKV'],
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
+    AUDIO: ['.MP3', '.WAV', '.M4A', '.AAC', '.OGG', '.FLAC'],
+    VIDEO: ['.MP4', '.AVI', '.MOV', '.WMV', '.FLV', '.MKV'],
 }
 
 export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad }) {
