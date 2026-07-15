@@ -1040,18 +1040,28 @@ class LinsightWorkflowTask:
         return "values", chunk, None
 
     @staticmethod
-    def _extract_last_message_text(messages) -> str | None:
-        """Pull plain text from the last message of a graph values snapshot.
+    def _is_assistant_message(msg) -> bool:
+        """True iff ``msg`` is an assistant/AI message (not Tool/Human/System).
+
+        Uses the LangChain ``.type`` discriminator ("ai" / "tool" / "human" /
+        "system"; "AIMessageChunk" for streamed chunks) and falls back to the
+        ``type``/``role`` key on dict-shaped messages.
+        """
+        t = getattr(msg, "type", None)
+        if t is None and isinstance(msg, dict):
+            t = msg.get("type") or msg.get("role")
+        return t in ("ai", "assistant", "AIMessageChunk")
+
+    @staticmethod
+    def _message_text(msg) -> str | None:
+        """Plain text of a single message's content (str or content-block list).
 
         Tolerates LangChain message objects and dicts, and content that is a
         string or a list of content blocks (multimodal/tool-call shape).
         """
-        if not messages:
-            return None
-        last = messages[-1]
-        content = getattr(last, "content", None)
-        if content is None and isinstance(last, dict):
-            content = last.get("content")
+        content = getattr(msg, "content", None)
+        if content is None and isinstance(msg, dict):
+            content = msg.get("content")
         if isinstance(content, str):
             return content.strip() or None
         if isinstance(content, list):
@@ -1062,6 +1072,30 @@ class LinsightWorkflowTask:
                 elif isinstance(block, dict) and isinstance(block.get("text"), str):
                     parts.append(block["text"])
             return "".join(parts).strip() or None
+        return None
+
+    @staticmethod
+    def _extract_last_message_text(messages) -> str | None:
+        """Pull plain text from the last *assistant* message of a values snapshot.
+
+        Walks backward to the last AIMessage carrying text, skipping
+        ToolMessage / HumanMessage / etc. This matters on the L3/L4 abort paths:
+        when a run is cut off mid tool-loop the trailing message is usually a raw
+        ToolMessage — e.g. a ``bisheng_code_interpreter`` ``{"exitcode":..,
+        "log":..}`` blob. Returning that as "the model's last words" leaked raw
+        tool output into the user-facing partial-result salvage (apology preamble
+        + body). Only genuine assistant text is eligible; when the model never
+        produced any, return None so the caller degrades to a friendly failure
+        instead of dumping tool JSON.
+        """
+        if not messages:
+            return None
+        for msg in reversed(messages):
+            if not LinsightWorkflowTask._is_assistant_message(msg):
+                continue
+            text = LinsightWorkflowTask._message_text(msg)
+            if text:
+                return text
         return None
 
     # ==================== Event processing ====================
