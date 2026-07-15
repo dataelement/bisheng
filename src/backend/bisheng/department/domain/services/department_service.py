@@ -1549,6 +1549,7 @@ class DepartmentService:
             password=pwd_hash,
             source='local',
             external_id=person_id,
+            wechat_user_id=(data.wechat_user_id or '').strip() or None,
         )
         try:
             user = UserDao.add_user_with_groups_and_roles(

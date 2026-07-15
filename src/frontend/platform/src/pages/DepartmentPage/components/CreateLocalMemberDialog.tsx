@@ -30,6 +30,7 @@ export function CreateLocalMemberDialog({
   const { t } = useTranslation()
   const [userName, setUserName] = useState("")
   const [personId, setPersonId] = useState("")
+  const [wechatUserId, setWechatUserId] = useState("")
   const [password, setPassword] = useState("")
   const [roles, setRoles] = useState<{ id: number; role_name: string }[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -67,7 +68,7 @@ export function CreateLocalMemberDialog({
     try {
       const enc = await handleEncrypt(password)
       const res = await captureAndAlertRequestErrorHoc(
-        createDepartmentLocalMemberApi(deptId, {
+        createDepartmentLocalMemberApi(deptId, wechatUserId?.trim() || undefined, {
           user_name: userName.trim(),
           person_id: personId.trim(),
           password: enc,
@@ -160,6 +161,18 @@ export function CreateLocalMemberDialog({
                 searchPlaceholder={t("system.searchRoles")}
               />
             )}
+          </div>
+          <div>
+            <Label>{t("bs:localMember.wechatUserId")}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("bs:localMember.wechatUserIdHint")}
+            </p>
+            <Input
+              value={wechatUserId}
+              onChange={(e) => setWechatUserId(e.target.value)}
+              className="mt-1"
+              placeholder={t("bs:localMember.wechatUserIdPlaceholder")}
+            />
           </div>
         </div>
         <DialogFooter>

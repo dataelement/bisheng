@@ -90,6 +90,13 @@ class User(UserBase, table=True):
             comment='v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change',
         ),
     )
+    wechat_user_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(256), nullable=True, index=True,
+            comment='Enterprise WeChat user ID for message push',
+        ),
+    )
 
     # DefinitiongroupsAndrolesQuery Relationships for
     groups: List["Group"] = Relationship(link_model=UserGroup)

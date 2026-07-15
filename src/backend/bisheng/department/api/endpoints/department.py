@@ -77,6 +77,7 @@ async def create_local_member_body(
             person_id=data.person_id,
             password=data.password,
             role_ids=data.role_ids,
+            wechat_user_id=data.wechat_user_id,
         )
         out = await DepartmentService.acreate_local_member(data.dept_id, inner, login_user)
         return resp_200(out)

@@ -75,6 +75,11 @@ class DepartmentLocalMemberCreate(BaseModel):
         default_factory=list,
         description='可选；与部门「默认角色」合并后写入，均须落在当前部门可分配角色内',
     )
+    wechat_user_id: Optional[str] = Field(
+        default=None,
+        max_length=256,
+        description='企业微信用户ID，用于接收企业微信消息推送',
+    )
 
 
 class DepartmentLocalMemberCreateWithDeptId(DepartmentLocalMemberCreate):

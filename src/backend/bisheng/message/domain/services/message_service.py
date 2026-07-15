@@ -23,6 +23,7 @@ from bisheng.message.domain.services.notification_content import infer_action_co
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.notification.forwarder import maybe_forward_external
+from bisheng.notification.shougang_wechat_forwarder import maybe_push_shougang_wechat_message
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,12 @@ class MessageService:
         except Exception as exc:
             # Defensive guard: forwarder bug must never break the main flow
             logger.warning("maybe_forward_external raised: %s", exc, exc_info=True)
+
+        # Shougang enterprise WeChat push outbox hook
+        try:
+            await maybe_push_shougang_wechat_message(saved_message)
+        except Exception as exc:
+            logger.warning("maybe_push_shougang_wechat_message raised: %s", exc, exc_info=True)
 
         return saved_message
 

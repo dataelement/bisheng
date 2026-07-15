@@ -11,6 +11,7 @@ from bisheng.worker.knowledge.space_init_worker import (
     init_knowledge_space_indices,
 )
 from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
+from bisheng.worker.message.tasks import push_single_wecom_message, scan_wecom_message_push_outbox
 from bisheng.worker.org_sync.reconcile_tasks import (
     reconcile_all_organizations,
     report_ts_conflicts_daily_escalation,

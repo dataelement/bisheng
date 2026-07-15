@@ -81,6 +81,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.share_link.domain.models.share_link",
     "bisheng.message.domain.models.inbox_message",
     "bisheng.message.domain.models.inbox_message_read",
+    "bisheng.message.domain.models.message_push_outbox",
     "bisheng.channel.domain.models.channel",
     "bisheng.channel.domain.models.article_read_record",
     "bisheng.channel.domain.models.channel_info_source",
