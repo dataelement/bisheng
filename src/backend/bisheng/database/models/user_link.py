@@ -1,15 +1,12 @@
 from datetime import datetime
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy import text, and_, delete
+from sqlalchemy import UniqueConstraint, and_, delete, text
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Field, Column, DateTime, select
+from sqlmodel import Column, DateTime, Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
-
-
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 class UserLinkBase(SQLModelSerializable):
@@ -24,6 +21,9 @@ class UserLinkBase(SQLModelSerializable):
 
 class UserLink(UserLinkBase, table=True):
     __tablename__ = 'user_link'
+    __table_args__ = (
+        UniqueConstraint('user_id', 'type', 'type_detail', name='uk_user_link_user_type_detail'),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
 
 

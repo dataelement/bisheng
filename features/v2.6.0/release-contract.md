@@ -15,6 +15,7 @@
 |---------|--------------|------|
 | ApprovalScenario / ApprovalRouteRule / ApprovalFlowDefinition / ApprovalFlowVersion / ApprovalNodeDefinition | F025-approval-center-unification | 审批场景配置、条件分支、流程定义、流程版本与顺序节点 |
 | ApprovalInstance / ApprovalTask / ApprovalException / ApprovalOutbox / ApprovalActionLog | F025-approval-center-unification | 审批实例、审批任务、异常、业务执行队列、审批时间线 |
+| ApprovalNotificationOutbox | F054-file-publish-submit-performance | 发布申请初始待审批通知的独立可靠投递队列；不得推进审批实例业务执行状态 |
 | UserMenuAccess | F025-approval-center-unification | 菜单权限申请通过后的用户级菜单授权与撤回记录 |
 | ChannelAuthorizationWrite | F026-channel-active-authorization | 频道资源主动授权、撤销授权、频道 relation-model binding 写入与清理行为 |
 | SpaceChannelMember(channel relation/source fields) | F026-channel-active-authorization | `space_channel_member` 中 `business_type='channel'` 的四档关系与授权来源字段；不拥有知识空间成员关系 |
@@ -52,6 +53,7 @@
 | F025-approval-center-unification | F005, F011, F012, F013 | 依赖菜单审批模式、多租户、租户解析与权限隔离基线 |
 | F026-channel-active-authorization | F006, F013 | 依赖统一 ReBAC/OpenFGA 授权与多租户权限隔离基线 |
 | F027-rebac-list-perf-optim | F004, F008, F011/F012/F013 | 性能优化型；不新增领域对象，仅修改高频列表接口分页协议与部门树 member_count |
+| F054-file-publish-submit-performance | F025 | 复用统一审批事实和任务模型；新增独立通知 outbox，不修改业务执行 outbox 语义 |
 
 ---
 
@@ -75,3 +77,4 @@
 | 2026-05-28 | 登记 F026 频道主动授权的领域对象归属、依赖与 190 模块错误码边界 | F026 |
 | 2026-05-28 | 登记 F027 ReBAC 列表性能优化：新增 INV-6（cursor-based 分页 + 统一 cursor 契约）；未新增领域对象；扩展现有模块错误码 109 / 105 / 180 各新增 1 个 `*InvalidCursorError` | F027 |
 | 2026-06-10 | 登记 F044 开发者 Token 管理与认证模块错误码 198 | F044 |
+| 2026-07-14 | 登记 F054 发布申请提交性能优化及 `ApprovalNotificationOutbox` 领域归属 | F054 |

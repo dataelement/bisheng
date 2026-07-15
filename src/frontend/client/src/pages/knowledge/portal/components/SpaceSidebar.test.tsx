@@ -36,7 +36,8 @@ function renderSidebar(extraGroups: SpaceGroup[] = []) {
             iconSrc: { collapsed: "", expanded: "" },
             spaces: [
                 createSpace({ id: "117", name: "我的收藏", isFavorite: true }),
-                createSpace({ id: "2", name: "普通库", isFavorite: false }),
+                // Personal spaces must hide pin UI even if legacy data marks one as pinned.
+                createSpace({ id: "2", name: "普通库", isFavorite: false, isPinned: true }),
             ],
         },
     ];
@@ -48,7 +49,7 @@ function renderSidebar(extraGroups: SpaceGroup[] = []) {
         groups,
         activeSpaceId: undefined,
         collapsed: false,
-        expandedGroups: { public: false, department: false, team: false, personal: true } as Record<SpaceGroupKey, boolean>,
+        expandedGroups: { public: true, department: false, team: false, personal: true } as Record<SpaceGroupKey, boolean>,
         groupRefs,
         createOptionsLoading: false,
         createPermissionByLevel: { public: false, department: false, team: false, personal: false } as Record<SpaceLevel, boolean>,
@@ -72,24 +73,70 @@ function renderSidebar(extraGroups: SpaceGroup[] = []) {
 }
 
 describe("SpaceSidebar 收藏库操作门控（portal 内嵌工作台）", () => {
-    it("普通知识库菜单含 空间设置/置顶空间/删除空间", async () => {
+    it("普通个人知识库菜单不含置顶操作", async () => {
         const user = userEvent.setup();
         renderSidebar();
         await user.click(screen.getByLabelText("更多普通库操作"));
         expect(await screen.findByText("空间设置")).toBeInTheDocument();
-        expect(screen.getByText("置顶空间")).toBeInTheDocument();
+        expect(screen.queryByText("置顶空间")).not.toBeInTheDocument();
+        expect(screen.queryByText("取消置顶")).not.toBeInTheDocument();
         expect(screen.getByText("删除空间")).toBeInTheDocument();
     });
 
-    it("『我的收藏』保留菜单按钮与置顶，隐藏 空间设置/删除空间", async () => {
-        const user = userEvent.setup();
+    it("『我的收藏』不显示菜单按钮", () => {
         renderSidebar();
-        const trigger = screen.getByLabelText("更多我的收藏操作");
-        expect(trigger).toBeInTheDocument();
-        await user.click(trigger);
+        expect(screen.getByTestId("space-row-117")).toBeInTheDocument();
+        expect(screen.queryByLabelText("更多我的收藏操作")).not.toBeInTheDocument();
+    });
+
+    it("公共知识库仍显示置顶操作", async () => {
+        const user = userEvent.setup();
+        renderSidebar([
+            {
+                key: "public",
+                title: "公共知识库",
+                level: SpaceLevel.PUBLIC,
+                iconSrc: { collapsed: "", expanded: "" },
+                spaces: [createSpace({ id: "3", name: "公共库", spaceLevel: SpaceLevel.PUBLIC })],
+            },
+        ]);
+        await user.click(screen.getByLabelText("更多公共库操作"));
         expect(await screen.findByText("置顶空间")).toBeInTheDocument();
-        expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
-        expect(screen.queryByText("删除空间")).not.toBeInTheDocument();
+    });
+});
+
+describe("SpaceSidebar 置顶状态标识", () => {
+    it("置顶的公共知识库在名称后显示不可独立交互的置顶标识", () => {
+        renderSidebar([
+            {
+                key: "public",
+                title: "公共知识库",
+                level: SpaceLevel.PUBLIC,
+                iconSrc: { collapsed: "", expanded: "" },
+                spaces: [createSpace({ id: "3", name: "置顶公共库", isPinned: true, spaceLevel: SpaceLevel.PUBLIC })],
+            },
+        ]);
+
+        const pinIcon = screen.getByTestId("space-pin-icon-3");
+        expect(pinIcon).toHaveAttribute("aria-hidden", "true");
+        expect(pinIcon).not.toHaveAttribute("role", "button");
+        expect(pinIcon.previousElementSibling).toHaveTextContent("置顶公共库");
+    });
+
+    it("未置顶知识库和个人知识库不显示置顶标识", () => {
+        renderSidebar([
+            {
+                key: "public",
+                title: "公共知识库",
+                level: SpaceLevel.PUBLIC,
+                iconSrc: { collapsed: "", expanded: "" },
+                spaces: [createSpace({ id: "3", name: "普通公共库", spaceLevel: SpaceLevel.PUBLIC })],
+            },
+        ]);
+
+        expect(screen.queryByTestId("space-pin-icon-3")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("space-pin-icon-117")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("space-pin-icon-2")).not.toBeInTheDocument();
     });
 });
 

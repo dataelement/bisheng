@@ -1,5 +1,9 @@
 # register tasks
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
+from bisheng.worker.approval.notification_tasks import (
+    consume_approval_notification,
+    dispatch_approval_notifications,
+)
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.knowledge.file_worker import file_copy_celery, parse_knowledge_file_celery, \

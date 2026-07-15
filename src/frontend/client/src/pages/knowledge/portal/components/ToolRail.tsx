@@ -8,14 +8,14 @@ const TOOLBAR_ITEMS: Array<{
     icon: typeof PanelRight;
     panelKey?: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">;
 }> = [
-    { key: "toggle", title: "侧边栏展开和关闭", icon: PanelRight },
-    { key: "properties", title: "属性", icon: FileText, panelKey: "properties" },
-    { key: "time", title: "时间", icon: Clock, panelKey: "time" },
-    { key: "source", title: "来源", icon: Link2, panelKey: "source" },
-    { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
-    { key: "permission", title: "权限", icon: Lock, panelKey: "permission" },
-    { key: "ai", title: "AI 对话", icon: Bot },
-];
+        { key: "toggle", title: "侧边栏展开和关闭", icon: PanelRight },
+        { key: "properties", title: "属性", icon: FileText, panelKey: "properties" },
+        { key: "time", title: "时间", icon: Clock, panelKey: "time" },
+        { key: "source", title: "来源", icon: Link2, panelKey: "source" },
+        { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
+        // { key: "permission", title: "权限", icon: Lock, panelKey: "permission" },
+        { key: "ai", title: "AI 对话", icon: Bot },
+    ];
 
 interface ToolRailProps {
     activePanel: PanelKey | null;

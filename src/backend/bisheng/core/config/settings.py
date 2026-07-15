@@ -227,6 +227,11 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples',
                 'schedule': 30.0,  # Every 30 seconds
             }
+        if 'dispatch_approval_notifications' not in self.beat_schedule:
+            self.beat_schedule['dispatch_approval_notifications'] = {
+                'task': 'bisheng.worker.approval.notification_tasks.dispatch_approval_notifications',
+                'schedule': 30.0,
+            }
         if 'check_org_sync_schedules' not in self.beat_schedule:
             self.beat_schedule['check_org_sync_schedules'] = {
                 'task': 'bisheng.worker.org_sync.tasks.check_org_sync_schedules',
@@ -574,6 +579,20 @@ class InAppMessageForwardingConf(BaseModel):
     shougang_wechat: ShougangWeChatMessagePushConf = ShougangWeChatMessagePushConf()
 
 
+class DatabasePoolConf(BaseModel):
+    """SQLAlchemy connection-pool settings for each database engine."""
+
+    pool_size: int = Field(default=100, description='Persistent connections per engine and process')
+    max_overflow: int = Field(default=20, description='Temporary connections allowed above pool_size')
+    pool_timeout: int = Field(default=30, description='Seconds to wait for an available connection')
+    pool_recycle: int = Field(default=3600, description='Seconds before recycling a connection')
+    pool_pre_ping: bool = Field(default=True, description='Check connection health before use')
+
+    def as_engine_kwargs(self) -> Dict[str, Any]:
+        """Return keyword arguments accepted by SQLAlchemy engine factories."""
+        return self.model_dump()
+
+
 class Settings(BaseModel):
     """ Application Settings """
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
@@ -635,6 +654,7 @@ class Settings(BaseModel):
     reconcile: ReconcileConf = ReconcileConf()
     llm: LLMConf = LLMConf()
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
+    database_pool: DatabasePoolConf = Field(default_factory=DatabasePoolConf)
 
     @field_validator('database_url')
     @classmethod

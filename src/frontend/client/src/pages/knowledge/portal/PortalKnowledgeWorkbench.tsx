@@ -457,6 +457,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [queryClient, spacePermissionDialogSpace]);
 
     const handlePinSpace = useCallback(async (space: KnowledgeSpace, pinned: boolean, group: SpaceGroup) => {
+        if (group.level === SpaceLevel.PERSONAL || space.spaceLevel === SpaceLevel.PERSONAL) return;
         if (pinned && group.spaces.filter((item) => item.isPinned).length >= 5) {
             showToast({ message: "最多置顶 5 个知识库", severity: NotificationSeverity.INFO });
             return;

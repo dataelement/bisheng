@@ -1074,7 +1074,7 @@
     "tagLibraryNameMaxLength": "Tag library name cannot exceed 20 characters",
     "tagLibraryNameDuplicate": "Tag library name already exists",
     "tagLibraryNamePlaceholder": "Enter tag library name",
-    "tagLibraryLimit": "A tag library can contain up to 200 tags",
+    "tagLibraryLimit": "A tag library can contain up to 999 tags",
     "autoTagGenerationTitle": "Tags Pending Review",
     "autoTagGenerationDesc": "Review AI-suggested tag names not yet in the vocabulary. Once approved, they are added to a tag library and linked to the corresponding knowledge space.",
     "searchReviewTag": "Search pending review tags",

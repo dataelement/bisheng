@@ -26,7 +26,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 10;
-const TAG_LIMIT = 200;
+const TAG_LIMIT = 999;
 const TAG_LIBRARY_NAME_MAX_LENGTH = 20;
 const BOUND_SPACE_NAME_MAX_CHARS = 12;
 
@@ -370,7 +370,7 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
     const persistTagItems = async (nextItems: KnowledgeSpaceTagLibraryTagItem[]) => {
         if (!library?.id) return false;
         if (nextItems.length > TAG_LIMIT) {
-            toast({ variant: "error", description: t("build.tagLibraryLimit", "单个标签库最多 200 个标签") });
+            toast({ variant: "error", description: t("build.tagLibraryLimit", "单个标签库最多 999 个标签") });
             return false;
         }
         const { systemTags, manualTags, aiTags } = splitTagItems(nextItems);
@@ -449,95 +449,95 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="gap-0 p-0 sm:max-w-[920px] bg-background-login">
-                <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
-                    <DialogTitle>
-                        {t("build.tagLibraryTagsTitle", "标签库标签")} — {library?.name || ""}
-                    </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 px-6 py-5">
-                    <div className="flex items-center gap-2">
-                        <SearchInput
-                            className="min-w-0 flex-1"
-                            placeholder={t("build.searchTagInLibrary", "搜索标签")}
-                            value={searchKeyword}
-                            onChange={(e) => setSearchKeyword(e.target.value)}
-                        />
-                        <Button className="shrink-0" disabled={saving} onClick={() => setAddTagDialogOpen(true)}>
-                            <Plus className="mr-1 size-4" />
-                            {t("build.addTag", "添加")}
-                        </Button>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
-                        <table className="w-full table-fixed border-collapse">
-                            <thead className="sticky top-0 z-10 bg-background">
-                                <tr className="text-left text-sm text-muted-foreground">
-                                    <th className="w-[22%] px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
-                                    <th className="w-[14%] px-3 py-3 font-medium">{t("build.tagSource", "标签来源")}</th>
-                                    <th className="w-[12%] px-3 py-3 font-medium">{t("build.tagUsedCount", "使用知识数")}</th>
-                                    <th className="w-[18%] px-3 py-3 font-medium">{t("build.createTime", "创建时间")}</th>
-                                    <th className="w-[14%] px-3 py-3 font-medium">{t("build.creator", "创建者")}</th>
-                                    <th className="w-[10%] px-3 py-3 font-medium">{t("build.operation", "操作")}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loading ? (
-                                    <tr>
-                                        <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
-                                            {t("loading")}
-                                        </td>
+                    <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
+                        <DialogTitle>
+                            {t("build.tagLibraryTagsTitle", "标签库标签")} — {library?.name || ""}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 px-6 py-5">
+                        <div className="flex items-center gap-2">
+                            <SearchInput
+                                className="min-w-0 flex-1"
+                                placeholder={t("build.searchTagInLibrary", "搜索标签")}
+                                value={searchKeyword}
+                                onChange={(e) => setSearchKeyword(e.target.value)}
+                            />
+                            <Button className="shrink-0" disabled={saving} onClick={() => setAddTagDialogOpen(true)}>
+                                <Plus className="mr-1 size-4" />
+                                {t("build.addTag", "添加")}
+                            </Button>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
+                            <table className="w-full table-fixed border-collapse">
+                                <thead className="sticky top-0 z-10 bg-background">
+                                    <tr className="text-left text-sm text-muted-foreground">
+                                        <th className="w-[22%] px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
+                                        <th className="w-[14%] px-3 py-3 font-medium">{t("build.tagSource", "标签来源")}</th>
+                                        <th className="w-[12%] px-3 py-3 font-medium">{t("build.tagUsedCount", "使用知识数")}</th>
+                                        <th className="w-[18%] px-3 py-3 font-medium">{t("build.createTime", "创建时间")}</th>
+                                        <th className="w-[14%] px-3 py-3 font-medium">{t("build.creator", "创建者")}</th>
+                                        <th className="w-[10%] px-3 py-3 font-medium">{t("build.operation", "操作")}</th>
                                     </tr>
-                                ) : filteredTagItems.length === 0 ? (
-                                    <tr>
-                                        <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
-                                            {tagItems.length === 0
-                                                ? t("build.tagLibraryTagsEmpty", "暂无标签，请点击右上角添加")
-                                                : t("build.tagLibraryTagsEmptySearch", "未找到匹配的标签")}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredTagItems.map((item) => (
-                                        <tr
-                                            key={`${item.resource_type}-${item.name}`}
-                                            className="border-t text-sm"
-                                        >
-                                            <td className="truncate px-3 py-3 font-medium">{item.name}</td>
-                                            <td className="truncate px-3 py-3 text-muted-foreground">
-                                                {formatTagSource(item.resource_type, t)}
-                                            </td>
-                                            <td className="px-3 py-3">{item.resource_count ?? 0}</td>
-                                            <td className="truncate px-3 py-3 text-muted-foreground">
-                                                {formatDateTime(item.create_time)}
-                                            </td>
-                                            <td className="truncate px-3 py-3 text-muted-foreground">
-                                                {formatTagCreator(item, t)}
-                                            </td>
-                                            <td className="px-3 py-3">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    disabled={saving}
-                                                    onClick={() => handleDeleteTag(item)}
-                                                >
-                                                    <Trash2 className="size-4" />
-                                                </Button>
+                                </thead>
+                                <tbody>
+                                    {loading ? (
+                                        <tr>
+                                            <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
+                                                {t("loading")}
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                    ) : filteredTagItems.length === 0 ? (
+                                        <tr>
+                                            <td className="px-3 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
+                                                {tagItems.length === 0
+                                                    ? t("build.tagLibraryTagsEmpty", "暂无标签，请点击右上角添加")
+                                                    : t("build.tagLibraryTagsEmptySearch", "未找到匹配的标签")}
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredTagItems.map((item) => (
+                                            <tr
+                                                key={`${item.resource_type}-${item.name}`}
+                                                className="border-t text-sm"
+                                            >
+                                                <td className="truncate px-3 py-3 font-medium">{item.name}</td>
+                                                <td className="truncate px-3 py-3 text-muted-foreground">
+                                                    {formatTagSource(item.resource_type, t)}
+                                                </td>
+                                                <td className="px-3 py-3">{item.resource_count ?? 0}</td>
+                                                <td className="truncate px-3 py-3 text-muted-foreground">
+                                                    {formatDateTime(item.create_time)}
+                                                </td>
+                                                <td className="truncate px-3 py-3 text-muted-foreground">
+                                                    {formatTagCreator(item, t)}
+                                                </td>
+                                                <td className="px-3 py-3">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        disabled={saving}
+                                                        onClick={() => handleDeleteTag(item)}
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {tagItems.length}/{TAG_LIMIT}
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        {tagItems.length}/{TAG_LIMIT}
-                    </p>
-                </div>
-                <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
-                    <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
-                        {t("close", { ns: "bs", defaultValue: "关闭" })}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
+                        <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
+                            {t("close", { ns: "bs", defaultValue: "关闭" })}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <AddTagToLibraryDialog
                 open={addTagDialogOpen}
                 saving={saving}

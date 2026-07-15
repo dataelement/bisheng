@@ -26,8 +26,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileRenameReq,
     FolderCreateReq,
     FolderRenameReq,
-    KnowledgeSpaceFilePermissionsReq,
     KnowledgeSpaceCreateReq,
+    KnowledgeSpaceFilePermissionsReq,
     KnowledgeSpaceFolderStatsReq,
     KnowledgeSpaceUpdateReq,
     MoveFileFolderReq,
@@ -200,12 +200,12 @@ async def update_space(
 
 
 @router.post("/{space_id}/set-pin")
-async def set_channel_pin(
+async def set_space_pin(
     space_id: int,
     is_pined: bool = Body(default=True, embed=True),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
-    """Set channel pin status."""
+    """设置当前用户的知识库置顶偏好。"""
     await svc.pin_space(space_id, is_pined)
     return resp_200(data=True)
 

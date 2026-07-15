@@ -420,6 +420,14 @@
   font-size: 15px;
 }
 
+.spaceSelectButton .spacePinIcon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: #86909c;
+  pointer-events: none;
+}
+
 .emptySpace {
   padding: 3px 10px 7px 52px;
   color: #9aa6b8;

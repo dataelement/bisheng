@@ -221,6 +221,16 @@ class KnowledgeSpaceTagLibraryNotBoundError(BaseErrorCode):
     Msg: str = "请先为知识库绑定标签库后再添加标签"
 
 
+class SpacePersonalPinForbiddenError(BaseErrorCode):
+    Code: int = 18078
+    Msg: str = "个人知识库不支持置顶"
+
+
+class SpacePinLimitError(BaseErrorCode):
+    Code: int = 18079
+    Msg: str = "每类最多置顶 5 个知识库"
+
+
 # —— Free space deletion / migration to department knowledge space
 class FreeSpaceMigrationTargetNotFoundError(BaseErrorCode):
     Code: int = 18081

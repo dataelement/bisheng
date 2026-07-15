@@ -70,7 +70,7 @@ def _sso_response() -> SgSsoAccountSyncResponse:
     return SgSsoAccountSyncResponse(
         TIEM=[
             SgSsoAccountSyncResultItem(
-                Result="0",
+                Result="S",
                 UserName="Alice",
                 Description="success",
                 Guid="guid-1",
@@ -235,7 +235,7 @@ class TestSgSsoAccountSyncRoute:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["TIEM"][0]["Result"] == "0"
+        assert data["TIEM"][0]["Result"] == "S"
         assert data["TIEM"][0]["Guid"] == "guid-1"
         mocked_sg_services.sso.assert_awaited_once()
         payload = mocked_sg_services.sso.await_args.args[0]

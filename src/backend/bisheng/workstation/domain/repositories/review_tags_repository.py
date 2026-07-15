@@ -13,6 +13,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.workstation.domain.repositories.tags_repository import TagRepositoryImpl
+from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagSubmitterTarget
 
 
 class ReviewTagsRepositoryImpl:
@@ -386,6 +387,58 @@ class ReviewTagsRepositoryImpl:
             return int(normalized)
         return None
 
+    @classmethod
+    def _space_id_from_review_tag(cls, tag) -> int | None:
+        business_type = str(getattr(tag, "business_type", "") or "")
+        business_id = getattr(tag, "business_id", None)
+        if business_type in (
+            TagBusinessTypeEnum.KNOWLEDGE_SPACE.value,
+            TagBusinessTypeEnum.KNOWLEDGE.value,
+        ):
+            return cls._parse_knowledge_space_id(business_id)
+        return None
+
+    async def _resolve_space_id_from_tag_links(self, tag_id: int, tenant_id: int) -> int | None:
+        links = await self.get_review_tag_link_list_by_tag_id([tag_id], tenant_id)
+        for link in links or []:
+            knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
+                link.resource_id,
+                tenant_id,
+            )
+            if knowledgefile and knowledgefile.knowledge_id:
+                return int(knowledgefile.knowledge_id)
+        return None
+
+    async def _resolve_file_target_from_link(
+        self,
+        link,
+        tenant_id: int,
+    ) -> tuple[int | None, int | None, str | None, str | None]:
+        knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
+            link.resource_id,
+            tenant_id,
+        )
+        if not knowledgefile or knowledgefile.id is None:
+            return None, None, None, None
+        space_id = int(knowledgefile.knowledge_id) if knowledgefile.knowledge_id else None
+        file_id = int(knowledgefile.id)
+        file_name = knowledgefile.file_name
+        file_type = knowledgefile.file_type
+        return space_id, file_id, file_name, file_type
+
+    async def _resolve_primary_file_for_tag(
+        self,
+        tag_id: int,
+        user_id: int,
+        tenant_id: int,
+    ) -> tuple[int | None, int | None, str | None, str | None]:
+        links = await self.get_review_tag_link_list_by_tag_id([tag_id], tenant_id)
+        preferred = next((link for link in links or [] if int(link.user_id or 0) == user_id), None)
+        chosen = preferred or ((links or [None])[0])
+        if chosen is None:
+            return None, None, None, None
+        return await self._resolve_file_target_from_link(chosen, tenant_id)
+
     async def list_submitter_notification_targets(
         self,
         tag_name: str,
@@ -393,18 +446,39 @@ class ReviewTagsRepositoryImpl:
         tenant_id: int,
         *,
         exclude_user_id: int | None = None,
-    ) -> list[tuple[int, int | None]]:
-        """Return unique submitter user ids and their preferred knowledge space id."""
+    ) -> list[ReviewTagSubmitterTarget]:
+        """Return unique submitters with their related knowledge space and file."""
         tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id)
-        user_space: dict[int, int | None] = {}
+        user_targets: dict[int, ReviewTagSubmitterTarget] = {}
 
         for tag in tags:
             user_id = int(tag.user_id or 0)
             if user_id <= 0:
                 continue
-            space_id = self._parse_knowledge_space_id(tag.business_id)
-            if user_id not in user_space or user_space[user_id] is None:
-                user_space[user_id] = space_id
+            space_id = self._space_id_from_review_tag(tag)
+            file_id: int | None = None
+            file_name: str | None = None
+            file_type: str | None = None
+            if tag.id is not None:
+                resolved_space, resolved_file, resolved_name, resolved_type = await self._resolve_primary_file_for_tag(
+                    int(tag.id),
+                    user_id,
+                    tenant_id,
+                )
+                if space_id is None:
+                    space_id = resolved_space
+                file_id = resolved_file
+                file_name = resolved_name
+                file_type = resolved_type
+            existing = user_targets.get(user_id)
+            if existing is None or (existing.knowledge_space_id is None and space_id is not None):
+                user_targets[user_id] = ReviewTagSubmitterTarget(
+                    user_id=user_id,
+                    knowledge_space_id=space_id,
+                    file_id=file_id,
+                    file_name=file_name,
+                    file_type=file_type,
+                )
 
         tag_ids = [int(tag.id) for tag in tags if tag.id is not None]
         if tag_ids:
@@ -412,14 +486,25 @@ class ReviewTagsRepositoryImpl:
             links = await self.get_review_tag_link_list_by_tag_id(tag_ids, tenant_id)
             for link in links:
                 user_id = int(link.user_id or 0)
-                if user_id <= 0 or user_id in user_space:
+                if user_id <= 0 or user_id in user_targets:
                     continue
-                parent_tag = tag_by_id.get(int(link.tag_id))
-                user_space[user_id] = self._parse_knowledge_space_id(parent_tag.business_id if parent_tag else None)
+                space_id, file_id, file_name, file_type = await self._resolve_file_target_from_link(link, tenant_id)
+                if space_id is None:
+                    parent_tag = tag_by_id.get(int(link.tag_id))
+                    space_id = self._space_id_from_review_tag(parent_tag) if parent_tag else None
+                    if space_id is None and parent_tag and parent_tag.id is not None:
+                        space_id = await self._resolve_space_id_from_tag_links(int(parent_tag.id), tenant_id)
+                user_targets[user_id] = ReviewTagSubmitterTarget(
+                    user_id=user_id,
+                    knowledge_space_id=space_id,
+                    file_id=file_id,
+                    file_name=file_name,
+                    file_type=file_type,
+                )
 
         if exclude_user_id is not None:
-            user_space.pop(int(exclude_user_id), None)
-        return list(user_space.items())
+            user_targets.pop(int(exclude_user_id), None)
+        return list(user_targets.values())
 
     async def list_all_tags_by_page(self, page: int, page_size: int, keyword: str, tenant_id: int):
         return await self.tags_repository.list_all_tags_by_page(page, page_size, keyword, tenant_id)

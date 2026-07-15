@@ -240,4 +240,52 @@ describe("NotificationsDialog approval jump", () => {
     });
     expect(mockParentPostMessage).not.toHaveBeenCalled();
   });
+
+  it("does not navigate when clicking an approved review tag notification target name", async () => {
+    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 696,
+        sender: 1,
+        sender_name: "admin",
+        message_type: "notify",
+        action_code: "approved_review_tag",
+        status: "approved",
+        is_read: false,
+        create_time: "2026-07-14T10:05:44",
+        update_time: "2026-07-14T10:05:44",
+        content: [
+          { type: "user", content: "@admin", metadata: { user_id: 1 } },
+          { type: "system_text", content: "approved_review_tag" },
+          {
+            type: "business_url",
+            content: "--「测试哈哈哈」",
+            metadata: {
+              business_type: "knowledge_file_id",
+              data: {
+                knowledge_space_id: "214",
+                file_id: "501",
+                knowledge_file_id: "501",
+                business_id: "501",
+                business_name: "「测试哈哈哈」",
+                file_name: "report.pdf",
+                file_type: "pdf",
+              },
+            },
+          },
+        ],
+      }],
+    });
+    jest.mocked(markMessageReadApi).mockResolvedValue({});
+    const onOpenChange = jest.fn();
+
+    render(<NotificationsDialog open onOpenChange={onOpenChange} />);
+
+    fireEvent.click(await screen.findByText("「测试哈哈哈」"));
+
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
 });

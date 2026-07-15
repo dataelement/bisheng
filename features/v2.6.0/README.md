@@ -13,6 +13,7 @@
 | # | Feature | 优先级 | 状态 | 依赖 |
 |---|---------|--------|------|------|
 | F025 | [approval-center-unification](./025-approval-center-unification/) | P0 | 🔲 规格已生成，待评审 | F005, F011, F012, F013 |
+| F054 | [file-publish-submit-performance](./054-file-publish-submit-performance/) | P0 | ✅ 第一阶段已实现并完成自动化验证 | F025 |
 
 ---
 
@@ -34,3 +35,4 @@
 | 日期 | 变更 |
 |------|------|
 | 2026-05-18 | 初始化 v2.6.0 版本目录，并迁入 **F025-approval-center-unification** 规格与任务。 |
+| 2026-07-14 | 登记并完成 **F054-file-publish-submit-performance** 第一阶段：定向目标校验、发布通知异步化、审批任务批量写入与分段性能日志。 |

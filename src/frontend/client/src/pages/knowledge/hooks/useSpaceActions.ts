@@ -131,6 +131,7 @@ export function useSpaceActions({
     // ── Pin / Unpin space ──
 
     const handlePinSpace = async (spaceId: string, pinned: boolean, type: SpaceLevel) => {
+        if (type === SpaceLevel.PERSONAL) return;
         const targetList =
             type === SpaceLevel.PUBLIC ? groupedSpaces.publicSpaces
                 : type === SpaceLevel.DEPARTMENT ? groupedSpaces.departmentSpaces

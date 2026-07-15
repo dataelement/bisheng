@@ -1,22 +1,16 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.review_tags import ApproveOrRejectEnum
 from bisheng.message.domain.services.notification_content import build_notify_content
+from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagSubmitterTarget
 
 logger = logging.getLogger(__name__)
 
 ACTION_APPROVED_REVIEW_TAG = "approved_review_tag"
 ACTION_REJECTED_REVIEW_TAG = "rejected_review_tag"
-
-
-@dataclass(frozen=True)
-class ReviewTagSubmitterTarget:
-    user_id: int
-    knowledge_space_id: int | None = None
 
 
 class ReviewTagNotificationService:
@@ -56,19 +50,16 @@ class ReviewTagNotificationService:
             async with get_async_db_session() as session:
                 message_service = await get_message_service(session)
                 for target in submitter_targets:
-                    space_id = target.knowledge_space_id or fallback_knowledge_id
                     await message_service.send_generic_notify(
                         sender=sender,
                         receiver_user_ids=[target.user_id],
                         content_item_list=build_notify_content(
                             action_code=action_code,
                             target_name=target_name,
-                            business_type="knowledge_space_id" if space_id is not None else None,
-                            business_id=space_id,
                             actor_user_id=sender,
                             actor_user_name=sender_user_name,
                             reason=reject_reason if status == ApproveOrRejectEnum.REJECT else None,
-                            navigable=space_id is not None,
+                            navigable=False,
                         ),
                         action_code=action_code,
                     )

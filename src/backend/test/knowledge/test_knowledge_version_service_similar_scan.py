@@ -690,6 +690,133 @@ async def test_shougang_publish_document_search_returns_target_files_without_ver
     assert entries[0].title == "桃新品种经济效益分析.pdf"
 
 
+def _build_unit_version_service(*, document=None, versions=None, target_file=None, existing_version=None):
+    return KnowledgeVersionService(
+        request=MagicMock(),
+        login_user=MagicMock(),
+        doc_repo=SimpleNamespace(find_by_id=AsyncMock(return_value=document)),
+        version_repo=SimpleNamespace(
+            find_by_document_id=AsyncMock(return_value=versions or []),
+            find_by_knowledge_file_id=AsyncMock(return_value=existing_version),
+        ),
+        knowledge_file_repo=SimpleNamespace(find_by_id=AsyncMock(return_value=target_file)),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_shougang_publish_version_target_returns_single_version_document():
+    target_doc = SimpleNamespace(id=10, knowledge_id=2, primary_version_id=20)
+    primary_version = SimpleNamespace(id=20, document_id=10, knowledge_file_id=200, version_no=1)
+    primary_file = SimpleNamespace(
+        id=200,
+        knowledge_id=2,
+        file_name="f200.pdf",
+        file_encoding="SGGF-STD-PP-20260500000001",
+        file_type=1,
+        status=2,
+        user_name="上传人",
+        create_time=None,
+    )
+    service = _build_unit_version_service(
+        document=target_doc,
+        versions=[primary_version],
+        target_file=primary_file,
+    )
+
+    entry = await service.get_shougang_publish_version_target(
+        knowledge_id=2, current_file_id=100, target_document_id=target_doc.id
+    )
+
+    assert entry.document_id == 10
+    assert entry.target_file_id is None
+    assert entry.title == "f200.pdf"
+    assert entry.doc_code == "SGGF-STD-PP-20260500000001"
+    assert entry.current_primary_version_no == 1
+
+
+@pytest.mark.asyncio
+async def test_get_shougang_publish_version_target_returns_unversioned_file():
+    target_file = SimpleNamespace(
+        id=300,
+        knowledge_id=2,
+        file_name="待关联文件.pdf",
+        file_encoding="SGGF-STD-PP-20260500000002",
+        file_type=1,
+        status=2,
+        user_name="上传人",
+        create_time=None,
+    )
+    service = _build_unit_version_service(target_file=target_file)
+
+    entry = await service.get_shougang_publish_version_target(
+        knowledge_id=2,
+        current_file_id=100,
+        target_file_id=300,
+    )
+
+    assert entry.document_id is None
+    assert entry.target_file_id == 300
+    assert entry.title == "待关联文件.pdf"
+    assert entry.current_primary_version_no == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_case", ["cross_space", "parse_failed", "directory", "versioned"])
+async def test_get_shougang_publish_version_target_rejects_invalid_file(
+    invalid_case,
+):
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+
+    target_knowledge_id = 3 if invalid_case == "cross_space" else 2
+    target_file = SimpleNamespace(
+        id=300,
+        knowledge_id=target_knowledge_id,
+        file_name="目标.pdf",
+        file_encoding=None,
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        user_name=None,
+        create_time=None,
+    )
+    if invalid_case == "parse_failed":
+        target_file.status = KnowledgeFileStatus.FAILED.value
+    elif invalid_case == "directory":
+        target_file.file_type = FileType.DIR.value
+    existing_version = SimpleNamespace(id=40) if invalid_case == "versioned" else None
+    service = _build_unit_version_service(
+        target_file=target_file,
+        existing_version=existing_version,
+    )
+
+    entry = await service.get_shougang_publish_version_target(
+        knowledge_id=2,
+        current_file_id=100,
+        target_file_id=300,
+    )
+
+    assert entry is None
+
+
+@pytest.mark.asyncio
+async def test_get_shougang_publish_version_target_rejects_multi_version_document():
+    target_doc = SimpleNamespace(id=10, knowledge_id=2, primary_version_id=20)
+    service = _build_unit_version_service(
+        document=target_doc,
+        versions=[
+            SimpleNamespace(id=20, document_id=10, knowledge_file_id=200, version_no=1),
+            SimpleNamespace(id=21, document_id=10, knowledge_file_id=201, version_no=2),
+        ],
+    )
+
+    entry = await service.get_shougang_publish_version_target(
+        knowledge_id=2,
+        current_file_id=100,
+        target_document_id=target_doc.id,
+    )
+
+    assert entry is None
+
+
 @pytest.mark.asyncio
 async def test_ensure_shougang_publish_document_for_file_creates_v1_document_chain(
     enable_switch,

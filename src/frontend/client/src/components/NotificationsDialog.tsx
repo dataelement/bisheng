@@ -34,6 +34,54 @@ export interface NotificationsDialogProps {
 
 const PAGE_SIZE = 20;
 
+type NotificationNavigateTarget =
+    | { targetType: "channel"; targetId: string }
+    | { targetType: "space"; targetId: string }
+    | { targetType: "qa_question"; targetId: string; answerId?: string; commentId?: string }
+    | { targetType: "knowledge_file"; targetId: string; spaceId: string; fileName?: string; fileType?: string };
+
+function buildNotificationRoute(
+    target: NotificationNavigateTarget,
+    notification: MessageItem,
+    isRejectedKnowledgeSpaceJoin: (item: MessageItem) => boolean,
+    isRejectedChannelJoin: (item: MessageItem) => boolean,
+): string {
+    if (target.targetType === "channel") {
+        return isRejectedChannelJoin(notification)
+            ? `/channel/share/${target.targetId}?square=1`
+            : `/channel/${target.targetId}`;
+    }
+    if (target.targetType === "knowledge_file") {
+        const params = new URLSearchParams();
+        if (target.fileName) params.set("name", target.fileName);
+        if (target.fileType) params.set("type", target.fileType);
+        if (target.spaceId) params.set("spaceId", target.spaceId);
+        const query = params.toString();
+        return `/knowledge/file/${target.targetId}${query ? `?${query}` : ""}`;
+    }
+    if (isRejectedKnowledgeSpaceJoin(notification)) {
+        return `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
+    }
+    return `/knowledge/space/${target.targetId}`;
+}
+
+function openNotificationTarget(
+    target: NotificationNavigateTarget,
+    notification: MessageItem,
+    isRejectedKnowledgeSpaceJoin: (item: MessageItem) => boolean,
+    isRejectedChannelJoin: (item: MessageItem) => boolean,
+) {
+    const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+    const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+    const route = buildNotificationRoute(
+        target,
+        notification,
+        isRejectedKnowledgeSpaceJoin,
+        isRejectedChannelJoin,
+    );
+    window.open(normalizedBase + route, "_blank");
+}
+
 function resolveMessageTimeLocale(lang: string) {
     if (lang.startsWith("zh")) return "zh-CN";
     if (lang.startsWith("ja")) return "ja-JP";
@@ -530,6 +578,9 @@ export function NotificationsDialog({
         return { text, targetName, showApproval };
     };
 
+    const isReviewTagDecisionNotification = (actionCode?: string) =>
+        actionCode === "approved_review_tag" || actionCode === "rejected_review_tag";
+
     const getSupplementaryText = (notification: MessageItem): string => {
         const parts = Array.isArray(notification.content) ? notification.content : [];
         const tooltipPart = parts.find((c: any) => c?.type === "tooltip_text");
@@ -552,17 +603,20 @@ export function NotificationsDialog({
         );
     };
 
-    const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space" | "qa_question"; targetId: string; answerId?: string; commentId?: string } | null => {
+    const getNotificationTarget = (notification: MessageItem): NotificationNavigateTarget | null => {
         const allBusinessParts = (notification.content ?? []).filter((c: any) => c?.type === "business_url") as any[];
         const systemText = String(notification.content?.find((c: any) => c?.type === "system_text")?.content ?? "");
+        const actionCode = String(notification.action_code ?? getSystemTextCode(notification));
 
         // Some notify payloads may contain multiple business_url segments.
         // Prefer the one whose metadata.business_type matches the notification's intent.
-        const preferSpace = /knowledge_space|knowledge space|space/i.test(systemText);
+        const preferFile = /review_tag/i.test(actionCode) || /knowledge_file/i.test(systemText);
+        const preferSpace = !preferFile && /knowledge_space|knowledge space|space/i.test(systemText);
         const preferChannel = /channel/i.test(systemText);
         const part =
             allBusinessParts.find((p) => {
                 const bt = String(p?.metadata?.business_type ?? "");
+                if (preferFile) return /knowledge_file/i.test(bt);
                 if (preferSpace) return /knowledge_space|space/i.test(bt);
                 if (preferChannel) return /channel/i.test(bt);
                 return false;
@@ -572,7 +626,6 @@ export function NotificationsDialog({
         const meta = part?.metadata as any;
         const businessType = meta?.business_type;
         const data = meta?.data || {};
-        const actionCode = String(notification.action_code ?? "");
 
         const pickId = (...vals: any[]) => {
             for (const v of vals) {
@@ -618,6 +671,29 @@ export function NotificationsDialog({
             const spaceId = data?.space_id ?? data?.business_id ?? (notification as any)?.business_id;
             if (spaceId !== undefined && spaceId !== null && String(spaceId) !== "") {
                 return { targetType: "space", targetId: String(spaceId) };
+            }
+        }
+        if (businessType === "knowledge_file_id" || businessType === "knowledge_file") {
+            const fileId = pickId(
+                data?.file_id,
+                data?.knowledge_file_id,
+                meta?.business_id,
+                data?.business_id,
+            );
+            const spaceId = pickId(
+                data?.knowledge_space_id,
+                data?.knowledge_space_Id,
+                data?.space_id,
+                meta?.data?.knowledge_space_id,
+            );
+            if (fileId && spaceId) {
+                return {
+                    targetType: "knowledge_file",
+                    targetId: fileId,
+                    spaceId,
+                    fileName: typeof data?.file_name === "string" ? data.file_name : undefined,
+                    fileType: typeof data?.file_type === "string" ? data.file_type : undefined,
+                };
             }
         }
         if (businessType === "knowledge_space_Id" || businessType === "knowledge_space_id") {
@@ -711,6 +787,31 @@ export function NotificationsDialog({
             );
             if (id) return { targetType: "space", targetId: id };
         }
+
+        // Last resort: review-tag notifications should open the source file when possible.
+        if (/review_tag/i.test(actionCode)) {
+            const fileId = pickId(
+                data?.file_id,
+                data?.knowledge_file_id,
+                meta?.business_id,
+                data?.business_id,
+            );
+            const spaceId = pickId(
+                data?.knowledge_space_id,
+                data?.knowledge_space_Id,
+                data?.space_id,
+                meta?.data?.knowledge_space_id,
+            );
+            if (fileId && spaceId) {
+                return {
+                    targetType: "knowledge_file",
+                    targetId: fileId,
+                    spaceId,
+                    fileName: typeof data?.file_name === "string" ? data.file_name : undefined,
+                    fileType: typeof data?.file_type === "string" ? data.file_type : undefined,
+                };
+            }
+        }
         return null;
     };
 
@@ -750,7 +851,9 @@ export function NotificationsDialog({
             : null;
         const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
         const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
-        const canNavigateTarget = Boolean(target && target.targetId && targetName);
+        const canNavigateTarget =
+            Boolean(target && target.targetId && targetName)
+            && !isReviewTagDecisionNotification(getSystemTextCode(notification));
         const targetLabel = targetName;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
@@ -920,32 +1023,12 @@ export function NotificationsDialog({
                                             onOpenChange?.(false);
                                             return;
                                         }
-                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-                                        if (target.targetType === "channel") {
-                                            const route = isRejectedChannelJoinNotification(notification)
-                                                ? `/channel/share/${target.targetId}?square=1`
-                                                : `/channel/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
-                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else {
-                                            const route = `/knowledge/space/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        }
+                                        openNotificationTarget(
+                                            target,
+                                            notification,
+                                            isRejectedKnowledgeSpaceJoinNotification,
+                                            isRejectedChannelJoinNotification,
+                                        );
                                         onOpenChange?.(false);
                                     }}
                                 >
@@ -992,32 +1075,12 @@ export function NotificationsDialog({
                                             onOpenChange?.(false);
                                             return;
                                         }
-                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-                                        if (target.targetType === "channel") {
-                                            const route = isRejectedChannelJoinNotification(notification)
-                                                ? `/channel/share/${target.targetId}?square=1`
-                                                : `/channel/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
-                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        } else {
-                                            const route = `/knowledge/space/${target.targetId}`;
-                                            console.info("[NotificationsDialog] navigate", {
-                                                notificationId: notification.id,
-                                                route,
-                                            });
-                                            window.open(normalizedBase + route, "_blank");
-                                        }
+                                        openNotificationTarget(
+                                            target,
+                                            notification,
+                                            isRejectedKnowledgeSpaceJoinNotification,
+                                            isRejectedChannelJoinNotification,
+                                        );
                                         onOpenChange?.(false);
                                     }}
                                 >

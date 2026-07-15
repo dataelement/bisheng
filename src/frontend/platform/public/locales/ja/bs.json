@@ -1057,7 +1057,7 @@
     "tagLibraryNameMaxLength": "タグライブラリ名は20文字以内で入力してください",
     "tagLibraryNameDuplicate": "タグライブラリ名は既に存在します",
     "tagLibraryNamePlaceholder": "タグライブラリ名を入力",
-    "tagLibraryLimit": "タグライブラリには最大200個のタグを設定できます",
+    "tagLibraryLimit": "タグライブラリには最大999個のタグを設定できます",
     "autoTagGenerationTitle": "審査待ちタグ",
     "autoTagGenerationDesc": "AI が推薦した、語彙にまだ存在しないタグ名を審査します。承認後、タグライブラリに追加され、対応するナレッジに紐づけられます。",
     "searchReviewTag": "審査待ちタグを検索",

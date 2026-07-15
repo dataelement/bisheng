@@ -15,10 +15,11 @@ from bisheng.sso_sync.domain.schemas.sg_payloads import (
 MODULE = "bisheng.sso_sync.domain.services.sg_sso_account_sync_service"
 
 
-def _user(*, user_id: int = 5, guid: str | None = None, user_name: str = "Old"):
+def _user(*, user_id: int = 5, guid: str | None = None, user_name: str = "Old", external_id: str | None = None):
     return SimpleNamespace(
         user_id=user_id,
-        external_id="P001",
+        external_id=external_id,
+        external_code="P001",
         user_name=user_name,
         guid=guid,
     )
@@ -45,7 +46,7 @@ class TestSgSsoAccountSyncService:
         )
         with (
             patch(
-                f"{MODULE}.UserDao.aget_by_external_id",
+                f"{MODULE}.UserDao.aget_by_external_code",
                 new_callable=AsyncMock,
                 return_value=target,
             ),
@@ -63,11 +64,11 @@ class TestSgSsoAccountSyncService:
 
         assert len(response.items) == 1
         item = response.items[0]
-        assert item.result == "0"
+        assert item.result == "S"
         assert item.user_name == "New Name"
         assert item.guid == "existing-guid"
         updated = update_user.await_args.args[0]
-        assert updated.user_name == "New Name"
+        assert updated.external_id == "New Name"
         assert updated.guid == "existing-guid"
 
     async def test_fallback_resolve_user_by_guid(self):
@@ -85,7 +86,7 @@ class TestSgSsoAccountSyncService:
         )
         with (
             patch(
-                f"{MODULE}.UserDao.aget_by_external_id",
+                f"{MODULE}.UserDao.aget_by_external_code",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -101,7 +102,7 @@ class TestSgSsoAccountSyncService:
         ):
             response = await SgSsoAccountSyncService.execute(payload)
 
-        assert response.items[0].result == "0"
+        assert response.items[0].result == "S"
         assert response.items[0].guid == "guid-only"
 
     async def test_empty_guid_generates_uuid(self):
@@ -115,7 +116,7 @@ class TestSgSsoAccountSyncService:
         )
         with (
             patch(
-                f"{MODULE}.UserDao.aget_by_external_id",
+                f"{MODULE}.UserDao.aget_by_external_code",
                 new_callable=AsyncMock,
                 return_value=target,
             ),
@@ -131,7 +132,7 @@ class TestSgSsoAccountSyncService:
         ):
             response = await SgSsoAccountSyncService.execute(payload)
 
-        assert response.items[0].result == "0"
+        assert response.items[0].result == "S"
         generated = update_user.await_args.args[0].guid
         assert generated
         assert response.items[0].guid == generated
@@ -147,7 +148,7 @@ class TestSgSsoAccountSyncService:
         )
         with (
             patch(
-                f"{MODULE}.UserDao.aget_by_external_id",
+                f"{MODULE}.UserDao.aget_by_external_code",
                 new_callable=AsyncMock,
                 return_value=target,
             ),
@@ -167,7 +168,7 @@ class TestSgSsoAccountSyncService:
         ):
             response = await SgSsoAccountSyncService.execute(payload)
 
-        assert response.items[0].result == "0"
+        assert response.items[0].result == "S"
         assert response.items[0].guid == "stable-guid"
         updated = update_user.await_args.args[0]
         assert updated.guid == "stable-guid"
@@ -183,7 +184,7 @@ class TestSgSsoAccountSyncService:
         )
         with (
             patch(
-                f"{MODULE}.UserDao.aget_by_external_id",
+                f"{MODULE}.UserDao.aget_by_external_code",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -196,8 +197,8 @@ class TestSgSsoAccountSyncService:
             response = await SgSsoAccountSyncService.execute(payload)
 
         item = response.items[0]
-        assert item.result == "1"
-        assert "user not found by PersonNO or Guid" in item.description
+        assert item.result == "E"
+        assert "user not found by PersonNO (external_code) or Guid" in item.description
 
     async def test_guid_bound_to_other_user_fails(self):
         from bisheng.sso_sync.domain.services.sg_sso_account_sync_service import (
@@ -215,7 +216,7 @@ class TestSgSsoAccountSyncService:
         )
         with (
             patch(
-                f"{MODULE}.UserDao.aget_by_external_id",
+                f"{MODULE}.UserDao.aget_by_external_code",
                 new_callable=AsyncMock,
                 return_value=target,
             ),
@@ -228,7 +229,7 @@ class TestSgSsoAccountSyncService:
             response = await SgSsoAccountSyncService.execute(payload)
 
         item = response.items[0]
-        assert item.result == "1"
+        assert item.result == "E"
         assert "Guid already bound to another user" in item.description
 
     async def test_missing_person_no_returns_validation_failure(self):
@@ -242,5 +243,5 @@ class TestSgSsoAccountSyncService:
         response = await SgSsoAccountSyncService.execute(payload)
 
         item = response.items[0]
-        assert item.result == "1"
+        assert item.result == "E"
         assert "PersonNO is required" in item.description
