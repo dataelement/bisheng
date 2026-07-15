@@ -55,24 +55,30 @@ async def materialize_session_skills(
     Args:
         backend: the session ``WorkspaceBackend`` (write-throughs to MinIO+cache).
         tenant_id: owning tenant; scopes the on-disk bundle source path.
-        selected: skill names picked for this run. ``[]`` = none (all disabled);
-            ``None`` = unconstrained (non-UI fallback — copy every enabled skill);
-            ``["a", "b"]`` = exactly those that are also governance-enabled.
+        selected: skill names picked for this run. Both ``None`` (field absent —
+            a legacy row, or any client/caller that never sent it) and ``[]`` (the
+            UI explicitly cleared the picker) mean "no skills this run": copy
+            nothing. Only an explicit non-empty list opts in, and each name is
+            still intersected with the tenant's governance-enabled set.
         store: skill disk store (injectable for tests).
 
     Returns:
         The skill names actually materialized. Empty when nothing matched — the
         caller then skips attaching the skills middleware entirely.
     """
-    # [] = the UI explicitly disabled every skill for this run; copy nothing.
-    if selected == []:
+    # None ≡ [] ≡ "no skills for this run" — copy nothing. Treating a missing
+    # field as "copy every enabled skill" was a footgun: any request that omitted
+    # skills (a stale/cached client, a non-UI caller, a legacy row) silently
+    # loaded EVERY enabled skill, defeating the picker. Skills are strictly opt-in
+    # via an explicit name list.
+    if not selected:
         return []
 
     store = store or SkillStore()
     # Governance gate, scoped to the current tenant (LinsightSkillDao.list_enabled
     # uses strict_tenant_filter); the worker has already restored tenant context.
     enabled = {skill.name for skill in await LinsightSkillDao.list_enabled()}
-    wanted = enabled if selected is None else {name for name in selected if name in enabled}
+    wanted = {name for name in selected if name in enabled}
     if not wanted:
         return []
 

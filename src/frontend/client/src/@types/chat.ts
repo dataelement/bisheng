@@ -38,7 +38,8 @@ export type ChatMessageType = {
   sender?: string;
   /** @某人 */
   receiver?: any;
-  liked?: boolean;
+  /** Feedback verdict: 0 none / 1 thumbs up / 2 thumbs down (mirrors chatmessage.liked). */
+  liked?: number;
   extra?: string;
   create_time: string;
   update_time: string;

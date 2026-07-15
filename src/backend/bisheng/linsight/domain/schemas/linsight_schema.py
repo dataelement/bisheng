@@ -51,8 +51,9 @@ class LinsightQuestionSubmitSchema(BaseModel):
     # F035 Track D: skill names the user picked for this run. The worker copies the
     # matched (governance-enabled ∩ selected) bundles into the session workspace at
     # startup (skill_provisioning.materialize_session_skills) — the copy IS the
-    # whitelist gate, so unselected skills never reach the agent. [] disables all;
-    # None (non-UI callers) means "no per-run constraint" → every enabled skill.
+    # whitelist gate, so unselected skills never reach the agent. Both [] and a
+    # missing/None field mean "no skills this run"; skills are opt-in via an
+    # explicit non-empty list.
     skills: list[str] | None = Field(None, description="Selected skill names for this run")
     # F035: continue an existing session (a follow-up round in the same 会话).
     # None creates a brand-new session.

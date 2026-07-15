@@ -126,6 +126,59 @@ def test_coerce_drops_unrecoverable_debris_not_a_blob():
     assert _coerce_questions(['{"options": ["a", "b"], "multiple": false}']) == []
 
 
+# Case D (observed live with deepseek-v4-flash, session b28d0dc6…, "skill test"): the
+# OpenAI-compatible arg parser produced a WELL-FORMED outer list/dict, but the whole
+# 3-question array got crammed into the FIRST dict's `question` VALUE as a serialized
+# blob — it dropped the array's opening `[{"question"` (keeping the `: "` separator) and
+# left the inner quotes in 你想要的"skill test"是指什么？ unescaped. The pre-fix code kept
+# the dict as-is, so the user saw the raw-JSON blob as the (single) question title with
+# zero options. The trigger is intermittent: it only fires when a question's text itself
+# contains quote characters (here echoed from the literal user input "skill test").
+# These are the EXACT bytes captured from the live session's execute-task-detail API.
+_LIVE_CRAMMED_IN_DICT_VALUE = (
+    ': "你想要的"skill test"是指什么？", '
+    '"options": ["测试我的 AI 能力（给我出一道题来评估我的表现）", "生成一套技能测试题/考核方案（用于评估他人）", '
+    '"帮我做一份个人技能评估或能力自测", "对某个特定领域的技能进行摸底测试"], "multiple": false}, '
+    '{"question": "如果涉及技能测试内容，测试的领域或技能方向是什么？", '
+    '"options": ["编程/软件开发", "数据分析/AI/机器学习", "产品/项目管理", "通用职场技能（沟通、协作等）", "其他（请在下方补充）"], '
+    '"multiple": false}, {"question": "希望的交付格式是？", '
+    '"options": ["markdown", "html", "docx", "pdf"], "multiple": true}]'
+)
+
+
+def test_coerce_case_d_dict_value_crammed_array_re_expands():
+    """The reported fix: a dict whose `question` VALUE is a crammed array must be
+    re-expanded into the real structured questions (options intact), not passed
+    through as one raw-JSON title with no options."""
+    out = _coerce_questions([{"question": _LIVE_CRAMMED_IN_DICT_VALUE, "options": [], "multiple": False}])
+    assert len(out) == 3
+    # first question comes back CLEAN — no leading `: "` separator noise
+    assert out[0]["question"] == '你想要的"skill test"是指什么？'
+    assert len(out[0]["options"]) == 4
+    assert out[1]["question"] == "如果涉及技能测试内容，测试的领域或技能方向是什么？"
+    assert out[2]["question"] == "希望的交付格式是？"
+    assert out[2]["options"] == ["markdown", "html", "docx", "pdf"]
+    assert out[2]["multiple"] is True
+    # invariant regardless of json_repair drift: never a raw-JSON blob as a title
+    assert all(len(str(q.get("question", ""))) < 200 for q in out)
+
+
+def test_coerce_case_d_also_recovers_from_top_level_string():
+    """The same crammed array arriving as a top-level malformed STRING (not wrapped
+    in a list/dict) is recovered too, rather than degrading straight to []."""
+    out = _coerce_questions(_LIVE_CRAMMED_IN_DICT_VALUE)
+    assert len(out) == 3
+    assert out[0]["question"] == '你想要的"skill test"是指什么？'
+
+
+def test_coerce_prose_question_not_mistaken_for_crammed_array():
+    """Regression guard: a genuine question dict whose text merely MENTIONS the word
+    options (unquoted) or uses a {placeholder} must NOT trip the crammed-array
+    re-expansion — only the quoted JSON-key signature does."""
+    value = [{"question": "请用 {name} 占位，你的 options 有哪些?", "options": ["x", "y"], "multiple": False}]
+    assert _coerce_questions(value) == value
+
+
 # --- ask_user tool: the stringified payload must now park, not ValidationError
 
 
@@ -215,6 +268,24 @@ async def test_ask_user_well_formed_list_unchanged():
     tool_calls = captured.call_args.args[0]["params"]["tool_calls"]
     assert len(tool_calls) == 1
     assert tool_calls[0]["args"]["options"] == ["a", "b"]
+
+
+async def test_ask_user_case_d_crammed_dict_value_parks_structured():
+    """End-to-end for the reported live case (session b28d0dc6): a dict whose
+    `question` VALUE is a crammed array must park with the 3 real clarify questions —
+    one clickable tool_call each, options intact — instead of a single raw-JSON title."""
+    captured = MagicMock(return_value="ok")
+    questions = [{"question": _LIVE_CRAMMED_IN_DICT_VALUE, "options": [], "multiple": False}]
+    with patch.object(agent_factory, "interrupt", captured):
+        await ask_user.ainvoke({"reason": '请求"skill test"非常模糊，请先确认以下问题：', "questions": questions})
+
+    captured.assert_called_once()
+    tool_calls = captured.call_args.args[0]["params"]["tool_calls"]
+    assert len(tool_calls) == 3
+    assert all(tc["name"] == "clarify" for tc in tool_calls)
+    assert tool_calls[0]["args"]["question"] == '你想要的"skill test"是指什么？'
+    assert len(tool_calls[0]["args"]["options"]) == 4
+    assert tool_calls[2]["args"]["multiple"] is True
 
 
 # --- ② _salvage_options_only pure-function behavior -------------------------
