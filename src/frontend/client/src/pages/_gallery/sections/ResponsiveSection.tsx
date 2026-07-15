@@ -25,6 +25,7 @@ export function ResponsiveSection() {
         <>一套组件一条代码路径：不引入 antd-mobile、不做第二套移动端组件，适配全走 CSS 规则与既有 hooks。</>,
         <>控件字号不随正文抬升（移动端 14→16 只作用于阅读文本）；唯一例外：输入框 ≥16px。</>,
       ]}
+      bodyTitle={null}
     >
       <ExampleGroup title="① 两种判定口径（先分清，别混用）">
         <CompareTable

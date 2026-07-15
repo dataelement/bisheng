@@ -23,6 +23,7 @@ export function ComponentPage({
   eng,
   description,
   whenToUse,
+  bodyTitle,
   children,
 }: {
   title: string;
@@ -30,10 +31,12 @@ export function ComponentPage({
   description?: ReactNode;
   /** 何时使用 / 使用规则 — rendered as a bordered bullet list, antd-style. */
   whenToUse?: ReactNode[];
+  /** Heading above the body. Defaults to 代码演示; pass null to omit (overview-style pages). */
+  bodyTitle?: string | null;
   children: ReactNode;
 }) {
   return (
-    <article className="mx-auto max-w-4xl px-8 py-10">
+    <article className="p-8">
       <header className="mb-8">
         <h1 className="flex items-baseline gap-3 text-h1 text-text-primary">
           {title}
@@ -59,7 +62,9 @@ export function ComponentPage({
       )}
 
       <section>
-        <h2 className="mb-4 text-h3 text-text-primary">代码演示 / 状态</h2>
+        {bodyTitle !== null && (
+          <h2 className="mb-4 text-h3 text-text-primary">{bodyTitle ?? '代码演示'}</h2>
+        )}
         {children}
       </section>
     </article>

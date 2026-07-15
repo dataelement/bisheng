@@ -82,7 +82,7 @@ export function TypographySection() {
     >
       <ExampleGroup
         title="字体栈 Font Family"
-        subtitle="纯系统字体栈，零加载成本：Mac/iOS 命中 SF + 苹方，Windows 命中 Segoe UI + 微软雅黑，Android 命中 Roboto + 思源黑体。两步法第①步已切栈，旧字体文件（Inter / 阿里普惠体 / Roboto Mono）保留待回归后删除。"
+        subtitle="纯系统字体栈，零加载成本：Mac/iOS 命中 SF + 苹方，Windows 命中 Segoe UI + 微软雅黑，Android 命中 Roboto + 思源黑体。"
       >
         <CompareTable
           head={['Token / 类名', '实时示例 + 完整字体栈', '用途']}
@@ -149,21 +149,6 @@ export function TypographySection() {
         />
       </ExampleGroup>
 
-      {/* Quick reference for migration */}
-      <ExampleGroup title="迁移速查" subtitle="随组件改造逐步替换，本次不批量改">
-      <CompareTable
-        head={['旧写法（Tailwind 默认档）', '新语义类', '差异']}
-        rows={[
-          ['text-xs (12/16)', 'text-caption (12/20)', '行高 16→20'],
-          ['text-sm (14/20)', 'text-body (14/22)', '行高 20→22，规范化 lh = size + 8'],
-          ['text-base (16/24)', 'text-h4 (16/24, 500) 或正文场景 text-body', '按语义选择'],
-          ['text-lg (18/28)', 'text-h3 (18/26, 500)', '行高 28→26，自带 500 字重'],
-          ['text-xl (20/28)', 'text-h2 (20/28, 500)', '自带 500 字重'],
-          ['text-2xl (24/32)', 'text-h1 (24/32, 500)', '自带 500 字重'],
-          ['font-bold / font-semibold (157 处)', 'font-medium', '独立迁移，非本次范围'],
-        ]}
-      />
-      </ExampleGroup>
     </ComponentPage>
   );
 }
