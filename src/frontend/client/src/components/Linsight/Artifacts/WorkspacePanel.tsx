@@ -119,7 +119,7 @@ export function WorkspacePanel({
                     </div>
                     {/* preview body — scrollbar-os: respect OS scrollbar setting */}
                     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os">
-                        <PreviewBody file={previewFile} versionId={versionId} />
+                        <PreviewBody file={previewFile} versionId={versionId} fileList={files} />
                     </div>
                 </>
             ) : (

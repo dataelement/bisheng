@@ -122,6 +122,84 @@ export async function resolveArtifactUrl(fileUrl: string, versionId: string): Pr
     return `${__APP_ENV__.BASE_URL}${res.data.file_path}`;
 }
 
+function decodeSafe(s: string): string {
+    try {
+        return decodeURIComponent(s);
+    } catch {
+        return s;
+    }
+}
+
+/**
+ * An image `src` that is already directly loadable and needs no workspace
+ * resolution: absolute http(s), protocol-relative, data:/blob:, or root-relative.
+ * Only bare relative refs (`charts/x.png`) go through matchArtifactByRelPath.
+ */
+export function isAbsoluteImageSrc(src: string): boolean {
+    return /^(https?:)?\/\//i.test(src) || /^(data|blob):/i.test(src) || src.startsWith('/');
+}
+
+/**
+ * Match a relative image reference — as authored inside a markdown deliverable,
+ * e.g. `charts/ch1_brazil.png` — against the session's artifact file list.
+ *
+ * Deliverable images are written under `output/<...>` in the workspace and
+ * surfaced in file_list with a bare `file_name` plus a `file_path` that preserves
+ * the relative dir (worker-local `.../output/charts/ch1_brazil.png`). We match on
+ * the path suffix first (disambiguates same-name files in different dirs) and fall
+ * back to basename. Returns the matching entry (whose `file_url` resolves to a
+ * presigned URL) or undefined when nothing matches.
+ */
+export function matchArtifactByRelPath(
+    fileList: ArtifactFile[] | undefined,
+    relPath: string,
+): ArtifactFile | undefined {
+    if (!relPath || !fileList?.length) return undefined;
+    const norm = (s: string) => decodeSafe(s).replace(/\\/g, '/').replace(/^\.?\//, '');
+    const target = norm(relPath);
+    const targetNoOutput = target.replace(/^output\//, '');
+    const base = target.split('/').pop() as string;
+    // 1) path-suffix match on file_path (most precise — survives same basename).
+    const bySuffix = fileList.find((f) => {
+        if (!f.file_path) return false;
+        const p = norm(f.file_path);
+        return (
+            p === target ||
+            p.endsWith('/' + target) ||
+            p.endsWith('/' + targetNoOutput) ||
+            p.endsWith('/output/' + targetNoOutput)
+        );
+    });
+    if (bySuffix) return bySuffix;
+    // 2) basename match on file_name (bare filename, no dir).
+    return fileList.find((f) => norm(f.file_name) === base);
+}
+
+/**
+ * Remove empty raw-HTML block placeholders (e.g. the styled `<div ...></div>`
+ * comment/figure boxes some report templates emit) from a markdown deliverable
+ * BEFORE preview.
+ *
+ * The client markdown pipeline deliberately does not enable rehype-raw (XSS
+ * guard, see rehypeBr.ts), so raw HTML renders as escaped literal text. An empty
+ * styled box is pure layout scaffolding meant for the derived HTML/PDF — in the
+ * markdown preview it just leaks as an ugly `<div style=...></div>` string.
+ * Stripping only *empty* paired block tags removes that noise with zero content
+ * loss (content-bearing HTML is left untouched). Preview-only: the stored .md
+ * keeps the tags so the HTML/PDF derivation is unaffected.
+ */
+export function stripEmptyHtmlPlaceholders(md: string): string {
+    if (!md) return md;
+    // Loop to collapse simple nesting (`<div><div></div></div>`).
+    let out = md;
+    let prev: string;
+    do {
+        prev = out;
+        out = out.replace(/<(div|section|p|span|figure)\b[^>]*>\s*<\/\1>/gi, '');
+    } while (out !== prev);
+    return out;
+}
+
 /**
  * Open an HTML artifact in the standalone sandboxed viewer tab (`/html`).
  *

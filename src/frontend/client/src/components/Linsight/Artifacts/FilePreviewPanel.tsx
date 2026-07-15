@@ -20,11 +20,14 @@ interface FilePreviewPanelProps {
     onOpenChange: (open: boolean) => void;
     file: ArtifactFile | null;
     versionId: string;
+    /** Full session artifact list — lets the markdown preview resolve relative
+     *  image refs (`![](charts/x.png)`) against real workspace objects. */
+    fileList?: ArtifactFile[];
     /** present when the preview was opened from the workspace drawer */
     onBack?: () => void;
 }
 
-export function FilePreviewPanel({ open, onOpenChange, file, versionId, onBack }: FilePreviewPanelProps) {
+export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList, onBack }: FilePreviewPanelProps) {
     const localize = useLocalize();
 
     if (!file) return null;
@@ -65,7 +68,7 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, onBack }
                 {/* scrollbar-os: opt out of the forced custom webkit scrollbar so the
                     OS setting (auto-hide vs always-on) is respected (see style.css). */}
                 <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os">
-                    <PreviewBody file={file} versionId={versionId} />
+                    <PreviewBody file={file} versionId={versionId} fileList={fileList} />
                 </div>
             </SheetContent>
         </Sheet>

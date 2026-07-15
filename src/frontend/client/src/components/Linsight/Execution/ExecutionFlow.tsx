@@ -298,6 +298,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 onOpenChange={(open) => !open && artifactsPanel.closePreview()}
                 file={artifactsPanel.previewFile}
                 versionId={versionId}
+                fileList={workspaceFiles}
                 onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
             />
         </div>
