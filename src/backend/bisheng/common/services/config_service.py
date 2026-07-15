@@ -9,7 +9,7 @@ from bisheng.common.repositories.implementations.config_repository_impl import C
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
     WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf, \
-    DailyChatConf, ShougangConf, CofcoForwardingConf
+    DailyChatConf, ShougangConf, CofcoForwardingConf, ShougangWeChatMessagePushConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -289,6 +289,19 @@ class ConfigService(Settings):
                     'Invalid cofco forwarding config in DB: %s; falling back to YAML', exc,
                 )
         return self.in_app_message_forwarding.cofco
+
+    def get_shougang_wechat_message_push_conf(self) -> ShougangWeChatMessagePushConf:
+        """Hot-reload Shougang WeChat message push config from DB; fall back to YAML boot value."""
+        all_config = self.get_all_config()
+        db_block = (all_config.get('in_app_message_forwarding') or {}).get('shougang_wechat') or {}
+        if db_block:
+            try:
+                return ShougangWeChatMessagePushConf.model_validate(db_block)
+            except Exception as exc:
+                logger.warning(
+                    'Invalid shougang_wechat message push config in DB: %s; falling back to YAML', exc,
+                )
+        return self.in_app_message_forwarding.shougang_wechat
 
     async def aget_from_db(self, key: str):
         # Get all of them firstkey

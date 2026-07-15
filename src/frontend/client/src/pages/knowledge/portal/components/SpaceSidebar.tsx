@@ -106,8 +106,10 @@ function SpaceMenu({
     onDeleteSpace: (space: KnowledgeSpace) => void;
     onLeaveSpace: (space: KnowledgeSpace) => void;
 }) {
-    // 『我的收藏』为系统库：保留置顶，隐藏 空间设置/成员管理/删除 等操作
+    // 『我的收藏』为系统库：隐藏 空间设置/成员管理/删除 等操作。
+    // 所有个人知识库均不支持置顶。
     const isFavorite = isFavoriteSpace(space);
+    const canPin = group.level !== SpaceLevel.PERSONAL;
     const showDangerAction = (permissions.canDeleteSpace || Boolean(space.canUnsubscribe)) && !isFavorite;
     return (
         <DropdownMenu onOpenChange={onOpenChange}>
@@ -141,22 +143,24 @@ function SpaceMenu({
                         <span className={sidebarListMoreMenuLabelClassName}>成员管理</span>
                     </DropdownMenuItem>
                 ) : null}
-                <DropdownMenuItem
-                    className={sidebarListMoreMenuItemClassName}
-                    onClick={() => onPinSpace(space, !space.isPinned, group)}
-                >
-                    {space.isPinned ? (
-                        <>
-                            <PinOff className={sidebarListMoreMenuIconClassName} />
-                            <span className={sidebarListMoreMenuLabelClassName}>取消置顶</span>
-                        </>
-                    ) : (
-                        <>
-                            <Pin className={sidebarListMoreMenuIconClassName} />
-                            <span className={sidebarListMoreMenuLabelClassName}>置顶空间</span>
-                        </>
-                    )}
-                </DropdownMenuItem>
+                {canPin ? (
+                    <DropdownMenuItem
+                        className={sidebarListMoreMenuItemClassName}
+                        onClick={() => onPinSpace(space, !space.isPinned, group)}
+                    >
+                        {space.isPinned ? (
+                            <>
+                                <PinOff className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>取消置顶</span>
+                            </>
+                        ) : (
+                            <>
+                                <Pin className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>置顶空间</span>
+                            </>
+                        )}
+                    </DropdownMenuItem>
+                ) : null}
                 {showDangerAction ? (
                     <>
                         <SidebarListMoreMenuDivider />
@@ -390,21 +394,30 @@ export function SpaceSidebar({
                                                         >
                                                             <KnowledgeSpaceIcon className={s.spaceIcon} aria-hidden="true" data-testid={`space-row-icon-${space.id}`} />
                                                             <span className={s.spaceName} title={space.name}>{space.name}</span>
+                                                            {space.isPinned && group.level !== SpaceLevel.PERSONAL ? (
+                                                                <Pin
+                                                                    className={s.spacePinIcon}
+                                                                    aria-hidden="true"
+                                                                    data-testid={`space-pin-icon-${space.id}`}
+                                                                />
+                                                            ) : null}
                                                         </button>
-                                                        <div className={s.spaceMenuArea}>
-                                                            <SpaceMenu
-                                                                space={space}
-                                                                group={group}
-                                                                open={spaceMenuOpenId === space.id}
-                                                                permissions={getSpacePermissions(space)}
-                                                                onOpenChange={(open) => onSpaceMenuOpenChange(space.id, open)}
-                                                                onOpenSpaceSettings={onOpenSpaceSettings}
-                                                                onOpenSpaceMembers={onOpenSpaceMembers}
-                                                                onPinSpace={onPinSpace}
-                                                                onDeleteSpace={onDeleteSpace}
-                                                                onLeaveSpace={onLeaveSpace}
-                                                            />
-                                                        </div>
+                                                        {!isFavoriteSpace(space) ? (
+                                                            <div className={s.spaceMenuArea}>
+                                                                <SpaceMenu
+                                                                    space={space}
+                                                                    group={group}
+                                                                    open={spaceMenuOpenId === space.id}
+                                                                    permissions={getSpacePermissions(space)}
+                                                                    onOpenChange={(open) => onSpaceMenuOpenChange(space.id, open)}
+                                                                    onOpenSpaceSettings={onOpenSpaceSettings}
+                                                                    onOpenSpaceMembers={onOpenSpaceMembers}
+                                                                    onPinSpace={onPinSpace}
+                                                                    onDeleteSpace={onDeleteSpace}
+                                                                    onLeaveSpace={onLeaveSpace}
+                                                                />
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                 ))
                                             ) : (

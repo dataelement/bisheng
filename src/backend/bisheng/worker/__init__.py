@@ -1,5 +1,9 @@
 # register tasks
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
+from bisheng.worker.approval.notification_tasks import (
+    consume_approval_notification,
+    dispatch_approval_notifications,
+)
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.knowledge.file_worker import file_copy_celery, parse_knowledge_file_celery, \
@@ -11,6 +15,7 @@ from bisheng.worker.knowledge.space_init_worker import (
     init_knowledge_space_indices,
 )
 from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
+from bisheng.worker.message.tasks import push_single_wecom_message, scan_wecom_message_push_outbox
 from bisheng.worker.org_sync.reconcile_tasks import (
     reconcile_all_organizations,
     report_ts_conflicts_daily_escalation,

@@ -50,44 +50,16 @@ class ReviewTagNotificationService:
             async with get_async_db_session() as session:
                 message_service = await get_message_service(session)
                 for target in submitter_targets:
-                    space_id = target.knowledge_space_id or fallback_knowledge_id
-                    file_id = target.file_id
-                    if file_id is not None and space_id is not None:
-                        notify_metadata = {
-                            "data": {
-                                "knowledge_space_id": str(space_id),
-                                "file_id": str(file_id),
-                                "file_name": target.file_name or "",
-                                "file_type": target.file_type or "",
-                            }
-                        }
-                        business_type = "knowledge_file_id"
-                        business_id = file_id
-                        navigable = True
-                    elif space_id is not None:
-                        notify_metadata = None
-                        business_type = "knowledge_space_id"
-                        business_id = space_id
-                        navigable = True
-                    else:
-                        notify_metadata = None
-                        business_type = None
-                        business_id = None
-                        navigable = False
-
                     await message_service.send_generic_notify(
                         sender=sender,
                         receiver_user_ids=[target.user_id],
                         content_item_list=build_notify_content(
                             action_code=action_code,
                             target_name=target_name,
-                            business_type=business_type,
-                            business_id=business_id,
                             actor_user_id=sender,
                             actor_user_name=sender_user_name,
                             reason=reject_reason if status == ApproveOrRejectEnum.REJECT else None,
-                            navigable=navigable,
-                            metadata=notify_metadata,
+                            navigable=False,
                         ),
                         action_code=action_code,
                     )

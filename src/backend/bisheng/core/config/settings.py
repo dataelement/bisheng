@@ -155,6 +155,7 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},
                 # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
                 "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
+                "bisheng.worker.message.*": {"queue": "knowledge_celery"},  # WeChat message push tasks
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
@@ -226,6 +227,11 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples',
                 'schedule': 30.0,  # Every 30 seconds
             }
+        if 'dispatch_approval_notifications' not in self.beat_schedule:
+            self.beat_schedule['dispatch_approval_notifications'] = {
+                'task': 'bisheng.worker.approval.notification_tasks.dispatch_approval_notifications',
+                'schedule': 30.0,
+            }
         if 'check_org_sync_schedules' not in self.beat_schedule:
             self.beat_schedule['check_org_sync_schedules'] = {
                 'task': 'bisheng.worker.org_sync.tasks.check_org_sync_schedules',
@@ -267,6 +273,13 @@ class CeleryConf(BaseModel):
             self.beat_schedule['sync_information_article_hourly'] = {
                 'task': 'bisheng.worker.information.article.sync_information_article',
                 'schedule': crontab.from_string('*/30 * * * *'),  # exec Every half hour
+            }
+        
+        # v2.6.0 F057: scan wechat message push outbox every 30 seconds.
+        if 'scan_wechat_message_push_outbox' not in self.beat_schedule:
+            self.beat_schedule['scan_wechat_message_push_outbox'] = {
+                'task': 'bisheng.worker.message.tasks.scan_wechat_message_push_outbox',
+                'schedule': 30.0,  # Every 30 seconds
             }
 
         # convert str to crontab
@@ -514,10 +527,56 @@ class CofcoForwardingConf(BaseModel):
     )
 
 
+class ShougangWeChatMessagePushTemplateConf(BaseModel):
+    """Message templates for Shougang enterprise WeChat push."""
+
+    qa_expert_invited: str = Field(
+        default="{applicant} 邀请你回答问题「{resource}」\n{preview}",
+        description="Template for qa_expert_invited notifications",
+    )
+    qa_expert_answered: str = Field(
+        default="{applicant} 回答了问题「{resource}」\n{preview}",
+        description="Template for qa_expert_answered notifications",
+    )
+    qa_answer_commented: str = Field(
+        default="{applicant} 评论了回答「{resource}」\n{preview}",
+        description="Template for qa_answer_commented notifications",
+    )
+    qa_answer_accepted: str = Field(
+        default="你的回答「{resource}」被 {applicant} 采纳\n{preview}",
+        description="Template for qa_answer_accepted notifications",
+    )
+
+
+class ShougangWeChatMessagePushConf(BaseModel):
+    """Shougang enterprise WeChat message push configuration."""
+
+    enabled: bool = Field(default=False, description="Master switch for WeChat message push")
+    api_url: str = Field(
+        default="https://mobms.sggf.com.cn:30201/madp-app/madp/qywxPush-api/pushMessage",
+        description="Shougang MADC qywxPush API endpoint",
+    )
+    id: str = Field(default="", description="Enterprise ID")
+    agentid: str = Field(default="1000053", description="Enterprise WeChat app ID")
+    key: str = Field(default="", description="Enterprise WeChat app secret")
+    sys_id: str = Field(default="1", description="Business system ID")
+    msg_type: str = Field(default="text", description="Message type")
+    timeout_seconds: float = Field(default=10.0, description="HTTP timeout in seconds")
+    max_retries: int = Field(default=3, description="Maximum retry attempts")
+    batch_size: int = Field(default=100, description="Max outbox records per scan")
+    scan_interval_seconds: float = Field(default=30.0, description="Beat scan interval in seconds")
+    retry_base_seconds: int = Field(default=60, description="Base retry backoff in seconds")
+    retry_max_seconds: int = Field(default=3600, description="Max retry backoff in seconds")
+    templates: ShougangWeChatMessagePushTemplateConf = Field(
+        default_factory=ShougangWeChatMessagePushTemplateConf,
+        description="Message templates by action_code",
+    )
+
+
 class InAppMessageForwardingConf(BaseModel):
     """Top-level forwarding config; one sub-block per external system."""
     cofco: CofcoForwardingConf = CofcoForwardingConf()
-    # Future: shougang / longhua etc. as parallel fields
+    shougang_wechat: ShougangWeChatMessagePushConf = ShougangWeChatMessagePushConf()
 
 
 class DatabasePoolConf(BaseModel):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from time import perf_counter
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -52,6 +54,8 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 )
 from bisheng.tenant.domain.services.tenant_service import TenantService
 
+logger = logging.getLogger(__name__)
+
 
 class ShougangApprovalService:
     _FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
@@ -74,9 +78,11 @@ class ShougangApprovalService:
         *,
         approval_gate: ApprovalGate | Any | None = None,
         message_service: Any | None = None,
+        notification_service: Any | None = None,
     ) -> None:
         self.approval_gate = approval_gate or self._build_gate()
         self.message_service = message_service
+        self.notification_service = notification_service
 
     @staticmethod
     def _build_gate() -> ApprovalGate:
@@ -612,6 +618,63 @@ class ShougangApprovalService:
         space_service=None,
         version_service=None,
     ) -> dict:
+        started_at = perf_counter()
+        performance: dict[str, float | str] = {
+            'base_validation_ms': 0.0,
+            'target_validation_ms': 0.0,
+            'approval_create_ms': 0.0,
+            'notification_enqueue_ms': 0.0,
+            'failed_stage': 'base_validation',
+        }
+        try:
+            data = await self._submit_file_publish_impl(
+                req=req,
+                login_user=login_user,
+                space_service=space_service,
+                version_service=version_service,
+                performance=performance,
+            )
+        except Exception:
+            logger.exception(
+                'file_publish_submit_perf status=failed failed_stage=%s '
+                'source_file_id=%s target_space_id=%s base_validation_ms=%.2f '
+                'target_validation_ms=%.2f approval_create_ms=%.2f '
+                'notification_enqueue_ms=%.2f total_ms=%.2f',
+                performance['failed_stage'],
+                req.source_file_id,
+                req.target_space_id,
+                performance['base_validation_ms'],
+                performance['target_validation_ms'],
+                performance['approval_create_ms'],
+                performance['notification_enqueue_ms'],
+                (perf_counter() - started_at) * 1000,
+            )
+            raise
+        logger.info(
+            'file_publish_submit_perf status=success source_file_id=%s target_space_id=%s '
+            'instance_id=%s base_validation_ms=%.2f target_validation_ms=%.2f '
+            'approval_create_ms=%.2f notification_enqueue_ms=%.2f total_ms=%.2f',
+            req.source_file_id,
+            req.target_space_id,
+            data.get('instance_id'),
+            performance['base_validation_ms'],
+            performance['target_validation_ms'],
+            performance['approval_create_ms'],
+            performance['notification_enqueue_ms'],
+            (perf_counter() - started_at) * 1000,
+        )
+        return data
+
+    async def _submit_file_publish_impl(
+        self,
+        *,
+        req: ShougangFilePublishSubmitReq,
+        login_user,
+        space_service=None,
+        version_service=None,
+        performance: dict[str, float | str],
+    ) -> dict:
+        stage_started_at = perf_counter()
         source_space, source_file, source_level = await self._load_publish_source(
             req.source_space_id,
             req.source_file_id,
@@ -639,7 +702,10 @@ class ShougangApprovalService:
             space_service=space_service,
         )
         target_folder_payload = self._target_folder_payload(target_folder)
+        performance['base_validation_ms'] = (perf_counter() - stage_started_at) * 1000
 
+        performance['failed_stage'] = 'target_validation'
+        stage_started_at = perf_counter()
         target_document_title = None
         if req.target_document_id and req.target_file_id:
             raise HTTPException(status_code=400, detail='目标文档和目标文件不能同时选择')
@@ -648,45 +714,19 @@ class ShougangApprovalService:
                 raise HTTPException(status_code=400, detail='目标文档校验服务不可用')
             if hasattr(version_service, '_require_version_management_enabled'):
                 await version_service._require_version_management_enabled()
-            can_view_file = self._build_file_publish_candidate_permission_checker(
-                space_service=space_service,
-                target_space_id=req.target_space_id,
+            matched_document = await version_service.get_shougang_publish_version_target(
+                knowledge_id=req.target_space_id,
+                current_file_id=req.source_file_id,
+                target_document_id=req.target_document_id,
+                target_file_id=req.target_file_id,
             )
-            if hasattr(version_service, 'search_shougang_publish_version_sources'):
-                documents = await version_service.search_shougang_publish_version_sources(
-                    req.target_space_id,
-                    '',
-                    req.source_file_id,
-                    can_view_file=can_view_file,
-                )
-            else:
-                documents = await version_service.search_version_sources(
-                    req.target_space_id,
-                    '',
-                    req.source_file_id,
-                )
-            if req.target_document_id:
-                matched_document = next(
-                    (
-                        document
-                        for document in documents
-                        if getattr(document, 'document_id', None) == req.target_document_id
-                    ),
-                    None,
-                )
-            else:
-                matched_document = next(
-                    (
-                        document
-                        for document in documents
-                        if getattr(document, 'target_file_id', None) == req.target_file_id
-                    ),
-                    None,
-                )
             if matched_document is None:
                 raise HTTPException(status_code=400, detail='目标文档不可用于发布')
             target_document_title = matched_document.title
+        performance['target_validation_ms'] = (perf_counter() - stage_started_at) * 1000
 
+        performance['failed_stage'] = 'approval_create'
+        stage_started_at = perf_counter()
         applicant_department_id = await self._get_primary_department_id(login_user)
         file_name = getattr(source_file, 'file_name', None) or getattr(source_file, 'name', None) or str(source_file.id)
         approval_req = ApprovalGateRequest(
@@ -728,12 +768,27 @@ class ShougangApprovalService:
             scenario_name='知识空间文件发布审批',
             handler=KnowledgeSpaceFilePublishApprovalHandler(),
         )
-        await self._send_approval_message(
-            login_user=login_user,
-            result=result,
-            business_name=f"发布文件：{file_name}",
-            action_code='request_knowledge_space_file_publish',
-        )
+        performance['approval_create_ms'] = (perf_counter() - stage_started_at) * 1000
+
+        performance['failed_stage'] = 'notification_enqueue'
+        stage_started_at = perf_counter()
+        if result.decision == ApprovalGateDecision.PENDING and getattr(result, 'task_ids', None):
+            notification_service = self.notification_service
+            if notification_service is None:
+                from bisheng.approval.domain.services.approval_notification_service import (
+                    ApprovalNotificationService,
+                )
+
+                notification_service = ApprovalNotificationService()
+            await notification_service.enqueue_file_publish(
+                tenant_id=login_user.tenant_id,
+                instance_id=result.instance_id,
+                task_ids=result.task_ids,
+                applicant_user_id=login_user.user_id,
+                applicant_user_name=login_user.user_name,
+                business_name=f"发布文件：{file_name}",
+            )
+        performance['notification_enqueue_ms'] = (perf_counter() - stage_started_at) * 1000
         data = self._gate_result_to_dict(result)
         data['created'] = False
         return data

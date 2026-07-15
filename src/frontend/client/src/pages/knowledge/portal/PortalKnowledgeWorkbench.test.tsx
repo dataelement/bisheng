@@ -1312,7 +1312,10 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(personalRow).getByRole("button", { name: "更多我的技术文档操作" }));
 
         expect(within(personalRow).queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
+        expect(within(personalRow).queryByRole("button", { name: "置顶空间" })).not.toBeInTheDocument();
+        expect(within(personalRow).queryByRole("button", { name: "取消置顶" })).not.toBeInTheDocument();
         expect(within(personalRow).getByRole("button", { name: "空间设置" })).toBeInTheDocument();
+        expect(pinSpaceApi).not.toHaveBeenCalled();
         expect(within(personalRow).getByRole("button", { name: "删除空间" })).toBeInTheDocument();
     });
 

@@ -17,6 +17,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalInstance,
     ApprovalInstanceStatus,
     ApprovalTask,
+    ApprovalTaskStatus,
 )
 from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
 from bisheng.approval.domain.models.user_menu_access import UserMenuAccess
@@ -432,13 +433,17 @@ async def test_gate_pending_when_route_hits_flow():
         list_node_definitions=AsyncMock(return_value=[node]),
     )
 
-    task_ids = iter([301, 302])
-
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 300})),
         create_exception=AsyncMock(),
-        create_task=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": next(task_ids)})),
+        create_task=AsyncMock(),
+        create_tasks=AsyncMock(
+            side_effect=lambda rows: [
+                row.model_copy(update={"id": task_id})
+                for row, task_id in zip(rows, [301, 302], strict=True)
+            ]
+        ),
         create_action_log=AsyncMock(),
     )
     gate = ApprovalGate(
@@ -465,8 +470,110 @@ async def test_gate_pending_when_route_hits_flow():
     assert result.decision == ApprovalGateDecision.PENDING
     assert result.instance_id == 300
     assert result.task_ids == [301, 302]
-    assert instance_repository.create_task.await_count == 2
+    instance_repository.create_tasks.assert_awaited_once()
+    created_rows = instance_repository.create_tasks.await_args.args[0]
+    assert [row.approver_user_id for row in created_rows] == [1001, 1002]
+    instance_repository.create_task.assert_not_called()
     instance_repository.create_action_log.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gate_propagates_batch_task_creation_failure():
+    handler = SimpleNamespace(
+        build_detail=AsyncMock(return_value={"space_name": "研发知识空间"}),
+        build_title=AsyncMock(return_value="研发知识空间"),
+        resolve_approvers=AsyncMock(return_value=[1001, 1002]),
+    )
+    node = SimpleNamespace(
+        node_code="first_node",
+        node_name="一级审批",
+        node_order=1,
+        node_mode="or",
+        approver_config={"type": "direct"},
+    )
+    scenario_repository = SimpleNamespace(
+        get_scenario_by_code=AsyncMock(
+            return_value=SimpleNamespace(id=2, scenario_name="知识空间加入审批", enabled=True)
+        ),
+        list_route_rules=AsyncMock(return_value=[]),
+        get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=21)),
+        list_node_definitions=AsyncMock(return_value=[node]),
+    )
+    instance_repository = SimpleNamespace(
+        find_duplicate_active_instance=AsyncMock(return_value=None),
+        create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 300})),
+        create_tasks=AsyncMock(side_effect=RuntimeError("batch insert failed")),
+        create_action_log=AsyncMock(),
+    )
+    gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock(return_value=handler)),
+        scenario_repository=scenario_repository,
+        instance_repository=instance_repository,
+        route_matcher=AsyncMock(
+            return_value=SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="batch insert failed"):
+        await gate.request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=1,
+                scenario_code="knowledge_space_subscribe_request",
+                business_key="space:12:user:7",
+                business_resource_type="knowledge_space",
+                business_resource_id="12",
+                business_name="研发知识空间",
+                applicant_user_id=7,
+                applicant_user_name="alice",
+                payload_snapshot={"space_id": 12},
+            )
+        )
+
+    instance_repository.create_action_log.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_repository_create_tasks_persists_all_in_input_order(patched_approval_repositories):
+    instance = await ApprovalInstanceRepository.create_instance(
+        ApprovalInstance(
+            tenant_id=1,
+            scenario_code="knowledge_space_subscribe_request",
+            scenario_name="知识空间加入审批",
+            handler_key="knowledge_space_subscribe_request",
+            business_key="space:12:user:7",
+            business_resource_type="knowledge_space",
+            business_resource_id="12",
+            business_name="研发知识空间",
+            applicant_user_id=7,
+            applicant_user_name="alice",
+            status=ApprovalInstanceStatus.PENDING,
+            payload_snapshot={"space_id": 12},
+            detail_snapshot={"space_name": "研发知识空间"},
+        )
+    )
+    rows = [
+        ApprovalTask(
+            tenant_id=1,
+            instance_id=instance.id,
+            flow_version_id=21,
+            node_code="first_node",
+            node_name="一级审批",
+            node_order=1,
+            approver_user_id=approver_user_id,
+            approver_source_type="resolved",
+            node_mode="or",
+            status=ApprovalTaskStatus.PENDING,
+        )
+        for approver_user_id in [1002, 1001]
+    ]
+
+    saved = await ApprovalInstanceRepository.create_tasks(rows)
+    listed = await ApprovalInstanceRepository.list_tasks(instance.id)
+
+    assert [row.approver_user_id for row in saved] == [1002, 1001]
+    assert all(row.id is not None for row in saved)
+    assert [row.id for row in saved] == [row.id for row in listed]
+    assert {row.approver_user_id for row in listed} == {1001, 1002}
 
 
 @pytest.mark.asyncio

@@ -4571,6 +4571,14 @@ def service():
 def clear_portal_visible_space_cache():
     from bisheng.knowledge.domain.services import knowledge_space_service as service_module
 
+    async def apply_no_pins(spaces, _user_id):
+        for item in spaces:
+            if isinstance(item, dict):
+                item["is_pinned"] = False
+            else:
+                item.is_pinned = False
+        return spaces
+
     cache = getattr(service_module, "_PORTAL_VISIBLE_SPACE_CACHE", None)
     if cache is not None:
         cache.clear()
@@ -4582,6 +4590,16 @@ def clear_portal_visible_space_cache():
         patch.object(
             service_module.KnowledgeSpaceService,
             "_enqueue_default_scope_permissions",
+        ),
+        patch.object(
+            service_module.KnowledgeSpacePinService,
+            "apply_pins",
+            new=AsyncMock(side_effect=apply_no_pins),
+        ),
+        patch.object(
+            service_module.KnowledgeSpacePinService,
+            "delete_space_pins",
+            new=AsyncMock(return_value=0),
         ),
     ):
         yield
@@ -10088,7 +10106,7 @@ class TestFormatAccessibleSpacesCharacterization:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_pinned_membership_space_sorts_first(self, service):
+    async def test_membership_pin_no_longer_controls_space_sort_order(self, service):
         s_pinned = _make_space(space_id=10, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
         s_plain = _make_space(space_id=11, user_id=service.login_user.user_id, auth_type=AuthTypeEnum.PRIVATE)
         member = _make_member(user_id=service.login_user.user_id, user_role=UserRoleEnum.MEMBER, space_id=10)
@@ -10128,4 +10146,5 @@ class TestFormatAccessibleSpacesCharacterization:
                 memberships=[member],
                 required_permission_id="view_space",
             )
-        assert result[0].id == 10 and result[0].is_pinned is True
+        assert [item.id for item in result] == [11, 10]
+        assert all(item.is_pinned is False for item in result)

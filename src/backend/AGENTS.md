@@ -118,7 +118,7 @@ assistant, evaluation, audit, group, tag, mark, flows, skillcenter, variable, re
 | `common/schemas/api.py` | Unified response model `UnifiedResponseModel` |
 | `common/dependencies/` | FastAPI dependency injection (`UserPayload`) |
 | `database/models/` | SQLModel ORM models; each file contains Schema + DAO |
-| `worker/` | Celery async tasks |
+| `worker/` |  async tasks |
 
 ---
 

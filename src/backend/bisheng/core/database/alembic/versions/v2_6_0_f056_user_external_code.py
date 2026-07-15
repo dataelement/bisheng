@@ -1,22 +1,23 @@
-"""F056: user.external_code — manual DDL already applied.
+"""F056: add user.external_code for SG MDM / SSO matching.
 
 Revision ID: f056_user_external_code
 Revises: f055_message_citation_relation
 Create Date: 2026-07-14
 
-Background:
-  ``user.external_code`` (VARCHAR(255) NULL) and the backfill
-  ``external_code = external_id`` were applied manually via SQL on target
-  environments. This revision is a no-op marker so ``alembic upgrade head``
-  can advance without re-running DDL or data updates.
+Adds ``user.external_code`` (VARCHAR(255) NULL).
 
-  ORM model: ``bisheng.user.domain.models.user.User.external_code``.
+ORM model: ``bisheng.user.domain.models.user.User.external_code``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Union
+
+import sqlalchemy as sa
+from alembic import op
+
+from bisheng.core.database.dialect_helpers import column_exists, table_exists
 
 revision: str = "f056_user_external_code"
 down_revision: Union[str, Sequence[str], None] = "f055_message_citation_relation"
@@ -25,10 +26,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Intentional no-op: column + backfill applied manually.
-    pass
+    conn = op.get_bind()
+    if not table_exists(conn, "user"):
+        return
+
+    if not column_exists(conn, "user", "external_code"):
+        op.add_column(
+            "user",
+            sa.Column(
+                "external_code",
+                sa.String(length=255),
+                nullable=True,
+                comment="External employee code for SG MDM / SSO matching",
+            ),
+        )
 
 
 def downgrade() -> None:
-    # Intentional no-op: do not drop a manually provisioned column.
-    pass
+    conn = op.get_bind()
+    if column_exists(conn, "user", "external_code"):
+        op.drop_column("user", "external_code")

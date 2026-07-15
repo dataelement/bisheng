@@ -1,3 +1,4 @@
+import logging
 import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import ANY, AsyncMock, Mock
@@ -104,6 +105,8 @@ def _patch_file_publish_submit_dependencies(
     monkeypatch.setattr(service, "_ensure_publish_target_folder", AsyncMock(return_value=None))
     monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
     monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
+    if service.notification_service is None:
+        service.notification_service = SimpleNamespace(enqueue_file_publish=AsyncMock())
     return source_file, target_space
 
 
@@ -916,7 +919,10 @@ async def test_file_publish_submit_persists_target_folder_snapshot(monkeypatch):
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
-    service = ShougangApprovalService(approval_gate=_pending_approval_gate(118))
+    service = ShougangApprovalService(
+        approval_gate=_pending_approval_gate(118),
+        notification_service=SimpleNamespace(enqueue_file_publish=AsyncMock()),
+    )
     monkeypatch.setattr(
         service,
         "_load_publish_source",
@@ -1339,7 +1345,10 @@ async def test_file_publish_submit_rejects_invalid_target_document(monkeypatch):
             )
         ),
     )
-    version_service = SimpleNamespace(search_version_sources=AsyncMock(return_value=[]))
+    version_service = SimpleNamespace(
+        get_shougang_publish_version_target=AsyncMock(return_value=None),
+        search_shougang_publish_version_sources=AsyncMock(side_effect=AssertionError("提交复验不应调用全量搜索")),
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await service.submit_file_publish(
@@ -1355,6 +1364,14 @@ async def test_file_publish_submit_rejects_invalid_target_document(monkeypatch):
         )
 
     assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "目标文档不可用于发布"
+    version_service.get_shougang_publish_version_target.assert_awaited_once_with(
+        knowledge_id=20,
+        current_file_id=100,
+        target_document_id=999,
+        target_file_id=None,
+    )
+    version_service.search_shougang_publish_version_sources.assert_not_called()
     service.approval_gate.request_or_pass.assert_not_called()
 
 
@@ -1551,8 +1568,7 @@ async def test_file_publish_document_search_returns_cursor_page(monkeypatch):
     version_service = SimpleNamespace(
         search_shougang_publish_version_sources=AsyncMock(
             return_value=[
-                ShougangFilePublishDocumentEntry(document_id=index, title=f"文件{index}")
-                for index in range(1, 26)
+                ShougangFilePublishDocumentEntry(document_id=index, title=f"文件{index}") for index in range(1, 26)
             ]
         )
     )
@@ -1635,7 +1651,10 @@ async def test_file_publish_submit_accepts_target_file_without_document(monkeypa
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
     approval_gate = _pending_approval_gate(701)
-    service = ShougangApprovalService(approval_gate=approval_gate)
+    service = ShougangApprovalService(
+        approval_gate=approval_gate,
+        notification_service=SimpleNamespace(enqueue_file_publish=AsyncMock()),
+    )
     monkeypatch.setattr(
         service,
         "_load_publish_source",
@@ -1661,18 +1680,19 @@ async def test_file_publish_submit_accepts_target_file_without_document(monkeypa
     )
     monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
     monkeypatch.setattr(service, "_send_approval_message", AsyncMock(return_value=None))
+    permission_checker = Mock(side_effect=AssertionError("提交复验不应构造 view_file 检查器"))
+    monkeypatch.setattr(service, "_build_file_publish_candidate_permission_checker", permission_checker)
     version_service = SimpleNamespace(
         _require_version_management_enabled=AsyncMock(return_value=None),
-        search_shougang_publish_version_sources=AsyncMock(
-            return_value=[
-                ShougangFilePublishDocumentEntry(
-                    document_id=None,
-                    target_file_id=300,
-                    title="桃新品种经济效益分析.pdf",
-                    current_primary_version_no=1,
-                )
-            ]
+        get_shougang_publish_version_target=AsyncMock(
+            return_value=ShougangFilePublishDocumentEntry(
+                document_id=None,
+                target_file_id=300,
+                title="桃新品种经济效益分析.pdf",
+                current_primary_version_no=1,
+            )
         ),
+        search_shougang_publish_version_sources=AsyncMock(side_effect=AssertionError("提交复验不应调用全量搜索")),
     )
 
     await service.submit_file_publish(
@@ -1691,6 +1711,125 @@ async def test_file_publish_submit_accepts_target_file_without_document(monkeypa
     assert approval_req.payload_snapshot["target_document_id"] is None
     assert approval_req.payload_snapshot["target_file_id"] == 300
     assert approval_req.payload_snapshot["target_document_title"] == "桃新品种经济效益分析.pdf"
+    version_service.get_shougang_publish_version_target.assert_awaited_once_with(
+        knowledge_id=20,
+        current_file_id=100,
+        target_document_id=None,
+        target_file_id=300,
+    )
+    version_service.search_shougang_publish_version_sources.assert_not_called()
+    permission_checker.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_enqueues_notification_and_logs_performance(monkeypatch, caplog):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+
+    notification_service = SimpleNamespace(enqueue_file_publish=AsyncMock())
+    service = ShougangApprovalService(
+        approval_gate=_pending_approval_gate(702),
+        notification_service=notification_service,
+    )
+    _patch_file_publish_submit_dependencies(monkeypatch, service)
+    synchronous_message = AsyncMock(side_effect=AssertionError("发布申请不应同步发送站内信"))
+    monkeypatch.setattr(service, "_send_approval_message", synchronous_message)
+
+    with caplog.at_level(logging.INFO):
+        result = await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(
+                source_space_id=10,
+                source_file_id=100,
+                target_space_id=20,
+                reason="发布到公共空间",
+            ),
+            login_user=_login_user(),
+        )
+
+    assert result == {
+        "decision": "pending",
+        "instance_id": 702,
+        "task_ids": [802],
+        "created": False,
+    }
+    notification_service.enqueue_file_publish.assert_awaited_once_with(
+        tenant_id=1,
+        instance_id=702,
+        task_ids=[802],
+        applicant_user_id=11,
+        applicant_user_name="申请人",
+        business_name="发布文件：制度.pdf",
+    )
+    synchronous_message.assert_not_called()
+    performance_log = next(record.message for record in caplog.records if "file_publish_submit_perf" in record.message)
+    assert "status=success" in performance_log
+    assert "base_validation_ms=" in performance_log
+    assert "target_validation_ms=" in performance_log
+    assert "approval_create_ms=" in performance_log
+    assert "notification_enqueue_ms=" in performance_log
+    assert "total_ms=" in performance_log
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_pass_does_not_enqueue_notification(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+
+    gate = SimpleNamespace(
+        request_or_pass=AsyncMock(
+            return_value=SimpleNamespace(
+                decision=ApprovalGateDecision.PASS,
+                instance_id=703,
+                task_ids=[],
+                model_dump=lambda: {"decision": "pass", "instance_id": 703, "task_ids": []},
+            )
+        )
+    )
+    notification_service = SimpleNamespace(enqueue_file_publish=AsyncMock())
+    service = ShougangApprovalService(approval_gate=gate, notification_service=notification_service)
+    _patch_file_publish_submit_dependencies(monkeypatch, service)
+
+    await service.submit_file_publish(
+        req=ShougangFilePublishSubmitReq(
+            source_space_id=10,
+            source_file_id=100,
+            target_space_id=20,
+        ),
+        login_user=_login_user(),
+    )
+
+    notification_service.enqueue_file_publish.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_failure_logs_stage_and_propagates(monkeypatch, caplog):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+
+    service = ShougangApprovalService(
+        approval_gate=SimpleNamespace(request_or_pass=AsyncMock()),
+        notification_service=SimpleNamespace(enqueue_file_publish=AsyncMock()),
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(side_effect=RuntimeError("source database unavailable")),
+    )
+
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError, match="source database unavailable"):
+        await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(
+                source_space_id=10,
+                source_file_id=100,
+                target_space_id=20,
+            ),
+            login_user=_login_user(),
+        )
+
+    performance_log = next(record.message for record in caplog.records if "file_publish_submit_perf" in record.message)
+    assert "status=failed" in performance_log
+    assert "failed_stage=base_validation" in performance_log
+    assert "total_ms=" in performance_log
 
 
 @pytest.mark.asyncio

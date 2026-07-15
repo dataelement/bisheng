@@ -81,14 +81,9 @@ async def test_notify_after_decision_uses_file_metadata_when_available():
             fallback_knowledge_id=214,
         )
 
-    business_url = next(
-        item for item in send_notify.await_args.kwargs["content_item_list"] if item["type"] == "business_url"
-    )
-    assert business_url["metadata"]["business_type"] == "knowledge_file_id"
-    assert business_url["metadata"]["data"]["file_id"] == "501"
-    assert business_url["metadata"]["data"]["knowledge_space_id"] == "214"
-    assert business_url["metadata"]["data"]["file_name"] == "report.pdf"
-    assert business_url["metadata"]["data"]["file_type"] == "pdf"
+    business_url = next(item for item in send_notify.await_args.kwargs["content_item_list"] if item["type"] == "target")
+    assert business_url["content"] == "「测试哈哈哈」"
+    assert "business_type" not in (business_url.get("metadata") or {})
 
 
 @pytest.mark.asyncio
@@ -128,8 +123,8 @@ async def test_notify_after_decision_includes_reject_reason():
     tooltip_parts = [item for item in kwargs["content_item_list"] if item.get("type") == "tooltip_text"]
     assert tooltip_parts
     assert "重复" in tooltip_parts[0]["content"]
-    business_url = next(item for item in kwargs["content_item_list"] if item["type"] == "business_url")
-    assert business_url["metadata"]["business_type"] == "knowledge_file_id"
+    target_part = next(item for item in kwargs["content_item_list"] if item["type"] == "target")
+    assert target_part["content"] == "「重复标签」"
 
 
 @pytest.mark.asyncio

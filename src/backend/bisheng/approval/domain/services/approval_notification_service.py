@@ -1,7 +1,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
+from bisheng.approval.domain.models.approval_notification_outbox import (
+    ApprovalNotificationEventType,
+    ApprovalNotificationOutbox,
+    ApprovalNotificationOutboxStatus,
+)
+from bisheng.approval.domain.repositories.approval_instance_repository import (
+    ApprovalInstanceRepository,
+)
+from bisheng.approval.domain.repositories.approval_notification_outbox_repository import (
+    ApprovalNotificationOutboxRepository,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.message.domain.services.notification_content import build_notify_content
 
@@ -10,6 +22,137 @@ logger = logging.getLogger(__name__)
 
 class ApprovalNotificationService:
     """Station-message helpers for approval-center events."""
+
+    def __init__(
+        self,
+        *,
+        outbox_repository=ApprovalNotificationOutboxRepository,
+        instance_repository=ApprovalInstanceRepository,
+        message_service=None,
+        dispatcher: Callable[[int, int], None] | None = None,
+    ) -> None:
+        self.outbox_repository = outbox_repository
+        self.instance_repository = instance_repository
+        self.message_service = message_service
+        self.dispatcher = dispatcher or self._dispatch_file_publish_notification
+
+    async def enqueue_file_publish(
+        self,
+        *,
+        tenant_id: int,
+        instance_id: int,
+        task_ids: list[int],
+        applicant_user_id: int,
+        applicant_user_name: str,
+        business_name: str,
+    ) -> ApprovalNotificationOutbox:
+        action_code = "request_knowledge_space_file_publish"
+        outbox = await self.outbox_repository.create_or_get(
+            ApprovalNotificationOutbox(
+                tenant_id=tenant_id,
+                instance_id=instance_id,
+                event_type=ApprovalNotificationEventType.FILE_PUBLISH_SUBMITTED,
+                payload_snapshot={
+                    "task_ids": task_ids,
+                    "applicant_user_id": applicant_user_id,
+                    "applicant_user_name": applicant_user_name,
+                    "action_code": action_code,
+                    "business_type": "approval_instance_id",
+                    "business_id": str(instance_id),
+                    "business_name": business_name,
+                    "button_action_code": action_code,
+                },
+            )
+        )
+        if outbox.status == ApprovalNotificationOutboxStatus.SUCCESS:
+            return outbox
+        try:
+            self.dispatcher(int(outbox.id), int(outbox.tenant_id))
+        except Exception as exc:  # Broker failure is recoverable from the persisted outbox.
+            logger.exception(
+                "approval notification dispatch failed: outbox_id=%s",
+                outbox.id,
+            )
+            try:
+                await self.outbox_repository.mark_failed(int(outbox.id), str(exc))
+            except Exception:
+                logger.exception(
+                    "failed to record approval notification dispatch failure: outbox_id=%s",
+                    outbox.id,
+                )
+        return outbox
+
+    async def consume(self, outbox_id: int) -> bool:
+        outbox = await self.outbox_repository.get(outbox_id)
+        if outbox is None:
+            raise ValueError(f"approval notification outbox not found: {outbox_id}")
+        if outbox.status == ApprovalNotificationOutboxStatus.SUCCESS:
+            return True
+        if outbox.retry_count >= outbox.max_retries:
+            return False
+
+        try:
+            task_ids = [int(task_id) for task_id in outbox.payload_snapshot.get("task_ids", [])]
+            tasks = await self.instance_repository.get_tasks_by_ids(task_ids)
+            receiver_user_ids = list(dict.fromkeys(int(task.approver_user_id) for task in tasks))
+            if not receiver_user_ids:
+                raise ValueError(f"approval notification has no receivers: {outbox_id}")
+            await self._send_file_publish_message(
+                payload=outbox.payload_snapshot,
+                receiver_user_ids=receiver_user_ids,
+            )
+            await self.outbox_repository.mark_success(outbox_id)
+            return True
+        except Exception as exc:
+            try:
+                await self.outbox_repository.mark_failed(outbox_id, str(exc))
+            except Exception:
+                logger.exception(
+                    "failed to record approval notification consume failure: outbox_id=%s",
+                    outbox_id,
+                )
+            raise
+
+    async def _send_file_publish_message(
+        self,
+        *,
+        payload: dict,
+        receiver_user_ids: list[int],
+    ) -> None:
+        message_service = self.message_service
+        if message_service is not None:
+            await message_service.send_generic_approval(
+                applicant_user_id=payload["applicant_user_id"],
+                applicant_user_name=payload["applicant_user_name"],
+                action_code=payload["action_code"],
+                business_type=payload["business_type"],
+                business_id=payload["business_id"],
+                business_name=payload["business_name"],
+                button_action_code=payload["button_action_code"],
+                receiver_user_ids=receiver_user_ids,
+            )
+            return
+
+        from bisheng.message.api.dependencies import get_message_service as _get_message_service
+
+        async with get_async_db_session() as session:
+            message_service = await _get_message_service(session)
+            await message_service.send_generic_approval(
+                applicant_user_id=payload["applicant_user_id"],
+                applicant_user_name=payload["applicant_user_name"],
+                action_code=payload["action_code"],
+                business_type=payload["business_type"],
+                business_id=payload["business_id"],
+                business_name=payload["business_name"],
+                button_action_code=payload["button_action_code"],
+                receiver_user_ids=receiver_user_ids,
+            )
+
+    @staticmethod
+    def _dispatch_file_publish_notification(outbox_id: int, tenant_id: int) -> None:
+        from bisheng.worker.approval.notification_tasks import consume_approval_notification
+
+        consume_approval_notification.delay(outbox_id, tenant_id)
 
     @staticmethod
     async def notify_user(

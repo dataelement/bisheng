@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS user (
     avatar VARCHAR(512),
     source VARCHAR(32) NOT NULL DEFAULT 'local',
     external_id VARCHAR(128),
+    wechat_user_id VARCHAR(256),
     "delete" INTEGER DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -509,6 +510,46 @@ CREATE INDEX IF NOT EXISTS idx_conflict_lookup
 
 
 # ---------------------------------------------------------------------------
+# F057: message push outbox for Shougang enterprise WeChat
+# ---------------------------------------------------------------------------
+
+TABLE_MESSAGE_PUSH_OUTBOX = """\
+CREATE TABLE IF NOT EXISTS message_push_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    inbox_message_id INTEGER,
+    action_code VARCHAR(64) NOT NULL,
+    receiver_user_ids JSON NOT NULL DEFAULT '[]',
+    wechat_user_ids JSON NOT NULL DEFAULT '[]',
+    body TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    next_retry_at DATETIME,
+    failure_reason TEXT,
+    sent_at DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+INDEX_MESSAGE_PUSH_OUTBOX_TENANT = """\
+CREATE INDEX IF NOT EXISTS ix_message_push_outbox_tenant_id
+    ON message_push_outbox (tenant_id)"""
+
+INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY = """\
+CREATE INDEX IF NOT EXISTS ix_message_push_outbox_status_next_retry_at
+    ON message_push_outbox (status, next_retry_at)"""
+
+INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE = """\
+CREATE INDEX IF NOT EXISTS ix_message_push_outbox_inbox_message_id
+    ON message_push_outbox (inbox_message_id)"""
+
+INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE = """\
+CREATE INDEX IF NOT EXISTS ix_message_push_outbox_action_code
+    ON message_push_outbox (action_code)"""
+
+
+# ---------------------------------------------------------------------------
 # Registry & helpers
 # ---------------------------------------------------------------------------
 
@@ -542,6 +583,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     # F009 + F015: organization sync config + event-scoped log rows.
     "org_sync_config": TABLE_ORG_SYNC_CONFIG,
     "org_sync_log": TABLE_ORG_SYNC_LOG,
+    # F057: message push outbox for Shougang enterprise WeChat.
+    "message_push_outbox": TABLE_MESSAGE_PUSH_OUTBOX,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.
@@ -552,6 +595,10 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE,
     INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE,
     INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT,
+    INDEX_MESSAGE_PUSH_OUTBOX_TENANT,
+    INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY,
+    INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE,
+    INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE,
 ]
 
 
@@ -581,3 +628,8 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE))
             conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE))
             conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT))
+        if "message_push_outbox" in table_names:
+            conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_TENANT))
+            conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY))
+            conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE))
+            conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE))

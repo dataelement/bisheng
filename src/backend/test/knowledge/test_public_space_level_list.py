@@ -19,6 +19,20 @@ def _build_service(*, user_id: int = 1) -> KnowledgeSpaceService:
     return service
 
 
+@pytest.fixture(autouse=True)
+def mock_empty_user_link_pins():
+    async def apply_no_pins(spaces, _user_id):
+        for item in spaces:
+            item["is_pinned"] = False
+        return spaces
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpacePinService.apply_pins",
+        new=AsyncMock(side_effect=apply_no_pins),
+    ):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_public_space_list_includes_user_role_from_membership():
     space = Knowledge(
@@ -96,7 +110,14 @@ async def test_public_space_list_resolves_user_role_from_permission_level():
         result = await service.get_public_spaces("update_time")
 
     permission_levels.assert_awaited_once()
-    assert result == [{**space.model_dump(), "space_level": "public", "user_role": "admin"}]
+    assert result == [
+        {
+            **space.model_dump(),
+            "space_level": "public",
+            "user_role": "admin",
+            "is_pinned": False,
+        }
+    ]
 
 
 @pytest.mark.asyncio

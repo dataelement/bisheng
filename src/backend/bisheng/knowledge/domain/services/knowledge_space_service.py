@@ -60,6 +60,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
     SpacePersonalCreateForbiddenError,
+    SpacePersonalPinForbiddenError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
     SpaceTenantMismatchError,
@@ -193,6 +194,7 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
     KnowledgeAuditTelemetryService,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_pin_service import KnowledgeSpacePinService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
@@ -321,7 +323,7 @@ PORTAL_SEARCH_TITLE_MATCH_STOPWORDS = (
     "的",
 )
 _PORTAL_VISIBLE_SPACE_CACHE_TTL = 5.0
-_PORTAL_VISIBLE_SPACE_CACHE: dict[tuple, tuple[float, list[Knowledge]]] = {}
+_PORTAL_VISIBLE_SPACE_CACHE: dict[tuple, tuple[float, list[Knowledge], dict[int, bool]]] = {}
 _PORTAL_VISIBLE_SPACE_CACHE_LOCK = asyncio.Lock()
 
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
@@ -431,6 +433,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             int,
             tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
         ] = {}
+        # space_id -> whether the current user may download files in that space.
+        # Derived from the same per-space effective-permission pass used for portal
+        # search visibility, so it never drifts from actual download enforcement.
+        # Populated by _get_shougang_portal_visible_search_spaces and read back when
+        # building each portal file item's can_download flag.
+        self._portal_space_download_map: dict[int, bool] = {}
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -1005,6 +1013,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_created: bool = False,
         required_permission_id: str | None = None,
         include_file_count: bool = True,
+        apply_user_pins: bool = True,
     ) -> list[KnowledgeRead]:
         t0 = time.perf_counter()
         if not space_ids:
@@ -1052,7 +1061,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             effective_ms = (time.perf_counter() - _t_effective) * 1000
             permission_ids_map = {space_id: ids for space_id, ids in zip(permission_id_space_ids, permission_ids)}
 
-        pinned_spaces = []
         normal_spaces = []
         for space in spaces:
             # 『我的收藏』是每个用户私有的系统知识库，只对归属者本人可见，
@@ -1062,7 +1070,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
                 **space.model_dump(),
-                is_pinned=bool(member_conf and member_conf.is_pinned),
+                is_pinned=False,
             )
 
             if space.user_id == self.login_user.user_id:
@@ -1091,12 +1099,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     continue
                 self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
 
-            if result.is_pinned:
-                pinned_spaces.append(result)
-            else:
-                normal_spaces.append(result)
+            normal_spaces.append(result)
 
-        ordered_spaces = pinned_spaces + normal_spaces
+        ordered_spaces = normal_spaces
         file_count_ms = 0.0
         if include_file_count and ordered_spaces:
             _t_file_count = time.perf_counter()
@@ -1114,6 +1119,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         _t_decorate = time.perf_counter()
         result = await self._decorate_department_metadata(ordered_spaces)
+        if apply_user_pins:
+            result = await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
         decorate_ms = (time.perf_counter() - _t_decorate) * 1000
 
         _logger.info(
@@ -5286,9 +5293,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cache_key = self._shougang_portal_visible_space_cache_key(requested_space_ids, space_level)
         cached = await self._get_cached_shougang_portal_visible_spaces(cache_key)
         if cached is not None:
-            return cached
-        spaces = await self._compute_shougang_portal_visible_search_spaces(requested_space_ids, space_level)
-        await self._set_cached_shougang_portal_visible_spaces(cache_key, spaces)
+            spaces, download_map = cached
+            self._portal_space_download_map = download_map
+            return spaces
+        spaces, download_map = await self._compute_shougang_portal_visible_search_spaces(
+            requested_space_ids, space_level
+        )
+        self._portal_space_download_map = download_map
+        await self._set_cached_shougang_portal_visible_spaces(cache_key, spaces, download_map)
         return spaces
 
     def _shougang_portal_visible_space_cache_key(
@@ -5305,27 +5317,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             str(self._space_level_value(space_level) or ""),
         )
 
-    async def _get_cached_shougang_portal_visible_spaces(self, cache_key: tuple) -> list[Knowledge] | None:
+    async def _get_cached_shougang_portal_visible_spaces(
+        self, cache_key: tuple
+    ) -> tuple[list[Knowledge], dict[int, bool]] | None:
         try:
             async with _PORTAL_VISIBLE_SPACE_CACHE_LOCK:
                 cached = _PORTAL_VISIBLE_SPACE_CACHE.get(cache_key)
                 if cached is None:
                     return None
-                expires_at, spaces = cached
+                expires_at, spaces, download_map = cached
                 if expires_at <= time.monotonic():
                     _PORTAL_VISIBLE_SPACE_CACHE.pop(cache_key, None)
                     return None
-                return list(spaces)
+                return list(spaces), dict(download_map)
         except Exception as exc:
             logger.warning("skip shougang portal visible space cache read: error={}", exc)
             return None
 
-    async def _set_cached_shougang_portal_visible_spaces(self, cache_key: tuple, spaces: list[Knowledge]) -> None:
+    async def _set_cached_shougang_portal_visible_spaces(
+        self, cache_key: tuple, spaces: list[Knowledge], download_map: dict[int, bool]
+    ) -> None:
         try:
             async with _PORTAL_VISIBLE_SPACE_CACHE_LOCK:
                 _PORTAL_VISIBLE_SPACE_CACHE[cache_key] = (
                     time.monotonic() + _PORTAL_VISIBLE_SPACE_CACHE_TTL,
                     list(spaces),
+                    dict(download_map),
                 )
         except Exception as exc:
             logger.warning("skip shougang portal visible space cache write: error={}", exc)
@@ -5334,15 +5351,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         requested_space_ids: list[int],
         space_level: KnowledgeSpaceLevelEnum | None,
-    ) -> list[Knowledge]:
+    ) -> tuple[list[Knowledge], dict[int, bool]]:
         space_ids = await self._resolve_shougang_portal_search_space_ids(requested_space_ids, space_level)
         if not space_ids:
-            return []
+            return [], {}
         spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by="update_time")
         space_map = {int(space.id): space for space in spaces if int(space.type) == KnowledgeTypeEnum.SPACE.value}
         ordered_spaces = [space_map[space_id] for space_id in space_ids if space_id in space_map]
         if not ordered_spaces:
-            return []
+            return [], {}
 
         is_global_admin = False
         is_admin = getattr(self.login_user, "is_admin", None)
@@ -5350,33 +5367,53 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_global_admin = bool(is_admin())
 
         visible_spaces: list[Knowledge] = []
+        # space_id -> can_download, derived from the same per-space effective
+        # 'download_file' permission the download endpoint enforces, so it never
+        # drifts from actual download enforcement (and matches file preview).
+        download_map: dict[int, bool] = {}
         permission_checks = []
         permission_spaces: list[Knowledge] = []
         for space in ordered_spaces:
-            if (
-                is_global_admin
-                or int(space.user_id or 0) == int(self.login_user.user_id)
-                or self._is_square_preview_space(space)
-            ):
+            space_id = int(space.id)
+            if is_global_admin or int(space.user_id or 0) == int(self.login_user.user_id):
+                # Global admin / space owner: always visible and downloadable.
                 visible_spaces.append(space)
+                download_map[space_id] = True
                 continue
+            # Every other space (including square-preview ones) needs its real
+            # effective-permission set: square-preview spaces stay visible regardless
+            # of the result, but the download flag must reflect the actual grant — a
+            # viewer-role user, for instance, may see a space without being allowed to
+            # download its files.
             permission_spaces.append(space)
-            permission_checks.append(self._get_effective_permission_ids("knowledge_space", int(space.id)))
+            permission_checks.append(self._get_effective_permission_ids("knowledge_space", space_id))
 
         if permission_checks:
             permission_results = await asyncio.gather(*permission_checks, return_exceptions=True)
             for space, permission_result in zip(permission_spaces, permission_results):
+                space_id = int(space.id)
                 if isinstance(permission_result, Exception):
                     logger.warning(
                         "skip shougang portal space search permission check: space_id={} error={}",
                         space.id,
                         permission_result,
                     )
+                    # Preserve legacy visibility for square-preview spaces even when the
+                    # permission lookup fails; download stays disabled to be safe.
+                    if self._is_square_preview_space(space):
+                        visible_spaces.append(space)
+                    download_map[space_id] = False
                     continue
-                if "view_space" in permission_result:
+                if "view_space" in permission_result or self._is_square_preview_space(space):
                     visible_spaces.append(space)
+                download_map[space_id] = "download_file" in permission_result
+
         visible_space_ids = {int(space.id) for space in visible_spaces}
-        return [space for space in ordered_spaces if int(space.id) in visible_space_ids]
+        ordered_visible = [space for space in ordered_spaces if int(space.id) in visible_space_ids]
+        visible_download_map = {
+            int(space.id): download_map.get(int(space.id), False) for space in ordered_visible
+        }
+        return ordered_visible, visible_download_map
 
     async def _resolve_shougang_portal_search_space_ids(
         self,
@@ -5599,6 +5636,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=self._get_shougang_file_subcategory_code(item),
             folder_path=str(item.get("folder_path") or ""),
             source_path=str(item.get("source_path") or ""),
+            can_download=bool(self._portal_space_download_map.get(int(space_id), False)),
         )
 
     @staticmethod
@@ -5813,6 +5851,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+        await KnowledgeSpacePinService.delete_space_pins(space_id)
         await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
         if not force:
             await self._send_space_event_notification(
@@ -5997,37 +6036,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         members_map = {int(one.business_id): one for one in members}
         res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
-        pinned_spaces = []
-        normal_spaces = []
+        spaces = []
         for one in res:
             member_conf = members_map.get(one.id)
             if not member_conf:
                 continue
             can_unsubscribe = await self._can_unsubscribe_space(one, member_conf)
 
-            if member_conf.is_pinned:
-                pinned_spaces.append(
-                    KnowledgeSpaceInfoResp(
-                        **one.model_dump(),
-                        is_pinned=True,
-                        user_role=member_conf.user_role,
-                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
-                        is_followed=True,
-                        can_unsubscribe=can_unsubscribe,
-                    )
+            spaces.append(
+                KnowledgeSpaceInfoResp(
+                    **one.model_dump(),
+                    is_pinned=False,
+                    user_role=member_conf.user_role,
+                    subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                    is_followed=True,
+                    can_unsubscribe=can_unsubscribe,
                 )
-            else:
-                normal_spaces.append(
-                    KnowledgeSpaceInfoResp(
-                        **one.model_dump(),
-                        is_pinned=False,
-                        user_role=member_conf.user_role,
-                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
-                        is_followed=True,
-                        can_unsubscribe=can_unsubscribe,
-                    )
-                )
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+            )
+        result = await self._decorate_department_metadata(spaces)
+        return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
@@ -6096,7 +6123,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self.login_user.user_id,
                 len(cached),
             )
-            return cached
+            return await KnowledgeSpacePinService.apply_pins(cached, self.login_user.user_id)
 
         _t = time.perf_counter()
         members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
@@ -6134,9 +6161,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_by,
             memberships=members,
             required_permission_id="view_space",
+            apply_user_pins=False,
         )
         await SpaceListCache.set(self.login_user.user_id, order_by, formatted)
-        return formatted
+        return await KnowledgeSpacePinService.apply_pins(formatted, self.login_user.user_id)
 
     async def get_grouped_spaces(
         self,
@@ -6240,7 +6268,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if user_role is not None:
                 payload["user_role"] = user_role.value
             result.append(payload)
-        return result
+        return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def global_search_files(
         self,
@@ -6360,7 +6388,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
-        return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        level = self._normalize_space_level(scope.level if scope is not None else None)
+        if level == KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpacePersonalPinForbiddenError()
+
+        if level == KnowledgeSpaceLevelEnum.PUBLIC:
+            visible_spaces = await self.get_public_spaces()
+        else:
+            visible_spaces = await self.get_spaces_by_level(level)
+        visible_space_ids = {
+            int(item.get("id") if isinstance(item, dict) else item.id)
+            for item in visible_spaces
+        }
+        if space_id not in visible_space_ids:
+            raise SpacePermissionDeniedError()
+
+        return await KnowledgeSpacePinService.set_pin(
+            user_id=self.login_user.user_id,
+            space_id=space_id,
+            visible_space_ids=visible_space_ids,
+            is_pinned=is_pinned,
+        )
 
     async def get_knowledge_square(self, keyword: str = None, page: int = 1, page_size: int = 20) -> dict:
         from bisheng.user.domain.services.user import UserService
