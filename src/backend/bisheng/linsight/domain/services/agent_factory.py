@@ -326,11 +326,17 @@ def _recover_question_items(s: str) -> list[dict]:
     if not any(marker in s for marker in ('"question"', '"options"', "{", "[")):
         return [{"question": s}]
     candidates = [s, "[" + s + "]"]
-    # Only restore a dropped opening ``[{"question": "`` when the blob actually
-    # looks like it lost its head (starts mid-value, not with ``{``/``[``). This
-    # targets the observed failure precisely without corrupting a complete dict
+    # Only restore a dropped opening ``[{"question"…`` when the blob actually looks
+    # like it lost its head (starts mid-value, not with ``{``/``[``). Two shapes seen:
+    #   - the blob RETAINED the ``: "`` separator (starts ``: "…``) → prepend only
+    #     ``[{"question"`` so the first question comes back CLEAN (observed live with
+    #     deepseek-v4-flash, session b28d0dc6);
+    #   - it also dropped ``: "`` (starts mid-value) → prepend the full ``[{"question": "``.
+    # The clean-separator variant is tried first so it wins ties over the noisier one.
+    # This targets the observed failure precisely without corrupting a complete dict
     # that merely lacks a ``question`` key into a bogus one.
     if not s.startswith(("{", "[")):
+        candidates.append('[{"question"' + s)
         candidates.append('[{"question": "' + s)
     best: list[dict] = []
     for cand in candidates:
@@ -347,6 +353,19 @@ def _recover_question_items(s: str) -> list[dict]:
     return best
 
 
+def _looks_like_crammed_questions_array(text: str) -> bool:
+    """True when a string is itself a serialized ``questions`` array rather than a
+    natural-language question. The tell-tale is quoted JSON keys — ``"options"``
+    together with ``"question"`` or ``"multiple"`` — which a real question never
+    contains verbatim. Gates the Case-D re-expansion in ``_normalize_to_dicts`` (a
+    dict whose ``question`` VALUE is a crammed array) AND the top-level malformed-
+    string recovery, so ordinary prose is never mangled: prose that merely mentions
+    the word ``options`` unquoted, or uses ``{}`` placeholders, does NOT match
+    because the markers are the quoted-key forms, and a bare non-JSON string still
+    degrades to ``[]`` (park with reason only) instead of becoming a bogus question."""
+    return '"options"' in text and ('"question"' in text or '"multiple"' in text)
+
+
 def _normalize_to_dicts(value: object) -> list[dict]:
     """Structural normalization shared by ``_coerce_questions`` and
     ``_salvage_options_only``: parse the (possibly stringified, or per-item
@@ -361,18 +380,31 @@ def _normalize_to_dicts(value: object) -> list[dict]:
         stripped = value.strip()
         if not stripped:
             return []
-        # A malformed top-level string degrades to [] (park with reason only) — the
-        # observed failure mode is a malformed element INSIDE a list, handled below.
+        # A malformed top-level string still gets one recovery pass — but ONLY when it
+        # is clearly a crammed structured array (JSON-key markers); arbitrary prose
+        # degrades to [] (park with reason only), never a bogus question. The more
+        # common failure is a malformed element INSIDE a list, handled below.
         try:
             value = json.loads(stripped)
         except (json.JSONDecodeError, ValueError):
-            return []
+            return _recover_question_items(stripped) if _looks_like_crammed_questions_array(stripped) else []
     if not isinstance(value, list):
         return []
 
     out: list[dict] = []
     for item in value:
         if isinstance(item, dict):
+            # Case D: a model may cram the WHOLE questions array into a single dict's
+            # ``question`` VALUE as a serialized (usually unescaped) blob — observed
+            # live with deepseek-v4-flash (session b28d0dc6): the value carried nested
+            # ``"options"``/``"question"`` keys and the user saw raw JSON as the title.
+            # Re-expand it into the real question dicts; otherwise keep the dict as-is.
+            qtext = str(item.get("question", ""))
+            if _looks_like_crammed_questions_array(qtext):
+                recovered = _recover_question_items(qtext)
+                if recovered:
+                    out.extend(recovered)
+                    continue
             out.append(item)
         elif isinstance(item, str):
             out.extend(_recover_question_items(item))
