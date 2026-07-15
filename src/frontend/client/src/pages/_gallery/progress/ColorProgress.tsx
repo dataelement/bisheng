@@ -23,6 +23,11 @@ export function ColorProgress() {
         </>,
         <>近似值折叠（如 <code>#EBECF0</code> → gray-3，视觉差 ≤2/255）需逐处目检。</>,
         <>游离蓝迁品牌 token 前，先核对是否属「固定蓝」例外（审批中 tag 等，永远不换肤）。</>,
+        <>
+          命名注：规范里的语义名 <code>border</code> 与 shadcn 的 <code>--border</code>（HSL）及
+          Tailwind 边框类冲突，落地为 <code>border-base</code>（类{' '}
+          <code>border-border-base</code>，与现有 <code>border-border-light</code> 同构）。
+        </>,
       ]}
       bodyTitle="迁移台账"
     >

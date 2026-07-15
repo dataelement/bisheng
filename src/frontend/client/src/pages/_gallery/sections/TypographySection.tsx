@@ -72,7 +72,7 @@ export function TypographySection() {
     <ComponentPage
       title="字体 Typography"
       eng="Typography"
-      description="九档 semantic 字号（自带字重）+ 两档字重。系统字体栈已全量切换；窗口缩到 ≤768px 可看移动端重映射（className 不变）。"
+      description="九档 semantic 字号（自带字重）+ 两档字重，纯系统字体栈。窗口缩到 ≤768px 可看移动端重映射。"
       whenToUse={[
         <>组件与业务代码只用 semantic 类（<code>text-body</code> / <code>text-h1</code>…），不写裸 <code>text-sm</code> 或数值。</>,
         <>字重只用 <code>font-normal</code>(400) / <code>font-medium</code>(500) 两档，禁用 600/700。</>,

@@ -59,8 +59,7 @@ export function ConfirmDialogSection() {
       description={
         <>
           删除 / 危险操作时的「确认 / 取消」小弹窗。标准实现是全局服务{' '}
-          <code>useConfirm()</code>（ConfirmContext）：一行调用，样式集中在一个文件，
-          分 destructive / default 两个变体。壳与按钮标准<b>已定稿</b>。
+          <code>useConfirm()</code>，分 destructive / default 两档，标准<b>已定稿</b>。
         </>
       }
       whenToUse={[

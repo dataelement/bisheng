@@ -137,12 +137,8 @@ export function ColorSection() {
       eng="Color"
       description={
         <>
-          Arco 色板为基准的两层 token：primitive（<code>--arco-gray-1~10</code>）→ semantic（
-          <code>--text-1~4</code> / <code>--fill-1~4</code> / <code>--border-base|-deep</code> /{' '}
-          <code>--success|warning|danger-*</code>）。命名注：规范里的语义名 <code>border</code> 与
-          shadcn 的 <code>--border</code>（HSL）及 Tailwind 边框类冲突，落地为{' '}
-          <code>border-base</code>（类 <code>border-border-base</code>，与现有{' '}
-          <code>border-border-light</code> 同构）。
+          Arco 色板为基准的两层 token：primitive（<code>--arco-gray-1~10</code>）→
+          semantic（文字 / 填充 / 边框 / 语义色），业务代码只接触 semantic 层。
         </>
       }
       whenToUse={[

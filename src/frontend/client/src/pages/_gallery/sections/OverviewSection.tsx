@@ -9,7 +9,7 @@
  */
 import { ComponentType } from 'react';
 import { Outlined } from 'bisheng-icons';
-import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
+import { ComponentPage, ExampleGroup } from '../components/kit';
 
 /** The cross-cutting principles every individual spec derives from. */
 const PRINCIPLES: { title: string; body: string }[] = [
@@ -36,6 +36,10 @@ const PRINCIPLES: { title: string; body: string }[] = [
   {
     title: '状态即规范',
     body: 'hover / active / disabled / loading / focus 是组件规范的一部分，由组件内置（如 Button 的 loading 属性），业务页不自拼状态样式。',
+  },
+  {
+    title: '滚动条跟随系统',
+    body: '任何滚动区域默认不写 ::-webkit-scrollbar / scrollbar-width——原生滚动条天然跟随系统的显隐设置（始终显示 / 滚动时显示），写了就会强制常驻。例外只允许"更少可见"的三个既有 utility（no-scrollbar / scroll-on-scroll / scroll-no-hover），详见 基础-滚动条规范.md。',
   },
 ];
 
@@ -93,7 +97,7 @@ export function OverviewSection() {
     >
       <ExampleGroup
         title="设计原则"
-        subtitle="原则推导出基础规范，基础规范支撑组件规范；遇到规范没覆盖的场景，回到这六条判断。"
+        subtitle="原则推导出基础规范，基础规范支撑组件规范；遇到规范没覆盖的场景，回到这七条判断。"
       >
         <DerivationStrip />
         <div className="space-y-9">
@@ -111,21 +115,6 @@ export function OverviewSection() {
         </div>
       </ExampleGroup>
 
-      <ExampleGroup title="规范索引" subtitle="按成熟度分级：已定稿的直接照用；未定稿的以页内说明为准。">
-        <CompareTable
-          head={['规范页', '内容', '成熟度', '源文档（docs-ui-refactor/）']}
-          rows={[
-            ['字体 Typography', '系统字体栈 + 九档 semantic 字号 + 双字重', '✅ 已定稿落地', '基础-字体规范.md'],
-            ['色彩 Colors', '两层 token：Arco primitive → semantic（文字/填充/边框/语义色）', '✅ v1 已定稿落地', '基础-色彩规范.md'],
-            ['多端适配 Responsive', '双判定口径 + 四条核心原则 + 窄屏布局惯例', '✅ v1 已建', '基础-多端适配原则.md'],
-            ['滚动条 Scrollbar', '显隐跟随系统设置，默认不自定义 + 三个减显 utility', '✅ 已定稿落地', '基础-滚动条规范.md'],
-            ['Button 按钮', 'color × variant 双轴 + 三档尺寸 + 内容形态与状态', '✅ v1 已定稿落地', '组件-Button按钮.md'],
-            ['Modal 弹窗', '普通弹窗壳标准', '🟨 未定稿 · C 套壳候选', '组件-Modal弹窗.md'],
-            ['二次确认弹窗', 'useConfirm() 服务 + 壳与按钮两档标准', '✅ 已定稿', '组件-Modal弹窗.md'],
-            ['点赞 / 点踩', 'MessageFeedbackButtons 统一控件 + 延迟提交交互', '✅ 已定稿', '—'],
-          ]}
-        />
-      </ExampleGroup>
     </ComponentPage>
   );
 }

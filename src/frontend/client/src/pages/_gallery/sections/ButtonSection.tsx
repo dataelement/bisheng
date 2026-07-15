@@ -31,10 +31,9 @@ export function ButtonSection() {
       eng="Button"
       description={
         <>
-          antd 式 <code>color × variant</code> 双轴：color 管颜色（primary 品牌 / default
-          中性 / danger 危险），variant 管画法（solid / outlined / filled / text /
-          link），3×5 组合自动成立。颜色全部走 token（品牌随蓝⇄绿主题，危险红固定），
-          触屏下自动禁用 hover 态并扩 44px 热区。规范见 docs-ui-refactor/组件-Button按钮.md。
+          antd 式 <code>color × variant</code> 双轴：color 管颜色（primary / default /
+          danger），variant 管画法（solid / outlined / filled / text / link），3×5
+          组合自动成立；尺寸三档。
         </>
       }
       whenToUse={[

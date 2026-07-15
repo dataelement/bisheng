@@ -20,7 +20,6 @@ import { ResponsiveSection } from './sections/ResponsiveSection';
 import { TypographySection } from './sections/TypographySection';
 import { ColorSection } from './sections/ColorSection';
 import { IllustrationSection } from './sections/IllustrationSection';
-import { ScrollbarSection } from './sections/ScrollbarSection';
 import { ModalSection } from './sections/ModalSection';
 import { ConfirmDialogSection } from './sections/ConfirmDialogSection';
 import { ButtonSection } from './sections/ButtonSection';
@@ -53,7 +52,6 @@ const SPEC_PAGES: PageDef[] = [
   { id: 'color', label: '色彩 Colors', group: '基础 Foundation', Page: ColorSection },
   { id: 'illustration', label: '插画 Illustration', group: '基础 Foundation', Page: IllustrationSection },
   { id: 'responsive', label: '多端适配 Responsive', group: '基础 Foundation', Page: ResponsiveSection },
-  { id: 'scrollbar', label: '滚动条 Scrollbar', group: '基础 Foundation', Page: ScrollbarSection },
   { id: 'button', label: 'Button 按钮', group: '通用 General', Page: ButtonSection },
   { id: 'modal', label: 'Modal 弹窗', group: '反馈 Feedback', draft: true, Page: ModalSection },
   { id: 'confirm', label: '二次确认弹窗', group: '反馈 Feedback', Page: ConfirmDialogSection },
@@ -116,7 +114,7 @@ export default function GalleryApp() {
       <aside className="flex w-64 shrink-0 flex-col border-r border-border-light bg-muted/20">
         <div className="border-b border-border-light px-5 py-4">
           <div className="text-h4 text-text-primary">组件画廊</div>
-          <div className="mt-0.5 text-caption text-muted-foreground">DEV only · 不会发版</div>
+          <div className="mt-0.5 text-caption text-muted-foreground">DEV only</div>
         </div>
 
         {/* Mode segmented control — spec for consumers, progress for the owner */}
