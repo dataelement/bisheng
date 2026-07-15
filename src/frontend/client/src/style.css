@@ -1698,42 +1698,13 @@ button {
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
-/* Webkit scrollbar — `.scrollbar-os` opts out so the OS scrollbar setting
-   (auto-hide vs always-on) is respected instead of a forced custom scrollbar.
-   `html`/`body` (the document scroller) are always excluded so the page-level
-   scrollbar follows the OS setting rather than becoming a forced always-on bar. */
-:not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar {
-  height: 0.1em;
-  width: 0.5rem;
-}
-
-:not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 9999px;
-}
-
-.dark :not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: hsla(0, 0%, 100%, 0.1);
-}
-
-:not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar-track {
-  background-color: transparent;
-  border-radius: 9999px;
-}
-
-/* Excel preview: horizontal scrollbar same thickness as vertical (override global 0.1em height) */
-.excel-scroll::-webkit-scrollbar {
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-.scrollbar-transparent::-webkit-scrollbar-thumb {
-  background-color: transparent;
-}
-
-.dark .scrollbar-transparent::-webkit-scrollbar-thumb {
-  background-color: transparent;
-}
+/* Scrollbar policy (设计规范 · 基础-滚动条规范.md, 2026-07-15):
+   scrollbars follow the OS setting — auto-hide stays auto-hide, always-on stays
+   always-on. DO NOT style ::-webkit-scrollbar / scrollbar-width by default:
+   any such rule kills the OS overlay behavior and forces an always-visible bar.
+   (The old global forced-slim rule was removed; the `.scrollbar-os` opt-out class
+   found in ~33 business files is now a no-op — clean it up as files get touched.)
+   Sanctioned exceptions below only make bars LESS visible, never force them on. */
 
 /* Hide scrollbar entirely (used by horizontal tab strips) */
 .no-scrollbar {
