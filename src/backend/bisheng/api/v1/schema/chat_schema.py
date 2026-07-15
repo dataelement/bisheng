@@ -100,6 +100,13 @@ class APIChatCompletion(BaseModel):
     # daily chain; the turn still lives in the same conversation (chat_id).
     task_mode: bool | None = False
 
+    # --- F035 Track H: per-turn selected skill names (task mode only) ---
+    # The skills the user picked in the daily task-mode input. Threaded onto the
+    # linsight submit schema by ``_to_linsight_submit``; ``None``/``[]`` both mean
+    # "no skills this turn" (skills are opt-in, see materialize_session_skills).
+    # Ignored on the plain daily chain.
+    skills: list[str] | None = None
+
     # --- Preserved (new code-path also honours use_knowledge_base / files) ---
     use_knowledge_base: UseKnowledgeBaseParam | None = None
     files: list[dict] | None = None
