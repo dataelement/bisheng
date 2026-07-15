@@ -1,10 +1,11 @@
-import asyncio
 import logging
+
 from fastapi import Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus, FileType
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileDao, KnowledgeFileStatus
+from bisheng.utils.async_utils import run_async_safe
 from bisheng.worker.knowledge.file_worker import copy_normal
 from bisheng.worker.main import bisheng_celery
 
@@ -25,6 +26,7 @@ async def _delete_source_space(source_id: int, op_user_id: int) -> None:
     from bisheng.knowledge.domain.services.knowledge_space_service import (
         KnowledgeSpaceService,
     )
+
     login_user = UserPayload(user_id=op_user_id, user_name="system-worker", role="user")
     svc = KnowledgeSpaceService(request=_worker_request(), login_user=login_user)
     await svc.delete_space(source_id, migrate_free_space=False)
@@ -43,8 +45,10 @@ def _do_migrate(source_id: int, target_id: int, op_user_id: int) -> None:
     page = 1
     while True:
         files = KnowledgeFileDao.get_file_by_filters(
-            source_id, status=[KnowledgeFileStatus.SUCCESS.value],
-            page=page, page_size=_PAGE_SIZE,
+            source_id,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            page=page,
+            page_size=_PAGE_SIZE,
         )
         if not files:
             break
@@ -59,13 +63,19 @@ def _do_migrate(source_id: int, target_id: int, op_user_id: int) -> None:
             if copied is None or copied.status == KnowledgeFileStatus.FAILED.value:
                 _logger.error(
                     "space_migrate copy 失败 source=%s target=%s file_id=%s（已迁 %s，将回滚）",
-                    source_id, target_id, getattr(one, "id", None), migrated,
+                    source_id,
+                    target_id,
+                    getattr(one, "id", None),
+                    migrated,
                 )
                 raise RuntimeError(f"copy_normal failed for source file id={getattr(one, 'id', None)}")
             migrated += 1
             _logger.info(
                 "space_migrate copy ok source=%s file_id=%s → target=%s new_file_id=%s",
-                source_id, getattr(one, "id", None), target_id, getattr(copied, "id", None),
+                source_id,
+                getattr(one, "id", None),
+                target_id,
+                getattr(copied, "id", None),
             )
             if one.md5:
                 target_md5.add(one.md5)
@@ -74,7 +84,11 @@ def _do_migrate(source_id: int, target_id: int, op_user_id: int) -> None:
         page += 1
     _logger.info(
         "space_migrate 复制完成 source=%s target=%s 迁移=%s 去重跳过=%s 目录跳过=%s",
-        source_id, target_id, migrated, dedup_skipped, dir_skipped,
+        source_id,
+        target_id,
+        migrated,
+        dedup_skipped,
+        dir_skipped,
     )
 
 
@@ -86,7 +100,7 @@ def space_migrate_celery(param: dict) -> str:
     _logger.info("space_migrate start source=%s target=%s", source_id, target_id)
     try:
         _do_migrate(source_id, target_id, op_user_id)
-        asyncio.run(_delete_source_space(source_id, op_user_id))
+        run_async_safe(_delete_source_space(source_id, op_user_id), timeout=None)
         _logger.info("space_migrate done source=%s", source_id)
         return "space migrate done"
     except Exception as e:  # 回滚：源库状态恢复，保留源库

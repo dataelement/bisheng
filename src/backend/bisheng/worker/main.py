@@ -6,11 +6,10 @@ from celery import Celery
 from celery.signals import celeryd_after_setup, worker_shutting_down
 from loguru import logger
 
+import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import set_logger_config
-
-import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
 
 
 def create_celery_app():
@@ -20,8 +19,8 @@ def create_celery_app():
     """
     set_logger_config(settings.logger_conf)
     # loop = app_ctx.get_event_loop()
-    bisheng_celery = Celery('bisheng', include=['bisheng.worker'])
-    bisheng_celery.config_from_object('bisheng.worker.config')
+    bisheng_celery = Celery("bisheng", include=["bisheng.worker"])
+    bisheng_celery.config_from_object("bisheng.worker.config")
     return bisheng_celery
 
 
@@ -46,7 +45,7 @@ def worker_alive_beat(all_queues: List[str]):
             logger.error(f"Error in worker alive beat: {e}")
             time.sleep(_WORKER_BEAT_SLEEP * 2)
             continue
-    logger.debug('Worker alive beat stopped.')
+    logger.debug("Worker alive beat stopped.")
 
 
 async def _init_worker_openfga() -> None:
@@ -58,7 +57,7 @@ async def _init_worker_openfga() -> None:
         from bisheng.core.openfga.manager import FGAManager, aget_fga_client
 
         try:
-            app_context.get_context('openfga')
+            app_context.get_context("openfga")
         except KeyError:
             app_context.register_context(FGAManager(openfga_config=settings.openfga), optional=True)
 
@@ -73,6 +72,7 @@ def on_worker_init(*args, **kwargs):
     global _WORKER_START
     """Worker initialization signal handler."""
     from bisheng.worker._asyncio_utils import get_worker_loop, run_async_task
+
     get_worker_loop()  # start the persistent loop thread before any task arrives
     run_async_task(_init_worker_openfga)
     queues = bisheng_celery.amqp.queues
@@ -90,3 +90,6 @@ def on_worker_shutdown(*args, **kwargs):
     logger.debug("Celery worker shutting down.")
     global _WORKER_START
     _WORKER_START = False
+    from bisheng.utils.async_utils import set_preferred_bridge_loop
+
+    set_preferred_bridge_loop(None)

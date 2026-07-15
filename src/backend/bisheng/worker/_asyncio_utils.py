@@ -34,9 +34,10 @@ import contextvars
 import logging
 import os
 import threading
-from typing import Awaitable, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 _loop: asyncio.AbstractEventLoop | None = None
@@ -59,6 +60,10 @@ def get_worker_loop() -> asyncio.AbstractEventLoop:
             )
             _loop_thread.start()
             logger.debug("Celery async event-loop thread started (tid=%d)", _loop_thread.ident)
+        assert _loop is not None
+        from bisheng.utils.async_utils import set_preferred_bridge_loop
+
+        set_preferred_bridge_loop(_loop)
     return _loop
 
 
