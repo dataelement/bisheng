@@ -1,4 +1,20 @@
-import { applyHtmlViewerTabIdentity, openHtmlArtifactViewer, stripWorkspacePaths } from './artifactUtils';
+import {
+    type ArtifactFile,
+    applyHtmlViewerTabIdentity,
+    isAbsoluteImageSrc,
+    matchArtifactByRelPath,
+    openHtmlArtifactViewer,
+    stripEmptyHtmlPlaceholders,
+    stripWorkspacePaths,
+} from './artifactUtils';
+
+const mkArtifact = (over: Partial<ArtifactFile>): ArtifactFile => ({
+    file_id: over.file_id ?? Math.random().toString(36).slice(2),
+    file_name: over.file_name ?? 'x.png',
+    file_url: over.file_url ?? 'linsight/final_result/svid/rand.png',
+    file_path: over.file_path,
+    ...over,
+});
 
 describe('stripWorkspacePaths', () => {
     it('drops the output/ folder prefix, keeping the filename', () => {
@@ -32,6 +48,103 @@ describe('stripWorkspacePaths', () => {
     it('is safe on empty / undefined input', () => {
         expect(stripWorkspacePaths('')).toBe('');
         expect(stripWorkspacePaths(undefined as unknown as string)).toBe(undefined);
+    });
+});
+
+describe('isAbsoluteImageSrc', () => {
+    it('treats http(s) / protocol-relative / data / blob / root-relative as absolute', () => {
+        expect(isAbsoluteImageSrc('https://x/y.png')).toBe(true);
+        expect(isAbsoluteImageSrc('http://x/y.png')).toBe(true);
+        expect(isAbsoluteImageSrc('//x/y.png')).toBe(true);
+        expect(isAbsoluteImageSrc('data:image/png;base64,AAAA')).toBe(true);
+        expect(isAbsoluteImageSrc('blob:https://x/uuid')).toBe(true);
+        expect(isAbsoluteImageSrc('/workspace/y.png')).toBe(true);
+    });
+
+    it('treats a bare relative ref as NOT absolute (goes through resolution)', () => {
+        expect(isAbsoluteImageSrc('charts/ch1_brazil.png')).toBe(false);
+        expect(isAbsoluteImageSrc('./charts/x.png')).toBe(false);
+        expect(isAbsoluteImageSrc('output/charts/x.png')).toBe(false);
+    });
+});
+
+describe('matchArtifactByRelPath', () => {
+    // file_path is the worker-local abs path; it preserves the relative dir suffix.
+    const brazil = mkArtifact({
+        file_name: 'ch1_brazil.png',
+        file_url: 'linsight/final_result/svid/aaaa1111.png',
+        file_path: '/cache/linsight/01b4635d/output/charts/ch1_brazil.png',
+    });
+    const argentina = mkArtifact({
+        file_name: 'ch1_argentina.png',
+        file_url: 'linsight/final_result/svid/bbbb2222.png',
+        file_path: '/cache/linsight/01b4635d/output/charts/ch1_argentina.png',
+    });
+    const list = [brazil, argentina];
+
+    it('matches a bare `charts/x.png` ref by file_path suffix', () => {
+        expect(matchArtifactByRelPath(list, 'charts/ch1_brazil.png')).toBe(brazil);
+    });
+
+    it('matches when the ref carries the output/ prefix too', () => {
+        expect(matchArtifactByRelPath(list, 'output/charts/ch1_argentina.png')).toBe(argentina);
+    });
+
+    it('tolerates a leading ./', () => {
+        expect(matchArtifactByRelPath(list, './charts/ch1_brazil.png')).toBe(brazil);
+    });
+
+    it('decodes URL-encoded (e.g. Chinese) filenames before matching', () => {
+        const cn = mkArtifact({
+            file_name: 'ch3_艾奥瓦豆油基差.png',
+            file_path: '/cache/linsight/01b4635d/output/charts/ch3_艾奥瓦豆油基差.png',
+        });
+        expect(matchArtifactByRelPath([cn], 'charts/ch3_%E8%89%BE%E5%A5%A5%E7%93%A6%E8%B1%86%E6%B2%B9%E5%9F%BA%E5%B7%AE.png')).toBe(cn);
+    });
+
+    it('disambiguates same basename in different dirs via the path suffix', () => {
+        const a = mkArtifact({ file_name: 'chart.png', file_path: '/w/output/charts/chart.png' });
+        const b = mkArtifact({ file_name: 'chart.png', file_path: '/w/output/other/chart.png' });
+        expect(matchArtifactByRelPath([a, b], 'charts/chart.png')).toBe(a);
+        expect(matchArtifactByRelPath([a, b], 'other/chart.png')).toBe(b);
+    });
+
+    it('falls back to a bare basename match when file_path is absent', () => {
+        const noPath = mkArtifact({ file_name: 'ch1_brazil.png', file_path: undefined });
+        expect(matchArtifactByRelPath([noPath], 'charts/ch1_brazil.png')).toBe(noPath);
+    });
+
+    it('returns undefined on no match / empty list / empty ref', () => {
+        expect(matchArtifactByRelPath(list, 'charts/nope.png')).toBeUndefined();
+        expect(matchArtifactByRelPath([], 'charts/ch1_brazil.png')).toBeUndefined();
+        expect(matchArtifactByRelPath(undefined, 'charts/ch1_brazil.png')).toBeUndefined();
+        expect(matchArtifactByRelPath(list, '')).toBeUndefined();
+    });
+});
+
+describe('stripEmptyHtmlPlaceholders', () => {
+    it('removes an empty styled <div></div> placeholder box (the leaked-noise case)', () => {
+        const md = '正文\n\n<div style="border:1px solid #ccc; height:120px; background:#f9f9f9;"></div>\n\n更多';
+        expect(stripEmptyHtmlPlaceholders(md)).toBe('正文\n\n\n\n更多');
+    });
+
+    it('removes multiple and simply-nested empty blocks', () => {
+        expect(stripEmptyHtmlPlaceholders('<div></div><section class="a"></section>')).toBe('');
+        expect(stripEmptyHtmlPlaceholders('<div><div></div></div>')).toBe('');
+    });
+
+    it('keeps content-bearing HTML untouched (only EMPTY tags are stripped)', () => {
+        expect(stripEmptyHtmlPlaceholders('<div>评论：看多</div>')).toBe('<div>评论：看多</div>');
+    });
+
+    it('leaves normal markdown (incl. image syntax) untouched', () => {
+        const md = '# 标题\n\n![季节性走势](charts/x.png)\n\n段落';
+        expect(stripEmptyHtmlPlaceholders(md)).toBe(md);
+    });
+
+    it('is safe on empty / undefined input', () => {
+        expect(stripEmptyHtmlPlaceholders('')).toBe('');
+        expect(stripEmptyHtmlPlaceholders(undefined as unknown as string)).toBe(undefined);
     });
 });
 
