@@ -203,6 +203,10 @@ export function UserPopMenu() {
                                 <span className="flex-1 text-sm">日本語</span>
                                 {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
+                            <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('ko'))}>
+                                <span className="flex-1 text-sm">한국어</span>
+                                {langcode === 'ko' && <Check className="ml-2 size-4 text-blue-600" />}
+                            </DropdownMenuItem>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
 
