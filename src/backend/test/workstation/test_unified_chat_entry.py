@@ -106,3 +106,28 @@ def test_to_linsight_submit_no_knowledge_defaults_false():
 
     assert submit.org_knowledge_enabled is False
     assert submit.personal_knowledge_enabled is False
+
+
+def test_to_linsight_submit_forwards_selected_skills():
+    """The daily task-mode skill picker must reach the submit schema.
+
+    Regression: _to_linsight_submit dropped skills entirely, so the stored SV had
+    skills=None. That was masked while None meant "load all enabled skills"; once
+    None means "no skills", an explicit pick that never arrived silently loaded
+    nothing — the picker looked broken.
+    """
+    data = APIChatCompletion(
+        clientTimestamp="t", conversationId="c", model="m", text="hi", task_mode=True, skills=["morning-report"]
+    )
+
+    submit = chat_service._to_linsight_submit(data)
+
+    assert submit.skills == ["morning-report"]
+
+
+def test_to_linsight_submit_no_skills_stays_none():
+    data = APIChatCompletion(clientTimestamp="t", conversationId="c", model="m", text="hi", task_mode=True)
+
+    submit = chat_service._to_linsight_submit(data)
+
+    assert submit.skills is None
