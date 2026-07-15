@@ -36,7 +36,14 @@ are subfolders of the current working directory. NEVER use an absolute path with
 leading slash such as `/output/...` or `/scratch/...` — anything written outside the \
 current working directory is DISCARDED and will NOT be delivered to the user. \
 Do not use things like plot.show() as it will not work; save figures to `output/` \
-instead. print() any output and results so you can capture the output."""
+instead. print() any output and results so you can capture the output. \
+AVAILABLE LIBRARIES: this runs in the backend Python environment; these are ALREADY \
+installed — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
+python-docx (Word), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
+`fitz` (read/parse PDF). To READ text or tables from a PDF, use `import fitz` \
+(PyMuPDF); do NOT use pdfminer / pdfplumber / PyPDF2 — they are NOT installed. If an \
+import fails, switch to an already-installed library instead of assuming a package \
+exists; do NOT run `pip install` (this is a shared, offline environment)."""
 
 
 class LocalExecutor(BaseExecutor):

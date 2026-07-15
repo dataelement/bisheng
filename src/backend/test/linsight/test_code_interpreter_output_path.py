@@ -113,3 +113,23 @@ def test_run_failure_path_returns_without_notice(monkeypatch):
     assert "log" in result
     # failure path returns early — no file_list, no notice appended
     assert "file_list" not in result
+
+
+# ---------------------------------------------------------------------------
+# LOCAL_DESCRIPTION: available-library guidance
+# ---------------------------------------------------------------------------
+def test_description_guides_to_installed_pdf_and_data_libs():
+    """The tool description names installed libraries and steers PDF reads to
+    `fitz`, away from pdfminer/pdfplumber/PyPDF2 which the model tends to reach
+    for but are NOT installed in the backend env. Prevents regressing the
+    guidance that stops spurious 'No module named pdfminer' output.
+    """
+    d = LocalExecutor(minio={}).description
+    # PDF read guidance points at the installed lib, not the model's defaults
+    assert "fitz" in d
+    assert "pdfminer" in d and "NOT installed" in d
+    # names an installed PDF generator + core data lib so the model won't guess
+    assert "reportlab" in d
+    assert "pandas" in d
+    # shared, offline env — must not encourage pip install
+    assert "pip install" in d
