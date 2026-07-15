@@ -10,10 +10,11 @@ is a catch-all safety net for cases where:
   - Tenant lifecycle changes (mount/unmount/disable) invalidated
     previously-active leaf assignments.
 
-Every 6h we walk the user table in batches, calling
-``UserTenantSyncService.sync_user`` per user. A ``TenantRelocateBlockedError``
-from enforce_transfer_before_relocate=True is swallowed (already audited
-by the service) so one user's blocked relocation can't stop the scan.
+Every 6h we keyset-page the user table and batch-derive expected assignments.
+Only drifted users enter ``UserTenantSyncService.sync_user``. A
+``TenantRelocateBlockedError`` from enforce_transfer_before_relocate=True is
+swallowed (already audited by the service) so one blocked relocation cannot
+stop the scan.
 
 The scheduled entry is registered by ``CeleryConf.validate`` in
 ``bisheng.core.config.settings``.
@@ -35,17 +36,22 @@ def reconcile_user_tenant_assignments():
 
 
 async def _reconcile_async() -> None:
-    """Page through every active user, call sync_user with a reconcile trigger."""
+    """Batch-detect drift and sync only inconsistent active users."""
     from bisheng.common.errcode.tenant_resolver import TenantRelocateBlockedError
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+    from bisheng.tenant.domain.services.user_tenant_reconcile_service import (
+        UserTenantReconcileService,
+    )
     from bisheng.tenant.domain.services.user_tenant_sync_service import (
         UserTenantSyncService,
     )
     from bisheng.user.domain.models.user import UserDao
 
-    offset = 0
+    context = await UserTenantReconcileService.load_context()
+    last_user_id = 0
     processed = 0
+    unchanged = 0
     synced = 0
     blocked = 0
     failed = 0
@@ -59,32 +65,44 @@ async def _reconcile_async() -> None:
     # so ContextVar tokens aren't shared across concurrent coroutines.
     with bypass_tenant_filter():
         while True:
-            users = await UserDao.alist_users_paginated(
-                offset=offset, limit=BATCH_SIZE,
+            users = await UserDao.alist_users_after_id(
+                last_user_id=last_user_id,
+                limit=BATCH_SIZE,
             )
             if not users:
                 break
-            for u in users:
-                processed += 1
+            user_ids = [int(user.user_id) for user in users]
+            drifted_user_ids = await UserTenantReconcileService.find_drifted_user_ids(
+                user_ids,
+                context,
+            )
+            processed += len(user_ids)
+            unchanged += len(user_ids) - len(drifted_user_ids)
+
+            for user_id in drifted_user_ids:
                 try:
                     await UserTenantSyncService.sync_user(
-                        u.user_id,
+                        user_id,
                         trigger=UserTenantSyncTrigger.CELERY_RECONCILE,
                     )
                     synced += 1
                 except TenantRelocateBlockedError:
                     blocked += 1
                     # Already written as ``user.tenant_relocate_blocked`` in audit_log.
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     failed += 1
                     logger.error(
-                        'reconcile_user_tenant: sync_user(%d) failed: %s',
-                        u.user_id, exc,
+                        "reconcile_user_tenant: sync_user(%d) failed: %s",
+                        user_id,
+                        exc,
                     )
-            offset += BATCH_SIZE
+            last_user_id = user_ids[-1]
 
     logger.info(
-        'reconcile_user_tenant_assignments done: processed=%d synced=%d '
-        'blocked=%d failed=%d',
-        processed, synced, blocked, failed,
+        "reconcile_user_tenant_assignments done: processed=%d unchanged=%d synced=%d blocked=%d failed=%d",
+        processed,
+        unchanged,
+        synced,
+        blocked,
+        failed,
     )
