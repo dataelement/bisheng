@@ -72,7 +72,13 @@ class E2bCodeExecutor(BaseExecutor):
 
     @property
     def description(self) -> str:
-        return "A code interpreter that can execute python code. Input should be a valid python code. If you have any files outputted write them to `output/` relative to the execution path."
+        return (
+            "A code interpreter that can execute python code. Input should be valid python code. "
+            "Write final deliverables to the RELATIVE directory `output/` (e.g. `output/report.pdf`) "
+            "and intermediate files to `scratch/`. NEVER use an absolute path with a leading slash "
+            "such as `/output/...` or `/scratch/...` — files written outside the current working "
+            "directory are DISCARDED and will NOT be delivered to the user."
+        )
 
     def init_sandbox(self):
         if not self.sandbox:
