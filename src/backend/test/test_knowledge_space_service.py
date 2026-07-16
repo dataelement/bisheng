@@ -1636,6 +1636,275 @@ def test_shougang_portal_file_browse_request_defaults_to_updated_time_desc_sort(
 
 
 @pytest.mark.asyncio
+async def test_public_latest_selected_uses_authoritative_public_spaces_without_permissions(service):
+    public_spaces = [
+        _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC),
+        _make_space(space_id=18, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC),
+    ]
+    public_spaces[0].name = "轧线技术案例库"
+    public_spaces[1].name = "冷轧技术手册"
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name="热轧治理实践.pdf"),
+        _make_file(file_id=1801, knowledge_id=18, file_name="冷轧缺陷处理.pdf"),
+    ]
+
+    async def fake_get_files(**kwargs):
+        assert kwargs["knowledge_ids"] == [12, 18]
+        assert kwargs["status"] == [KnowledgeFileStatus.SUCCESS.value]
+        assert kwargs["file_ids"] == [1801, 1580]
+        return files
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12, 18],
+        ) as mock_public_space_ids,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=public_spaces,
+        ) as mock_spaces,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.PortalTelemetryEventService.list_document_read_counts_by_space_ids",
+            new_callable=AsyncMock,
+            return_value=[
+                {"file_id": 1801, "read_count": 20},
+                {"file_id": 1580, "read_count": 10},
+            ],
+        ) as mock_read_counts,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters",
+            new_callable=AsyncMock,
+            side_effect=fake_get_files,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
+        patch.object(
+            service,
+            "_get_shougang_portal_visible_search_spaces",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not resolve user-visible spaces"),
+        ) as mock_visible_spaces,
+        patch.object(
+            service,
+            "_get_effective_permission_ids",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not evaluate space permissions"),
+        ) as mock_effective_permissions,
+        patch.object(
+            service,
+            "_public_space_viewer_permission_ids",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not query public viewer permissions"),
+        ) as mock_public_viewer_permissions,
+        patch.object(
+            service,
+            "_filter_visible_child_items",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not evaluate file permissions"),
+        ) as mock_child_permissions,
+        patch.object(
+            service,
+            "_filter_shougang_portal_visible_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not enter generic visibility filtering"),
+        ) as mock_file_visibility,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                public_only=True,
+                space_ids=[999],
+                sort="portal_read_count_desc",
+                limit=2,
+            )
+        )
+
+    mock_public_space_ids.assert_awaited_once_with(KnowledgeSpaceLevelEnum.PUBLIC)
+    mock_spaces.assert_awaited_once_with([12, 18], order_by="update_time")
+    mock_read_counts.assert_awaited_once_with([12, 18], offset=0, limit=100)
+    mock_visible_spaces.assert_not_awaited()
+    mock_effective_permissions.assert_not_awaited()
+    mock_public_viewer_permissions.assert_not_awaited()
+    mock_child_permissions.assert_not_awaited()
+    mock_file_visibility.assert_not_awaited()
+    assert [item["id"] for item in result["data"]] == [1801, 1580]
+    assert result["has_more"] is False
+    assert result["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_public_latest_selected_discards_stale_candidates_and_keeps_cursor_order(service):
+    public_space = _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC)
+    public_space.name = "公共案例库"
+    first_valid = _make_file(file_id=1580, knowledge_id=12, file_name="第一篇.pdf")
+    second_valid = _make_file(file_id=1582, knowledge_id=12, file_name="第二篇.pdf")
+
+    async def fake_get_files(**kwargs):
+        assert kwargs["knowledge_ids"] == [12]
+        assert kwargs["file_ids"] == [9999, 1580, 1582]
+        return [second_valid, first_valid]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[public_space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.PortalTelemetryEventService.list_document_read_counts_by_space_ids",
+            new_callable=AsyncMock,
+            return_value=[
+                {"file_id": 9999, "read_count": 30},
+                {"file_id": 1580, "read_count": 20},
+                {"file_id": 1582, "read_count": 10},
+            ],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters",
+            new_callable=AsyncMock,
+            side_effect=fake_get_files,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
+        patch.object(
+            service,
+            "_filter_shougang_portal_visible_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("trusted public candidates must bypass generic visibility filtering"),
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                public_only=True,
+                space_ids=[999],
+                sort="portal_read_count_desc",
+                limit=1,
+            )
+        )
+
+    assert [item["id"] for item in result["data"]] == [1580]
+    assert result["has_more"] is True
+    assert result["next_cursor"]
+
+
+@pytest.mark.asyncio
+async def test_public_latest_selected_updated_time_sort_still_bypasses_permissions(service):
+    public_space = _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC)
+    public_space.name = "公共案例库"
+    old_file = _make_file(file_id=1580, knowledge_id=12, file_name="较早文档.pdf")
+    old_file.update_time = datetime(2026, 4, 13, 10, 30, 0)
+    new_file = _make_file(file_id=1582, knowledge_id=12, file_name="较新文档.pdf")
+    new_file.update_time = datetime(2026, 4, 15, 10, 30, 0)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[public_space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor",
+            new_callable=AsyncMock,
+            return_value=[old_file, new_file],
+        ) as mock_batch_files,
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
+        patch.object(
+            service,
+            "_get_shougang_portal_visible_search_spaces",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not resolve user-visible spaces"),
+        ),
+        patch.object(
+            service,
+            "_filter_shougang_portal_visible_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not evaluate file permissions"),
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                public_only=True,
+                space_ids=[999],
+                sort="updated_at_asc",
+            )
+        )
+
+    assert mock_batch_files.await_args.kwargs["knowledge_ids"] == [12]
+    assert mock_batch_files.await_args.kwargs["order_sort"] == "asc"
+    assert [item["id"] for item in result["data"]] == [1580, 1582]
+
+
+@pytest.mark.asyncio
+async def test_public_only_without_latest_selected_keeps_existing_permission_path(service):
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_visible_search_spaces",
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as mock_visible_spaces,
+        patch.object(
+            service,
+            "_get_shougang_portal_public_search_spaces",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public_only alone must not activate the permission bypass"),
+        ) as mock_public_spaces,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(public_only=True, space_ids=[12])
+        )
+
+    mock_visible_spaces.assert_awaited_once_with([12], None)
+    mock_public_spaces.assert_not_awaited()
+    assert result == {"data": [], "has_more": False, "next_cursor": None}
+
+
+@pytest.mark.asyncio
 async def test_latest_selected_explicit_updated_time_sort_bypasses_hot_read_ranking(service):
     space = _make_space(space_id=12, user_id=7)
     old_file = _make_file(file_id=1580, knowledge_id=12, file_name="较早文档.pdf")
@@ -5781,6 +6050,9 @@ class TestSpaceListings:
         members = [_make_member(user_id=service.login_user.user_id, user_role=UserRoleEnum.MEMBER, space_id=202)]
         formatted_spaces = [_make_space(space_id=202, user_id=99, auth_type=AuthTypeEnum.PRIVATE)]
 
+        async def _list_accessible_ids(*, relation, **_kwargs):
+            return ["202"] if relation == "can_read" else []
+
         with (
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
@@ -5792,6 +6064,11 @@ class TestSpaceListings:
                 new_callable=AsyncMock,
                 return_value=members,
             ) as mock_members,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.list_accessible_ids",
+                new_callable=AsyncMock,
+                side_effect=_list_accessible_ids,
+            ) as mock_list_accessible_ids,
             patch.object(
                 service,
                 "_format_accessible_spaces",
@@ -5805,14 +6082,58 @@ class TestSpaceListings:
         assert result == formatted_spaces
         mock_level_candidates.assert_awaited_once_with(space_level)
         mock_members.assert_awaited_once_with(service.login_user.user_id)
+        assert mock_list_accessible_ids.await_count == 2
         mock_format.assert_awaited_once_with(
             [202],
             "update_time",
             memberships=members,
             required_permission_id="view_space",
             include_file_count=False,
+            precomputed_permission_levels={202: "can_read"},
         )
         mock_accessible_spaces.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_spaces_by_level_intersects_candidates_with_readable_or_member_spaces(self, service):
+        members = [_make_member(user_id=service.login_user.user_id, user_role=UserRoleEnum.MEMBER, space_id=202)]
+
+        async def _list_accessible_ids(*, relation, **_kwargs):
+            return ["201"] if relation == "can_read" else []
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+                new_callable=AsyncMock,
+                return_value=[201, 202, 203],
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_space_members",
+                new_callable=AsyncMock,
+                return_value=members,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.list_accessible_ids",
+                new_callable=AsyncMock,
+                side_effect=_list_accessible_ids,
+            ),
+            patch.object(
+                service,
+                "_format_accessible_spaces",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as mock_format,
+        ):
+            result = await service.get_spaces_by_level(KnowledgeSpaceLevelEnum.TEAM)
+
+        assert result == []
+        mock_format.assert_awaited_once_with(
+            [201, 202],
+            "update_time",
+            memberships=members,
+            required_permission_id="view_space",
+            include_file_count=False,
+            precomputed_permission_levels={201: "can_read"},
+        )
 
     @pytest.mark.asyncio
     async def test_get_my_created_spaces_excludes_department_bound_spaces(self, service):
@@ -5876,6 +6197,18 @@ class TestSpaceListings:
             ),
             patch.object(
                 service,
+                "_get_relation_models_map",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch.object(
+                service,
+                "_get_relation_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                service,
                 "_get_effective_permission_ids",
                 new_callable=AsyncMock,
                 return_value={"view_space"},
@@ -5924,6 +6257,24 @@ class TestSpaceListings:
                 "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels",
                 new_callable=AsyncMock,
                 return_value={"2": "can_read"},
+            ),
+            patch.object(
+                service,
+                "_get_relation_models_map",
+                new_callable=AsyncMock,
+                return_value={"custom-viewless": {"is_system": False}},
+            ),
+            patch.object(
+                service,
+                "_get_relation_bindings",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "resource_type": "knowledge_space",
+                        "resource_id": "2",
+                        "model_id": "custom-viewless",
+                    }
+                ],
             ),
             patch.object(
                 service,
@@ -10047,10 +10398,22 @@ class TestFormatAccessibleSpacesCharacterization:
             ),
             patch.object(
                 service,
+                "_get_relation_models_map",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch.object(
+                service,
+                "_get_relation_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                service,
                 "_get_effective_permission_ids",
                 new_callable=AsyncMock,
                 return_value={"view_space", "manage_space_relation"},
-            ),
+            ) as mock_effective_permissions,
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
                 new_callable=AsyncMock,
@@ -10070,6 +10433,63 @@ class TestFormatAccessibleSpacesCharacterization:
             )
         assert [s.id for s in result] == [3]
         assert result[0].user_role == UserRoleEnum.ADMIN
+        mock_effective_permissions.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_custom_permission_model_keeps_effective_view_permission_check(self, service):
+        granted = _make_space(space_id=4, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+                new_callable=AsyncMock,
+                return_value=[granted],
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels",
+                new_callable=AsyncMock,
+                return_value={"4": "can_read"},
+            ),
+            patch.object(
+                service,
+                "_get_relation_models_map",
+                new_callable=AsyncMock,
+                return_value={"custom-viewless": {"is_system": False}},
+            ),
+            patch.object(
+                service,
+                "_get_relation_bindings",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "resource_type": "knowledge_space",
+                        "resource_id": "4",
+                        "model_id": "custom-viewless",
+                    }
+                ],
+            ),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ) as mock_effective_permissions,
+            patch.object(
+                service,
+                "_decorate_department_metadata",
+                new_callable=AsyncMock,
+                side_effect=lambda spaces: spaces,
+            ),
+        ):
+            result = await service._format_accessible_spaces(
+                [4],
+                "update_time",
+                memberships=[],
+                required_permission_id="view_space",
+                include_file_count=False,
+            )
+
+        assert result == []
+        mock_effective_permissions.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_non_owner_space_without_view_space_is_excluded(self, service):
@@ -10148,3 +10568,102 @@ class TestFormatAccessibleSpacesCharacterization:
             )
         assert [item.id for item in result] == [11, 10]
         assert all(item.is_pinned is False for item in result)
+
+    @pytest.mark.asyncio
+    async def test_large_active_membership_list_skips_redundant_effective_permission_checks(self, service):
+        spaces = [
+            _make_space(space_id=space_id, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+            for space_id in range(1000, 1150)
+        ]
+        memberships = [
+            _make_member(
+                user_id=service.login_user.user_id,
+                user_role=UserRoleEnum.MEMBER,
+                space_id=space.id,
+            )
+            for space in spaces
+        ]
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+                new_callable=AsyncMock,
+                return_value=spaces,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels",
+                new_callable=AsyncMock,
+            ) as mock_permission_levels,
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+            ) as mock_effective_permissions,
+            patch.object(
+                service,
+                "_can_unsubscribe_space",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch.object(
+                service,
+                "_decorate_department_metadata",
+                new_callable=AsyncMock,
+                side_effect=lambda result: result,
+            ),
+        ):
+            result = await service._format_accessible_spaces(
+                [space.id for space in spaces],
+                "update_time",
+                memberships=memberships,
+                required_permission_id="view_space",
+                include_file_count=False,
+            )
+
+        assert len(result) == 150
+        assert all(item.user_role == UserRoleEnum.MEMBER for item in result)
+        mock_permission_levels.assert_not_awaited()
+        mock_effective_permissions.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_global_admin_list_skips_per_space_permission_resolution(self, service):
+        service.login_user.is_admin = lambda: True
+        spaces = [
+            _make_space(space_id=space_id, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+            for space_id in range(2000, 2150)
+        ]
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+                new_callable=AsyncMock,
+                return_value=spaces,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_levels",
+                new_callable=AsyncMock,
+            ) as mock_permission_levels,
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+            ) as mock_effective_permissions,
+            patch.object(
+                service,
+                "_decorate_department_metadata",
+                new_callable=AsyncMock,
+                side_effect=lambda result: result,
+            ),
+        ):
+            result = await service._format_accessible_spaces(
+                [space.id for space in spaces],
+                "update_time",
+                memberships=[],
+                required_permission_id="view_space",
+                include_file_count=False,
+            )
+
+        assert len(result) == 150
+        assert all(item.user_role == UserRoleEnum.ADMIN for item in result)
+        mock_permission_levels.assert_not_awaited()
+        mock_effective_permissions.assert_not_awaited()

@@ -94,8 +94,6 @@ class UseKnowledgeBaseParam(BaseModel):
     def convert_knowledge_space_ids(cls, v: Any):
         if v is None:
             return []
-        if len(v) > 50:
-            raise ValueError('Can only be used up to 50 knowledge space')
 
         return v
 

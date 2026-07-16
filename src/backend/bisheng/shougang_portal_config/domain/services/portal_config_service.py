@@ -18,6 +18,8 @@ from bisheng.shougang_portal_config.domain.services.department_business_domain_s
     DepartmentBusinessDomainService,
 )
 
+SHOUGANG_PORTAL_CONFIG_KEY = 'shougang_portal_config'
+
 
 def _enqueue_recommendation_config_post_commit(**kwargs) -> None:
     from bisheng.worker.knowledge.portal_recommendation import (

@@ -378,6 +378,10 @@ class ShougangPortalFileBrowseReq(BaseModel):
         default=None, max_length=16, description="Business domain code from file_encoding segment 3"
     )
     recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
+    public_only: bool = Field(
+        default=False,
+        description="Restrict latest-selected browsing to server-resolved public knowledge spaces",
+    )
     sort: str = Field(
         default="updated_at_desc", description="Sort mode: updated_at / updated_at_desc / updated_at_asc"
     )
