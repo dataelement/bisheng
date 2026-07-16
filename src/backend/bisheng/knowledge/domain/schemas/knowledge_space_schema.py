@@ -429,7 +429,6 @@ class ShougangPortalFileItemResp(BaseModel):
     summary: str = ""
     source: str = ""
     updated_at: str = ""
-    tags: list[str] = Field(default_factory=list)
     tag_infos: list[ShougangPortalFileTagResp] = Field(default_factory=list)
     file_ext: str = ""
     file_size: str = ""

@@ -4189,11 +4189,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=None,
             include_source_paths=False,
         )
-        if not current_items or not current_items[0].tags:
+        if not current_items or not current_items[0].tag_infos:
             return {"data": [], "total": 0}
 
         score_map: dict[int, int] = {}
-        for tag_name in current_items[0].tags:
+        for tag_info in current_items[0].tag_infos:
+            tag_name = tag_info.tag_name
             tag_ids = await TagLibraryTagService.resolve_tag_ids_by_name_for_space(space_id, tag_name)
             if not tag_ids:
                 continue
@@ -6669,7 +6670,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             summary = item.summary.lower()
             tags = [
                 tag_text.lower()
-                for tag_text in (KnowledgeSpaceService._shougang_portal_tag_text(tag) for tag in item.tags)
+                for tag_text in (KnowledgeSpaceService._shougang_portal_tag_text(tag) for tag in item.tag_infos)
                 if tag_text
             ]
             hit_score = 0
