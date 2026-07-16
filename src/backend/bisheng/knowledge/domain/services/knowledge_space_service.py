@@ -1988,18 +1988,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceInvalidLevelError()
 
         files = await self._get_space_files_or_raise(space_id, file_ids)
-        action_permission_ids = (
-            "rename_file",
-            "download_file",
-            "delete_file",
-            "move_file",
-            "manage_file_relation",
-        )
+
+        def action_permission_ids(file_record: KnowledgeFile) -> tuple[str, ...]:
+            if file_record.file_type == FileType.DIR.value:
+                return (
+                    "rename_folder",
+                    "download_folder",
+                    "delete_folder",
+                    "move_folder",
+                    "manage_folder_relation",
+                )
+            return (
+                "rename_file",
+                "download_file",
+                "delete_file",
+                "move_file",
+                "manage_file_relation",
+            )
+
         is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, "is_admin", None)) else False
         if is_admin:
             return {
                 "permissions": [
-                    {"file_id": file_record.id, "permission_ids": list(action_permission_ids)}
+                    {
+                        "file_id": file_record.id,
+                        "permission_ids": list(action_permission_ids(file_record)),
+                    }
                     for file_record in files
                 ]
             }
@@ -2030,7 +2044,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "file_id": file_record.id,
                     "permission_ids": [
                         permission_id
-                        for permission_id in action_permission_ids
+                        for permission_id in action_permission_ids(file_record)
                         if permission_id in permission_ids
                     ],
                 }
@@ -3973,16 +3987,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _search_shougang_portal_files_impl(self, req: ShougangPortalFileSearchReq) -> dict:
         _set_portal_search_stage("resolve_spaces")
-        spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
+        is_public_latest_selected = bool(req.public_only) and self._is_shougang_portal_latest_selected_recommendation(
+            req.recommendation
+        )
+        if is_public_latest_selected:
+            spaces = await self._get_shougang_portal_public_search_spaces()
+        else:
+            spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
         perf = _get_portal_search_perf()
         if perf is not None:
             perf.space_count = len(spaces)
         if not spaces:
             return self._build_shougang_portal_search_response([])
 
-        if self._is_shougang_portal_latest_selected_recommendation(req.recommendation):
+        if self._is_shougang_portal_latest_selected_recommendation(
+            req.recommendation
+        ) and not self._is_shougang_portal_updated_at_sort(req.sort):
             _set_portal_search_stage("list_hot_read_files")
-            return await self._list_shougang_portal_hot_read_files(req=req, spaces=spaces)
+            return await self._list_shougang_portal_hot_read_files(
+                req=req,
+                spaces=spaces,
+                trusted_public_scope=is_public_latest_selected,
+            )
 
         _set_portal_search_stage("resolve_tag")
         space_ids = [int(space.id) for space in spaces]
@@ -4003,6 +4029,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             req=req,
             spaces=spaces,
             tag_file_ids=tag_file_ids,
+            trusted_public_scope=is_public_latest_selected,
         )
 
     async def _list_shougang_portal_hot_read_files(
@@ -4010,6 +4037,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         req: ShougangPortalFileSearchReq,
         spaces: list[Knowledge],
+        trusted_public_scope: bool = False,
     ) -> dict:
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 
@@ -4036,6 +4064,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=req.file_subcategory_code,
             include_source_paths=True,
             detect_has_more=True,
+            trusted_public_scope=trusted_public_scope,
         )
         next_cursor = (
             encode_cursor((next_offset,), context=cursor_context) if has_more and next_offset is not None else None
@@ -4073,6 +4102,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_subcategory_code: str | None,
         include_source_paths: bool,
         detect_has_more: bool,
+        trusted_public_scope: bool = False,
     ) -> tuple[list[ShougangPortalFileItemResp], bool, int | None]:
         space_ids = [int(space.id) for space in spaces]
         safe_limit = min(max(int(limit or 20), 1), 100)
@@ -4112,7 +4142,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             files = self._filter_shougang_portal_files_by_subcategory_code(files, file_subcategory_code)
             files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
             if files:
-                visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+                visible_files = (
+                    self._accept_shougang_portal_public_files(files)
+                    if trusted_public_scope
+                    else await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+                )
                 visible_file_map = {int(file.id): file for file in visible_files}
                 ordered_files = [
                     visible_file_map[file_id] for file_id in bucket_file_ids if file_id in visible_file_map
@@ -4178,6 +4212,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         req: ShougangPortalFileSearchReq,
         spaces: list[Knowledge],
         tag_file_ids: list[int] | None,
+        trusted_public_scope: bool = False,
     ) -> dict:
         from bisheng.common.cursor import CursorDecodeError, decode_cursor
 
@@ -4218,7 +4253,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
             files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
             if files:
-                visible_batch = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+                visible_batch = (
+                    self._accept_shougang_portal_public_files(files)
+                    if trusted_public_scope
+                    else await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+                )
                 visible_ids = {int(file.id) for file in visible_batch}
                 for file in files:
                     if int(file.id) not in visible_ids:
@@ -5197,6 +5236,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @staticmethod
     def _is_shougang_portal_latest_selected_recommendation(recommendation: str | None) -> bool:
         return str(recommendation or "").strip() == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
+
+    async def _get_shougang_portal_public_search_spaces(self) -> list[Knowledge]:
+        """Resolve the current tenant's public spaces without user permission checks."""
+        public_space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
+        unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in public_space_ids if int(space_id) > 0))
+        if not unique_space_ids:
+            return []
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(unique_space_ids, order_by="update_time")
+        space_map = {
+            int(space.id): space
+            for space in spaces
+            if space.id is not None and int(space.type) == KnowledgeTypeEnum.SPACE.value
+        }
+        return [space_map[space_id] for space_id in unique_space_ids if space_id in space_map]
+
+    def _accept_shougang_portal_public_files(self, files: list[KnowledgeFile]) -> list[KnowledgeFile]:
+        """Accept server-scoped public files without evaluating user permissions."""
+        _increment_portal_search_perf("fast_path_public_space_count", len(files))
+        return files
 
     async def _get_shougang_portal_visible_search_spaces(
         self,
