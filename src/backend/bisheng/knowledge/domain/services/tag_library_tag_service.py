@@ -980,7 +980,15 @@ class TagLibraryTagService:
         tags = await TagDao.alist_tree(keyword=keyword)
         if not tags:
             return {}
-        tag_map = {tag.business_id: KnowledgeSpaceTagLibraryTreeItem(id="T"+str(tag.id), name=tag.name, key=tag.id, library_id=tag.library_id, parent_id="L"+str(tag.parent_id)) for tag in tags}
-        tag_set = set([tag.business_id for tag in tags])
-        tags_group = {tag_id: tag_map.get(tag_id, []) for tag_id in tag_set if tag_id in tag_map}
-        return tags_group
+        tag_map: dict[int, list[KnowledgeSpaceTagLibraryTreeItem]] = {}
+        for tag in tags:
+            tag_map.setdefault(tag.business_id, []).append(
+                KnowledgeSpaceTagLibraryTreeItem(
+                    id="T" + str(tag.id),
+                    name=tag.name,
+                    key=tag.id,
+                    library_id=tag.business_id,
+                    parent_id="L" + str(tag.business_id),
+                )
+            )
+        return tag_map

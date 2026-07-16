@@ -51,4 +51,4 @@ class KnowledgeSpaceTagLibraryTreeItem(BaseModel):
     library_id: int = Field(description="标签库 ID")
     meta_info: str | None = Field(default=None, description="标签库元信息")
     parent_id: str | None = Field(default=None, description="父标签库 ID")    
-    children: list[KnowledgeSpaceTagLibraryTreeItem] = Field(default_factory=list, description="子标签库列表")
+    children: list["KnowledgeSpaceTagLibraryTreeItem"] = Field(default_factory=list, description="子标签库列表")

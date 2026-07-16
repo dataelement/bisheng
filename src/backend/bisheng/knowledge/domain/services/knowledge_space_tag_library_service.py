@@ -1,7 +1,5 @@
 """Knowledge-space tag library service backed by ``tag`` rows and M:N links."""
 
-from backend.bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryListItem
-
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
     KnowledgeSpaceTagLibraryInvalidError,
@@ -370,23 +368,23 @@ class KnowledgeSpaceTagLibraryService:
         tags_group = await TagLibraryTagService.alist_tree(keyword=keyword)
         if not tags_group or len(tags_group) == 0:
             return []
-        data: list[KnowledgeSpaceTagLibraryTreeItem] = []
+        result: list[KnowledgeSpaceTagLibraryTreeItem] = []
         for tag_id, items in tags_group.items():
             library = await KnowledgeSpaceTagLibraryDao.aget(int(tag_id))
             if not library:
                 continue
-            data = jsonable_encoder(library)
+            library_data = jsonable_encoder(library)
             tree_item = KnowledgeSpaceTagLibraryTreeItem(
                 id="L"+str(library.id),
                 name=library.name,
                 key=library.id,
                 library_id=library.id,
-                meta_info=json.dumps(data, ensure_ascii=False),
+                meta_info=json.dumps(library_data, ensure_ascii=False),
                 parent_id=None,
                 children=items,
             )
-            data.append(tree_item)
-        return data
+            result.append(tree_item)
+        return result
     
     async def list_libraries(
         self, page: int = 1, page_size: int = 20, keyword: str | None = None

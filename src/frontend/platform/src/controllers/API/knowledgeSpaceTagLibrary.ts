@@ -83,12 +83,28 @@ export interface KnowledgeSpaceTagLibraryPage {
   total: number
 }
 
+export interface KnowledgeSpaceTagLibraryTreeItem {
+  id: string
+  name: string
+  key: number
+  library_id: number
+  meta_info: string | null
+  parent_id: string | null
+  children: KnowledgeSpaceTagLibraryTreeItem[]
+}
+
 export async function getKnowledgeSpaceTagLibrariesApi(params?: {
   page?: number
   page_size?: number
   keyword?: string
 }): Promise<KnowledgeSpaceTagLibraryPage> {
   return await axios.get("/api/v1/knowledge/space/tag-libraries", { params })
+}
+
+export async function getKnowledgeSpaceTagLibrariesByTreeApi(params?: {
+  keyword?: string
+}): Promise<KnowledgeSpaceTagLibraryTreeItem[]> {
+  return await axios.get("/api/v1/knowledge/space/tag-libraries/tree", { params })
 }
 
 export async function getKnowledgeSpaceTagLibraryApi(id: number): Promise<KnowledgeSpaceTagLibraryDetail> {
