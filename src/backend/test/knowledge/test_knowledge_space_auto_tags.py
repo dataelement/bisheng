@@ -23,7 +23,7 @@ def test_tag_library_normalize_preserves_duplicates_and_rejects_over_limit():
     assert KnowledgeSpaceTagLibraryService.normalize_tags([" 政策 ", "", "政策", "制度"]) == ["政策", "政策", "制度"]
 
     with pytest.raises(KnowledgeSpaceTagLibraryInvalidError):
-        KnowledgeSpaceTagLibraryService.normalize_tags([f"tag-{i}" for i in range(201)])
+        KnowledgeSpaceTagLibraryService.normalize_tags([f"tag-{i}" for i in range(1000)])
 
 
 def test_auto_tag_parse_accepts_strict_json_and_json_fence():
@@ -44,6 +44,17 @@ def test_auto_tag_match_only_uses_library_tags_and_limits_result_count():
     matched, ai_matched = KnowledgeSpaceAutoTagService._match_library_tags(selected_with_ai, ["政策"], ["AI-政策"])
     assert matched == ["政策"]
     assert ai_matched == ["AI-政策"]
+
+    library_tags = ["政策", "制度", "项目", "市场", "财务"]
+    ai_tag_names = [f"AI-{i}" for i in range(7)]
+    selected = library_tags + ai_tag_names
+    matched, ai_matched = KnowledgeSpaceAutoTagService._match_library_tags(
+        selected,
+        library_tags,
+        ai_tag_names,
+    )
+    assert matched == library_tags
+    assert ai_matched == [f"AI-{i}" for i in range(5)]
 
 
 _LINK_DAO_PATCH = (
@@ -221,9 +232,21 @@ def test_auto_tag_writes_ai_matches_even_when_manual_match_empty():
         ),
         patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()),
         patch.object(KnowledgeSpaceAutoTagService, "_invoke_llm", return_value=["AI-标签"]),
+        patch.object(KnowledgeSpaceAutoTagService, "_cap_ai_tags_for_file", side_effect=lambda _fid, tags: tags),
         patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags") as append_file_tags,
     ):
         KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
 
     append_file_tags.assert_called_once()
     assert append_file_tags.call_args.kwargs["tag_names"] == ["AI-标签"]
+
+
+def test_cap_ai_tags_for_file_respects_existing_ai_tag_count():
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service"
+
+    with patch.object(KnowledgeSpaceAutoTagService, "_count_file_ai_auto_tags", return_value=3):
+        capped = KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(99, ["A", "B", "C"])
+    assert capped == ["A", "B"]
+
+    with patch.object(KnowledgeSpaceAutoTagService, "_count_file_ai_auto_tags", return_value=5):
+        assert KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(99, ["A"]) == []

@@ -477,3 +477,9 @@ class TagDao(Tag):
                 )
             await session.commit()
             return True
+
+    @classmethod
+    async def alist_tree(cls, keyword: str) -> list[Tag]:
+        statement = select(Tag).where(Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value, Tag.name.like(f"%{keyword}%"))
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()

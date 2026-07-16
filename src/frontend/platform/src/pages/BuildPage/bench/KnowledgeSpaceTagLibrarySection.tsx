@@ -11,18 +11,20 @@ import {
     deleteKnowledgeSpaceTagLibraryApi,
     deleteKnowledgeSpaceTagLibraryTagApi,
     getKnowledgeSpaceTagLibrariesApi,
+    getKnowledgeSpaceTagLibrariesByTreeApi,
     getKnowledgeSpaceTagLibraryApi,
     getKnowledgeSpaceTagLibraryUsageApi,
     updateKnowledgeSpaceTagLibraryApi,
     type KnowledgeSpaceTagLibraryDetail,
     type KnowledgeSpaceTagLibraryListItem,
     type KnowledgeSpaceTagLibraryTagItem,
+    type KnowledgeSpaceTagLibraryTreeItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cname } from "@/components/bs-ui/utils";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import type { MouseEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 10;
@@ -57,6 +59,68 @@ function BoundSpaceNamesCell({ names }: { names: string[] }) {
                 </Portal>
             </Tooltip>
         </TooltipProvider>
+    );
+}
+
+function TreeSuggestionNode({
+    node,
+    siblings,
+    depth,
+    expandedIds,
+    onToggleExpand,
+    onSelect,
+}: {
+    node: KnowledgeSpaceTagLibraryTreeItem;
+    siblings: KnowledgeSpaceTagLibraryTreeItem[];
+    depth: number;
+    expandedIds: Set<string>;
+    onToggleExpand: (node: KnowledgeSpaceTagLibraryTreeItem, siblings: KnowledgeSpaceTagLibraryTreeItem[]) => void;
+    onSelect: (node: KnowledgeSpaceTagLibraryTreeItem) => void;
+}) {
+    const children = Array.isArray(node.children) ? node.children : [];
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedIds.has(node.id);
+    const handleRowClick = () => {
+        if (hasChildren) {
+            onToggleExpand(node, siblings);
+        } else {
+            onSelect(node);
+        }
+    };
+    return (
+        <div>
+            <div
+                className="flex cursor-pointer items-center py-2 text-sm hover:bg-muted"
+                style={{ paddingLeft: `${12 + depth * 16}px` }}
+                onClick={handleRowClick}
+            >
+                <span
+                    className={cname(
+                        "flex size-4 shrink-0 items-center justify-center text-muted-foreground",
+                        !hasChildren && "invisible",
+                    )}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleExpand(node, siblings);
+                    }}
+                >
+                    {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                </span>
+                <span className="ml-1 truncate hover:text-foreground">{node.name}</span>
+            </div>
+            {isExpanded &&
+                children.map((child) => (
+                    <TreeSuggestionNode
+                        key={child.id}
+                        node={child}
+                        siblings={children}
+                        depth={depth + 1}
+                        expandedIds={expandedIds}
+                        onToggleExpand={onToggleExpand}
+                        onSelect={onSelect}
+                    />
+                ))}
+        </div>
     );
 }
 
@@ -115,6 +179,7 @@ interface TagLibraryFormDialogProps {
 interface LibraryTagsDialogProps {
     open: boolean;
     library: KnowledgeSpaceTagLibraryListItem | null;
+    defaultSearchKeyword?: string;
     onOpenChange: (open: boolean) => void;
     onUpdated: () => void;
 }
@@ -324,7 +389,7 @@ function AddTagToLibraryDialog({ open, saving, onOpenChange, onSubmit }: AddTagT
     );
 }
 
-function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTagsDialogProps) {
+function LibraryTagsDialog({ open, library, defaultSearchKeyword = "", onOpenChange, onUpdated }: LibraryTagsDialogProps) {
     const { t } = useTranslation();
     const { toast } = useToast();
     const [tagItems, setTagItems] = useState<KnowledgeSpaceTagLibraryTagItem[]>([]);
@@ -362,10 +427,10 @@ function LibraryTagsDialog({ open, library, onOpenChange, onUpdated }: LibraryTa
 
     useEffect(() => {
         if (!open || !library?.id) return;
-        setSearchKeyword("");
+        setSearchKeyword(defaultSearchKeyword);
         setAddTagDialogOpen(false);
         loadTags();
-    }, [open, library?.id, loadTags]);
+    }, [open, library?.id, defaultSearchKeyword, loadTags]);
 
     const persistTagItems = async (nextItems: KnowledgeSpaceTagLibraryTagItem[]) => {
         if (!library?.id) return false;
@@ -565,15 +630,65 @@ export default function KnowledgeSpaceTagLibrarySection({
     const [editingLibrary, setEditingLibrary] = useState<KnowledgeSpaceTagLibraryDetail | null>(null);
     const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
     const [selectedLibrary, setSelectedLibrary] = useState<KnowledgeSpaceTagLibraryListItem | null>(null);
+    const [suggestions, setSuggestions] = useState<KnowledgeSpaceTagLibraryTreeItem[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const searchRef = useRef<HTMLDivElement>(null);
+
+    const handleToggleExpand = useCallback(
+        (node: KnowledgeSpaceTagLibraryTreeItem, siblings: KnowledgeSpaceTagLibraryTreeItem[]) => {
+            setExpandedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(node.id)) {
+                    next.delete(node.id);
+                } else {
+                    for (const sibling of siblings) {
+                        next.delete(sibling.id);
+                    }
+                    next.add(node.id);
+                }
+                return next;
+            });
+        },
+        [],
+    );
 
     const loadData = useCallback(async (targetPage: number) => {
         setLoading(true);
-        const res = await captureAndAlertRequestErrorHoc(
-            getKnowledgeSpaceTagLibrariesApi({ page: targetPage, page_size: PAGE_SIZE, keyword: keyword || undefined }),
-        );
-        if (res) {
-            setRows(res.data || []);
-            setTotal(res.total || 0);
+        if (!keyword) {
+            const res = await captureAndAlertRequestErrorHoc(
+                getKnowledgeSpaceTagLibrariesApi({ page: targetPage, page_size: PAGE_SIZE, keyword: keyword || undefined }),
+            );
+            if(res){
+                setRows(res.data || []);
+                setTotal(res.total || 0);
+            }else{
+                setRows([]);
+                setTotal(0);
+            }
+            setSuggestions([]);
+        } else {
+            const res = await captureAndAlertRequestErrorHoc(
+                getKnowledgeSpaceTagLibrariesByTreeApi({ keyword: keyword || undefined }),
+            );
+            const treeList = Array.isArray(res) ? res : [];
+            setSuggestions(treeList);
+            const list: KnowledgeSpaceTagLibraryListItem[] = [];
+            const traverse = (nodes: KnowledgeSpaceTagLibraryTreeItem[]) => {
+                nodes.forEach((node) => {
+                    if (node.meta_info) {
+                        try {
+                            const item = JSON.parse(node.meta_info) as KnowledgeSpaceTagLibraryListItem;
+                            list.push(item);
+                        } catch {
+                            // ignore malformed meta_info
+                        }
+                    }
+                });
+            };
+            traverse(treeList);
+            setRows(list);
+            setTotal(list.length);
         }
         setLoading(false);
     }, [keyword]);
@@ -584,6 +699,20 @@ export default function KnowledgeSpaceTagLibrarySection({
             loadData(1);
         }
     }, [visible, keyword]);
+
+    useEffect(() => {
+        setExpandedIds(new Set());
+    }, [keyword]);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const handlePageChange = (newPage: number) => {
         setPage(newPage);
@@ -666,12 +795,44 @@ export default function KnowledgeSpaceTagLibrarySection({
                 {visible && (
                     <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                         <div className="mb-3 flex items-center gap-2">
-                            <SearchInput
-                                className="w-[280px]"
-                                placeholder={t("build.searchTagLibrary", "按标签库名搜索")}
-                                value={keyword}
-                                onChange={(e) => setKeyword(e.target.value)}
-                            />
+                            <div ref={searchRef} className="relative w-[280px]">
+                                <SearchInput
+                                    className="w-full"
+                                    placeholder={t("build.searchTagLibrary", "按标签名搜索")}
+                                    value={keyword}
+                                    onChange={(e) => {
+                                        setKeyword(e.target.value);
+                                        setShowSuggestions(true);
+                                    }}
+                                    onFocus={() => setShowSuggestions(true)}
+                                />
+                                {showSuggestions && keyword.length > 0 && suggestions.length > 0 && (
+                                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[240px] overflow-auto rounded-md border bg-background py-1 shadow-md">
+                                        {suggestions.map((node) => (
+                                            <TreeSuggestionNode
+                                                key={node.id}
+                                                node={node}
+                                                siblings={suggestions}
+                                                depth={0}
+                                                expandedIds={expandedIds}
+                                                onToggleExpand={handleToggleExpand}
+                                                onSelect={(node) => {
+                                                    const row = rows.find((r) => r.id === node.library_id);
+                                                    if (row) {
+                                                        openTagsDialog(row);
+                                                    } else {
+                                                        openTagsDialog({
+                                                            id: node.library_id,
+                                                            name: node.name,
+                                                        } as KnowledgeSpaceTagLibraryListItem);
+                                                    }
+                                                    setShowSuggestions(false);
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                             <div className="ml-auto">
                                 <Button onClick={openCreate}>
                                     <Plus className="mr-2 size-4" />
@@ -797,6 +958,7 @@ export default function KnowledgeSpaceTagLibrarySection({
             <LibraryTagsDialog
                 open={tagsDialogOpen}
                 library={selectedLibrary}
+                defaultSearchKeyword={keyword}
                 onOpenChange={setTagsDialogOpen}
                 onUpdated={() => loadData(page)}
             />

@@ -4,9 +4,12 @@ from collections.abc import Iterable, Sequence
 
 from langchain_core.documents import Document
 from loguru import logger
+from sqlmodel import func, select
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.database.models.tag import TagResourceTypeEnum
+from bisheng.core.database import get_sync_db_session
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.tag import Tag, TagLink, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileSource,
@@ -26,7 +29,8 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import (
 from bisheng.llm.domain import LLMService
 
 AUTO_TAG_MAX_CONTENT = 3000
-AUTO_TAG_MAX_RESULT = 5
+AUTO_TAG_MAX_LIBRARY_MATCH = 5
+AUTO_TAG_MAX_AI_TAGS_PER_FILE = 5
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
     "你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。\n"
     '输出格要求严格遵循 JSON 格式： {"tags": ["标签名"]}。'
@@ -96,6 +100,8 @@ class KnowledgeSpaceAutoTagService:
                     tenant_id=db_file.tenant_id,
                     resource_type=TagResourceTypeEnum.SYSTEM_TAG,
                 )
+            if ai_matched:
+                ai_matched = cls._cap_ai_tags_for_file(db_file.id, ai_matched)
             if ai_matched:
                 cls._append_file_tags(
                     space_id=knowledge.id,
@@ -231,18 +237,40 @@ class KnowledgeSpaceAutoTagService:
         for tag in selected:
             if tag in allowed and tag not in matched:
                 matched.append(allowed[tag])
-            if len(matched) >= AUTO_TAG_MAX_RESULT:
+            if len(matched) >= AUTO_TAG_MAX_LIBRARY_MATCH:
                 break
         ai_matched: list[str] = []
-        count = len(matched)
-        if count < AUTO_TAG_MAX_RESULT:
-            ai_allowed = {tag: tag for tag in ai_tags}
-            for tag in selected:
-                if tag in ai_allowed and tag not in ai_matched and tag not in matched:
-                    ai_matched.append(ai_allowed[tag])
-                if count + len(ai_matched) >= AUTO_TAG_MAX_RESULT:
-                    break
+        ai_allowed = {tag: tag for tag in ai_tags}
+        for tag in selected:
+            if tag in ai_allowed and tag not in ai_matched and tag not in matched:
+                ai_matched.append(ai_allowed[tag])
+            if len(ai_matched) >= AUTO_TAG_MAX_AI_TAGS_PER_FILE:
+                break
         return matched, ai_matched
+
+    @classmethod
+    def _count_file_ai_auto_tags(cls, file_id: int) -> int:
+        with get_sync_db_session() as session:
+            count = session.exec(
+                select(func.count())
+                .select_from(TagLink)
+                .join(Tag, Tag.id == TagLink.tag_id)
+                .where(
+                    TagLink.resource_id == str(file_id),
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    Tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG.value,
+                )
+            ).one()
+        return int(count or 0)
+
+    @classmethod
+    def _cap_ai_tags_for_file(cls, file_id: int, tag_names: list[str]) -> list[str]:
+        if not tag_names:
+            return []
+        remaining = AUTO_TAG_MAX_AI_TAGS_PER_FILE - cls._count_file_ai_auto_tags(file_id)
+        if remaining <= 0:
+            return []
+        return tag_names[:remaining]
 
     @staticmethod
     def _append_file_tags(

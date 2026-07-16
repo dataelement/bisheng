@@ -381,6 +381,10 @@ class ShougangPortalFileBrowseReq(BaseModel):
         default=None, max_length=16, description="Business domain code from file_encoding segment 3"
     )
     recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
+    public_only: bool = Field(
+        default=False,
+        description="Restrict latest-selected browsing to server-resolved public knowledge spaces",
+    )
     sort: str = Field(default="updated_at_desc", description="Sort mode: updated_at / updated_at_desc / updated_at_asc")
     cursor: str | None = Field(default=None, description="Cursor returned by the previous request")
     limit: int = Field(default=20, ge=1, le=100)
@@ -426,7 +430,6 @@ class ShougangPortalFileItemResp(BaseModel):
     summary: str = ""
     source: str = ""
     updated_at: str = ""
-    tags: list[str] = Field(default_factory=list)
     tag_infos: list[ShougangPortalFileTagResp] = Field(default_factory=list)
     file_ext: str = ""
     file_size: str = ""

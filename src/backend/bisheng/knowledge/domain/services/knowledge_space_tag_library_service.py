@@ -23,6 +23,9 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import (
     TagLibraryTagService,
 )
 from bisheng.user.domain.models.user import UserDao
+from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryTreeItem
+from fastapi.encoders import jsonable_encoder
+import json
 
 MAX_LIBRARY_TAGS = 999
 MAX_LIBRARY_NAME_LENGTH = 20
@@ -361,6 +364,28 @@ class KnowledgeSpaceTagLibraryService:
         data = [await self.to_list_item(row) for row in rows]
         return PageData(data=data, total=1)
 
+    async def list_libraries_tree(self, keyword: str) -> list[KnowledgeSpaceTagLibraryTreeItem]:
+        tags_group = await TagLibraryTagService.alist_tree(keyword=keyword)
+        if not tags_group or len(tags_group) == 0:
+            return []
+        result: list[KnowledgeSpaceTagLibraryTreeItem] = []
+        for tag_id, items in tags_group.items():
+            library = await KnowledgeSpaceTagLibraryDao.aget(int(tag_id))
+            if not library:
+                continue
+            library_data = jsonable_encoder(library)
+            tree_item = KnowledgeSpaceTagLibraryTreeItem(
+                id="L"+str(library.id),
+                name=library.name,
+                key=library.id,
+                library_id=library.id,
+                meta_info=json.dumps(library_data, ensure_ascii=False),
+                parent_id=None,
+                children=items,
+            )
+            result.append(tree_item)
+        return result
+    
     async def list_libraries(
         self, page: int = 1, page_size: int = 20, keyword: str | None = None
     ) -> PageData[KnowledgeSpaceTagLibraryListItem]:
