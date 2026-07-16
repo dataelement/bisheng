@@ -2,10 +2,10 @@
 
 ## Metadata
 - Feature ID: `044-developer-token`
-- Status: `draft`
+- Status: `implemented-pending-manual-verification`
 - Related requirements: `specs/044-developer-token/requirements.md`
 - Created: `2026-06-10`
-- Updated: `2026-06-10`
+- Updated: `2026-07-15`
 
 ## Context
 - Existing architecture:
@@ -16,6 +16,8 @@
   - Tenant isolation uses `current_tenant_id`, `visible_tenant_ids`, and SQLAlchemy tenant filters in `src/backend/bisheng/core/context/tenant.py`.
   - Platform system management page is `src/frontend/platform/src/pages/SystemPage/index.tsx`.
   - Platform API wrappers use `src/frontend/platform/src/controllers/request.ts` and API modules under `src/frontend/platform/src/controllers/API/`.
+  - Developer token management, authentication, endpoint-isolated rate limiting, and Platform UI are implemented under `src/backend/bisheng/developer_token/` and `src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx`.
+  - `get_developer_token_user` already derives an endpoint key from the uppercase request method and `request.scope["route"].path` FastAPI template.
 - Relevant files inspected:
   - `/Users/wenruli/Desktop/044-developer-token/development-implementation.md`
   - `features/v2.6.0/release-contract.md`
@@ -36,7 +38,7 @@
   - New backend tests should be placed under `src/backend/test/developer_token/`.
   - Platform verification is primarily manual for this feature unless existing local tooling is extended.
 - Constraints from project guidance:
-  - No production code edits in this spec-only phase.
+  - This scope update must pass the SDD confirmation gate before production code edits.
   - Backend must support MySQL and DM8; avoid MySQL-only JSON types and JSON query functions.
   - Do not write manual tenant filter conditions as permission substitutes.
   - Do not import `bisheng.database.models.*` directly in endpoints.
@@ -52,6 +54,8 @@
 - Expose Platform System Page UI for authorized admins to manage tokens and global config.
 - Keep existing JWT and non-opt-in endpoints behavior unchanged.
 - Produce a task plan that can be implemented and verified incrementally.
+- Restrict each token to up to 200 manually configured route rules while preserving empty-list allow-all compatibility.
+- Support exact method-and-path, exact path for any method, and descendant-prefix matching without arbitrary glob semantics.
 
 ### Non-Goals
 - Do not bulk retrofit existing business APIs to use developer token dependency.
@@ -60,6 +64,9 @@
 - Do not introduce a new first-level Platform menu.
 - Do not introduce a new state management or UI library.
 - Do not add a separate global developer token config table.
+- Do not scan FastAPI routes or require manually entered rules to resolve to a currently registered endpoint.
+- Do not add route denylists, global route rules, or arbitrary-position wildcard matching.
+- Do not bulk retrofit additional business endpoints as part of the route-allowlist change.
 
 ## Boundary Commitments
 - Owns:
@@ -85,6 +92,7 @@
 | REQ-006 | AC-REQ-006-01..06 | Migration, ORM/domain model, repository boundary, API contract, error code module `198` | Migration/code review + backend tests |
 | REQ-007 | AC-REQ-007-01..11 | Platform API module, System Page tab, DeveloperToken component, tree user picker, dialogs, i18n | Manual UI verification + backend API tests |
 | REQ-008 | AC-REQ-008-01..04 | Audit actions and no-secret logging policy; emergency disable behavior | Backend tests + code/log review |
+| REQ-009 | AC-REQ-009-01..13 | Nullable `JsonType` route rules, service validation/matching, dependency route context, Platform structured editor | Migration review + backend service/dependency/API tests + frontend unit/build/manual checks |
 
 ## Architecture
 - Pattern:
@@ -94,12 +102,14 @@
   - Repository layer owns only data access for developer token records.
   - Global config uses existing `config` table and remains a service concern.
   - Platform UI uses System Page tab composition and API wrapper functions.
+  - Route rules are stored on the token row as structured JSON and evaluated in memory after identity/IP checks and before rate limiting.
 - Rationale:
   - A dedicated module avoids mixing developer token concerns into existing JWT or open endpoint modules.
   - Service-owned business logic keeps repository testable and complies with DDD layering.
   - Hash lookup avoids decrypt-and-scan and supports a unique index.
   - Encrypted secret storage supports the explicit secret-view requirement while reducing database leak impact.
   - Opt-in dependency prevents behavior changes to existing endpoints.
+  - Nullable route-rule storage preserves existing token access without a data backfill, while bounded in-memory matching avoids dialect-specific JSON queries.
 - Preserved existing patterns:
   - Admin namespace aggregation under `/api/v1/admin`.
   - `UserPayload` dependency semantics for business code.
@@ -136,6 +146,25 @@
 | `src/frontend/platform/public/locales/en-US/bs.json` | modify | English i18n keys | REQ-007 |
 | `src/frontend/platform/public/locales/ja/bs.json` | modify if present/required | Japanese i18n keys | REQ-007 |
 
+### Scope Update File Plan: Route Allowlist
+| Path | Create / Modify | Responsibility | Requirements |
+|---|---|---|---|
+| `src/backend/bisheng/core/database/alembic/versions/v2_6_0_f044_developer_token_route_allowlist.py` | create | Add/drop nullable `route_whitelist` using `JsonType`; attach to current Alembic heads without editing the deployed F044 migration | REQ-006, REQ-009 |
+| `src/backend/bisheng/developer_token/domain/models/developer_token.py` | modify | Persist normalized route-rule arrays | REQ-006, REQ-009 |
+| `src/backend/bisheng/developer_token/domain/schemas/developer_token.py` | modify | Define route match enum/rule schema and extend create/update/list/detail contracts | REQ-009 |
+| `src/backend/bisheng/developer_token/domain/services/developer_token_service.py` | modify | Normalize, validate, persist, summarize, audit, and enforce route rules | REQ-008, REQ-009 |
+| `src/backend/bisheng/developer_token/api/dependencies.py` | modify | Pass uppercase request method and FastAPI route template separately to authentication | REQ-004, REQ-009 |
+| `src/backend/bisheng/common/errcode/developer_token.py` | modify | Add invalid-rule `19811` and route-forbidden `19812` errors | REQ-006, REQ-009 |
+| `src/backend/test/developer_token/test_developer_token_service.py` | modify | Validate route-rule management, normalization, limits, and persistence | REQ-009 |
+| `src/backend/test/developer_token/test_developer_token_dependency.py` | modify | Verify all matching modes, boundary cases, ordering, and rejection behavior | REQ-009 |
+| `src/backend/test/developer_token/test_developer_token_api.py` | modify | Verify create/update/list/detail route-rule contracts | REQ-009 |
+| `src/frontend/platform/src/controllers/API/developerToken.ts` | modify | Add route-rule types and list/detail/payload fields | REQ-009 |
+| `src/frontend/platform/src/pages/SystemPage/components/DeveloperTokenRouteAllowlist.tsx` | create | Structured repeatable rule editor using existing Platform components | REQ-007, REQ-009 |
+| `src/frontend/platform/src/pages/SystemPage/components/developerTokenRouteValidation.ts` | create | Pure frontend normalization and validation helpers | REQ-009 |
+| `src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx` | modify | Integrate route count and extracted editor while remaining under 600 lines | REQ-007, REQ-009 |
+| `src/frontend/platform/src/test/developerTokenRouteValidation.test.ts` | create | Route-rule validation regression tests | REQ-009 |
+| `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json` | modify | Route-rule labels, help text, placeholders, and error messages | REQ-007, REQ-009 |
+
 ## Components and Interfaces
 
 ### DeveloperToken API endpoints
@@ -144,7 +173,7 @@
 - Outputs: Project-standard success response with `PageData`, token creation result, token detail, secret view result, or global config.
 - Dependencies: `DeveloperTokenService`, `UserPayload.get_login_user` or tenant-admin-compatible dependency, request IP helper, response wrapper.
 - Error behavior: Converts domain/business errors to project-standard error responses. Does not catch generic exceptions as intentional business responses.
-- Requirements: REQ-001, REQ-002, REQ-003, REQ-006, REQ-008.
+- Requirements: REQ-001, REQ-002, REQ-003, REQ-006, REQ-008, REQ-009.
 
 ### DeveloperTokenService
 - Responsibility: Own developer token business logic.
@@ -152,8 +181,25 @@
 - Outputs: DTO responses, authenticated `UserPayload`, validation errors.
 - Dependencies: `DeveloperTokenRepository`, `ConfigDao`, Redis client, user/tenant data access, audit log DAO/service, tenant ContextVar helpers, crypto utilities, `ipaddress`.
 - Error behavior: Raises `DeveloperToken*Error` subclasses for expected failures. Logs best-effort last-used update failure without breaking successful authentication.
-- Requirements: REQ-001..REQ-008.
+- Requirements: REQ-001..REQ-009.
 - Binding behavior: Create/update payloads carry `user_id` plus selected department context. The service resolves the tenant from the selected department using existing department mount ancestry semantics, verifies the user belongs to that department and resolved tenant, then applies admin-scope checks before persisting `tenant_id`.
+- Route behavior: Normalize and validate up to 200 rules on create/update. During authentication, null/empty rules allow all; otherwise any `METHOD_PATH`, `PATH`, or `PREFIX` match allows the request and a miss raises `19812`.
+- Authentication order: Token lookup/enabled state -> bound tenant/user validation -> IP allowlist -> route allowlist -> per-endpoint Redis limit -> tenant ContextVars and bound `UserPayload`.
+
+### Route rule contract and matching
+- Stored/API shape:
+  ```json
+  [
+    {"match_type": "METHOD_PATH", "method": "GET", "path": "/api/v2/files/{file_id}"},
+    {"match_type": "PATH", "method": null, "path": "/api/v2/files/list"},
+    {"match_type": "PREFIX", "method": null, "path": "/api/v2/files/*"}
+  ]
+  ```
+- Supported `METHOD_PATH.method` values are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, and `HEAD`; input is trimmed and normalized to uppercase.
+- `PATH` and `PREFIX` must omit `method`. Every path is trimmed, case-sensitive, starts with `/`, and contains no query string, fragment, or whitespace.
+- `METHOD_PATH` and `PATH` reject every `*`. `PREFIX` requires exactly one terminal `/*`; matching removes the terminal `*` and uses the remaining slash-terminated value as a path-segment prefix.
+- Duplicate detection occurs after normalization over `(match_type, method, path)` and rejects duplicates rather than silently dropping administrator input.
+- Authentication compares against the FastAPI route template, not the concrete request URL. If a non-empty allowlist is present but no FastAPI route template is available, route authorization fails closed with `19812`.
 
 ### DeveloperTokenRepository
 - Responsibility: Encapsulate database access for `developer_token` rows.
@@ -165,11 +211,11 @@
 
 ### Developer token authentication dependency
 - Responsibility: Provide `get_developer_token_user(request: Request) -> UserPayload` for opt-in business APIs.
-- Inputs: FastAPI `Request` with `X-Developer-Token` header.
+- Inputs: FastAPI `Request` with `X-Developer-Token` header, uppercase request method, and `request.scope["route"].path` route template.
 - Outputs: Bound `UserPayload` and tenant ContextVars set for downstream business logic.
 - Dependencies: `DeveloperTokenService.authenticate`.
-- Error behavior: Missing, invalid, disabled, forbidden IP, rate limit, and limiter unavailable errors fail the request.
-- Requirements: REQ-004, REQ-005.
+- Error behavior: Missing, invalid, disabled, forbidden IP, forbidden route, rate limit, and limiter unavailable errors fail the request before business-handler execution.
+- Requirements: REQ-004, REQ-005, REQ-009.
 
 ### Global config handler
 - Responsibility: Read/update `developer_token_global_config` stored as JSON string in existing `config` table.
@@ -185,11 +231,12 @@
 - Outputs: User-visible table/dialog state and API mutations.
 - Dependencies: `@/controllers/API/developerToken`, `bs-ui`, `useTranslation`, existing toast/confirm utilities.
 - Error behavior: Uses existing request error handling and toast/confirm patterns. Does not add custom 403 branches.
-- Requirements: REQ-007.
+- Requirements: REQ-007, REQ-009.
 - Binding UI: Uses the existing organization-tree user selector in single-select mode. The dialog does not render editable `tenant_id` or `user_id` fields. The selected option must preserve the selected department id/business id so the backend can resolve the trusted tenant.
 - Rate-limit UI: Global and token-level per-minute limit fields are integer-only text inputs. Empty and `0` normalize to no limit; decimal, negative, exponent, or other non-digit input is rejected locally with a clear toast before any API mutation.
 - IP whitelist UI: Global and token-level whitelist textareas share a small validation helper. Empty value is valid. Non-empty values are split with the backend-compatible separators (`whitespace`, comma, semicolon); each rule must be a valid single IP or CIDR prefix before save. The first invalid rule is shown in a localized toast, and backend `19809` is also localized as a fallback.
 - Input placeholders: All Developer Token text inputs use localized placeholders matching the field purpose, including list search, token name, global/token rate limits, IP whitelist, and organization-tree user selection/search inputs.
+- Route UI: The token dialog embeds an extracted structured editor. Each row selects `METHOD_PATH`, `PATH`, or `PREFIX`; method is required only for `METHOD_PATH`; add/remove controls use existing Platform components and icons. The list displays `0` as all routes and otherwise displays the rule count; edit loads full rules from the detail API.
 
 ## Data / State Changes
 - Entities:
@@ -210,6 +257,7 @@
     - `ip_whitelist`: large text, nullable.
     - `override_rate_limit`: boolean, default false.
     - `rate_limit_per_minute`: integer, nullable.
+    - `route_whitelist`: `JsonType`, nullable; null or empty array means all opted-in routes.
     - `last_used_time`: datetime, nullable.
     - `last_used_ip`: string length 64, nullable.
     - `created_by`: integer, nullable.
@@ -224,9 +272,11 @@
   - Upgrade creates table and indexes.
   - Global config row may be inserted by migration or returned as default by service on first read. If migration inserts it, downgrade must remove it.
   - Downgrade drops indexes and table. In production use, direct downgrade after issuance is unsafe unless tokens are disabled/retired first.
+  - The route-allowlist scope update uses a new follow-up migration rather than editing the deployed F044 migration. Upgrade adds a nullable `route_whitelist` column without backfill. Downgrade drops the column and permanently removes configured route restrictions, restoring allow-all behavior.
 - Compatibility:
   - Use dual-DB-compatible text/date/default helpers available in the project.
   - Do not use SQLAlchemy JSON or MySQL JSON functions for config or whitelist querying.
+  - Use project `JsonType` for the route-rule array; matching occurs in Python and does not issue JSON predicates.
   - Multi-tenant filtering must remain event-driven; token hash lookup can use tenant-filter bypass only for authentication lookup, with service enforcing bound tenant semantics after match.
 
 ## Testing Strategy
@@ -238,8 +288,9 @@
 | AC-REQ-004-01..09 | integration/regression | `test_developer_token_dependency.py` | Include opt-in-only regression review |
 | AC-REQ-005-01..06 | unit/integration | dependency/service limiter tests | Use fake Redis or mock Redis client |
 | AC-REQ-006-01..06 | migration/code review/integration | migration file, repository tests, API tests | DM8 validation through CI/Linux if available |
-| AC-REQ-007-01..10 | manual/API regression | Platform System Page | Manual verification checklist required |
+| AC-REQ-007-01..11 | manual/API regression | Platform System Page | Manual verification checklist required |
 | AC-REQ-008-01..04 | integration/code review | API audit tests, log review, dependency disabled-token test | Ensure no plaintext token in audit/logs |
+| AC-REQ-009-01..13 | unit/integration/frontend/manual | service/dependency/API tests, route validation frontend test, Platform build and manual dialog checks | Cover compatibility, all match modes, prefix boundaries, invalid inputs, API projection, and editor behavior |
 
 ## Decisions
 
@@ -295,9 +346,9 @@
 ### Decision: Do not retrofit existing endpoints in this phase
 - Context: Existing endpoints have their own auth behavior and regression risk.
 - Options considered: Provide dependency only, also update selected existing endpoints.
-- Decision: Provide dependency only.
-- Rationale: Keeps this feature low-impact and avoids unintended behavior changes.
-- Consequences: Business APIs must explicitly opt in later.
+- Decision: Do not bulk retrofit additional endpoints as part of this scope update; route enforcement applies wherever `get_developer_token_user` is already or later explicitly used.
+- Rationale: Keeps the route-allowlist change isolated from business endpoint authentication decisions.
+- Consequences: Non-opt-in endpoints remain unaffected, and adding the dependency to another endpoint remains a separate scoped change.
 
 ### Decision: Use module error code `198`
 - Context: Source document proposed `181`, but v2.6.0 release contract already assigns `181` to approval.
@@ -306,6 +357,20 @@
 - Rationale: Avoids module code collision.
 - Consequences: Release contract or equivalent registry must be updated before implementation.
 
+### Decision: Store route rules in a nullable `JsonType` column
+- Context: Rules are token-owned, bounded, returned with token detail, and never queried independently.
+- Options considered: Child route table, newline text grammar, structured JSON on the token row.
+- Decision: Add nullable `route_whitelist` containing normalized rule objects.
+- Rationale: Avoids a new aggregate/repository boundary, preserves structured validation, supports MySQL/DM8 through `JsonType`, and requires no backfill for existing tokens.
+- Consequences: Rule filtering cannot be delegated to SQL, so authentication performs an O(n) scan bounded to 200 rules.
+
+### Decision: Use explicit rule types and trailing-segment wildcard semantics
+- Context: Administrators need exact and prefix controls without ambiguous glob expansion.
+- Options considered: One token-wide match mode, arbitrary glob patterns, explicit per-rule types.
+- Decision: Each rule uses `METHOD_PATH`, `PATH`, or `PREFIX`; `PREFIX` accepts exactly one trailing `/*` and matches descendants only.
+- Rationale: Per-rule types support mixed permissions while path-segment boundaries prevent `/files/*` from matching `/files` or `/files-other`.
+- Consequences: Access to a prefix root requires an additional `PATH` or `METHOD_PATH` rule.
+
 ## Risks / Trade-Offs
 | Risk | Impact | Mitigation | Owner / Phase |
 |---|---|---|---|
@@ -313,9 +378,14 @@
 | Redis outage blocks opt-in API calls | Availability impact for external callers | Document fail-closed policy; operators can monitor Redis and disable/adjust token usage | Backend + Ops |
 | Tenant ContextVar leakage | Requests could execute under wrong tenant | Use request-scoped dependency carefully, tests assert context, reset behavior where needed | Backend |
 | DM8 incompatibility | CI/customer DB failure | Use compatible field types/defaults and CI/Linux DM8 validation | Backend |
-| Error code registry not updated | Conflicting errors in implementation | Register `198` before/with implementation task | Backend |
-| Existing endpoints accidentally changed | Regression in JWT/open endpoints | Keep opt-in dependency unreferenced by existing routes unless separately scoped | Backend |
+| New route errors are not mapped consistently | Generic or unclear frontend feedback | Add `19811`/`19812` in the existing module and localized Platform error keys with tests | Backend + Frontend |
+| Existing endpoint auth set accidentally changed | Regression in JWT/open endpoints | Preserve the current set of `get_developer_token_user` call sites; do not add or remove business endpoint dependencies in this scope | Backend |
 | Config JSON corruption | Global config read failure or unsafe defaults | Validate on save; fail safely/log on invalid stored value; test default behavior | Backend |
+| Empty route rules grant all opted-in APIs | Newly created or migrated tokens remain broad until configured | Preserve for compatibility, show explicit Platform help text, and display all-routes state in the list | Product + Frontend |
+| Prefix rule covers future descendants | Later APIs can become reachable without editing the token | Restrict wildcard to trailing `/*`, document the behavior, and show prefix warning in the editor | Backend + Frontend |
+| Manual route typo or stale path | Intended API remains inaccessible | Validate syntax locally and on the backend, return normalized rules in detail, and allow correction without requiring route registration | Backend + Frontend |
+| Migration downgrade removes restrictions | Tokens become allow-all after the column is dropped | Do not downgrade in production without disabling tokens or accepting the permission broadening; record rollback risk | Backend + Ops |
+| Large rule arrays increase auth cost | Per-request CPU and payload growth | Reject more than 200 rules and use bounded in-memory matching | Backend |
 
 ## Acceptance Coverage Detail
 | Acceptance ID | Design Element | Verification Strategy |
@@ -377,6 +447,19 @@
 | AC-REQ-008-02 | Audit for global config update | Backend API test |
 | AC-REQ-008-03 | No plaintext token in denial logs/audit | Code/log review |
 | AC-REQ-008-04 | Emergency disable behavior | Dependency test + manual operation note |
+| AC-REQ-009-01 | Bounded route-rule create/update schema and service validation | Service/API boundary tests |
+| AC-REQ-009-02 | Null/empty route rules short-circuit to allow | Dependency compatibility tests |
+| AC-REQ-009-03 | `METHOD_PATH` exact method and template matcher | Dependency unit tests |
+| AC-REQ-009-04 | `PATH` exact template matcher independent of method | Dependency unit tests |
+| AC-REQ-009-05 | `PREFIX` trailing `/*` validator | Service and frontend validation tests |
+| AC-REQ-009-06 | Descendant-only path-segment prefix matcher | Dependency boundary tests |
+| AC-REQ-009-07 | OR composition across normalized rules | Dependency unit tests |
+| AC-REQ-009-08 | Route miss raises `19812` before business handler | Dependency/integration test |
+| AC-REQ-009-09 | Dependency passes route template and method separately | Dependency helper test |
+| AC-REQ-009-10 | Invalid/duplicate/over-limit rules raise `19811` | Service/API/frontend validation tests |
+| AC-REQ-009-11 | No live route registration lookup on save | Service/API test with unregistered path |
+| AC-REQ-009-12 | Extracted structured Platform editor | Frontend unit/build/manual checks |
+| AC-REQ-009-13 | List count/detail full-rule projection | API test + manual table/edit check |
 
 ## Design Quality Gate
 - [x] Every requirement ID is represented in Requirements Traceability.

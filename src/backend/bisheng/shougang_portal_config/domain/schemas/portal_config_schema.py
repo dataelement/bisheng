@@ -1,10 +1,11 @@
+import re
 import secrets
 import string
 from copy import deepcopy
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 def _strip(value: Any) -> str:
@@ -13,6 +14,7 @@ def _strip(value: Any) -> str:
 
 _DOCUMENT_TYPE_CHILD_CODE_RANDOM_ALPHABET = string.ascii_uppercase + string.digits
 _DOCUMENT_TYPE_CHILD_CODE_RANDOM_LENGTH = 4
+_BUSINESS_DOMAIN_CODE_PATTERN = re.compile(r"^[A-Z0-9_]{1,16}$")
 
 
 def _normalize_document_type_code(value: Any) -> str:
@@ -58,6 +60,7 @@ def _is_http_url(value: Any) -> bool:
 class PortalDomainConfig(BaseModel):
     name: str
     space_ids: list[int] = Field(default_factory=list)
+    department_ids: list[int] = Field(default_factory=list)
     color: str
     bg: str
     icon: str
@@ -65,10 +68,29 @@ class PortalDomainConfig(BaseModel):
     enabled: bool = True
     code: str = ""
 
+    @field_validator("department_ids")
+    @classmethod
+    def normalize_department_ids(cls, department_ids: list[int]) -> list[int]:
+        normalized: list[int] = []
+        for department_id in department_ids:
+            if department_id <= 0:
+                raise ValueError("department id must be positive")
+            if department_id not in normalized:
+                normalized.append(department_id)
+        return normalized
+
     @model_validator(mode="after")
     def normalize(self):
         self.name = _strip(self.name)
         self.code = _strip(self.code).upper()
+        normalized_department_ids: list[int] = []
+        for value in self.department_ids:
+            department_id = int(value)
+            if department_id <= 0:
+                raise ValueError("department id must be positive")
+            if department_id not in normalized_department_ids:
+                normalized_department_ids.append(department_id)
+        self.department_ids = normalized_department_ids
         if not self.name:
             raise ValueError("domain name is required")
         return self
@@ -323,11 +345,18 @@ class PortalRecommendationConfig(BaseModel):
     provider: str
     home_strategy: str
     detail_strategy: str
+    home_total_count: int = Field(default=20, ge=1, le=50, strict=True)
+    hot_half_life_days: int = Field(default=7, ge=1, le=90, strict=True)
+    home_entry_source_weight: float = Field(default=0.3, ge=0, le=1, allow_inf_nan=False)
+    stable_shuffle_score_gap: float = Field(default=5, ge=0, le=100, allow_inf_nan=False)
+    stable_shuffle_cycle_days: int = Field(default=7, ge=1, le=30, strict=True)
+    personalized_shadow_enabled: StrictBool = False
+    personalized_rollout_percent: int = Field(default=0, ge=0, le=100, strict=True)
 
 
 class PortalDisplayHomeConfig(BaseModel):
     page_size: int | None = None
-    section_page_size: int = 6
+    section_page_size: int = Field(default=6, ge=1, le=50, strict=True)
     hot_tags_count: int = 8
     qa_hot_count: int = 4
     domain_count: int = 6
@@ -413,6 +442,25 @@ class PortalConfig(BaseModel):
         if not isinstance(value, dict):
             return value
         data = deepcopy(value)
+
+        # Before personalized recommendations, home sections could be configured
+        # above the new Top-N default of 20. Preserve those valid legacy configs
+        # only when home_total_count was not explicitly supplied; explicit values
+        # still go through the cross-field validation below.
+        raw_recommendation = data.get("recommendation")
+        raw_display = data.get("display")
+        raw_home = raw_display.get("home") if isinstance(raw_display, dict) else None
+        section_page_size = raw_home.get("section_page_size") if isinstance(raw_home, dict) else None
+        if (
+            isinstance(raw_recommendation, dict)
+            and "home_total_count" not in raw_recommendation
+            and isinstance(section_page_size, int)
+            and not isinstance(section_page_size, bool)
+        ):
+            recommendation = dict(raw_recommendation)
+            recommendation["home_total_count"] = max(20, section_page_size)
+            data["recommendation"] = recommendation
+
         raw_agent_config = data.get("agent_config")
         agent_config = dict(raw_agent_config) if isinstance(raw_agent_config, dict) else {}
         raw_applications = agent_config.get("applications")
@@ -484,6 +532,13 @@ class PortalConfig(BaseModel):
         data["agent_config"] = agent_config
         data.pop("apps", None)
         return data
+
+    @model_validator(mode="after")
+    def validate_personalized_recommendation_config(self):
+        if self.recommendation.home_total_count < self.display.home.section_page_size:
+            raise ValueError("recommendation.home_total_count must be >= display.home.section_page_size")
+
+        return self
 
 
 class PortalBishengRuntimeConfig(BaseModel):

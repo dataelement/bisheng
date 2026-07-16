@@ -64,6 +64,13 @@ http://{bisheng-host}:7860/api/v2
 | `responsible_person` | 责任人 | string | 否 | 接口调用人 | 文件的责任人，不传时默认填入接口调用人。 |
 | `responsible_person_id` | 责任人 ID | integer / string | 否 | 接口调用人 ID | 责任人的 ID，不传时默认填入接口调用人。 |
 
+补充校验规则：
+
+- ID 为权威字段；同时传入 ID 和名称时，名称必须与 ID 对应的实际名称一致。
+- `03` 接口指定非调用人主部门作为主责单位时，必须传 `department_id`。
+- `04`、`05`、`06`、`07` 接口指定非调用人作为责任人时，必须传 `responsible_person_id`。
+- `external_file_id` 与当前同步接口共同标识文件来源，系统不按该字段执行唯一性或幂等校验；重复提交会分别进入正常上传流程。
+
 `params` 示例：
 
 ```json
@@ -85,11 +92,11 @@ http://{bisheng-host}:7860/api/v2
 |---|---|
 | 文件名 | 取 `params.file_name`。 |
 | 标签 | 跟随知识库的 AI 标签生成规则。 |
-| 文件编码 | `SG+文件分类+业务口`。 |
+| 文件编码 | `SGGF-{一级分类编码}-{业务域编码}-{YYYYMM}{8位序号}`；序号按目标知识空间和月份计算。 |
 | 更新时间 | 入库时间。 |
 | 上传人 | 接口调用人。 |
 
-> 各接口的差异仅体现在**文件分类**、**业务口分类**、**同步位置**三项，详见各接口章节。
+> 各接口的差异仅体现在**文件分类**、**业务域分类**、**同步位置**三项，详见各接口章节。
 
 ### 1.6 通用成功响应
 
@@ -113,7 +120,7 @@ http://{bisheng-host}:7860/api/v2
 |---|---|---|
 | `data.external_file_id` | string | 第三方系统文件唯一标识，原样回传，便于调用方对账。 |
 | `data.file_id` | integer | 知识库系统内的文件 ID。 |
-| `data.file_encoding` | string | 文件编码，规则为 `SG+文件分类+业务口`。 |
+| `data.file_encoding` | string | 最终文件编码，格式为 `SGGF-{一级分类编码}-{业务域编码}-{YYYYMM}{8位序号}`。 |
 | `data.knowledge_id` | integer | 文件落库的目标知识资源 ID。 |
 | `data.knowledge_name` | string | 文件落库的目标知识资源名称。 |
 | `data.status` | integer | 文件处理状态。同步刚提交时通常为 `5`（排队中）。取值见 [1.7 status 枚举](#17-status-枚举)。 |
@@ -151,18 +158,21 @@ http://{bisheng-host}:7860/api/v2
 | `400` | `external_file_id must not be empty` | `params.external_file_id` 缺失或为空。 |
 | `400` | `file_name must not be empty` | `params.file_name` 缺失或为空。 |
 | `403` | - | 无目标知识资源写入权限。 |
-| `409` | `duplicate external_file_id` | `external_file_id` 已同步过，唯一性校验未通过。 |
+| `404` | - | 人员、部门、分类、业务域、目标知识空间或绑定配置不存在。 |
+| `409` | `duplicate file content or name` | 现有知识上传校验判定文件内容或名称重复。 |
 | `422` | - | multipart 表单校验失败（缺少 `file` 或 `params`）。 |
 
 ### 1.10 通用业务规则错误
 
-分类 / 知识库 / 业务口匹配失败时，以业务消息返回：
+分类 / 知识库 / 业务域匹配失败时，以业务消息返回：
 
 | 场景 | 返回消息 |
 |---|---|
-| 文件分类未在平台配置固定分类 | `行份知识管理平台不存在分类{{分类名称/二级分类名称}}` |
-| 主责单位或责任人未绑定知识库 | `行份知识管理平台不存在知识库{{知识库名称}}` |
-| 部门库中缺少「上传人所在科室对应的」业务口 | `行份知识管理平台的{{知识库名称}}不存在{{业务口名称}}` |
+| 文件分类未在平台配置固定分类 | `首钢股份知识管理平台不存在分类{{分类名称/二级分类名称}}` |
+| 主责单位或责任人未绑定知识库 | `首钢股份知识管理平台不存在知识库{{知识库名称}}` |
+| 目标知识空间未绑定所需业务域 | `首钢股份知识管理平台的{{知识库名称}}不存在{{业务域名称}}` |
+
+> 二级分类名称中的 `/` 是名称本身的一部分，例如 `故障诊断/协作案例` 和 `国家/行业法规`，不表示备选分类或第三级分类。
 
 ---
 
@@ -188,7 +198,7 @@ POST /api/v2/filelib/file/sync/03
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 政策制度-管理政策 |
-| 业务口分类 | 各责任人所在科室对应的业务口（运行时按责任人科室动态解析） |
+| 业务域分类 | 各责任人所在科室对应的业务域（运行时按责任人科室动态解析） |
 | 同步位置 | 根据主责单位对应部门库，文件存入根目录下（运行时按主责单位动态解析） |
 
 #### 请求示例
@@ -209,7 +219,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/03' \
   "data": {
     "external_file_id": "SG-DOC-0301",
     "file_id": 345,
-    "file_encoding": "SG-政策制度/管理政策-安全",
+    "file_encoding": "SGGF-<政策制度编码>-<责任人业务域编码>-20260700000001",
     "knowledge_id": 118,
     "knowledge_name": "安全环保部-部门库",
     "status": 5
@@ -236,7 +246,7 @@ POST /api/v2/filelib/file/sync/04
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 技术规程与诊断-精益项目 |
-| 业务口分类 | 各责任人所在科室对应的业务口（运行时按责任人科室动态解析） |
+| 业务域分类 | 各责任人所在科室对应的业务域（运行时按责任人科室动态解析） |
 | 同步位置 | 根据责任人所属科室所对应的科室库，文件存入根目录下（运行时按责任人科室动态解析） |
 
 #### 请求示例
@@ -257,7 +267,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/04' \
   "data": {
     "external_file_id": "SG-DOC-0401",
     "file_id": 346,
-    "file_encoding": "SG-技术规程与诊断/精益项目-<责任人业务口>",
+    "file_encoding": "SGGF-<技术规程与诊断编码>-<责任人业务域编码>-20260700000001",
     "knowledge_id": 121,
     "knowledge_name": "<责任人科室>-科室库",
     "status": 5
@@ -284,7 +294,7 @@ POST /api/v2/filelib/file/sync/05
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 技术规程与诊断-快速改善 |
-| 业务口分类 | 各责任人所在科室对应的业务口（运行时按责任人科室动态解析） |
+| 业务域分类 | 各责任人所在科室对应的业务域（运行时按责任人科室动态解析） |
 | 同步位置 | 根据责任人所属科室所对应的科室库，文件存入根目录下（运行时按责任人科室动态解析） |
 
 #### 请求示例
@@ -305,7 +315,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/05' \
   "data": {
     "external_file_id": "SG-DOC-0501",
     "file_id": 347,
-    "file_encoding": "SG-技术规程与诊断/快速改善-<责任人业务口>",
+    "file_encoding": "SGGF-<技术规程与诊断编码>-<责任人业务域编码>-20260700000001",
     "knowledge_id": 121,
     "knowledge_name": "<责任人科室>-科室库",
     "status": 5
@@ -332,7 +342,7 @@ POST /api/v2/filelib/file/sync/06
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 技术规程与诊断-管理参数 |
-| 业务口分类 | 各责任人所在科室对应的业务口（运行时按责任人科室动态解析） |
+| 业务域分类 | 各责任人所在科室对应的业务域（运行时按责任人科室动态解析） |
 | 同步位置 | 根据责任人所属科室所对应的科室库，文件存入根目录下（运行时按责任人科室动态解析） |
 
 #### 请求示例
@@ -353,7 +363,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/06' \
   "data": {
     "external_file_id": "SG-DOC-0601",
     "file_id": 348,
-    "file_encoding": "SG-技术规程与诊断/管理参数-<责任人业务口>",
+    "file_encoding": "SGGF-<技术规程与诊断编码>-<责任人业务域编码>-20260700000001",
     "knowledge_id": 121,
     "knowledge_name": "<责任人科室>-科室库",
     "status": 5
@@ -380,7 +390,7 @@ POST /api/v2/filelib/file/sync/07
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 技术规程与诊断-合理化建议 |
-| 业务口分类 | 各责任人所在科室对应的业务口（运行时按责任人科室动态解析） |
+| 业务域分类 | 各责任人所在科室对应的业务域（运行时按责任人科室动态解析） |
 | 同步位置 | 根据责任人所属科室所对应的科室库，文件存入根目录下（运行时按责任人科室动态解析） |
 
 #### 请求示例
@@ -401,7 +411,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/07' \
   "data": {
     "external_file_id": "SG-DOC-0701",
     "file_id": 349,
-    "file_encoding": "SG-技术规程与诊断/合理化建议-<责任人业务口>",
+    "file_encoding": "SGGF-<技术规程与诊断编码>-<责任人业务域编码>-20260700000001",
     "knowledge_id": 121,
     "knowledge_name": "<责任人科室>-科室库",
     "status": 5
@@ -428,7 +438,7 @@ POST /api/v2/filelib/file/sync/09
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 报告-经营管理成果 |
-| 业务口分类 | 信息 |
+| 业务域分类 | 信息 |
 | 同步位置 | 公共库/信息库 |
 
 #### 请求示例
@@ -449,7 +459,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/09' \
   "data": {
     "external_file_id": "SG-DOC-0901",
     "file_id": 350,
-    "file_encoding": "SG-报告/经营管理成果-信息",
+    "file_encoding": "SGGF-<报告编码>-<信息业务域编码>-20260700000001",
     "knowledge_id": 130,
     "knowledge_name": "公共库-信息库",
     "status": 5
@@ -476,7 +486,7 @@ POST /api/v2/filelib/file/sync/10
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 政策制度-管理政策 |
-| 业务口分类 | 信息 |
+| 业务域分类 | 信息 |
 | 同步位置 | 公共库/信息库 |
 
 #### 请求示例
@@ -497,7 +507,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/10' \
   "data": {
     "external_file_id": "SG-DOC-1001",
     "file_id": 351,
-    "file_encoding": "SG-政策制度/管理政策-信息",
+    "file_encoding": "SGGF-<政策制度编码>-<信息业务域编码>-20260700000001",
     "knowledge_id": 130,
     "knowledge_name": "公共库-信息库",
     "status": 5
@@ -524,7 +534,7 @@ POST /api/v2/filelib/file/sync/11
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 报告-经营管理成果 |
-| 业务口分类 | 采购 |
+| 业务域分类 | 采购 |
 | 同步位置 | 公共库/采购库 |
 
 #### 请求示例
@@ -545,7 +555,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/11' \
   "data": {
     "external_file_id": "SG-DOC-1101",
     "file_id": 352,
-    "file_encoding": "SG-报告/经营管理成果-采购",
+    "file_encoding": "SGGF-<报告编码>-<采购业务域编码>-20260700000001",
     "knowledge_id": 131,
     "knowledge_name": "公共库-采购库",
     "status": 5
@@ -572,7 +582,7 @@ POST /api/v2/filelib/file/sync/12
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 标准规范-产品成果 |
-| 业务口分类 | 营销 |
+| 业务域分类 | 营销 |
 | 同步位置 | 部门库/营销中心 |
 
 #### 请求示例
@@ -593,7 +603,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/12' \
   "data": {
     "external_file_id": "SG-DOC-1201",
     "file_id": 353,
-    "file_encoding": "SG-标准规范/产品成果-营销",
+    "file_encoding": "SGGF-<标准规范编码>-<营销业务域编码>-20260700000001",
     "knowledge_id": 140,
     "knowledge_name": "营销中心-部门库",
     "status": 5
@@ -620,7 +630,7 @@ POST /api/v2/filelib/file/sync/14
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 案例-故障诊断/协作案例 |
-| 业务口分类 | 营销 |
+| 业务域分类 | 营销 |
 | 同步位置 | 部门库/营销中心 |
 
 #### 请求示例
@@ -641,7 +651,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/14' \
   "data": {
     "external_file_id": "SG-DOC-1401",
     "file_id": 354,
-    "file_encoding": "SG-案例/故障诊断-协作案例-营销",
+    "file_encoding": "SGGF-<案例编码>-<营销业务域编码>-20260700000001",
     "knowledge_id": 140,
     "knowledge_name": "营销中心-部门库",
     "status": 5
@@ -668,7 +678,7 @@ POST /api/v2/filelib/file/sync/15
 | 项 | 取值 |
 |---|---|
 | 文件分类 | 政策制度-国家/行业法规 |
-| 业务口分类 | 安全 |
+| 业务域分类 | 安全 |
 | 同步位置 | 部门库/安全部 |
 
 #### 请求示例
@@ -689,7 +699,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync/15' \
   "data": {
     "external_file_id": "SG-DOC-1501",
     "file_id": 355,
-    "file_encoding": "SG-政策制度/国家-行业法规-安全",
+    "file_encoding": "SGGF-<政策制度编码>-<安全业务域编码>-20260700000001",
     "knowledge_id": 141,
     "knowledge_name": "安全部-部门库",
     "status": 5

@@ -469,6 +469,14 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                     file_level_path=getattr(existing_file, "file_level_path", "") or "",
                     level=int(getattr(existing_file, "level", 0) or 0),
                 )
+            from bisheng.worker.knowledge.portal_recommendation import (
+                enqueue_portal_recommendation_projection_refresh,
+            )
+
+            enqueue_portal_recommendation_projection_refresh(
+                file_id=int(existing_file.id),
+                tenant_id=int(payload_snapshot["tenant_id"]),
+            )
             return {
                 "file_id": int(existing_file.id),
                 "target_space_id": target_space_id,
@@ -560,6 +568,14 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 file_level_path=copy_target_file_level_path,
                 level=copy_target_level,
             )
+        from bisheng.worker.knowledge.portal_recommendation import (
+            enqueue_portal_recommendation_projection_refresh,
+        )
+
+        enqueue_portal_recommendation_projection_refresh(
+            file_id=int(copied_file.id),
+            tenant_id=int(payload_snapshot["tenant_id"]),
+        )
         return {
             "file_id": int(copied_file.id),
             "target_space_id": target_space_id,

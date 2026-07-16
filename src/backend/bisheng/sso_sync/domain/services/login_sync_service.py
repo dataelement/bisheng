@@ -45,6 +45,9 @@ from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.knowledge.domain.services.portal_recommendation_invalidation_service import (
+    invalidate_portal_recommendation_users_best_effort,
+)
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.sso_sync.domain.constants import (
     DEFAULT_SSO_SYNC_SOURCE,
@@ -66,11 +69,11 @@ from bisheng.tenant.domain.constants import (
 from bisheng.tenant.domain.services.user_tenant_sync_service import (
     UserTenantSyncService,
 )
+from bisheng.user.domain.const import USER_CURRENT_SESSION
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 from bisheng.user.domain.services.user import UserService
-from bisheng.user.domain.const import USER_CURRENT_SESSION
 
 _USER_LOCK_KEY = "user:sso_lock:{external_user_id}"
 
@@ -383,6 +386,7 @@ class LoginSyncService:
                 source=row_source,
             )
         await cls._sync_department_member_tuples(user_id, [dept_id])
+        invalidate_portal_recommendation_users_best_effort([user_id])
 
     @classmethod
     async def _replace_departments_full(
@@ -431,6 +435,16 @@ class LoginSyncService:
             )
 
         await cls._sync_department_member_tuples(user_id, desired_dept_ids)
+        current_primary_id = next(
+            (
+                int(row.department_id)
+                for row in current_memberships
+                if int(getattr(row, "is_primary", 0) or 0) == 1
+            ),
+            None,
+        )
+        if current_primary_id != primary_dept_id:
+            invalidate_portal_recommendation_users_best_effort([user_id])
 
     @classmethod
     async def _replace_department_scoped_roles(

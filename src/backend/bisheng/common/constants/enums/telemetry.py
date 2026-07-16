@@ -97,3 +97,6 @@ class BaseTelemetryTypeEnum(str, Enum):
 
     # Shougang portal document download event
     PORTAL_DOCUMENT_DOWNLOAD = "portal_document_download"
+
+    # Shougang portal explicit search event
+    PORTAL_SEARCH = "portal_search"

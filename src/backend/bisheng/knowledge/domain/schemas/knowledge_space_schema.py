@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
@@ -498,7 +498,13 @@ class ShougangPortalHomeResp(BaseModel):
 
 
 class ShougangPortalTelemetryEventReq(BaseModel):
-    event_type: Literal["portal_favorite", "portal_qa", "portal_document_read", "portal_document_download"]
+    event_type: Literal[
+        "portal_favorite",
+        "portal_qa",
+        "portal_document_read",
+        "portal_document_download",
+        "portal_search",
+    ]
     source_app: str = Field(..., min_length=1, max_length=64)
     scene: str = Field(..., min_length=1, max_length=128)
     entry_point: str = Field(..., min_length=1, max_length=128)
@@ -510,6 +516,35 @@ class ShougangPortalTelemetryEventReq(BaseModel):
     source_space_id: int | str | None = None
     source_file_id: int | str | None = None
     conversation_id: str | None = Field(default=None, max_length=128)
+    query: str | None = Field(default=None, min_length=1, max_length=500)
+    normalized_query: str | None = Field(default=None, min_length=1, max_length=500)
+    recommendation_scene: Literal["personalized_v1", "latest_selected"] | None = None
+
+    @model_validator(mode="after")
+    def validate_recommendation_telemetry(self):
+        if self.event_type == "portal_search":
+            if not self.query:
+                raise ValueError("query is required for portal_search")
+            if self.entry_point not in {"search_page", "home_hot_keyword"}:
+                raise ValueError("portal_search entry_point is invalid")
+            query = " ".join(self.query.strip().split())
+            if not query:
+                raise ValueError("query is required for portal_search")
+            self.query = query
+            self.normalized_query = query.casefold()
+        elif self.event_type == "portal_document_read":
+            valid_entries = {
+                "home_recommendation",
+                "recommendation_list",
+                "search",
+                "knowledge_space",
+                "direct",
+                "favorite",
+                "other",
+            }
+            if self.entry_point not in valid_entries:
+                raise ValueError("portal_document_read entry_point is invalid")
+        return self
 
 
 class ShougangPortalHomeStatsResp(BaseModel):

@@ -4,7 +4,11 @@ from types import ModuleType
 
 import pytest
 
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import ShougangPortalSpaceInfoReq
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalSpaceInfoReq,
+    ShougangPortalTelemetryEventReq,
+)
 
 
 class _FakeKnowledgeSpaceService:
@@ -13,6 +17,7 @@ class _FakeKnowledgeSpaceService:
         self.search_request = None
         self.share_create_request = None
         self.share_verify_request = None
+        self.behavior_event = None
 
     async def get_space_info(self, space_id: int):
         raise AssertionError("endpoint should use the batch service method")
@@ -168,8 +173,8 @@ class _FakeKnowledgeSpaceService:
         self.tag_search_request = (space_ids, space_level, business_domain_code)
         return ["设备"]
 
-    async def count_shougang_portal_domain_files(self, codes):
-        self.requested_codes = codes
+    async def count_shougang_portal_domain_files(self, domains):
+        self.requested_codes = domains
         return {"PP": 5, "QM": 2}
 
     async def get_shougang_portal_home(self, req):
@@ -192,6 +197,9 @@ class _FakeKnowledgeSpaceService:
             },
             "tags": ["最新精选", "热轧"],
         }
+
+    async def record_shougang_portal_recommendation_behavior(self, req):
+        self.behavior_event = req
 
 
 def _load_shougang_portal_endpoint(monkeypatch: pytest.MonkeyPatch):
@@ -264,6 +272,46 @@ async def test_shougang_portal_space_levels_returns_level_options(monkeypatch: p
         {"value": "team", "label": "团队空间"},
         {"value": "personal", "label": "个人空间"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_portal_search_writes_common_telemetry_then_updates_recommendation_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        logged = []
+        monkeypatch.setattr(
+            endpoint.PortalTelemetryEventService,
+            "log_event_sync",
+            lambda **kwargs: logged.append(kwargs),
+        )
+        service = _FakeKnowledgeSpaceService()
+        request = ShougangPortalTelemetryEventReq(
+            event_type="portal_search",
+            source_app="shougang_portal",
+            scene="knowledge_search",
+            entry_point="search_page",
+            query="  安全   STEEL ",
+        )
+        response = await endpoint.record_shougang_portal_telemetry_event(
+            request,
+            login_user=UserPayload(user_id=7, user_name="user-7"),
+            svc=service,
+        )
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert logged[0]["event_data"].query == "安全 STEEL"
+    assert logged[0]["event_data"].normalized_query == "安全 steel"
+    assert service.behavior_event is request
 
 
 @pytest.mark.asyncio
@@ -487,7 +535,12 @@ async def test_shougang_portal_domain_file_counts_delegates_to_service(monkeypat
     try:
         endpoint = _load_shougang_portal_endpoint(monkeypatch)
         fake_service = _FakeKnowledgeSpaceService()
-        req = endpoint.ShougangPortalDomainFileCountReq(codes=["PP", "QM"])
+        req = endpoint.ShougangPortalDomainFileCountReq(
+            domains=[
+                {"code": "PP", "space_ids": [11, 12]},
+                {"code": "QM", "space_ids": [13]},
+            ]
+        )
         response = await endpoint.count_shougang_portal_domain_files(req, svc=fake_service)
     finally:
         if previous_endpoint_module is None:
@@ -496,7 +549,10 @@ async def test_shougang_portal_domain_file_counts_delegates_to_service(monkeypat
             sys.modules[endpoint_module_name] = previous_endpoint_module
 
     assert response.status_code == 200
-    assert fake_service.requested_codes == ["PP", "QM"]
+    assert [item.model_dump() for item in fake_service.requested_codes] == [
+        {"code": "PP", "space_ids": [11, 12]},
+        {"code": "QM", "space_ids": [13]},
+    ]
     assert response.data["counts"] == {"PP": 5, "QM": 2}
 
 

@@ -23,18 +23,18 @@ from bisheng.common.errcode.org_sync import (
     OrgSyncConfigNotFoundError,
 )
 from bisheng.database.constants import (
-    DefaultRole,
     USER_DISABLE_SOURCE_ORG_SYNC,
+    DefaultRole,
 )
-from bisheng.database.models.group import DefaultGroup, GroupDao
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.department import (
     Department,
     DepartmentDao,
     UserDepartment,
     UserDepartmentDao,
 )
+from bisheng.database.models.group import DefaultGroup, GroupDao
 from bisheng.database.models.tenant import UserTenant, UserTenantDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_archive_cleanup_service import (
     DepartmentArchiveCleanupService,
 )
@@ -42,12 +42,9 @@ from bisheng.department.domain.services.department_change_handler import Departm
 from bisheng.department.domain.services.department_sync_rbac_service import (
     DepartmentSyncRBACService,
 )
-from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
-from bisheng.tenant.domain.constants import DeletionSource
-from bisheng.tenant.domain.services.department_deletion_handler import (
-    DepartmentDeletionHandler,
+from bisheng.knowledge.domain.services.portal_recommendation_invalidation_service import (
+    invalidate_portal_recommendation_users_best_effort,
 )
-from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncConfig,
     OrgSyncConfigDao,
@@ -69,7 +66,13 @@ from bisheng.org_sync.domain.services.reconciler import (
     reconcile_departments,
     reconcile_members,
 )
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.tenant.domain.constants import DeletionSource
+from bisheng.tenant.domain.services.department_deletion_handler import (
+    DepartmentDeletionHandler,
+)
 from bisheng.user.domain.models.user import User, UserDao
+from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
 
 REDIS_LOCK_KEY_PREFIX = 'bisheng:lock:org_sync:'
 REDIS_LOCK_TTL = 1800  # 30 minutes
@@ -648,6 +651,9 @@ class OrgSyncService:
             )
             await DepartmentChangeHandler.execute_async(tuple_ops)
 
+        if op.touch_primary and new_primary_id:
+            invalidate_portal_recommendation_users_best_effort([op.user_id])
+
     @classmethod
     async def _disable_member(cls, op: DisableMember) -> None:
         user = await UserDao.aget_user(op.user_id)
@@ -664,6 +670,7 @@ class OrgSyncService:
             await UserDepartmentDao.aremove_member(op.user_id, dept_id)
             tuple_ops = DepartmentChangeHandler.on_member_removed(dept_id, op.user_id)
             await DepartmentChangeHandler.execute_async(tuple_ops)
+        invalidate_portal_recommendation_users_best_effort([op.user_id])
 
     @classmethod
     async def _reactivate_member(
@@ -704,6 +711,8 @@ class OrgSyncService:
             await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
                 op.user_id, int(dept_id),
             )
+        if primary_dept_id:
+            invalidate_portal_recommendation_users_best_effort([op.user_id])
 
     # ------------------------------------------------------------------
     # Redis lock helpers

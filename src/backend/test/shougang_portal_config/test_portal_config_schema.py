@@ -1,10 +1,11 @@
 import re
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.shougang_portal_config.api.endpoints.portal_config import router
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     ShougangPortalAdminConfig,
@@ -103,7 +104,7 @@ def test_portal_document_type_generates_missing_child_codes():
         {
             "code": "pol",
             "label": "政策制度",
-            "description_examples": "  例如：管理制度、通知公告  ",
+            "description_examples": "  例如：管理制度、通知公告  ",  # noqa: RUF001
             "children": [
                 {"label": "制度文件"},
                 {"code": "POL-OLD", "label": "历史分类"},
@@ -122,7 +123,7 @@ def test_portal_document_type_generates_missing_child_codes():
     assert children[0].label == "制度文件"
     assert children[1].code == "POL-OLD"
     assert children[1].label == "历史分类"
-    assert config.portal.document_types[0].description_examples == "例如：管理制度、通知公告"
+    assert config.portal.document_types[0].description_examples == "例如：管理制度、通知公告"  # noqa: RUF001
 
 
 def test_portal_config_round_trips_unified_url_application():
@@ -275,7 +276,20 @@ def test_portal_config_rejects_invalid_url_application():
         )
 
 
-def test_internal_config_endpoint_returns_full_config_without_auth(monkeypatch):
+def test_internal_config_endpoint_requires_admin_dependency():
+    async def deny_request():
+        raise HTTPException(status_code=401, detail="missing admin token")
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[UserPayload.get_admin_user] = deny_request
+
+    response = TestClient(app).get("/shougang-portal/config/internal")
+
+    assert response.status_code == 401
+
+
+def test_internal_config_endpoint_returns_current_tenant_full_config_for_admin(monkeypatch):
     config = ShougangPortalAdminConfig(
         portal=_minimal_portal_config(),
         bisheng={
@@ -290,12 +304,20 @@ def test_internal_config_endpoint_returns_full_config_without_auth(monkeypatch):
         },
     )
 
-    async def fake_get_config():
+    requested_tenant_ids = []
+
+    async def fake_get_config(*, tenant_id: int | None = None):
+        requested_tenant_ids.append(tenant_id)
         return config
 
     monkeypatch.setattr(ShougangPortalConfigService, "get_config", staticmethod(fake_get_config))
     app = FastAPI()
     app.include_router(router)
+    app.dependency_overrides[UserPayload.get_admin_user] = lambda: type(
+        "AdminUser",
+        (),
+        {"tenant_id": 9, "user_id": 1},
+    )()
 
     response = TestClient(app).get("/shougang-portal/config/internal")
 
@@ -306,3 +328,4 @@ def test_internal_config_endpoint_returns_full_config_without_auth(monkeypatch):
     assert body["data"]["unified_auth"]["client_secret"] == "plain-client-secret"
     assert body["data"]["unified_auth"]["state_secret"] == "plain-state-secret"
     assert body["data"]["unified_auth"]["login_sync_hmac_secret"] == "plain-login-sync-secret"
+    assert requested_tenant_ids == [9]

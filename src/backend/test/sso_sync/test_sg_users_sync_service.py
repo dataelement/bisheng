@@ -372,6 +372,9 @@ class TestSgUsersSyncService:
                 f"{MODULE}.SgUsersSyncService._sync_department_member_tuples",
                 new_callable=AsyncMock,
             ) as sync_tuples,
+            patch(
+                f"{MODULE}.invalidate_portal_recommendation_users_best_effort",
+            ) as invalidate,
         ):
             await SgUsersSyncService._ensure_primary_membership(9, 200)
 
@@ -382,6 +385,7 @@ class TestSgUsersSyncService:
             source=SgUsersSyncService.SOURCE,
         )
         sync_tuples.assert_awaited_once_with(9, [200])
+        invalidate.assert_called_once_with([9])
 
     async def test_ensure_primary_membership_removes_old_department_on_change(self):
         from bisheng.sso_sync.domain.services.sg_users_sync_service import (
@@ -413,6 +417,9 @@ class TestSgUsersSyncService:
                 f"{MODULE}.SgUsersSyncService._sync_department_member_tuples",
                 new_callable=AsyncMock,
             ) as sync_tuples,
+            patch(
+                f"{MODULE}.invalidate_portal_recommendation_users_best_effort",
+            ) as invalidate,
         ):
             await SgUsersSyncService._ensure_primary_membership(9, 200)
 
@@ -424,6 +431,7 @@ class TestSgUsersSyncService:
             source=SgUsersSyncService.SOURCE,
         )
         sync_tuples.assert_awaited_once_with(9, [200])
+        invalidate.assert_called_once_with([9])
 
     async def test_remove_department_membership_clears_fga_and_admin_grant(self):
         from bisheng.sso_sync.domain.services.sg_users_sync_service import (

@@ -60,6 +60,16 @@ CREATE TABLE IF NOT EXISTS user_tenant (
 # Existing tables: user, group, role, roleaccess, flow, knowledge
 # ---------------------------------------------------------------------------
 
+TABLE_CONFIG = """\
+CREATE TABLE IF NOT EXISTS config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    "key" VARCHAR(255) NOT NULL UNIQUE,
+    value TEXT NOT NULL,
+    comment VARCHAR(255),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
 TABLE_USER = """\
 CREATE TABLE IF NOT EXISTS user (
     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -548,6 +558,41 @@ INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE = """\
 CREATE INDEX IF NOT EXISTS ix_message_push_outbox_action_code
     ON message_push_outbox (action_code)"""
 
+# ---------------------------------------------------------------------------
+# F056: portal personalized recommendation
+# ---------------------------------------------------------------------------
+
+TABLE_PORTAL_RECOMMENDATION_FILE_PROJECTION = """\
+CREATE TABLE IF NOT EXISTS portal_recommendation_file_projection (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    file_id INTEGER NOT NULL,
+    space_id INTEGER NOT NULL,
+    business_domain_code VARCHAR(16),
+    permission_scope VARCHAR(16) NOT NULL DEFAULT 'unknown',
+    recommendable INTEGER NOT NULL DEFAULT 0,
+    reason_code VARCHAR(32) NOT NULL DEFAULT 'unknown',
+    source_update_time DATETIME NOT NULL,
+    projection_version BIGINT NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(tenant_id, file_id)
+)"""
+
+INDEX_PRFP_DOMAIN_RECENCY = """\
+CREATE INDEX IF NOT EXISTS ix_prfp_domain_recency
+    ON portal_recommendation_file_projection
+    (tenant_id, business_domain_code, recommendable, source_update_time, file_id)"""
+
+INDEX_PRFP_GENERIC_RECENCY = """\
+CREATE INDEX IF NOT EXISTS ix_prfp_generic_recency
+    ON portal_recommendation_file_projection
+    (tenant_id, recommendable, source_update_time, file_id)"""
+
+INDEX_PRFP_SPACE_RECOMMENDABLE = """\
+CREATE INDEX IF NOT EXISTS ix_prfp_space_recommendable
+    ON portal_recommendation_file_projection (tenant_id, space_id, recommendable)"""
+
 
 # ---------------------------------------------------------------------------
 # Registry & helpers
@@ -557,6 +602,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "tenant": TABLE_TENANT,
     "user_tenant": TABLE_USER_TENANT,
     "user": TABLE_USER,
+    "config": TABLE_CONFIG,
     "group": TABLE_GROUP,
     "usergroup": TABLE_USERGROUP,
     "role": TABLE_ROLE,
@@ -585,6 +631,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "org_sync_log": TABLE_ORG_SYNC_LOG,
     # F057: message push outbox for Shougang enterprise WeChat.
     "message_push_outbox": TABLE_MESSAGE_PUSH_OUTBOX,
+    # F056: portal personalized recommendation.
+    "portal_recommendation_file_projection": TABLE_PORTAL_RECOMMENDATION_FILE_PROJECTION,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.
@@ -599,6 +647,9 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY,
     INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE,
     INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE,
+    INDEX_PRFP_DOMAIN_RECENCY,
+    INDEX_PRFP_GENERIC_RECENCY,
+    INDEX_PRFP_SPACE_RECOMMENDABLE,
 ]
 
 
@@ -633,3 +684,7 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY))
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE))
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE))
+        if "portal_recommendation_file_projection" in table_names:
+            conn.execute(text(INDEX_PRFP_DOMAIN_RECENCY))
+            conn.execute(text(INDEX_PRFP_GENERIC_RECENCY))
+            conn.execute(text(INDEX_PRFP_SPACE_RECOMMENDABLE))

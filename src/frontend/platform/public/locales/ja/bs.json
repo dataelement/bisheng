@@ -160,6 +160,25 @@
       "namePlaceholder": "Token 名を入力",
       "rateLimitPlaceholder": "例：60。空欄は無制限です。",
       "ipWhitelistHelp": "単一 IP または CIDR を指定できます。複数のルールは改行、スペース、カンマ、セミコロンで区切れます。空の場合はすべての IP を許可します。",
+      "routeRules": {
+        "add": "ルートルールを追加",
+        "remove": "ルートルールを削除",
+        "matchType": "一致タイプ",
+        "method": "HTTP メソッド",
+        "anyMethod": "任意のメソッド",
+        "pathPlaceholder": "例：/api/v1/items/{item_id}",
+        "prefixPlaceholder": "例：/api/v1/files/*",
+        "emptyHelp": "ルールがない場合、開発者 Token 認証を有効にしたすべての API にアクセスできます。",
+        "prefixHelp": "PREFIX は /* で終わる必要があり、子孫ルートだけに一致します。ルート自体や類似文字列のパスには一致しません。",
+        "invalidError": "{{index}} 番目のルートルールが無効か、別のルールと重複しています。",
+        "allRoutes": "すべての有効ルート",
+        "count": "{{count}} 件のルートルール",
+        "types": {
+          "METHOD_PATH": "メソッド + パス",
+          "PATH": "完全一致パス",
+          "PREFIX": "パスプレフィックス"
+        }
+      },
       "saveConfig": "設定を保存",
       "search": "検索",
       "create": "Token を作成",
@@ -191,6 +210,7 @@
         "binding": "紐づくユーザー / テナント",
         "status": "状態",
         "controls": "アクセス制御",
+        "routes": "ルート範囲",
         "lastUsed": "最終使用",
         "actions": "操作"
       },
@@ -201,7 +221,8 @@
         "overrideIp": "グローバル IP ホワイトリストを上書き",
         "overrideRate": "グローバルレート制限を上書き",
         "ipWhitelist": "IP ホワイトリスト",
-        "rateLimit": "毎分制限"
+        "rateLimit": "毎分制限",
+        "routeWhitelist": "ルートホワイトリスト"
       }
     },
     "orgAndMembers": "組織とメンバー",
@@ -2026,6 +2047,8 @@
     "19803": "システムレベルのLLM設定はグローバルスーパー管理者のみが変更できます。",
     "19804": "LLMサーバのエンドポイントがsettings.llm.endpoint_whitelistのいずれの接頭辞にも一致しません。",
     "19809": "IP ホワイトリストに無効な IP または CIDR があります。確認して再試行してください。",
+    "19811": "ルートホワイトリストのルールが無効か重複しています。確認して再試行してください。",
+    "19812": "この開発者 Token では要求されたルートにアクセスできません。",
     "20000": "テナントが見つかりません。",
     "20001": "所属テナントが停止されています。管理者にお問い合わせください。",
     "20002": "ユーザーはこのテナントに属していません。",

@@ -16,6 +16,9 @@ from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.knowledge.domain.services.portal_recommendation_invalidation_service import (
+    invalidate_portal_recommendation_users_best_effort,
+)
 from bisheng.sso_sync.domain.constants import SG_SOURCE
 from bisheng.sso_sync.domain.schemas.sg_payloads import (
     SgDataInfoItem,
@@ -209,18 +212,23 @@ class SgUsersSyncService:
                 source=cls.SOURCE,
             )
         await cls._sync_department_member_tuples(user_id, [dept_id])
+        invalidate_portal_recommendation_users_best_effort([user_id])
 
     @classmethod
     async def _handle_off_job(cls, user_id: int) -> None:
         """Remove SG-managed department memberships and OpenFGA tuples for off-job users."""
         memberships = await UserDepartmentDao.aget_user_departments(user_id)
+        removed_primary = False
         for row in memberships:
             if getattr(row, "source", None) != cls.SOURCE:
                 continue
+            removed_primary = removed_primary or int(getattr(row, "is_primary", 0) or 0) == 1
             await cls._remove_department_membership(
                 user_id,
                 int(row.department_id),
             )
+        if removed_primary:
+            invalidate_portal_recommendation_users_best_effort([user_id])
 
     @classmethod
     async def _remove_department_membership(

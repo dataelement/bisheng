@@ -25,6 +25,7 @@ _MEMBER = "space_channel_member"
 _SCOPE = "knowledge_space_scope"
 _UNIQUE = "uk_user_link_user_type_detail"
 _PIN_TYPE = "knowledge_space_pin"
+_MYSQL_COLLATION = "utf8mb4_unicode_ci"
 
 
 def _tables():
@@ -82,6 +83,13 @@ def _deduplicate(conn, user_link) -> None:
         conn.execute(sa.delete(user_link).where(user_link.c.id.in_(duplicate_ids[start : start + 500])))
 
 
+def _space_id_join_value(conn, scope):
+    value = sa.cast(scope.c.space_id, sa.String(36))
+    if conn.dialect.name == "mysql":
+        value = sa.collate(value, _MYSQL_COLLATION)
+    return value
+
+
 def _backfill(conn, user_link, member, scope) -> None:
     existing = {
         (int(row.user_id), str(row.type_detail))
@@ -94,7 +102,7 @@ def _backfill(conn, user_link, member, scope) -> None:
         .select_from(
             member.join(
                 scope,
-                sa.cast(scope.c.space_id, sa.String(36)) == member.c.business_id,
+                _space_id_join_value(conn, scope) == member.c.business_id,
             )
         )
         .where(

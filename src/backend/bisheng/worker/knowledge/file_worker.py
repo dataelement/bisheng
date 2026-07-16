@@ -26,6 +26,17 @@ from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus
 
 
+def _enqueue_recommendation_projection_refresh(file_id: int) -> None:
+    try:
+        from bisheng.worker.knowledge.portal_recommendation import (
+            enqueue_portal_recommendation_projection_refresh,
+        )
+
+        enqueue_portal_recommendation_projection_refresh(file_id=int(file_id))
+    except Exception:
+        logger.exception("failed to enqueue recommendation projection refresh file_id={}", file_id)
+
+
 @bisheng_celery.task(acks_late=True)
 def file_copy_celery(param: json) -> str:
     """Copy a Knowledge Base file to another Knowledge Base
@@ -163,6 +174,7 @@ def copy_normal(
         knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
+        _enqueue_recommendation_projection_refresh(knowledge_new.id)
         return knowledge_new
 
     # copy vector
@@ -181,6 +193,7 @@ def copy_normal(
         knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
+    _enqueue_recommendation_projection_refresh(knowledge_new.id)
     return knowledge_new
 
 
@@ -341,6 +354,7 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     trace_id_var.set(f'parse_file_{file_id}')
     logger.info(
         f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
+    knowledge = None
     try:
         # After the warehousing is successful, it is judged whether the file information still exists, and if not, it is deleted.
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
@@ -348,11 +362,13 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file and knowledge:
+        if db_file:
+            _enqueue_recommendation_projection_refresh(file_id)
+        elif knowledge:
             logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
             # If it does not exist, it may have been deleted during the parsing process,
             # and the data of the vector database needs to be deleted.
-            delete_vector_files([db_file[0].id], knowledge)
+            delete_vector_files([file_id], knowledge)
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):
@@ -401,17 +417,21 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
         KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED,
                                             KnowledgeFileFailedError(exception=e).to_json_str())
+        _enqueue_recommendation_projection_refresh(file_id)
         return
+    knowledge = None
     try:
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("retry_knowledge_file_celery error: {}", str(e))
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file and knowledge:
+        if db_file:
+            _enqueue_recommendation_projection_refresh(file_id)
+        elif knowledge:
             logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
             # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
-            delete_vector_files([db_file[0].id], knowledge)
+            delete_vector_files([file_id], knowledge)
 
 
 @bisheng_celery.task(acks_late=True)
