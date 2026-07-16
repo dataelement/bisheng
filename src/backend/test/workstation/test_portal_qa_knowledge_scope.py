@@ -48,6 +48,18 @@ def test_chat_schema_accepts_optional_files_scope_and_keeps_old_payload_valid():
     assert scoped.knowledge_scope.file_refs[0].knowledge_space_id == 7102
 
 
+def test_chat_schema_accepts_more_than_50_knowledge_spaces():
+    knowledge_space_ids = list(range(1, 68))
+
+    payload = APIChatCompletion(
+        clientTimestamp='2026-07-16T15:53:21',
+        model='821',
+        use_knowledge_base={'knowledge_space_ids': knowledge_space_ids},
+    )
+
+    assert payload.use_knowledge_base.knowledge_space_ids == knowledge_space_ids
+
+
 @pytest.mark.asyncio
 async def test_pre_retrieve_passes_resolved_file_filters_to_query_chunks(monkeypatch):
     query_chunks = AsyncMock(return_value=([], [], []))
