@@ -317,6 +317,18 @@ export function CreateKnowledgeSpaceDrawer({
         && spaceLevel === SpaceLevel.TEAM;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
+    const selectedDepartmentName = departmentSelection[0]?.name;
+    const currentLevelLabel = levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel;
+    const levelOwnerName = spaceLevel === SpaceLevel.DEPARTMENT
+        ? selectedDepartmentName || (!shouldShowDepartmentSelector
+            ? editingSpace?.ownerName || editingSpace?.departmentName
+            : undefined)
+        : !shouldShowDepartmentSelector
+            ? editingSpace?.ownerName || editingSpace?.departmentName
+            : undefined;
+    const levelDisplayLabel = levelOwnerName
+        ? `${currentLevelLabel} - ${levelOwnerName}`
+        : currentLevelLabel;
     const selectedLibrariesHaveTags = useMemo(
         () => selectedAutoTagLibrariesHaveTags(autoTagLibraryIds, tagLibraries, autoTagLibraryTags),
         [autoTagLibraryIds, tagLibraries, autoTagLibraryTags],
@@ -701,10 +713,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 </Label>
                                 {mode === "edit" ? (
                                     <div className="h-8 rounded-[6px] bg-[#F7F8FA] px-3 text-[14px] leading-8 text-[#4E5969]">
-                                        {levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel}
-                                        {!shouldShowDepartmentSelector && (editingSpace?.ownerName || editingSpace?.departmentName)
-                                            ? ` - ${editingSpace.ownerName || editingSpace.departmentName}`
-                                            : ""}
+                                        {levelDisplayLabel}
                                     </div>
                                 ) : (
                                     <RadioGroup.Root
@@ -723,7 +732,11 @@ export function CreateKnowledgeSpaceDrawer({
                                                 >
                                                     <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                                 </RadioGroup.Item>
-                                                <span>{option.label}</span>
+                                                <span>
+                                                    {option.value === SpaceLevel.DEPARTMENT && selectedDepartmentName
+                                                        ? `${option.label} - ${selectedDepartmentName}`
+                                                        : option.label}
+                                                </span>
                                             </label>
                                         ))}
                                     </RadioGroup.Root>
