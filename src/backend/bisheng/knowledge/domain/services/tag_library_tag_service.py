@@ -24,6 +24,7 @@ from bisheng.database.models.tag import (
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
     KnowledgeTagLibraryLinkDao,
 )
+from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryTreeItem
 
 
 class TagLibraryTagService:
@@ -973,3 +974,21 @@ class TagLibraryTagService:
             if name:
                 normalized.append(name)
         return normalized
+
+    @classmethod
+    async def alist_tree(cls, keyword: str) -> dict[int, list[KnowledgeSpaceTagLibraryTreeItem]]:
+        tags = await TagDao.alist_tree(keyword=keyword)
+        if not tags:
+            return {}
+        tag_map: dict[int, list[KnowledgeSpaceTagLibraryTreeItem]] = {}
+        for tag in tags:
+            tag_map.setdefault(tag.business_id, []).append(
+                KnowledgeSpaceTagLibraryTreeItem(
+                    id="T" + str(tag.id),
+                    name=tag.name,
+                    key=tag.id,
+                    library_id=tag.business_id,
+                    parent_id="L" + str(tag.business_id),
+                )
+            )
+        return tag_map

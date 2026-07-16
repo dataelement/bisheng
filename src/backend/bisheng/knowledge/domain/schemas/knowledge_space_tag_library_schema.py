@@ -43,3 +43,12 @@ class KnowledgeSpaceTagLibraryListItem(BaseModel):
 class KnowledgeSpaceTagLibraryDetail(KnowledgeSpaceTagLibraryListItem):
     tags: list[str] = Field(default_factory=list)
     tag_items: list[KnowledgeSpaceTagLibraryTagItem] = Field(default_factory=list)
+
+class KnowledgeSpaceTagLibraryTreeItem(BaseModel):
+    id: str = Field(description="标签库 ID")
+    name: str = Field(description="标签库名称")
+    key: int = Field(description="标签库 KEY")
+    library_id: int = Field(description="标签库 ID")
+    meta_info: str | None = Field(default=None, description="标签库元信息")
+    parent_id: str | None = Field(default=None, description="父标签库 ID")    
+    children: list["KnowledgeSpaceTagLibraryTreeItem"] = Field(default_factory=list, description="子标签库列表")
