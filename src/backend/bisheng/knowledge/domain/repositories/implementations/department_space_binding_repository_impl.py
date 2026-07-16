@@ -81,9 +81,9 @@ class DepartmentSpaceBindingRepositoryImpl(
                 .where(DepartmentKnowledgeSpace.department_id == department_id)
                 .with_for_update()
             )
-            target_binding = target_result.first()
-            if target_binding is not None and int(target_binding.space_id) != space_id:
-                raise DepartmentKnowledgeSpaceExistsError(msg="该部门已有知识库")
+            # Lock existing target-department rows so concurrent rebinds observe a
+            # stable set. Multiple rows are valid after F060 and are not conflicts.
+            target_result.all()
 
             current_result = await self.session.exec(
                 select(DepartmentKnowledgeSpace)
@@ -226,7 +226,7 @@ class DepartmentSpaceBindingRepositoryImpl(
             self._prepared_binding = None
             raise DepartmentKnowledgeSpaceExistsError(
                 exception=exc,
-                msg="该部门已有知识库",
+                msg="该知识库已绑定部门",
             ) from exc
         except Exception:
             await self.session.rollback()

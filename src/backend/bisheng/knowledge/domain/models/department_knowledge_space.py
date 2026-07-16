@@ -8,9 +8,8 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
-
-
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 
 class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
     tenant_id: Optional[int] = Field(
@@ -74,7 +73,6 @@ class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
 class DepartmentKnowledgeSpace(DepartmentKnowledgeSpaceBase, table=True):
     __tablename__ = 'department_knowledge_space'
     __table_args__ = (
-        UniqueConstraint('department_id', name='uk_dks_department_id'),
         UniqueConstraint('space_id', name='uk_dks_space_id'),
     )
 
@@ -122,18 +120,6 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
             return row
 
     @classmethod
-    async def aget_by_department_id(
-        cls, department_id: int,
-    ) -> Optional[DepartmentKnowledgeSpace]:
-        async with get_async_db_session() as session:
-            result = await session.exec(
-                select(DepartmentKnowledgeSpace).where(
-                    DepartmentKnowledgeSpace.department_id == department_id,
-                )
-            )
-            return result.first()
-
-    @classmethod
     async def aget_by_department_ids(
         cls, department_ids: List[int],
     ) -> List[DepartmentKnowledgeSpace]:
@@ -172,13 +158,6 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
                 )
             )
             return result.all()
-
-    @classmethod
-    async def aget_space_id_by_department_id(
-        cls, department_id: int,
-    ) -> Optional[int]:
-        row = await cls.aget_by_department_id(department_id)
-        return row.space_id if row else None
 
     @classmethod
     async def aget_department_ids_by_space_ids(

@@ -33,6 +33,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceAmbiguousError,
     FavoriteSpaceProtectedError,
     FreeSpaceMigratingError,
     FreeSpaceMigrationEmbeddingMismatchError,
@@ -6826,6 +6827,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if decision.action == "block":
                     raise {
                         "target_not_found": FreeSpaceMigrationTargetNotFoundError,
+                        "ambiguous_target": DepartmentKnowledgeSpaceAmbiguousError,
                         "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
                         "migrating": FreeSpaceMigratingError,
                     }.get(decision.reason, FreeSpaceMigrationTargetNotFoundError)()

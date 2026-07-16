@@ -19,8 +19,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.database.models.department import DepartmentDao
-from bisheng.database.models.department import UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -41,7 +40,6 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
 )
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
-
 
 _logger = logging.getLogger(__name__)
 
@@ -292,17 +290,8 @@ class DepartmentKnowledgeSpaceService:
         if not req.items:
             return []
         dept_ids = [int(item.department_id) for item in req.items]
-        if len(set(dept_ids)) != len(dept_ids):
-            raise DepartmentKnowledgeSpaceExistsError(
-                msg=f'Department ids are duplicated in request: {sorted(dept_ids)}'
-            )
 
         dept_map = await cls._load_departments(dept_ids)
-        existing = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(list(dept_map.keys()))
-        if existing:
-            raise DepartmentKnowledgeSpaceExistsError(
-                msg=f'Department knowledge space already exists: {sorted({row.department_id for row in existing})}'
-            )
 
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         created_spaces: List[KnowledgeSpaceInfoResp] = []
@@ -348,27 +337,29 @@ class DepartmentKnowledgeSpaceService:
         added_user_ids: Sequence[int],
         removed_user_ids: Sequence[int],
     ) -> None:
-        space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
-        if not space_id:
+        bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids([department_id])
+        space_ids = sorted({int(binding.space_id) for binding in bindings})
+        if not space_ids:
             return
 
         if request is None:
             request = Request(scope={'type': 'http'})
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        for user_id in sorted(set(int(uid) for uid in added_user_ids)):
-            await cls._sync_added_admin(
-                space_service=space_service,
-                space_id=space_id,
-                login_user=login_user,
-                user_id=user_id,
-            )
+        for space_id in space_ids:
+            for user_id in sorted(set(int(uid) for uid in added_user_ids)):
+                await cls._sync_added_admin(
+                    space_service=space_service,
+                    space_id=space_id,
+                    login_user=login_user,
+                    user_id=user_id,
+                )
 
-        for user_id in sorted(set(int(uid) for uid in removed_user_ids)):
-            await cls._sync_removed_admin(
-                space_service=space_service,
-                space_id=space_id,
-                user_id=user_id,
-            )
+            for user_id in sorted(set(int(uid) for uid in removed_user_ids)):
+                await cls._sync_removed_admin(
+                    space_service=space_service,
+                    space_id=space_id,
+                    user_id=user_id,
+                )
 
     @classmethod
     async def get_user_department_spaces(
@@ -439,8 +430,6 @@ class DepartmentKnowledgeSpaceService:
             raise SpaceNotFoundError(msg="只能绑定团队知识库")
         if await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id) is not None:
             raise DepartmentKnowledgeSpaceExistsError(msg="该知识库已绑定部门")
-        if await DepartmentKnowledgeSpaceDao.aget_by_department_id(department_id) is not None:
-            raise DepartmentKnowledgeSpaceExistsError(msg="该部门已绑定科室知识库")
         dept = await DepartmentDao.aget_by_id(department_id)
         if dept is None or getattr(dept, "status", "active") != "active":
             raise DepartmentNotFoundError()

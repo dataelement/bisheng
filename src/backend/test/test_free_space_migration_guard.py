@@ -1,6 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceAmbiguousError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.services.free_space_migration_service import (
     FreeSpaceMigrationService,
@@ -70,6 +72,25 @@ async def test_free_space_no_target_blocks():
     d = await _run(_Space(1, 5), target_id=None)
     assert d.action == "block"
     assert d.reason == "target_not_found"
+
+
+@pytest.mark.asyncio
+async def test_free_space_ambiguous_target_blocks():
+    with patch(
+        f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id",
+        new=AsyncMock(return_value=_Scope("team")),
+    ), patch.object(
+        FreeSpaceMigrationService,
+        "resolve_target_department_space",
+        new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
+    ):
+        decision = await FreeSpaceMigrationService.pre_delete_guard(_Space(1, 5))
+
+    assert decision.action == "block"
+    assert decision.reason == "ambiguous_target"
 
 
 @pytest.mark.asyncio

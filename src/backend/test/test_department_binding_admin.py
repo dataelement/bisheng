@@ -28,7 +28,6 @@ async def test_bind_requires_admin():
 async def test_bind_rejects_already_bound_space():
     with patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_space_ids_by_level", new=AsyncMock(return_value=[10])), \
          patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=object())), \
-         patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_department_id", new=AsyncMock(return_value=None)), \
          patch(f"{MOD}.DepartmentDao.aget_by_id", new=AsyncMock(return_value=SimpleNamespace(id=3, name="d", status="active"))):
         with pytest.raises(Exception):
             await Svc.bind_space_to_department(_admin(), space_id=10, department_id=3)
@@ -38,7 +37,6 @@ async def test_bind_rejects_already_bound_space():
 async def test_bind_success_creates_row():
     with patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_space_ids_by_level", new=AsyncMock(return_value=[10])), \
          patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=None)), \
-         patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_department_id", new=AsyncMock(return_value=None)), \
          patch(f"{MOD}.DepartmentDao.aget_by_id", new=AsyncMock(return_value=SimpleNamespace(id=3, name="d", status="active"))), \
          patch(f"{MOD}.DepartmentKnowledgeSpaceDao.acreate", new=AsyncMock(return_value=SimpleNamespace(space_id=10, department_id=3))) as create:
         await Svc.bind_space_to_department(_admin(), space_id=10, department_id=3)

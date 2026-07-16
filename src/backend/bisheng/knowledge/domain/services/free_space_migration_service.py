@@ -4,6 +4,9 @@ import logging
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
+from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceAmbiguousError,
+)
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -12,6 +15,9 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeSta
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScopeDao,
+)
+from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetResolver,
 )
 
 _logger = logging.getLogger(__name__)
@@ -59,14 +65,15 @@ class FreeSpaceMigrationService:
             _logger.info("resolve_target creator=%s → 无主部门", creator_user_id)
             return None
         chain = await cls._department_id_chain(int(primary.department_id))
-        for dept_id in chain:
-            space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(dept_id)
-            if space_id is not None:
-                _logger.info(
-                    "resolve_target creator=%s chain(近→远)=%s → 命中 dept=%s space=%s",
-                    creator_user_id, chain, dept_id, space_id,
-                )
-                return int(space_id)
+        space_id = await DepartmentSpaceTargetResolver.resolve(chain)
+        if space_id is not None:
+            _logger.info(
+                "resolve_target creator=%s chain(近→远)=%s → space=%s",
+                creator_user_id,
+                chain,
+                space_id,
+            )
+            return int(space_id)
         _logger.info(
             "resolve_target creator=%s chain(近→远)=%s → 沿途无已绑定科室库",
             creator_user_id, chain,
@@ -92,7 +99,14 @@ class FreeSpaceMigrationService:
         if level != KnowledgeSpaceLevelEnum.TEAM.value and level != KnowledgeSpaceLevelEnum.TEAM:
             _logger.info("pre_delete_guard space=%s level=%s → normal_delete(非自由 team 库，直接删)", space_id, level)
             return MigrationDecision("normal_delete")
-        target_id = await cls.resolve_target_department_space(space.user_id)
+        try:
+            target_id = await cls.resolve_target_department_space(space.user_id)
+        except DepartmentKnowledgeSpaceAmbiguousError:
+            _logger.warning(
+                "pre_delete_guard space=%s → block(ambiguous_target 多个目标知识库)",
+                space_id,
+            )
+            return MigrationDecision("block", reason="ambiguous_target")
         if target_id is None:
             _logger.info(
                 "pre_delete_guard space=%s creator=%s → block(target_not_found 无法迁移，找不到目标科室库)",
