@@ -447,6 +447,95 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByText("部门知识库")).toBeInTheDocument();
     });
 
+    test("系统管理员编辑部门知识库时可回显并修改所属部门", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: true,
+            canCreateDepartment: true,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+        const getDepartments = jest.requireMock("~/api/knowledge").getCreateSpaceDepartmentsApi;
+        getDepartments.mockResolvedValue({
+            data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", parent_id: null, children: [] }],
+            total: 1,
+        });
+
+        renderDrawer({
+            mode: "edit",
+            canEditDepartmentBinding: true,
+            editingSpace: {
+                id: "department-1",
+                name: "部门资料库",
+                description: "原简介",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.DEPARTMENT,
+                departmentId: 9,
+                ownerName: "炼铁部",
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+            onConfirm,
+        });
+
+        expect(await screen.findByTestId("department-selector")).toHaveTextContent("炼铁部");
+        fireEvent.click(await screen.findByRole("button", { name: "选择炼钢部" }));
+        await selectDefaultTagLibrary();
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            departmentId: 12,
+        }));
+    });
+
+    test("非系统管理员编辑部门知识库时所属部门保持只读", () => {
+        renderDrawer({
+            mode: "edit",
+            canEditDepartmentBinding: false,
+            editingSpace: {
+                id: "department-1",
+                name: "部门资料库",
+                description: "原简介",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.DEPARTMENT,
+                departmentId: 9,
+                ownerName: "炼铁部",
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+        });
+
+        expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
+        expect(screen.getByText(/炼铁部/)).toBeInTheDocument();
+    });
+
+    test("系统管理员编辑非部门知识库时不展示部门选择器", () => {
+        renderDrawer({
+            mode: "edit",
+            canEditDepartmentBinding: true,
+            editingSpace: {
+                id: "team-1",
+                name: "团队资料库",
+                description: "",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.TEAM,
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+        });
+
+        expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
+        expect(screen.getByText("团队/科室知识库")).toBeInTheDocument();
+    });
+
     test("创建模式可选择多个标签库", async () => {
         const onConfirm = jest.fn().mockResolvedValue(true);
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({

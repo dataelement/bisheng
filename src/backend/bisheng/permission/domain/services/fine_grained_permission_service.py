@@ -141,6 +141,28 @@ class FineGrainedPermissionService:
         return {dept.id: dept.path or '' for dept in departments}
 
     @staticmethod
+    async def has_explicit_relation_binding(
+        *,
+        object_type: str,
+        object_id: str | int,
+        subject_type: str,
+        subject_id: int,
+        relation: str,
+        include_children: bool,
+    ) -> bool:
+        """Return whether the permission UI persists an explicit matching grant."""
+        bindings = await _get_bindings()
+        return any(
+            binding.get('resource_type') == object_type
+            and str(binding.get('resource_id')) == str(object_id)
+            and binding.get('subject_type') == subject_type
+            and int(binding.get('subject_id') or 0) == int(subject_id)
+            and binding.get('relation') == relation
+            and bool(binding.get('include_children')) is include_children
+            for binding in bindings
+        )
+
+    @staticmethod
     async def get_current_user_department_paths(user_subject_strings: set[str]) -> dict[int, str]:
         department_ids: set[int] = set()
         for subject in user_subject_strings:

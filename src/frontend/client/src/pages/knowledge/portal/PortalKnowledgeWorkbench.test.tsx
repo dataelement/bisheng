@@ -53,8 +53,10 @@ import {
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
     updateFileEncoding,
+    updateSpaceApi,
     uploadFileToServerApi,
 } from "~/api/knowledge";
+import store from "~/store";
 
 function stripComments(source: string): string {
     return source
@@ -254,7 +256,7 @@ jest.mock("~/components/ui/icon/File", () => ({
 }));
 
 jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
-    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, showSuccessManageMembers, onConfirm }: any) => {
+    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, showSuccessManageMembers, canEditDepartmentBinding, onConfirm }: any) => {
         if (!open) return null;
         const successManageMembersVisible = typeof showSuccessManageMembers === "function"
             ? showSuccessManageMembers(initialSpaceLevel)
@@ -264,8 +266,10 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                 mode:{mode}
                 initial:{initialSpaceLevel}
                 editing:{editingSpace?.name || ""}
+                editingDepartment:{editingSpace?.departmentId || ""}
                 approvalReason:{String(Boolean(showApprovalReason))}
                 successManageMembers:{String(successManageMembersVisible)}
+                canEditDepartmentBinding:{String(Boolean(canEditDepartmentBinding))}
                 <button
                     type="button"
                     onClick={async () => {
@@ -276,8 +280,9 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                             joinPolicy: "review",
                             publishToSquare: "no",
                             spaceLevel: initialSpaceLevel,
+                            departmentId: editingSpace?.spaceLevel === "department" ? 12 : undefined,
                             autoTagEnabled: false,
-                            autoTagLibraryId: null,
+                            autoTagLibraryIds: [],
                         });
                     }}
                 >
@@ -503,7 +508,7 @@ function toLocalDateTimeInput(date: Date) {
     return `${formatLocalDateTime(date).replace(" ", "T")}:00`;
 }
 
-function renderWorkbench(initialEntry = "/knowledge-portal") {
+function renderWorkbench(initialEntry = "/knowledge-portal", currentUser?: Record<string, any>) {
     mockSearchParams = new URL(initialEntry, "http://localhost").search.slice(1);
     const queryClient = new QueryClient({
         defaultOptions: {
@@ -515,7 +520,9 @@ function renderWorkbench(initialEntry = "/knowledge-portal") {
 
     const view = render(
         <QueryClientProvider client={queryClient}>
-            <RecoilRoot>
+            <RecoilRoot initializeState={({ set }) => {
+                if (currentUser) set(store.user, currentUser as any);
+            }}>
                 <PortalKnowledgeWorkbench />
             </RecoilRoot>
         </QueryClientProvider>,
@@ -1350,6 +1357,85 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(getSpaceInfoApi).toHaveBeenCalledWith("team-1");
             expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("mode:edit");
             expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("editing:团队空间详情");
+        });
+    });
+
+    test("系统管理员保存部门知识库设置时使用权威更新响应回显新部门", async () => {
+        const departmentSpace = makeSpace("department-1", "部门空间01", {
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            departmentId: 9,
+            ownerName: "炼铁部",
+        });
+        const refreshedSpace = {
+            ...departmentSpace,
+            departmentId: 12,
+            ownerName: "炼钢部",
+        };
+        mockUseKnowledgeSpaceActionPermissions.mockReturnValue({
+            permissions: { "department-1": ["edit_space"] },
+            loading: false,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+        jest.mocked(updateSpaceApi).mockResolvedValue(refreshedSpace as any);
+
+        renderWorkbench("/knowledge-portal", { role: "admin" });
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const row = await screen.findByTestId("space-row-department-1");
+        fireEvent.click(within(row).getByRole("button", { name: "空间设置" }));
+        expect(await screen.findByTestId("create-space-drawer")).toHaveTextContent(
+            "canEditDepartmentBinding:true",
+        );
+        fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
+
+        await waitFor(() => expect(updateSpaceApi).toHaveBeenCalledTimes(1));
+        expect(updateSpaceApi).toHaveBeenCalledWith("department-1", expect.objectContaining({
+            department_id: 12,
+        }));
+        expect(jest.mocked(updateSpaceApi).mock.calls[0][1]).not.toHaveProperty("space_level");
+        expect(getSpaceInfoApi).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+            expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("editingDepartment:12");
+        });
+    });
+
+    test("部门重绑失败时保留设置抽屉并展示后端错误", async () => {
+        const departmentSpace = makeSpace("department-1", "部门空间01", {
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            departmentId: 9,
+            ownerName: "炼铁部",
+        });
+        mockUseKnowledgeSpaceActionPermissions.mockReturnValue({
+            permissions: { "department-1": ["edit_space"] },
+            loading: false,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+        jest.mocked(updateSpaceApi).mockRejectedValue(new Error("该部门已有知识库"));
+
+        renderWorkbench("/knowledge-portal", { role: "admin" });
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const row = await screen.findByTestId("space-row-department-1");
+        fireEvent.click(within(row).getByRole("button", { name: "空间设置" }));
+        fireEvent.click(await screen.findByRole("button", { name: "提交创建" }));
+
+        await waitFor(() => expect(mockCreateSpaceConfirmResult).toBe(false));
+        expect(screen.getByTestId("create-space-drawer")).toBeInTheDocument();
+        expect(mockShowToast).toHaveBeenCalledWith({
+            message: "该部门已有知识库",
+            severity: NotificationSeverity.ERROR,
         });
     });
 

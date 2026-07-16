@@ -23,6 +23,44 @@ Scope:
 - 仅处理真实文件、解析成功、未处理完成的文件：`file_type = FILE`、`status = SUCCESS`、`similar_status != 2`
 - 跳过没有有效 `simhash` 或没有有效前三段 `file_encoding` 的文件
 
+### `backfill_file_subcategories.py`
+
+补全历史空间知识库文件的二级分类。默认 dry-run 只扫描全部租户中
+`SPACE + FILE + SUCCESS + file_subcategory_code 为空` 的记录，不读取门户配置、
+Elasticsearch，不调用 AI，也不写数据库。
+
+传入 `--apply` 后，脚本使用文件所属租户的门户分类树：仅有一个合法子分类时
+直接保存并标记 `fallback`；存在多个候选时，读取 Elasticsearch 正文开头 1500
+字符，结合文件名和摘要调用工作台 LLM。AI 最多调用 3 次，全部失败后保持空值。
+
+Usage:
+
+```bash
+# 先执行全库只读统计
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_subcategories.py
+
+# 先对单个文件执行正式烟测
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_subcategories.py --apply --file-id 123
+
+# 按租户或知识库灰度
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_subcategories.py --apply --tenant-id 2 --limit 100
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_subcategories.py --apply --knowledge-id 3516
+
+# 分批限流后执行
+PYTHONPATH=./ .venv/bin/python scripts/backfill_file_subcategories.py --apply --limit 500 --batch-size 20 --sleep-ms 100
+```
+
+Operational notes:
+
+- `--tenant-id`、`--knowledge-id`、`--file-id` 可收窄处理范围；`--limit`、`--batch-size`、`--sleep-ms`
+  用于控制单次规模和 Elasticsearch/LLM 压力。
+- `file_encoding` 无效、租户门户配置不可用、无合法子分类、ES 无正文、模型未配置或
+  AI 三次失败均会保持数据不变，并在结束摘要和标准错误详情中说明原因。
+- 写入前会再次原子检查分类仍为空，不覆盖人工或其他任务的并发填充；已成功记录不会在
+  重跑时再次处理。
+- `--apply` 会产生 Elasticsearch 读取压力和 AI 调用成本，并修改历史数据。脚本不提供自动回滚，
+  正式全库执行前应依次完成 dry-run、单文件烟测和小批量灰度。
+
 ### `reparse_knowledge_space_files.py`
 
 重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。
@@ -47,6 +85,57 @@ Scope:
 - `--folder-id`：递归包含指定文件夹下所有层级的真实文件，可重复传入
 - `--file-id`：包含指定真实文件，可重复传入
 - 仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION` 状态，跳过 `WAITING` / `PROCESSING` / `REBUILDING`
+
+### `move_knowledge_space_files.py`
+
+将指定知识空间中的已解析文档复制到同租户、同向量模型的目标知识空间，完成数据库、
+MinIO、Milvus、Elasticsearch、标签和 OpenFGA 权限校验后，再删除来源文件。默认 dry-run；
+只有显式传入 `--apply` 才会逐文件执行迁移。每次运行都会在
+`migration_reports/knowledge_file_move/` 下生成 JSON 报告。
+
+Usage:
+
+```bash
+# 来源库全部 SUCCESS 文档；仅预检，不写数据
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --target-space-id 20 \
+  --target-owner-id 30
+
+# 递归选择来源文件夹，并同时匹配一级、二级分类；移动到目标文件夹
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --source-folder-id 11 \
+  --source-category-code STD \
+  --source-subcategory-code STD-A \
+  --target-space-id 20 \
+  --target-folder-id 21 \
+  --target-owner-id 30 \
+  --apply
+
+# 指定多个文件 ID；同一参数可重复传入
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --source-file-id 101 \
+  --source-file-id 102 \
+  --target-space-id 20 \
+  --target-owner-id 30 \
+  --apply
+```
+
+Selection and safety:
+
+- `--source-folder-id` 递归命中文件夹全部后代；不传时覆盖来源库全目录。
+- `--source-file-id`、`--source-category-code`、`--source-subcategory-code` 均可重复。
+  同一维度内按 OR 匹配，不同维度之间按 AND 匹配。
+- 一级分类来自 `file_encoding`，二级分类来自 `file_subcategory_code`；同时指定时会校验父子关系。
+- 仅移动 `file_type = FILE` 且 `status = SUCCESS` 的普通文档；版本链文件直接跳过。
+- 所有来源文件都会平铺到目标文件夹；不传 `--target-folder-id` 时平铺到目标库根目录。
+- 目标文件夹存在同名文件，或目标库任意位置存在相同 MD5 时，跳过该文件且保留来源。
+- 每个文件按“复制 → 校验 → 删除来源”执行。失败时保留或恢复来源，并尽力清理目标残留；
+  任一文件失败时进程返回非零退出码，跳过不计为失败。
+- `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
+  执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
 
 ## Export Scripts
 

@@ -5,6 +5,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.knowledge.domain.repositories.implementations.department_space_binding_repository_impl import (
+    DepartmentSpaceBindingRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -135,6 +138,7 @@ async def get_knowledge_space_service(
 
     message_service = await _get_message_service(session)
     service = _SvcClass(request=request, login_user=login_user)
+    service.department_space_binding_repo = DepartmentSpaceBindingRepositoryImpl(session)
     service.message_service = message_service
     service.version_repo = version_repo
     service.doc_repo = doc_repo

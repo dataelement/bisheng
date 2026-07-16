@@ -48,6 +48,7 @@ type PortalDialogsProps = {
     editingSpace: KnowledgeSpace | null;
     pendingCreateLevel: SpaceLevel;
     showSuccessManageMembers?: boolean | ((spaceLevel: SpaceLevel) => boolean);
+    canEditDepartmentBinding?: boolean;
     onViewCreatedSpace: () => void;
     onManageEditingSpaceMembers: () => void;
     uploadDialogProps: ComponentProps<typeof PortalUploadDialog>;
@@ -91,6 +92,7 @@ export function PortalDialogs({
     editingSpace,
     pendingCreateLevel,
     showSuccessManageMembers,
+    canEditDepartmentBinding = false,
     onViewCreatedSpace,
     onManageEditingSpaceMembers,
     uploadDialogProps,
@@ -199,6 +201,7 @@ export function PortalDialogs({
                 initialSpaceLevel={pendingCreateLevel}
                 showApprovalReason
                 showSuccessManageMembers={showSuccessManageMembers}
+                canEditDepartmentBinding={canEditDepartmentBinding}
                 onViewSpace={onViewCreatedSpace}
                 onManageMembers={onManageEditingSpaceMembers}
             />

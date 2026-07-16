@@ -19,6 +19,7 @@ import {
   recommendUploadFoldersApi,
   retryDuplicateFilesApi,
   updateFileEncoding,
+  updateSpaceApi,
 } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
@@ -69,6 +70,32 @@ describe("getSpaceInfoApi", () => {
     expect(result.memberCount).toBeUndefined();
     expect(result.fileCount).toBeUndefined();
     expect(result.totalFileCount).toBeUndefined();
+  });
+});
+
+describe("updateSpaceApi", () => {
+  beforeEach(() => {
+    mockPut.mockReset();
+  });
+
+  it("forwards department_id without adding space_level", async () => {
+    mockPut.mockResolvedValue({
+      status_code: 200,
+      data: {
+        id: 200,
+        name: "部门知识库",
+        auth_type: VisibilityType.PRIVATE,
+        space_level: SpaceLevel.DEPARTMENT,
+        department_id: 12,
+      },
+    });
+
+    await updateSpaceApi("200", { department_id: 12 });
+
+    expect(mockPut).toHaveBeenCalledWith("/api/v1/knowledge/space/200", {
+      department_id: 12,
+    });
+    expect(mockPut.mock.calls[0][1]).not.toHaveProperty("space_level");
   });
 });
 
