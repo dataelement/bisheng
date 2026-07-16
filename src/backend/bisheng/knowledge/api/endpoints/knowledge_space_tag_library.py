@@ -20,6 +20,15 @@ def get_service(
 ) -> KnowledgeSpaceTagLibraryService:
     return KnowledgeSpaceTagLibraryService(login_user)
 
+@router.get("/tree")
+async def list_tag_libraries_tree(
+    keyword: str | None = Query(default=None),
+    svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
+) -> Any:
+    if keyword is None:
+        return resp_200()
+    return resp_200(await svc.list_libraries_tree(keyword=keyword))
+
 
 @router.get("")
 async def list_tag_libraries(
