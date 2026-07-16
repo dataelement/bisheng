@@ -1003,6 +1003,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_created: bool = False,
         required_permission_id: str | None = None,
         include_file_count: bool = True,
+        precomputed_permission_levels: dict[int, str | None] | None = None,
     ) -> list[KnowledgeRead]:
         t0 = time.perf_counter()
         if not space_ids:
@@ -1019,36 +1020,97 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.id for space in spaces if space.user_id != self.login_user.user_id and space.id not in membership_map
         ]
         permission_id_space_ids = [space.id for space in spaces if space.user_id != self.login_user.user_id]
-        permission_levels = {}
+        permission_levels = dict(precomputed_permission_levels or {})
         permission_ids_map: dict[int, set[str]] = {}
         levels_ms = 0.0
         effective_ms = 0.0
-        if permission_space_ids:
-            _t_levels = time.perf_counter()
-            level_map = await PermissionService.get_permission_levels(
-                user_id=self.login_user.user_id,
-                object_type="knowledge_space",
-                object_ids=permission_space_ids,
-                login_user=self.login_user,
-            )
-            levels_ms = (time.perf_counter() - _t_levels) * 1000
-            permission_levels = {space_id: level_map.get(str(space_id)) for space_id in permission_space_ids}
+        is_global_admin = bool(self.login_user.is_admin())
+        if is_global_admin:
+            # PermissionService.check() treats a global administrator as the
+            # effective owner of every resource.  Avoid a per-space OpenFGA
+            # lookup merely to reconstruct that already-known result.
+            permission_levels = dict.fromkeys(permission_space_ids, "owner")
+        elif permission_space_ids:
+            permission_level_ids_to_resolve = [
+                space_id for space_id in permission_space_ids if space_id not in permission_levels
+            ]
+            if permission_level_ids_to_resolve:
+                _t_levels = time.perf_counter()
+                level_map = await PermissionService.get_permission_levels(
+                    user_id=self.login_user.user_id,
+                    object_type="knowledge_space",
+                    object_ids=permission_level_ids_to_resolve,
+                    login_user=self.login_user,
+                )
+                levels_ms = (time.perf_counter() - _t_levels) * 1000
+                permission_levels.update(
+                    {
+                        space_id: level_map.get(str(space_id))
+                        for space_id in permission_level_ids_to_resolve
+                    }
+                )
         if required_permission_id and permission_id_space_ids:
-            shared_tuple_cache: dict[str, list[dict]] = {}
-            _t_effective = time.perf_counter()
-            permission_ids = await asyncio.gather(
-                *[
-                    self._get_effective_permission_ids(
-                        "knowledge_space",
-                        space_id,
-                        tuple_cache=shared_tuple_cache,
-                        precomputed_permission_level=permission_levels.get(space_id, _LEVEL_UNSET),
+            # ``memberships`` comes from async_get_user_space_members(), which
+            # only returns ACTIVE rows.  An active membership always supplies
+            # the built-in viewer permission.  Likewise, the batched
+            # permission level is sufficient for resources without a custom
+            # permission model: every standard ``can_read`` level includes
+            # ``view_space``.  Rechecking either case one space at a time via
+            # OpenFGA is redundant and becomes very expensive for large team
+            # or department listings.
+            trusted_permission_space_ids: set[int] = set()
+            if is_global_admin:
+                trusted_permission_space_ids.update(permission_id_space_ids)
+            elif required_permission_id == "view_space":
+                trusted_permission_space_ids.update(
+                    space_id for space_id in permission_id_space_ids if space_id in membership_map
+                )
+                level_granted_space_ids = {
+                    space_id
+                    for space_id in permission_space_ids
+                    if permission_levels.get(space_id) is not None
+                }
+                if level_granted_space_ids:
+                    models, bindings = await asyncio.gather(
+                        self._get_relation_models_map(),
+                        self._get_relation_bindings(),
                     )
-                    for space_id in permission_id_space_ids
-                ]
-            )
-            effective_ms = (time.perf_counter() - _t_effective) * 1000
-            permission_ids_map = {space_id: ids for space_id, ids in zip(permission_id_space_ids, permission_ids)}
+                    custom_model_space_ids = {
+                        int(binding["resource_id"])
+                        for binding in bindings
+                        if (
+                            binding.get("resource_type") == "knowledge_space"
+                            and str(binding.get("resource_id", "")).isdigit()
+                            and (model := models.get(binding.get("model_id"))) is not None
+                            and not model.get("is_system")
+                        )
+                    }
+                    trusted_permission_space_ids.update(level_granted_space_ids - custom_model_space_ids)
+
+            permission_ids_map = {
+                space_id: {required_permission_id} for space_id in trusted_permission_space_ids
+            }
+            permission_ids_to_resolve = [
+                space_id for space_id in permission_id_space_ids if space_id not in trusted_permission_space_ids
+            ]
+            if permission_ids_to_resolve:
+                shared_tuple_cache: dict[str, list[dict]] = {}
+                _t_effective = time.perf_counter()
+                permission_ids = await asyncio.gather(
+                    *[
+                        self._get_effective_permission_ids(
+                            "knowledge_space",
+                            space_id,
+                            tuple_cache=shared_tuple_cache,
+                            precomputed_permission_level=permission_levels.get(space_id, _LEVEL_UNSET),
+                        )
+                        for space_id in permission_ids_to_resolve
+                    ]
+                )
+                effective_ms = (time.perf_counter() - _t_effective) * 1000
+                permission_ids_map.update(
+                    dict(zip(permission_ids_to_resolve, permission_ids, strict=True))
+                )
 
         pinned_spaces = []
         normal_spaces = []
@@ -6088,25 +6150,77 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if target_level == KnowledgeSpaceLevelEnum.PERSONAL:
             return await self._get_personal_spaces()
 
-        # Team and department listings are generally much smaller than the
-        # user's complete accessible-space set.  Select the level's candidate
-        # spaces first, then let _format_accessible_spaces perform the same
-        # membership/ReBAC ``view_space`` checks and response enrichment used
-        # by the other listings.
+        # Select level candidates in MySQL, then intersect them with the
+        # user's readable OpenFGA objects.  This keeps visibility enforcement
+        # intact without issuing a permission check per candidate space.
         if target_level in {
             KnowledgeSpaceLevelEnum.TEAM,
             KnowledgeSpaceLevelEnum.DEPARTMENT,
         }:
-            space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(target_level)
+            (
+                space_ids,
+                memberships,
+                readable_space_ids,
+                manageable_space_ids,
+            ) = await asyncio.gather(
+                KnowledgeSpaceScopeDao.aget_space_ids_by_level(target_level),
+                SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id),
+                PermissionService.list_accessible_ids(
+                    user_id=self.login_user.user_id,
+                    relation="can_read",
+                    object_type="knowledge_space",
+                    login_user=self.login_user,
+                ),
+                PermissionService.list_accessible_ids(
+                    user_id=self.login_user.user_id,
+                    relation="can_manage",
+                    object_type="knowledge_space",
+                    login_user=self.login_user,
+                ),
+            )
             if not space_ids:
                 return []
-            memberships = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+
+            candidate_space_ids = {int(space_id) for space_id in space_ids}
+            member_space_ids = {
+                int(member.business_id)
+                for member in memberships
+                if str(member.business_id).isdigit()
+            }
+            if readable_space_ids is None:
+                # PermissionService returns None only for global administrators,
+                # whose complete access is handled by _format_accessible_spaces.
+                visible_space_ids = candidate_space_ids
+                precomputed_permission_levels: dict[int, str | None] = {}
+            else:
+                readable_ids = {
+                    int(space_id) for space_id in readable_space_ids if str(space_id).isdigit()
+                }
+                manageable_ids = {
+                    int(space_id)
+                    for space_id in (manageable_space_ids or [])
+                    if str(space_id).isdigit()
+                }
+                readable_ids.update(manageable_ids)
+                visible_space_ids = candidate_space_ids & (readable_ids | member_space_ids)
+                if not visible_space_ids:
+                    return []
+                precomputed_permission_levels = {
+                    space_id: "can_read" for space_id in (visible_space_ids & readable_ids)
+                }
+                precomputed_permission_levels.update(
+                    {
+                        space_id: "can_manage"
+                        for space_id in (visible_space_ids & manageable_ids)
+                    }
+                )
             return await self._format_accessible_spaces(
-                space_ids,
+                [int(space_id) for space_id in space_ids if int(space_id) in visible_space_ids],
                 order_by,
                 memberships=memberships,
                 required_permission_id="view_space",
                 include_file_count=False,
+                precomputed_permission_levels=precomputed_permission_levels,
             )
 
         spaces = await self._list_accessible_spaces(order_by)
