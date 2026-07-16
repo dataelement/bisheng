@@ -9,6 +9,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import PageData
 from bisheng.developer_token.domain.schemas import (
     DeveloperTokenCreateResponse,
+    DeveloperTokenDetail,
     DeveloperTokenGlobalConfig,
     DeveloperTokenRead,
     DeveloperTokenSecretResponse,
@@ -43,6 +44,7 @@ def _read():
         enabled=True,
         override_ip_whitelist=False,
         override_rate_limit=False,
+        route_rule_count=2,
     )
 
 
@@ -59,6 +61,8 @@ def test_list_tokens_omits_plaintext_secret():
     data = resp.json()["data"]
     assert data["total"] == 1
     assert "plaintext_token" not in data["data"][0]
+    assert data["data"][0]["route_rule_count"] == 2
+    assert "route_whitelist" not in data["data"][0]
 
 
 def test_create_token_returns_plaintext_once():
@@ -93,6 +97,47 @@ def test_update_token_does_not_rotate_secret():
 
     assert resp.status_code == 200
     assert "plaintext_token" not in resp.json()["data"]
+
+
+def test_create_accepts_structured_route_whitelist():
+    app = _app(_user())
+    client = TestClient(app)
+    service_mock = AsyncMock(return_value=DeveloperTokenCreateResponse(token=_read(), plaintext_token="bst_secret"))
+    with patch(f"{ENDPOINT_MOD}.DeveloperTokenService.create_token", new=service_mock):
+        resp = client.post(
+            "/api/v1/admin/developer-tokens",
+            json={
+                "name": "api",
+                "user_id": 1,
+                "department_id": 20,
+                "route_whitelist": [{"match_type": "METHOD_PATH", "method": "GET", "path": "/api/v1/items"}],
+            },
+        )
+
+    assert resp.status_code == 200
+    route_rule = service_mock.await_args.args[1].route_whitelist[0]
+    assert route_rule.match_type == "METHOD_PATH"
+    assert route_rule.method == "GET"
+
+
+def test_detail_returns_full_route_whitelist():
+    app = _app(_user())
+    client = TestClient(app)
+    detail = DeveloperTokenDetail(
+        **_read().model_dump(),
+        ip_whitelist="",
+        route_whitelist=[{"match_type": "PREFIX", "method": None, "path": "/api/v1/files/*"}],
+    )
+    with patch(
+        f"{ENDPOINT_MOD}.DeveloperTokenService.get_token_detail",
+        new=AsyncMock(return_value=detail),
+    ):
+        resp = client.get("/api/v1/admin/developer-tokens/1")
+
+    assert resp.status_code == 200
+    assert resp.json()["data"]["route_whitelist"] == [
+        {"match_type": "PREFIX", "method": None, "path": "/api/v1/files/*"}
+    ]
 
 
 def test_secret_view_route_returns_secret_payload():

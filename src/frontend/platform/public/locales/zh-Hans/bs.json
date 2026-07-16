@@ -161,6 +161,25 @@
       "namePlaceholder": "请输入 Token 名称",
       "rateLimitPlaceholder": "例如：60，留空表示不限流",
       "ipWhitelistHelp": "支持单 IP 或 CIDR；可用换行、空格、逗号或分号分隔多条规则。留空表示允许所有 IP。",
+      "routeRules": {
+        "add": "添加路由规则",
+        "remove": "删除路由规则",
+        "matchType": "匹配类型",
+        "method": "请求方法",
+        "anyMethod": "任意方法",
+        "pathPlaceholder": "例如：/api/v1/items/{item_id}",
+        "prefixPlaceholder": "例如：/api/v1/files/*",
+        "emptyHelp": "未配置规则时，可访问所有已启用开发者 Token 的接口。",
+        "prefixHelp": "PREFIX 必须以 /* 结尾，只匹配其后代路由，不匹配前缀根路径或相似文本路径。",
+        "invalidError": "第 {{index}} 条路由规则无效或与其他规则重复，请检查后重试。",
+        "allRoutes": "全部开放路由",
+        "count": "{{count}} 条路由规则",
+        "types": {
+          "METHOD_PATH": "方法 + 路径",
+          "PATH": "精确路径",
+          "PREFIX": "路径前缀"
+        }
+      },
       "saveConfig": "保存配置",
       "search": "搜索",
       "create": "新建 Token",
@@ -192,6 +211,7 @@
         "binding": "绑定用户 / 租户",
         "status": "状态",
         "controls": "访问控制",
+        "routes": "路由范围",
         "lastUsed": "最近使用",
         "actions": "操作"
       },
@@ -202,7 +222,8 @@
         "overrideIp": "覆盖全局 IP 白名单",
         "overrideRate": "覆盖全局限流",
         "ipWhitelist": "IP 白名单",
-        "rateLimit": "每分钟限流"
+        "rateLimit": "每分钟限流",
+        "routeWhitelist": "路由白名单"
       }
     },
     "orgAndMembers": "组织与成员",
@@ -2026,6 +2047,8 @@
     "19803": "系统级大模型配置（工作台/知识/助手/评测默认值）仅全局超级管理员可修改。",
     "19804": "大模型服务地址不在 settings.llm.endpoint_whitelist 允许前缀内。",
     "19809": "IP 白名单包含非法 IP 或 CIDR，请检查后重试。",
+    "19811": "路由白名单规则无效或重复，请检查后重试。",
+    "19812": "当前开发者 Token 无权访问该路由。",
     "20000": "租户不存在。",
     "20001": "所属租户已停用，请联系管理员",
     "20002": "用户不属于该租户。",

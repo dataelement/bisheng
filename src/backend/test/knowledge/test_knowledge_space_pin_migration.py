@@ -1,8 +1,10 @@
 import importlib
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
 from sqlalchemy.exc import IntegrityError
 
 MIGRATION_MODULE = "bisheng.core.database.alembic.versions.v2_6_0_f057_knowledge_space_user_link_pin"
@@ -167,6 +169,17 @@ def test_backfill_only_active_nonpersonal_space_pins_and_is_idempotent():
 
     assert pins == [(1, "10"), (1, "11")]
     assert channel_pin is True
+
+
+def test_mysql_space_join_uses_business_id_collation():
+    migration = importlib.import_module(MIGRATION_MODULE)
+    _, member, scope = migration._tables()
+    conn = SimpleNamespace(dialect=SimpleNamespace(name="mysql"))
+    condition = migration._space_id_join_value(conn, scope) == member.c.business_id
+
+    sql = str(condition.compile(dialect=mysql.dialect()))
+
+    assert "COLLATE utf8mb4_unicode_ci" in sql
 
 
 def test_orm_unique_constraint_rejects_duplicate_triple():

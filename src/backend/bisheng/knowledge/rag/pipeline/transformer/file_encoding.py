@@ -157,6 +157,33 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self.knowledge_file = knowledge_file
         self.content_head: str = ""
 
+    @classmethod
+    async def generate_fixed_encoding(
+        cls,
+        *,
+        invoke_user_id: int,
+        knowledge_file: KnowledgeFile,
+        document_type_code: str,
+        business_domain_code: str,
+    ) -> str:
+        """Generate the final encoding without invoking the classifier."""
+        transformer = cls(invoke_user_id=invoke_user_id, knowledge_file=knowledge_file)
+        normalized_document_type = transformer._normalize_document_type_code(document_type_code)
+        normalized_business_domain = normalize_business_domain_code(business_domain_code)
+        if not normalized_document_type or not normalized_business_domain:
+            raise ValueError("invalid fixed file encoding code")
+        shougang_conf = await bisheng_settings.aget_shougang_conf()
+        prefix = transformer._resolve_company_code(shougang_conf)
+        seq = await transformer._compute_seq()
+        encoding = transformer._compose_encoding(
+            prefix,
+            f"{normalized_document_type}-{normalized_business_domain}",
+            knowledge_file.create_time,
+            seq,
+        )
+        knowledge_file.file_encoding = encoding
+        return encoding
+
     def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         # Sync entry point. Pipeline.run calls this directly. Pipeline.arun's
         # default atransform_documents wraps us in a thread executor. In Celery,

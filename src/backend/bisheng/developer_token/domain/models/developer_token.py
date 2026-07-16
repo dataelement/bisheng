@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, LargeText
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 
 
 class DeveloperToken(SQLModelSerializable, table=True):
@@ -51,6 +51,10 @@ class DeveloperToken(SQLModelSerializable, table=True):
     rate_limit_per_minute: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=True, comment="Per-minute request limit"),
+    )
+    route_whitelist: list[dict] | None = Field(
+        default=None,
+        sa_column=Column(JsonType, nullable=True, comment="Developer token route allowlist rules"),
     )
     last_used_time: datetime | None = Field(
         default=None,

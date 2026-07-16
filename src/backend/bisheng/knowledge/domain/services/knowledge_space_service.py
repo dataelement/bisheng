@@ -2001,18 +2001,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceInvalidLevelError()
 
         files = await self._get_space_files_or_raise(space_id, file_ids)
-        action_permission_ids = (
-            "rename_file",
-            "download_file",
-            "delete_file",
-            "move_file",
-            "manage_file_relation",
-        )
+
+        def action_permission_ids(file_record: KnowledgeFile) -> tuple[str, ...]:
+            if file_record.file_type == FileType.DIR.value:
+                return (
+                    "rename_folder",
+                    "download_folder",
+                    "delete_folder",
+                    "move_folder",
+                    "manage_folder_relation",
+                )
+            return (
+                "rename_file",
+                "download_file",
+                "delete_file",
+                "move_file",
+                "manage_file_relation",
+            )
+
         is_admin = self.login_user.is_admin() if callable(getattr(self.login_user, "is_admin", None)) else False
         if is_admin:
             return {
                 "permissions": [
-                    {"file_id": file_record.id, "permission_ids": list(action_permission_ids)}
+                    {
+                        "file_id": file_record.id,
+                        "permission_ids": list(action_permission_ids(file_record)),
+                    }
                     for file_record in files
                 ]
             }
@@ -2043,7 +2057,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "file_id": file_record.id,
                     "permission_ids": [
                         permission_id
-                        for permission_id in action_permission_ids
+                        for permission_id in action_permission_ids(file_record)
                         if permission_id in permission_ids
                     ],
                 }
@@ -2084,6 +2098,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if permission_id not in effective_permissions:
             raise SpacePermissionDeniedError()
+
+    async def require_root_upload_permission(self, space_id: int) -> None:
+        """Require upload permission on a knowledge-space root."""
+        await self._require_permission_id("knowledge_space", space_id, "upload_file")
 
     async def _list_space_child_resources(self, space_id: int) -> list[tuple[str, int]]:
         async with get_async_db_session() as session:
@@ -9146,6 +9164,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         manual_tag_names: list[str] | None = None,
         file_source: FileSource = None,
         skip_approval: bool = False,
+        enqueue_processing: bool = True,
     ) -> list[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -9333,11 +9352,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
             except Exception as cleanup_exc:
                 logger.warning(f"Failed to cleanup files after knowledge space upload error: {cleanup_exc}")
             raise
-        for index, one in enumerate(process_files):
-            file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
+        if enqueue_processing:
+            self.enqueue_file_processing(process_files, preview_cache_keys)
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return failed_files + process_files
+
+    @staticmethod
+    def enqueue_file_processing(
+        process_files: list[KnowledgeFile],
+        preview_cache_keys: list[str],
+    ) -> None:
+        if len(process_files) != len(preview_cache_keys):
+            raise ValueError("process_files and preview_cache_keys length mismatch")
+        for index, knowledge_file in enumerate(process_files):
+            file_worker.parse_knowledge_file_celery.delay(
+                knowledge_file.id,
+                preview_cache_keys[index],
+            )
+
+    async def cleanup_unqueued_files(self, created_files: list[KnowledgeFile]) -> None:
+        """Remove files created by a caller that failed before task enqueue."""
+        await self._cleanup_created_knowledge_files(created_files)
 
     async def rename_file(self, file_id: int, new_name: str) -> KnowledgeFile:
         from bisheng.worker.knowledge.rebuild_knowledge_worker import (

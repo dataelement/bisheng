@@ -11,8 +11,12 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenLimiterUnavailableError,
     DeveloperTokenMissingError,
     DeveloperTokenRateLimitedError,
+    DeveloperTokenRouteForbiddenError,
 )
-from bisheng.developer_token.api.dependencies import _get_developer_token_endpoint_key
+from bisheng.developer_token.api.dependencies import (
+    _get_developer_token_endpoint_key,
+    _get_developer_token_route,
+)
 from bisheng.developer_token.domain.models import DeveloperToken
 from bisheng.developer_token.domain.services.developer_token_service import DeveloperTokenService
 
@@ -31,6 +35,7 @@ def _active_token(**kwargs):
         "ip_whitelist": "",
         "override_rate_limit": False,
         "rate_limit_per_minute": None,
+        "route_whitelist": None,
         "logic_delete": 0,
     }
     data.update(kwargs)
@@ -184,6 +189,108 @@ def test_endpoint_key_uses_route_template_instead_of_concrete_path():
     )
 
     assert _get_developer_token_endpoint_key(request) == "GET /api/v2/filelib/file/{file_id}"
+
+
+def test_route_context_uses_fastapi_template_and_method():
+    request = SimpleNamespace(
+        method="post",
+        scope={
+            "route": SimpleNamespace(path="/api/v1/items/{item_id}"),
+            "path": "/api/v1/items/42",
+        },
+    )
+
+    assert _get_developer_token_route(request) == ("POST", "/api/v1/items/{item_id}")
+
+
+def test_route_context_does_not_fallback_to_concrete_path():
+    request = SimpleNamespace(method="GET", scope={"path": "/api/v1/items/42"})
+
+    assert _get_developer_token_route(request) == ("GET", None)
+
+
+def test_empty_route_whitelist_allows_all_opted_in_routes():
+    assert DeveloperTokenService._route_allowed(None, "GET", "/api/v1/items")
+    assert DeveloperTokenService._route_allowed([], "POST", "/api/v1/items")
+
+
+def test_method_path_and_path_rules_match_route_templates():
+    method_rule = [{"match_type": "METHOD_PATH", "method": "GET", "path": "/api/v1/items/{item_id}"}]
+    path_rule = [{"match_type": "PATH", "method": None, "path": "/api/v1/health"}]
+
+    assert DeveloperTokenService._route_allowed(method_rule, "GET", "/api/v1/items/{item_id}")
+    assert not DeveloperTokenService._route_allowed(method_rule, "POST", "/api/v1/items/{item_id}")
+    assert DeveloperTokenService._route_allowed(path_rule, "GET", "/api/v1/health")
+    assert DeveloperTokenService._route_allowed(path_rule, "POST", "/api/v1/health")
+    assert not DeveloperTokenService._route_allowed(method_rule, "GET", "/api/v1/items/42")
+
+
+def test_prefix_rule_matches_descendants_only():
+    rules = [{"match_type": "PREFIX", "method": None, "path": "/api/v1/files/*"}]
+
+    assert DeveloperTokenService._route_allowed(rules, "GET", "/api/v1/files/42")
+    assert DeveloperTokenService._route_allowed(rules, "POST", "/api/v1/files/{file_id}/content")
+    assert not DeveloperTokenService._route_allowed(rules, "GET", "/api/v1/files")
+    assert not DeveloperTokenService._route_allowed(rules, "GET", "/api/v1/files-extra")
+
+
+def test_multiple_route_rules_are_or_composed():
+    rules = [
+        {"match_type": "METHOD_PATH", "method": "POST", "path": "/api/v1/items"},
+        {"match_type": "PATH", "method": None, "path": "/api/v1/health"},
+    ]
+
+    assert DeveloperTokenService._route_allowed(rules, "GET", "/api/v1/health")
+    assert not DeveloperTokenService._route_allowed(rules, "GET", "/api/v1/items")
+
+
+def test_nonempty_route_whitelist_fails_closed_without_route_template():
+    rules = [{"match_type": "PATH", "method": None, "path": "/api/v1/items"}]
+
+    assert not DeveloperTokenService._route_allowed(rules, "GET", None)
+    with pytest.raises(DeveloperTokenRouteForbiddenError):
+        DeveloperTokenService._check_route_access(rules, "GET", None)
+
+
+@pytest.mark.asyncio
+async def test_route_miss_is_rejected_before_rate_limit(monkeypatch):
+    raw = "bst_route_miss"
+    token = _active_token(
+        token_hash=DeveloperTokenService._hash_token(raw),
+        route_whitelist=[{"match_type": "METHOD_PATH", "method": "GET", "path": "/api/v1/items"}],
+    )
+
+    class Repo:
+        @staticmethod
+        async def get_token_by_hash(token_hash):
+            return token
+
+    limiter = AsyncMock()
+    monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
+    monkeypatch.setattr(DeveloperTokenService, "_effective_controls", AsyncMock(return_value=("", 10)))
+    monkeypatch.setattr(DeveloperTokenService, "_check_rate_limit", limiter)
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.TenantDao",
+        SimpleNamespace(aget_by_id=AsyncMock(return_value=SimpleNamespace(id=5, status="active"))),
+    )
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.UserDao",
+        SimpleNamespace(aget_user=AsyncMock(return_value=SimpleNamespace(user_id=7, delete=0))),
+    )
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.UserTenantDao",
+        SimpleNamespace(aget_user_tenant=AsyncMock(return_value=SimpleNamespace(status="active"))),
+    )
+
+    with pytest.raises(DeveloperTokenRouteForbiddenError):
+        await DeveloperTokenService.authenticate(
+            raw,
+            request_ip="10.0.0.1",
+            request_method="POST",
+            route_path="/api/v1/items",
+        )
+
+    limiter.assert_not_awaited()
 
 
 @pytest.mark.asyncio

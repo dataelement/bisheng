@@ -49,3 +49,13 @@ class DeveloperTokenInvalidIpRuleError(BaseErrorCode):
 class DeveloperTokenInvalidRateLimitError(BaseErrorCode):
     Code: int = 19810
     Msg: str = "developer_token_invalid_rate_limit"
+
+
+class DeveloperTokenInvalidRouteRuleError(BaseErrorCode):
+    Code: int = 19811
+    Msg: str = "developer_token_invalid_route_rule"
+
+
+class DeveloperTokenRouteForbiddenError(BaseErrorCode):
+    Code: int = 19812
+    Msg: str = "developer_token_route_forbidden"

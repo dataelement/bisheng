@@ -5,6 +5,14 @@ export interface DeveloperTokenGlobalConfig {
   rate_limit_per_minute: number | null
 }
 
+export type DeveloperTokenRouteMatchType = "METHOD_PATH" | "PATH" | "PREFIX"
+
+export interface DeveloperTokenRouteRule {
+  match_type: DeveloperTokenRouteMatchType
+  method?: string | null
+  path: string
+}
+
 export interface DeveloperTokenRecord {
   id: number
   tenant_id: number
@@ -17,6 +25,7 @@ export interface DeveloperTokenRecord {
   override_ip_whitelist: boolean
   override_rate_limit: boolean
   rate_limit_per_minute?: number | null
+  route_rule_count: number
   last_used_time?: string | null
   last_used_ip?: string | null
   created_by?: number | null
@@ -27,6 +36,7 @@ export interface DeveloperTokenRecord {
 
 export interface DeveloperTokenDetail extends DeveloperTokenRecord {
   ip_whitelist?: string | null
+  route_whitelist?: DeveloperTokenRouteRule[] | null
 }
 
 export interface DeveloperTokenPage {
@@ -44,6 +54,7 @@ export interface DeveloperTokenPayload {
   ip_whitelist?: string
   override_rate_limit: boolean
   rate_limit_per_minute?: number | null
+  route_whitelist?: DeveloperTokenRouteRule[] | null
 }
 
 export interface DeveloperTokenCreateResponse {

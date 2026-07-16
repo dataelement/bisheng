@@ -87,7 +87,7 @@ POST /api/v2/filelib/file/sync
 
 | 字段 | 名称 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---:|---|---|
-| `external_file_id` | 文件 ID | string | 是 | - | 第三方系统文件唯一标识，用于校验第三方系统文件的唯一性。 |
+| `external_file_id` | 文件 ID | string | 是 | - | 第三方系统文件标识，与当前同步接口共同记录为文件来源，不执行唯一性校验。 |
 | `file_name` | 文件名称 | string | 是 | - | 同步文件的名称。 |
 | `department` | 主责单位 | string | 否 | 接口调用人所属部门 | 文件所属部门，不传时默认填入接口调用人所属部门。 |
 | `department_id` | 主责单位 ID | integer / string | 否 | 接口调用人所属部门 ID | 文件所属部门的 ID，不传时默认填入接口调用人所属部门。 |
@@ -185,7 +185,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync' \
 | `400` | `external_file_id must not be empty` | `params.external_file_id` 缺失或为空。 |
 | `400` | `file_name must not be empty` | `params.file_name` 缺失或为空。 |
 | `403` | - | 无目标知识资源写入权限。 |
-| `409` | `duplicate external_file_id` | `external_file_id` 已同步过，唯一性校验未通过。 |
+| `409` | `duplicate file content or name` | 现有知识上传校验判定文件内容或名称重复。 |
 | `422` | - | multipart 表单校验失败（缺少 `file` 或 `params`）。 |
 
 **业务规则错误**（分类 / 知识库 / 业务口匹配失败，以业务消息返回）：

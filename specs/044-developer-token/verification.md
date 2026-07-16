@@ -2,19 +2,34 @@
 
 ## Metadata
 - Feature ID: `044-developer-token`
-- Status: `manual-verify-required`
+- Status: `implemented-pending-manual-verification`
 - Related requirements: `specs/044-developer-token/requirements.md`
 - Related tasks: `specs/044-developer-token/tasks.md`
 - Created: `2026-06-10`
-- Updated: `2026-06-16`
+- Updated: `2026-07-15`
 
 ## Verification Summary
-- Overall status: `MANUAL_VERIFY_REQUIRED`
-- Completed tasks: T001-T019, T021-T023, T024-T029, T030-T032, T033-T035, T036-T038, T039-T041
+- Overall status: `PARTIAL`
+- Completed tasks: T001-T019, T021-T023, T024-T029, T030-T032, T033-T035, T036-T038, T039-T049
 - Remaining tasks: T020
 - Blocked tasks: None
+- Current gate: Automated implementation verification is complete; authenticated Platform workflows, prepared-database migration execution, and DM8 CI/Linux validation remain.
 
-## Commands Run
+## Phase 12 Commands Run
+| Command | Exit Code | Result | Evidence |
+|---|---:|---|---|
+| `cd src/backend && uv run pytest test/developer_token -q` | 0 | PASS | `55 passed in 0.24s`; covers rule bounds, normalization, matching, auth order, persistence, audit summary, and API projection |
+| `cd src/backend && uv run ruff format --check ... && uv run ruff check ...` | 0 | PASS | `12 files already formatted`; `All checks passed!` |
+| `cd src/backend && uv run alembic heads` | 0 | PASS | Single head: `f044_route_allowlist (head)`; no database mutation performed |
+| `cd src/frontend/platform && npm test -- --run src/test/developerTokenValidation.test.ts src/test/developerTokenRouteValidation.test.ts` | 0 | PASS | `2` test files and `13` tests passed |
+| `cd src/frontend/platform && npm run build` | 0 | PASS | Vite production build completed; existing dependency/chunk warnings remain |
+| `jq empty` for `zh-Hans`, `en-US`, and `ja` locale files | 0 | PASS | All three locale files parsed successfully |
+| `wc -l` for Developer Token frontend components | 0 | PASS | Main component `599`, editor `143`, route validation `70`; every file is at or below 600 lines |
+| `bash scripts/arch-guard.sh` | 0 | PASS | No architecture violations reported |
+| `git diff --check` | 0 | PASS | No whitespace or conflict-marker errors |
+| Route allowlist security review | 0 | PASS | Auth remains token/user/tenant -> IP -> route -> rate limit -> context; non-empty unknown route fails closed; audit/log search found no raw token or full route-map metadata |
+
+## Historical Commands Run Before Phase 12
 | Command | Purpose | Exit Code | Result | Evidence |
 |---|---|---:|---|---|
 | `cd src/backend && uv run pytest test/developer_token/` | Backend developer token unit/API/dependency/repository tests | 0 | PASS | `29 passed in 0.26s` after tree-binding contract update |
@@ -72,7 +87,7 @@
 | AC-REQ-004-06 | REQ-004 | Automated tests | `test_auth_sets_constrained_tenant_context` | PASS |
 | AC-REQ-004-07 | REQ-004 | Automated tests | `test_auth_sets_constrained_tenant_context` asserts current and visible tenant ContextVars | PASS |
 | AC-REQ-004-08 | REQ-004 | Automated tests | `test_last_used_update_is_best_effort` | PASS |
-| AC-REQ-004-09 | REQ-004 | Code review + search | `rg "get_developer_token_user\|X-Developer-Token"` only matches the dependency module | PASS |
+| AC-REQ-004-09 | REQ-004 | Code review + current search | Current call sites are limited to the developer-token dependency and explicitly opted-in `open_endpoints` integrations; Phase 12 does not add or remove business endpoint dependencies | PASS |
 | AC-REQ-005-01 | REQ-005 | Automated tests | `test_ip_whitelist_matching` single-IP match | PASS |
 | AC-REQ-005-02 | REQ-005 | Automated tests | `test_ip_whitelist_matching` CIDR match | PASS |
 | AC-REQ-005-03 | REQ-005 | Automated tests | `test_ip_whitelist_matching` miss returns false; service raises `19804` on miss | PASS |
@@ -80,7 +95,7 @@
 | AC-REQ-005-05 | REQ-005 | Automated tests | `test_redis_error_fails_closed` | PASS |
 | AC-REQ-005-06 | REQ-005 | Automated tests | `test_rate_limit_exceeded_is_rejected` asserts key prefix and 70s expiration | PASS |
 | AC-REQ-006-01 | REQ-006 | Migration/model review | ORM and migration define required columns and indexes | PASS |
-| AC-REQ-006-02 | REQ-006 | Code review | Migration uses `LargeText` and `UPDATE_TIME_SERVER_DEFAULT`; DM8 CI not available locally | MANUAL_REQUIRED |
+| AC-REQ-006-02 | REQ-006 | Code review | Route migration/model use project `JsonType`; DM8 CI is not available on local macOS | MANUAL_REQUIRED |
 | AC-REQ-006-03 | REQ-006 | Code review + tests | Repository `get_token_by_hash` uses `bypass_tenant_filter`; service validates token-bound tenant | PASS |
 | AC-REQ-006-04 | REQ-006 | Automated tests | `test_developer_token_api.py`; routes mounted under `/api/v1/admin/developer-tokens` | PASS |
 | AC-REQ-006-05 | REQ-006 | Code review | `features/v2.6.0/release-contract.md`; `common/errcode/developer_token.py` | PASS |
@@ -98,8 +113,21 @@
 | AC-REQ-007-11 | REQ-007 | Static build + code review + manual pending | `DeveloperToken.tsx` now wires placeholders for all Developer Token text inputs and three locale files define the new placeholder keys; browser rendering check not run | MANUAL_REQUIRED |
 | AC-REQ-008-01 | REQ-008 | Automated tests + code review | Service writes audit for create/update/delete/secret view; API/service tests exercise flows | PASS |
 | AC-REQ-008-02 | REQ-008 | Automated tests | `test_global_config_update_writes_audit_log` | PASS |
-| AC-REQ-008-03 | Code review + search | Audit metadata excludes plaintext; denied-auth logs do not include raw token | PASS |
-| AC-REQ-008-04 | Automated tests + code review | Disabled token dependency test and emergency `enabled=false` behavior | PASS |
+| AC-REQ-008-03 | REQ-008 | Code review + search | Audit metadata excludes plaintext; denied-auth logs do not include raw token | PASS |
+| AC-REQ-008-04 | REQ-008 | Automated tests + code review | Disabled token dependency test and emergency `enabled=false` behavior | PASS |
+| AC-REQ-009-01 | REQ-009 | Automated backend/frontend tests | Create/update contracts, model persistence, normalization helpers, and editor payload types cover structured route rules | PASS |
+| AC-REQ-009-02 | REQ-009 | Automated dependency tests | Null and empty rules allow every endpoint already opted in to developer-token authentication | PASS |
+| AC-REQ-009-03 | REQ-009 | Automated matcher tests | `test_method_path_and_path_rules_match_route_templates` covers exact method plus route-template matching and method mismatch | PASS |
+| AC-REQ-009-04 | REQ-009 | Automated matcher tests | `PATH` rules match the same route template for multiple HTTP methods | PASS |
+| AC-REQ-009-05 | REQ-009 | Backend/frontend validation tests | Only `PREFIX` accepts one trailing `/*`; exact rule types reject wildcards | PASS |
+| AC-REQ-009-06 | REQ-009 | Automated prefix tests | Descendant paths match; prefix root and sibling text paths do not | PASS |
+| AC-REQ-009-07 | REQ-009 | Automated OR-composition test | A later matching rule allows the request while unrelated rules do not | PASS |
+| AC-REQ-009-08 | REQ-009 | Automated auth-chain test | Route miss raises `19812`; rate-limit mock is not called, proving rejection before limiter/business execution | PASS |
+| AC-REQ-009-09 | REQ-009 | Automated request extraction tests | Dependency uses uppercase method and FastAPI template; missing route metadata does not fall back for authorization | PASS |
+| AC-REQ-009-10 | REQ-009 | Backend/frontend validation tests | Invalid types/methods/paths/prefixes, duplicates, 200/201 bounds, and localized `19811` fallback are covered | PASS |
+| AC-REQ-009-11 | REQ-009 | Automated create/persistence test | A syntactically valid unregistered `/api/v9/not-registered` path is normalized and persisted without route discovery | PASS |
+| AC-REQ-009-12 | REQ-009 | Frontend tests/build + manual pending | Extracted editor and pure validation compile; add/remove/type-switch interaction has not been exercised in an authenticated browser | MANUAL_REQUIRED |
+| AC-REQ-009-13 | REQ-009 | API tests/build + manual pending | List omits full rules and returns count; detail returns full rules; live rendered list/edit workflow has not been exercised | MANUAL_REQUIRED |
 
 ## Manual Verification
 | Acceptance ID | Manual Steps | Expected Result | Actual Result | Status |
@@ -114,12 +142,18 @@
 | AC-REQ-007-08 | Open create/edit token dialog | User is selected from organization tree; no editable tenant ID or user ID inputs are visible | Not run | NOT_RUN |
 | AC-REQ-007-10 | Enter or paste `1.5`, `.5`, `1e3`, and `-1` into global and token-level rate-limit inputs, then try saving | Non-integer input is blocked or clearly reported before any API mutation; empty and `0` keep no-limit behavior | Not run | NOT_RUN |
 | AC-REQ-007-11 | Open Developer Token page and create/edit dialog | List search, global rate limit, token name, bound user selector/search, IP whitelist, and token rate-limit inputs all display localized placeholders | Not run | NOT_RUN |
+| AC-REQ-009-12 | Open create/edit token dialog, add each rule type, change types, and remove rows | Structured fields update correctly; method is required only for `METHOD_PATH`; add/remove does not disturb other token fields | Not run | MANUAL_REQUIRED |
+| AC-REQ-009-13 | Inspect token list, then edit tokens with zero and multiple rules | List shows all-routes for zero rules and a count otherwise; edit loads the full normalized rules | Not run | MANUAL_REQUIRED |
 
 ## Failures and Gaps
 - `cd src/backend && uv run alembic upgrade head` was not run because no prepared local dev database was identified for this session; only `alembic heads` and migration code review were performed.
 - Real DM8 validation was not run on macOS; project guidance says DM8 drivers are unavailable locally and CI/Linux is required.
 - Platform authenticated manual checklist T020 was not run because no live authenticated Platform session / test accounts were provided. The tree-user-picker create/edit workflow, direct secret view click workflow, invalid whitelist save workflow, input placeholder rendering, and rate-limit paste/input workflow still need browser verification.
 - A Vite dev server was started and `curl -I http://localhost:3001/` returned HTTP 200, but this is only a route smoke check, not an authenticated UI workflow check.
+- Phase 12 production code and automated tests are complete; authenticated browser interaction remains manual.
+- The follow-up migration merges the former `f057_message_push_outbox` and `f058_approval_notification_outbox` heads; current inspection reports one head, `f044_route_allowlist`.
+- Applying the new migration to a database is outside the planned local verification. Downgrade would remove configured route restrictions and broaden affected tokens to allow all opted-in routes.
+- Frontend Prettier could not run because the repository CommonJS configuration attempts to `require()` the ESM `prettier-plugin-tailwindcss`; tests, production build, line-count, JSON, diff, and manual format review were used instead.
 
 ## Verification Quality Gate
 - [x] Every acceptance criterion has a status.

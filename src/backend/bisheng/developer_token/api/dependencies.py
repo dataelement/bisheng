@@ -8,9 +8,14 @@ from bisheng.utils import get_request_ip
 
 
 def _get_developer_token_endpoint_key(request: Request) -> str:
+    method, route_path = _get_developer_token_route(request)
+    endpoint_path = route_path or request.scope.get("path") or request.url.path
+    return f"{method} {endpoint_path}"
+
+
+def _get_developer_token_route(request: Request) -> tuple[str, str | None]:
     route = request.scope.get("route")
-    route_path = getattr(route, "path", None) or request.scope.get("path") or request.url.path
-    return f"{request.method.upper()} {route_path}"
+    return request.method.upper(), getattr(route, "path", None)
 
 
 async def get_developer_token_user(request: Request) -> AsyncGenerator[UserPayload, None]:
@@ -19,6 +24,8 @@ async def get_developer_token_user(request: Request) -> AsyncGenerator[UserPaylo
         request_ip=get_request_ip(request),
         user_agent=request.headers.get("user-agent"),
         endpoint_key=_get_developer_token_endpoint_key(request),
+        request_method=request.method.upper(),
+        route_path=_get_developer_token_route(request)[1],
     )
     try:
         yield user

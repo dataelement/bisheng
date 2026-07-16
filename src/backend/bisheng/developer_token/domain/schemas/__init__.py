@@ -5,6 +5,7 @@ from .developer_token import (
     DeveloperTokenGlobalConfig,
     DeveloperTokenListQuery,
     DeveloperTokenRead,
+    DeveloperTokenRouteRule,
     DeveloperTokenSecretResponse,
     DeveloperTokenUpdate,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "DeveloperTokenGlobalConfig",
     "DeveloperTokenListQuery",
     "DeveloperTokenRead",
+    "DeveloperTokenRouteRule",
     "DeveloperTokenSecretResponse",
     "DeveloperTokenUpdate",
 ]

@@ -11,6 +11,7 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenBindingForbiddenError,
     DeveloperTokenInvalidIpRuleError,
     DeveloperTokenInvalidRateLimitError,
+    DeveloperTokenInvalidRouteRuleError,
 )
 from bisheng.developer_token.domain.models import DeveloperToken
 from bisheng.developer_token.domain.schemas import (
@@ -91,7 +92,12 @@ async def test_create_token_returns_secret_once(monkeypatch):
 
     result = await DeveloperTokenService.create_token(
         _Operator(),
-        DeveloperTokenCreate(name="api", user_id=7, department_id=20),
+        DeveloperTokenCreate(
+            name="api",
+            user_id=7,
+            department_id=20,
+            route_whitelist=[{"match_type": "PATH", "path": "/api/v9/not-registered"}],
+        ),
     )
 
     assert result.plaintext_token.startswith("bst_")
@@ -99,6 +105,7 @@ async def test_create_token_returns_secret_once(monkeypatch):
     assert created["row"].token_hash != result.plaintext_token
     assert created["row"].token_ciphertext != result.plaintext_token
     assert DeveloperTokenService._decrypt_plaintext(created["row"].token_ciphertext) == result.plaintext_token
+    assert created["row"].route_whitelist == [{"match_type": "PATH", "method": None, "path": "/api/v9/not-registered"}]
 
 
 @pytest.mark.asyncio
@@ -222,6 +229,60 @@ def test_invalid_ip_rule_is_rejected():
 def test_negative_rate_limit_has_dedicated_error():
     with pytest.raises(DeveloperTokenInvalidRateLimitError):
         DeveloperTokenService._validate_rate_limit(-1)
+
+
+def test_route_whitelist_is_normalized_without_route_registration_lookup():
+    rules = DeveloperTokenService._normalize_route_whitelist(
+        [
+            {"match_type": "method_path", "method": "get", "path": " /api/v1/items/{item_id} "},
+            {"match_type": "path", "path": "/api/v1/health"},
+            {"match_type": "prefix", "path": "/api/v1/files/*"},
+        ]
+    )
+
+    assert rules == [
+        {"match_type": "METHOD_PATH", "method": "GET", "path": "/api/v1/items/{item_id}"},
+        {"match_type": "PATH", "method": None, "path": "/api/v1/health"},
+        {"match_type": "PREFIX", "method": None, "path": "/api/v1/files/*"},
+    ]
+
+
+def test_route_whitelist_accepts_two_hundred_rules():
+    rules = [{"match_type": "PATH", "path": f"/api/v1/items/{index}"} for index in range(200)]
+
+    assert len(DeveloperTokenService._normalize_route_whitelist(rules)) == 200
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        [{"match_type": "METHOD_PATH", "path": "/api/v1/items"}],
+        [{"match_type": "METHOD_PATH", "method": "TRACE", "path": "/api/v1/items"}],
+        [{"match_type": "PATH", "method": "GET", "path": "/api/v1/items"}],
+        [{"match_type": "PATH", "path": "api/v1/items"}],
+        [{"match_type": "PATH", "path": "/api/v1/items?active=true"}],
+        [{"match_type": "PREFIX", "path": "/api/v1/items"}],
+        [{"match_type": "PREFIX", "path": "/api/*/items/*"}],
+        [
+            {"match_type": "PATH", "path": "/api/v1/items"},
+            {"match_type": "path", "path": " /api/v1/items "},
+        ],
+        [{"match_type": "PATH", "path": f"/api/v1/items/{index}"} for index in range(201)],
+    ],
+)
+def test_invalid_route_whitelist_is_rejected(rules):
+    with pytest.raises(DeveloperTokenInvalidRouteRuleError):
+        DeveloperTokenService._normalize_route_whitelist(rules)
+
+
+def test_audit_snapshot_only_contains_route_rule_count():
+    snapshot = DeveloperTokenService._non_secret_snapshot(
+        _token(route_whitelist=[{"match_type": "PATH", "method": None, "path": "/api/v1/private"}])
+    )
+
+    assert snapshot["route_rule_count"] == 1
+    assert "route_whitelist" not in snapshot
+    assert "/api/v1/private" not in json.dumps(snapshot)
 
 
 @pytest.mark.asyncio
