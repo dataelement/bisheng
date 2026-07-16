@@ -1,5 +1,4 @@
 from collections import deque
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from loguru import logger
@@ -7,7 +6,6 @@ from loguru import logger
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.mark_task import MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.message import ChatMessageDao
@@ -19,9 +17,22 @@ from bisheng.utils.linked_list import DoubleLinkList
 router = APIRouter(prefix='/mark', tags=['Mark'])
 
 
+def _parse_process_user_ids(process_users: str, task_id: int) -> list[int]:
+    user_ids = []
+    for raw_user_id in (process_users or '').split(','):
+        raw_user_id = raw_user_id.strip()
+        if not raw_user_id:
+            continue
+        try:
+            user_ids.append(int(raw_user_id))
+        except ValueError:
+            logger.warning('Skipping invalid mark task process user: task_id={} user_id={}', task_id, raw_user_id)
+    return user_ids
+
+
 @router.get('/list')
 def list(request: Request,
-         status: Optional[int] = None,
+         status: int | None = None,
          page_size: int = 10,
          page_num: int = 1,
          login_user: UserPayload = Depends(UserPayload.get_login_user)):
@@ -43,13 +54,16 @@ def list(request: Request,
         process_list = []
         user_count = {}
 
-        for c in task.process_users.split(","):
-            user = UserDao.get_user(int(c))
-            process_count = "{}:{}".format(user.user_name, 0)
-            user_count[int(c)] = process_count
+        for user_id in _parse_process_user_ids(task.process_users, task.id):
+            user = UserDao.get_user(user_id)
+            if not user:
+                logger.warning('Skipping missing mark task process user: task_id={} user_id={}', task.id, user_id)
+                continue
+            process_count = f"{user.user_name}:0"
+            user_count[user_id] = process_count
 
         for c in record:
-            process_count = "{}:{}".format(c.create_user, c.user_count)
+            process_count = f"{c.create_user}:{c.user_count}"
             user_count[c.create_id] = process_count
 
         for c in user_count:
@@ -85,14 +99,9 @@ async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(
     task = MarkTask(create_id=login_user.user_id,
                     create_user=login_user.user_name,
                     app_id=",".join(task_create.app_list),
-                    process_users=",".join(task_create.user_list)
+                    process_users=",".join(str(user_id) for user_id in task_create.user_list)
                     )
-    MarkTaskDao.create_task(task)
-
-    user_app = [MarkAppUser(task_id=task.id, create_id=login_user.user_id, app_id=app, user_id=user) for app in
-                task_create.app_list for user in task_create.user_list]
-
-    MarkAppUserDao.create_task(user_app)
+    MarkTaskDao.create_task_with_assignments(task, task_create.app_list, task_create.user_list)
     return resp_200(data="ok")
 
 
@@ -110,8 +119,8 @@ async def get_user(task_id: int):
     task = MarkTaskDao.get_task_byid(task_id)
     user_list = []
 
-    for u in task.process_users.split(","):
-        user = UserDao.get_user(int(u))
+    for user_id in _parse_process_user_ids(task.process_users, task.id):
+        user = UserDao.get_user(user_id)
         if not user:
             continue
         user_list.append({"user_id": user.user_id, "user_name": user.user_name})
@@ -185,7 +194,7 @@ async def get_record(chat_id: str, task_id: int):
 async def pre_or_next(chat_id: str, action: str, task_id: int,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    prev or next 
+    prev or next
     """
 
     if action not in ["prev", "next"]:
