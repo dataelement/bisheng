@@ -21,7 +21,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.space_level": "空间层级",
             "com_knowledge.public_spaces": "公共知识库",
             "com_knowledge.department_spaces": "部门知识库",
-            "com_knowledge.team_spaces": "团队知识库",
+            "com_knowledge.team_spaces": "团队/科室知识库",
             "com_knowledge.personal_spaces": "个人知识库",
             "com_knowledge.space_create_success": "知识库创建成功",
             "com_subscription.create_knowledge_space_success": "知识库创建成功",
@@ -246,7 +246,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.queryByText("公共知识库")).not.toBeInTheDocument();
         expect(screen.queryByText("部门知识库")).not.toBeInTheDocument();
-        expect(screen.queryByText("团队知识库")).not.toBeInTheDocument();
+        expect(screen.queryByText("团队/科室知识库")).not.toBeInTheDocument();
         expect(screen.getByText("个人知识库")).toBeInTheDocument();
     });
 
@@ -264,7 +264,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("radio", { name: "团队/科室知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
     });
 
@@ -581,7 +581,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        expect(screen.queryByText("团队知识库")).not.toBeInTheDocument();
+        expect(screen.queryByText("团队/科室知识库")).not.toBeInTheDocument();
         await waitFor(() => {
             expect(screen.getByRole("radio", { name: "个人知识库" })).toHaveAttribute("aria-checked", "true");
         });
@@ -604,7 +604,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByText("部门知识库")).not.toBeInTheDocument();
         expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
         await waitFor(() => {
-            expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+            expect(screen.getByRole("radio", { name: "团队/科室知识库" })).toHaveAttribute("aria-checked", "true");
         });
     });
 
@@ -618,7 +618,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByRole("button", { name: "确认创建" })).toBeDisabled();
     });
 
-    test("团队知识库创建不展示用户组和业务域类型且可直接提交", async () => {
+    test("团队/科室知识库创建不展示用户组和业务域类型且可直接提交", async () => {
         const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
@@ -633,7 +633,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM, onConfirm });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("radio", { name: "团队/科室知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByText("申请理由")).toBeInTheDocument();
         expect(screen.queryByText("申请意见")).not.toBeInTheDocument();
         expect(screen.queryByTestId("user-group-selector")).not.toBeInTheDocument();

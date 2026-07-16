@@ -230,7 +230,7 @@ class TestCheckQuotaExceptions:
                           new=AsyncMock(return_value=(0, (5, 'tenant_limit', 2, 2, 'child-tenant')))):
             with pytest.raises(TenantQuotaExceededError) as exc:
                 await QuotaService.check_quota(
-                    user_id=10, resource_type='knowledge_space', tenant_id=5, login_user=user,
+                    user_id=10, resource_type='channel', tenant_id=5, login_user=user,
                 )
         assert exc.value.Code == 19401
         assert '5' in str(exc.value)
@@ -251,7 +251,7 @@ class TestCheckQuotaExceptions:
                           new=AsyncMock(return_value=(0, (1, 'root_hardcap', 5, 5, 'root-tenant')))):
             with pytest.raises(TenantQuotaExceededError) as exc:
                 await QuotaService.check_quota(
-                    user_id=10, resource_type='knowledge_space', tenant_id=5, login_user=user,
+                    user_id=10, resource_type='channel', tenant_id=5, login_user=user,
                 )
         assert exc.value.Code == 19401
         assert '集团总量已耗尽' in str(exc.value)

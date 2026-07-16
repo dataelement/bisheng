@@ -1,7 +1,11 @@
+import asyncio
 import json
+import os
+import time
 from typing import Any, Optional
 
 from fastapi import BackgroundTasks, Request
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from sqlmodel import select, col
@@ -25,7 +29,6 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id, strict_tenant_filter, \
     bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
-from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
@@ -35,12 +38,30 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.const import ToolPresetType
-from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from ..models import TenantWorkstationConfigDao
 
 
 class WorkStationService(BaseService):
+    # Selected knowledge spaces are stored in independent Milvus collections
+    # and ES indexes. Keep the fan-out bounded and use a two-stage search:
+    # a cheap vector-only probe across every space, followed by hybrid retrieval
+    # from only the most promising spaces.
+    _KB_PROBE_K = 2
+    _KB_PROBE_CONCURRENCY = 20
+    _KB_PROBE_TIMEOUT_SECONDS = 10.0
+    _KB_SELECTED_SPACE_LIMIT = 20
+    _KB_DEEP_CONCURRENCY = 16
+    _KB_DEEP_TIMEOUT_SECONDS = 5.0
+    _KB_DEEP_TOP_SPACE_K = 20
+    _KB_DEEP_OTHER_SPACE_K = 10
+    _KB_CANDIDATE_LIMIT = 300
+    _KB_RERANK_LIMIT = 200
+    _KB_RERANK_BATCH_SIZE = 32
+    _KB_RERANK_CONCURRENCY = 2
+    _KB_RERANK_TIMEOUT_SECONDS = 3.0
+    _KB_RRF_C = 60
+
     _TENANT_KEYS = {
         ConfigKeyEnum.WORKSTATION.value,
         ConfigKeyEnum.WORKSTATION_LINSIGHT.value,
@@ -906,6 +927,661 @@ class WorkStationService(BaseService):
         return res, total
 
     @classmethod
+    async def _load_retrieval_knowledge_rows(
+        cls,
+        *,
+        organization_ids: list[int],
+        space_ids: list[int],
+        login_user: UserPayload,
+    ) -> list[Any]:
+        """Load authorized KB rows without eagerly creating every vector store."""
+
+        async def _load_organization_rows() -> list[Any]:
+            if not organization_ids:
+                return []
+            return await KnowledgeDao.ajudge_knowledge_permission(
+                login_user.user_name,
+                organization_ids,
+            )
+
+        async def _load_space_rows() -> list[Any]:
+            if not space_ids:
+                return []
+            # Space permissions are resolved by the caller before this path,
+            # matching the previous check_auth=False behavior.
+            return await KnowledgeDao.aget_list_by_ids(space_ids)
+
+        organization_rows, space_rows = await asyncio.gather(
+            _load_organization_rows(),
+            _load_space_rows(),
+        )
+        row_by_id = {
+            int(row.id): row
+            for row in [*organization_rows, *space_rows]
+            if getattr(row, 'id', None) is not None
+        }
+        ordered_ids = list(dict.fromkeys([*organization_ids, *space_ids]))
+        return [row_by_id[kb_id] for kb_id in ordered_ids if kb_id in row_by_id]
+
+    @classmethod
+    def _knowledge_failure(cls, knowledge: Any, error: str) -> dict:
+        kb_id = getattr(knowledge, 'id', None)
+        return {
+            'id': int(kb_id) if isinstance(kb_id, (int, str)) and str(kb_id).isdigit() else kb_id,
+            'name': getattr(knowledge, 'name', '') or '',
+            'error': str(error or '知识库检索失败'),
+        }
+
+    @classmethod
+    def _annotate_scored_documents(
+        cls,
+        *,
+        kb_id: int,
+        docs_with_scores: list[tuple[Document, float]],
+        source: str,
+        allowed_file_ids: Optional[list[int]],
+        probe_score: Optional[float] = None,
+    ) -> list[Document]:
+        allowed_set = set(allowed_file_ids) if allowed_file_ids is not None else None
+        docs: list[Document] = []
+        for doc, raw_score in docs_with_scores or []:
+            if allowed_set is not None and not cls._doc_matches_file_filter(doc, kb_id, allowed_set):
+                continue
+            metadata = doc.metadata or {}
+            doc.metadata = metadata
+            # The selected row is authoritative. Older chunks may contain a
+            # missing or stale knowledge_id after a collection migration.
+            metadata['knowledge_id'] = kb_id
+            metadata['retrieval_source'] = source
+            try:
+                metadata['retrieval_score'] = float(raw_score)
+            except (TypeError, ValueError):
+                metadata['retrieval_score'] = 0.0
+            if probe_score is not None:
+                metadata['knowledge_probe_score'] = float(probe_score)
+            docs.append(doc)
+        return docs
+
+    @classmethod
+    async def _probe_retrieval_knowledge_rows(
+        cls,
+        *,
+        question: str,
+        knowledge_rows: list[Any],
+        login_user: UserPayload,
+        file_ids_by_space: Optional[dict[int, list[int]]],
+    ) -> tuple[list[dict], list[dict]]:
+        """Probe every KB with vector top-k while reusing one query embedding per model."""
+        semaphore = asyncio.Semaphore(cls._KB_PROBE_CONCURRENCY)
+        embedding_futures: dict[int, asyncio.Task] = {}
+        eligible_rows = [
+            knowledge
+            for knowledge in knowledge_rows
+            if cls._get_allowed_file_ids_for_space(file_ids_by_space, int(knowledge.id)) != []
+        ]
+        eligible_ids = {int(knowledge.id) for knowledge in eligible_rows}
+        for knowledge in knowledge_rows:
+            if int(knowledge.id) not in eligible_ids:
+                logger.info(
+                    f'[queryChunksFromDB] kb={getattr(knowledge, "id", "")} '
+                    'empty file filter, skip'
+                )
+        if not eligible_rows:
+            return [], []
+
+        async def _embedding_and_query_vector(model_id: int):
+            embeddings = await LLMService.get_bisheng_knowledge_embedding(
+                invoke_user_id=login_user.user_id,
+                model_id=model_id,
+            )
+            query_vector = await embeddings.aembed_query(question)
+            return embeddings, query_vector
+
+        for knowledge in eligible_rows:
+            try:
+                model_id = int(getattr(knowledge, 'model', '') or 0)
+            except (TypeError, ValueError):
+                model_id = 0
+            if model_id > 0 and model_id not in embedding_futures:
+                embedding_futures[model_id] = asyncio.create_task(
+                    _embedding_and_query_vector(model_id)
+                )
+
+        async def _probe_one(knowledge: Any) -> dict:
+            kb_id = int(knowledge.id)
+            allowed_file_ids = cls._get_allowed_file_ids_for_space(file_ids_by_space, kb_id)
+            if allowed_file_ids == []:
+                return {'status': 'skipped', 'knowledge': knowledge}
+
+            milvus_error = ''
+            milvus = None
+            query_vector = None
+            try:
+                model_id = int(getattr(knowledge, 'model', '') or 0)
+                collection_name = str(getattr(knowledge, 'collection_name', '') or '')
+                if model_id <= 0 or not collection_name:
+                    raise RuntimeError('知识库未配置向量模型或向量集合')
+                embeddings, query_vector = await embedding_futures[model_id]
+                async with semaphore:
+                    milvus = await asyncio.to_thread(
+                        KnowledgeRag.init_milvus_vectorstore,
+                        collection_name,
+                        embeddings,
+                    )
+                    search_kwargs: dict[str, Any] = {
+                        'k': cls._KB_PROBE_K,
+                        'param': {'ef': 110},
+                        'timeout': cls._KB_PROBE_TIMEOUT_SECONDS,
+                    }
+                    if allowed_file_ids is not None:
+                        search_kwargs['expr'] = f'document_id in {allowed_file_ids}'
+                    scored_docs = await milvus.asimilarity_search_with_relevance_scores_by_vector(
+                        query_vector,
+                        **search_kwargs,
+                    )
+                docs = cls._annotate_scored_documents(
+                    kb_id=kb_id,
+                    docs_with_scores=scored_docs,
+                    source='milvus',
+                    allowed_file_ids=allowed_file_ids,
+                )
+                return {
+                    'status': 'ok',
+                    'knowledge': knowledge,
+                    'milvus': milvus,
+                    'es': None,
+                    'query_vector': query_vector,
+                    'probe_docs': docs,
+                    'probe_score': max(
+                        (float(doc.metadata.get('retrieval_score', 0.0)) for doc in docs),
+                        default=-1.0,
+                    ),
+                }
+            except Exception as exc:
+                milvus_error = str(exc) or exc.__class__.__name__
+
+            # An ES-only probe preserves availability for KBs whose embedding
+            # model or Milvus collection is temporarily unavailable.
+            try:
+                index_name = str(getattr(knowledge, 'index_name', '') or '')
+                if not index_name:
+                    raise RuntimeError('知识库未配置全文索引')
+                async with semaphore:
+                    es = KnowledgeRag.init_es_vectorstore(index_name)
+                    search_kwargs = {'k': cls._KB_PROBE_K}
+                    if allowed_file_ids is not None:
+                        search_kwargs['filter'] = [
+                            {'terms': {'metadata.document_id': allowed_file_ids}}
+                        ]
+                    scored_docs = await es.asimilarity_search_with_relevance_scores(
+                        question,
+                        **search_kwargs,
+                    )
+                docs = cls._annotate_scored_documents(
+                    kb_id=kb_id,
+                    docs_with_scores=scored_docs,
+                    source='elasticsearch',
+                    allowed_file_ids=allowed_file_ids,
+                )
+                logger.warning(
+                    f'[queryChunksFromDB] kb={kb_id} vector probe failed, used ES: {milvus_error}'
+                )
+                return {
+                    'status': 'ok',
+                    'knowledge': knowledge,
+                    'milvus': milvus,
+                    'es': es,
+                    'query_vector': query_vector,
+                    'probe_docs': docs,
+                    'probe_score': max(
+                        (float(doc.metadata.get('retrieval_score', 0.0)) for doc in docs),
+                        default=-1.0,
+                    ),
+                }
+            except Exception as exc:
+                es_error = str(exc) or exc.__class__.__name__
+                return {
+                    'status': 'failed',
+                    'knowledge': knowledge,
+                    'error': f'Milvus: {milvus_error}; Elasticsearch: {es_error}',
+                }
+
+        task_by_id: dict[int, asyncio.Task] = {}
+        for knowledge in eligible_rows:
+            kb_id = int(knowledge.id)
+            task_by_id[kb_id] = asyncio.create_task(_probe_one(knowledge))
+
+        done, pending = await asyncio.wait(
+            task_by_id.values(),
+            timeout=cls._KB_PROBE_TIMEOUT_SECONDS,
+        )
+        pending_set = set(pending)
+        for task in pending:
+            task.cancel()
+
+        infos: list[dict] = []
+        failures: list[dict] = []
+        task_id_by_object = {task: kb_id for kb_id, task in task_by_id.items()}
+        row_by_id = {int(row.id): row for row in knowledge_rows}
+        for task in sorted(done, key=lambda item: task_id_by_object[item]):
+            try:
+                result = task.result()
+            except Exception as exc:
+                kb_id = task_id_by_object[task]
+                failures.append(cls._knowledge_failure(row_by_id[kb_id], str(exc)))
+                continue
+            if result.get('status') == 'ok':
+                infos.append(result)
+            elif result.get('status') == 'failed':
+                failures.append(
+                    cls._knowledge_failure(result['knowledge'], result.get('error', ''))
+                )
+
+        for task in sorted(pending_set, key=lambda item: task_id_by_object[item]):
+            kb_id = task_id_by_object[task]
+            failures.append(cls._knowledge_failure(row_by_id[kb_id], '知识库轻量探测超时'))
+        if pending_set:
+            await asyncio.gather(*pending_set, return_exceptions=True)
+
+        for future in embedding_futures.values():
+            if not future.done():
+                future.cancel()
+        if embedding_futures:
+            await asyncio.gather(*embedding_futures.values(), return_exceptions=True)
+        return infos, failures
+
+    @classmethod
+    async def _deep_retrieve_selected_knowledge(
+        cls,
+        *,
+        question: str,
+        selected_infos: list[dict],
+        file_ids_by_space: Optional[dict[int, list[int]]],
+    ) -> tuple[list[tuple[list[Document], float]], list[dict]]:
+        semaphore = asyncio.Semaphore(cls._KB_DEEP_CONCURRENCY)
+
+        async def _deep_one(info: dict, space_rank: int) -> dict:
+            knowledge = info['knowledge']
+            kb_id = int(knowledge.id)
+            allowed_file_ids = cls._get_allowed_file_ids_for_space(file_ids_by_space, kb_id)
+            deep_k = (
+                cls._KB_DEEP_TOP_SPACE_K
+                if space_rank < 5
+                else cls._KB_DEEP_OTHER_SPACE_K
+            )
+
+            async def _search_milvus():
+                milvus = info.get('milvus')
+                query_vector = info.get('query_vector')
+                if milvus is None or query_vector is None:
+                    return []
+                kwargs: dict[str, Any] = {
+                    'k': deep_k,
+                    'param': {'ef': 110},
+                    'timeout': cls._KB_DEEP_TIMEOUT_SECONDS,
+                }
+                if allowed_file_ids is not None:
+                    kwargs['expr'] = f'document_id in {allowed_file_ids}'
+                scored = await milvus.asimilarity_search_with_relevance_scores_by_vector(
+                    query_vector,
+                    **kwargs,
+                )
+                return cls._annotate_scored_documents(
+                    kb_id=kb_id,
+                    docs_with_scores=scored,
+                    source='milvus',
+                    allowed_file_ids=allowed_file_ids,
+                    probe_score=info.get('probe_score'),
+                )
+
+            async def _search_es():
+                es = info.get('es')
+                if es is None:
+                    index_name = str(getattr(knowledge, 'index_name', '') or '')
+                    if not index_name:
+                        return []
+                    es = KnowledgeRag.init_es_vectorstore(index_name)
+                    info['es'] = es
+                kwargs: dict[str, Any] = {'k': deep_k}
+                if allowed_file_ids is not None:
+                    kwargs['filter'] = [
+                        {'terms': {'metadata.document_id': allowed_file_ids}}
+                    ]
+                scored = await es.asimilarity_search_with_relevance_scores(question, **kwargs)
+                return cls._annotate_scored_documents(
+                    kb_id=kb_id,
+                    docs_with_scores=scored,
+                    source='elasticsearch',
+                    allowed_file_ids=allowed_file_ids,
+                    probe_score=info.get('probe_score'),
+                )
+
+            async with semaphore:
+                vector_result, es_result = await asyncio.gather(
+                    _search_milvus(),
+                    _search_es(),
+                    return_exceptions=True,
+                )
+
+            errors = []
+            if isinstance(vector_result, Exception):
+                errors.append(f'Milvus: {str(vector_result) or vector_result.__class__.__name__}')
+                vector_docs = list(info.get('probe_docs') or [])
+            else:
+                vector_docs = list(vector_result or info.get('probe_docs') or [])
+            if isinstance(es_result, Exception):
+                errors.append(f'Elasticsearch: {str(es_result) or es_result.__class__.__name__}')
+                es_docs = []
+            else:
+                es_docs = list(es_result or [])
+
+            return {
+                'knowledge': knowledge,
+                'space_rank': space_rank,
+                'vector_docs': vector_docs,
+                'es_docs': es_docs,
+                'error': '; '.join(errors) if errors and not vector_docs and not es_docs else '',
+            }
+
+        task_by_rank = {
+            rank: asyncio.create_task(_deep_one(info, rank))
+            for rank, info in enumerate(selected_infos)
+        }
+        if not task_by_rank:
+            return [], []
+
+        done, pending = await asyncio.wait(
+            task_by_rank.values(),
+            timeout=cls._KB_DEEP_TIMEOUT_SECONDS,
+        )
+        pending_set = set(pending)
+        for task in pending:
+            task.cancel()
+
+        rank_by_task = {task: rank for rank, task in task_by_rank.items()}
+        rank_lists: list[tuple[list[Document], float]] = []
+        failures: list[dict] = []
+        selected_count = max(len(selected_infos), 1)
+        for task in sorted(done, key=lambda item: rank_by_task[item]):
+            rank = rank_by_task[task]
+            info = selected_infos[rank]
+            try:
+                result = task.result()
+            except Exception as exc:
+                failures.append(cls._knowledge_failure(info['knowledge'], str(exc)))
+                result = {
+                    'vector_docs': list(info.get('probe_docs') or []),
+                    'es_docs': [],
+                    'error': '',
+                }
+            # Probe rank affects only the coarse fusion weight; RRF still
+            # decides chunk order from the independent vector and ES lists.
+            space_weight = 1.0 + 0.5 * (selected_count - rank) / selected_count
+            if result.get('vector_docs'):
+                rank_lists.append((list(result['vector_docs']), space_weight))
+            if result.get('es_docs'):
+                rank_lists.append((list(result['es_docs']), space_weight))
+            if result.get('error'):
+                failures.append(
+                    cls._knowledge_failure(info['knowledge'], result['error'])
+                )
+
+        for task in sorted(pending_set, key=lambda item: rank_by_task[item]):
+            rank = rank_by_task[task]
+            info = selected_infos[rank]
+            probe_docs = list(info.get('probe_docs') or [])
+            if probe_docs:
+                space_weight = 1.0 + 0.5 * (selected_count - rank) / selected_count
+                rank_lists.append((probe_docs, space_weight))
+            logger.warning(
+                f'[queryChunksFromDB] kb={getattr(info["knowledge"], "id", "")} '
+                'deep retrieval timed out, using probe documents'
+            )
+        if pending_set:
+            await asyncio.gather(*pending_set, return_exceptions=True)
+        return rank_lists, failures
+
+    @classmethod
+    def _retrieval_document_key(cls, doc: Document) -> tuple:
+        metadata = doc.metadata or {}
+        knowledge_id = metadata.get('knowledge_id') or metadata.get('kb_id') or ''
+        document_id = metadata.get('document_id') or metadata.get('file_id') or ''
+        chunk_index = metadata.get('chunk_index')
+        if knowledge_id != '' and document_id != '' and chunk_index is not None:
+            return 'chunk', str(knowledge_id), str(document_id), str(chunk_index)
+        if knowledge_id != '' and document_id != '':
+            return 'document-content', str(knowledge_id), str(document_id), doc.page_content
+        source = metadata.get('source') or metadata.get('document_name') or metadata.get('file_name') or ''
+        return 'content', str(knowledge_id), str(source), doc.page_content
+
+    @classmethod
+    def _global_rrf_merge(
+        cls,
+        rank_lists: list[tuple[list[Document], float]],
+        *,
+        limit: int,
+    ) -> list[Document]:
+        scores: dict[tuple, float] = {}
+        first_seen: dict[tuple, int] = {}
+        document_by_key: dict[tuple, Document] = {}
+        seen_index = 0
+        for docs, weight in rank_lists:
+            seen_in_list: set[tuple] = set()
+            for rank, doc in enumerate(docs, start=1):
+                key = cls._retrieval_document_key(doc)
+                if key in seen_in_list:
+                    continue
+                seen_in_list.add(key)
+                if key not in document_by_key:
+                    document_by_key[key] = doc
+                    first_seen[key] = seen_index
+                    seen_index += 1
+                scores[key] = scores.get(key, 0.0) + float(weight) / (rank + cls._KB_RRF_C)
+
+        ordered_keys = sorted(
+            scores,
+            key=lambda key: (
+                scores[key],
+                float((document_by_key[key].metadata or {}).get('knowledge_probe_score', -1.0)),
+                float((document_by_key[key].metadata or {}).get('retrieval_score', -1.0)),
+                -first_seen[key],
+            ),
+            reverse=True,
+        )
+        if limit > 0:
+            ordered_keys = ordered_keys[:limit]
+        documents = []
+        for key in ordered_keys:
+            doc = document_by_key[key]
+            doc.metadata = doc.metadata or {}
+            doc.metadata['rrf_score'] = scores[key]
+            documents.append(doc)
+        return documents
+
+    @classmethod
+    async def _resolve_workstation_rerank_model_id(cls) -> str:
+        try:
+            from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+                ShougangPortalConfigService,
+            )
+
+            config = await ShougangPortalConfigService.get_config()
+            model_id = str(
+                getattr(getattr(getattr(config, 'portal', None), 'search', None), 'rerank_model_id', '')
+                or ''
+            ).strip()
+            if model_id:
+                return model_id
+        except Exception as exc:
+            logger.warning(f'[queryChunksFromDB] unable to read rerank config: {exc}')
+        return os.getenv('BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID', '').strip()
+
+    @classmethod
+    async def _rerank_retrieval_candidates(
+        cls,
+        *,
+        question: str,
+        candidates: list[Document],
+    ) -> list[Document]:
+        if not candidates:
+            return []
+
+        async def _run() -> list[Document]:
+            model_id = await cls._resolve_workstation_rerank_model_id()
+            if not model_id:
+                logger.info('[queryChunksFromDB] no rerank model configured, using global RRF')
+                return candidates
+            rerank_model = await LLMService.get_bisheng_rerank(model_id=int(model_id))
+            rerank_head = candidates[:cls._KB_RERANK_LIMIT]
+            batches = [
+                rerank_head[index:index + cls._KB_RERANK_BATCH_SIZE]
+                for index in range(0, len(rerank_head), cls._KB_RERANK_BATCH_SIZE)
+            ]
+            semaphore = asyncio.Semaphore(cls._KB_RERANK_CONCURRENCY)
+
+            async def _rerank_batch(batch: list[Document]) -> list[Document]:
+                async with semaphore:
+                    return list(
+                        await rerank_model.acompress_documents(
+                            documents=batch,
+                            query=question,
+                        )
+                    )
+
+            reranked_batches = await asyncio.gather(
+                *[_rerank_batch(batch) for batch in batches]
+            )
+            scored_docs: list[Document] = []
+            for batch in reranked_batches:
+                for doc in batch:
+                    try:
+                        float((doc.metadata or {}).get('relevance_score'))
+                    except (TypeError, ValueError):
+                        continue
+                    scored_docs.append(doc)
+            if not scored_docs:
+                raise RuntimeError('rerank model returned no relevance scores')
+            scored_docs.sort(
+                key=lambda doc: float((doc.metadata or {}).get('relevance_score')),
+                reverse=True,
+            )
+            scored_keys = {cls._retrieval_document_key(doc) for doc in scored_docs}
+            missing_head = [
+                doc for doc in rerank_head
+                if cls._retrieval_document_key(doc) not in scored_keys
+            ]
+            logger.info(
+                f'[queryChunksFromDB] semantic rerank model={model_id}'
+                f' candidates={len(rerank_head)} batches={len(batches)}'
+            )
+            return [*scored_docs, *missing_head, *candidates[len(rerank_head):]]
+
+        try:
+            return await asyncio.wait_for(
+                _run(),
+                timeout=cls._KB_RERANK_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning(
+                f'[queryChunksFromDB] rerank unavailable, falling back to global RRF: {exc}'
+            )
+            return candidates
+
+    @classmethod
+    def _format_retrieval_document(cls, doc: Document) -> str:
+        metadata = doc.metadata or {}
+        file_name = (
+            metadata.get('source')
+            or metadata.get('document_name')
+            or metadata.get('file_name')
+            or ''
+        )
+        content = (doc.page_content or '').strip()
+        return (
+            f'[file name]:{file_name}\n'
+            f'[file content begin]\n{content}\n[file content end]\n'
+        )
+
+    @classmethod
+    def _truncate_ranked_documents_by_chars(
+        cls,
+        documents: list[Document],
+        max_chars: int,
+    ) -> tuple[list[str], list[Document]]:
+        try:
+            content_limit = max(int(max_chars), 0)
+        except (TypeError, ValueError):
+            content_limit = 0
+        if content_limit <= 0:
+            return [], []
+
+        formatted_results: list[str] = []
+        selected_docs: list[Document] = []
+        used_chars = 0
+        for doc in documents:
+            if not (doc.page_content or '').strip():
+                continue
+            formatted = cls._format_retrieval_document(doc)
+            separator_chars = 1 if formatted_results else 0
+            if used_chars + separator_chars + len(formatted) <= content_limit:
+                formatted_results.append(formatted)
+                selected_docs.append(doc)
+                used_chars += separator_chars + len(formatted)
+                continue
+
+            # Keep chunk boundaries intact. Only a single oversized top chunk
+            # is shortened so a valid retrieval result can still be returned.
+            if formatted_results:
+                break
+            metadata = doc.metadata or {}
+            file_name = (
+                metadata.get('source')
+                or metadata.get('document_name')
+                or metadata.get('file_name')
+                or ''
+            )
+            prefix = f'[file name]:{file_name}\n[file content begin]\n'
+            suffix = '\n[file content end]\n'
+            available_content_chars = content_limit - len(prefix) - len(suffix)
+            if available_content_chars <= 0:
+                break
+            page_content = (doc.page_content or '').strip()
+            citation_key = metadata.get('citation_key')
+            citation_suffix = f'\n\ncitation_key: {citation_key}' if citation_key else ''
+            if citation_suffix and page_content.endswith(citation_suffix):
+                content_without_citation = page_content[:-len(citation_suffix)].rstrip()
+                available_body_chars = available_content_chars - len(citation_suffix)
+                if available_body_chars >= 0:
+                    page_content = (
+                        content_without_citation[:available_body_chars].rstrip()
+                        + citation_suffix
+                    )
+                else:
+                    page_content = page_content[:available_content_chars]
+            else:
+                page_content = page_content[:available_content_chars]
+            truncated_doc = Document(
+                page_content=page_content,
+                metadata={**metadata, 'content_truncated': True},
+            )
+            formatted_results.append(cls._format_retrieval_document(truncated_doc))
+            selected_docs.append(truncated_doc)
+            break
+        return formatted_results, selected_docs
+
+    @classmethod
+    def _deduplicate_knowledge_failures(cls, failures: list[dict]) -> list[dict]:
+        deduplicated: list[dict] = []
+        seen: set[tuple] = set()
+        for failure in failures:
+            key = (failure.get('id'), failure.get('error'))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduplicated.append(failure)
+        return deduplicated
+
+    @classmethod
     async def queryChunksFromDB(
         cls,
         question: str,
@@ -913,146 +1589,93 @@ class WorkStationService(BaseService):
         max_token: int,
         login_user: UserPayload,
         file_ids_by_space: Optional[dict[int, list[int]]] = None,
-    ) -> tuple[list[str], Optional[list[dict]], list[dict]]:
-        """Query relevant knowledge blocks from the database.
-
-        Returns (formatted_results, finally_docs, failures) where `failures`
-        is a list of per-KB error descriptors:
-            {'id': int, 'name': str, 'error': str}
-        Caller (search_knowledge_bases) surfaces these to the UI as failed
-        KB chips with the error message.
-        """
+    ) -> tuple[list[str], Optional[list[Document]], list[dict]]:
+        """Retrieve globally ranked chunks with bounded fan-out and graceful fallback."""
         failures: list[dict] = []
+        started_at = time.monotonic()
+        if not str(question or '').strip():
+            return [], [], []
         try:
             organization_ids, space_ids = await cls._split_retrieval_knowledge_ids_by_type(
                 organization_knowledge_ids=use_knowledge_param.organization_knowledge_ids or [],
                 knowledge_space_ids=use_knowledge_param.knowledge_space_ids or [],
             )
-
-            knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
-                invoke_user_id=login_user.user_id,
-                knowledge_ids=organization_ids,
-                user_name=login_user.user_name,
+            knowledge_rows = await cls._load_retrieval_knowledge_rows(
+                organization_ids=organization_ids,
+                space_ids=space_ids,
+                login_user=login_user,
             )
-            knowledge_space_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
-                invoke_user_id=login_user.user_id,
-                knowledge_ids=space_ids,
-                check_auth=False,
+            if not knowledge_rows:
+                return [], [], []
+
+            probe_started_at = time.monotonic()
+            probe_infos, probe_failures = await cls._probe_retrieval_knowledge_rows(
+                question=question,
+                knowledge_rows=knowledge_rows,
+                login_user=login_user,
+                file_ids_by_space=file_ids_by_space,
             )
-            knowledge_vector_list.update(knowledge_space_list)
+            failures.extend(probe_failures)
+            selected_infos = sorted(
+                (info for info in probe_infos if info.get('probe_docs')),
+                key=lambda info: (
+                    float(info.get('probe_score', -1.0)),
+                    -int(getattr(info.get('knowledge'), 'id', 0) or 0),
+                ),
+                reverse=True,
+            )[:cls._KB_SELECTED_SPACE_LIMIT]
+            probe_ms = int((time.monotonic() - probe_started_at) * 1000)
+            if not selected_infos:
+                return [], [], cls._deduplicate_knowledge_failures(failures)
 
-            # Per-KB failure isolation — a single KB whose embedding model is
-            # broken (e.g. expired Volcengine key → 403) must not poison the
-            # whole batch. Run each KB's retriever independently; record
-            # failures so the caller can render them in the UI as failed KB
-            # chips instead of silently dropping them.
-            finally_docs: list = []
-            kb_succeed: list = []
-            max_total_docs = 100  # parity with old MultiRetriever finally_k
+            deep_started_at = time.monotonic()
+            rank_lists, deep_failures = await cls._deep_retrieve_selected_knowledge(
+                question=question,
+                selected_infos=selected_infos,
+                file_ids_by_space=file_ids_by_space,
+            )
+            failures.extend(deep_failures)
+            candidates = cls._global_rrf_merge(
+                rank_lists,
+                limit=cls._KB_CANDIDATE_LIMIT,
+            )
+            deep_ms = int((time.monotonic() - deep_started_at) * 1000)
+            if not candidates:
+                return [], [], cls._deduplicate_knowledge_failures(failures)
 
-            for kb_id, vectorstore_info in knowledge_vector_list.items():
-                if len(finally_docs) >= max_total_docs:
-                    break
-                allowed_file_ids = cls._get_allowed_file_ids_for_space(file_ids_by_space, kb_id)
-                if allowed_file_ids == []:
-                    logger.info(f'[queryChunksFromDB] kb={kb_id} empty file filter, skip')
-                    continue
-                milvus_vectorstore = vectorstore_info.get('milvus')
-                es_vectorstore = vectorstore_info.get('es')
-                kb_row = vectorstore_info.get('knowledge')
-                kb_name = getattr(kb_row, 'name', '') or ''
-                if milvus_vectorstore is None and es_vectorstore is None:
-                    logger.info(
-                        f'[queryChunksFromDB] kb={kb_id} no vectorstore, skip'
-                    )
-                    failures.append({
-                        'id': int(kb_id) if isinstance(kb_id, (int, str)) and str(kb_id).isdigit() else kb_id,
-                        'name': kb_name,
-                        'error': '知识库未初始化向量存储',
-                    })
-                    continue
-
-                try:
-                    milvus_search_kwargs = {'k': 100, 'param': {'ef': 110}}
-                    es_search_kwargs = {'k': 100}
-                    if allowed_file_ids is not None:
-                        milvus_search_kwargs['expr'] = f'document_id in {allowed_file_ids}'
-                        es_search_kwargs['filter'] = [{'terms': {'metadata.document_id': allowed_file_ids}}]
-                    per_kb_milvus = (
-                        MultiRetriever(
-                            vectors=[milvus_vectorstore],
-                            search_kwargs=[milvus_search_kwargs],
-                            finally_k=100,
-                        )
-                        if milvus_vectorstore is not None else None
-                    )
-                    per_kb_es = (
-                        MultiRetriever(
-                            vectors=[es_vectorstore],
-                            search_kwargs=[es_search_kwargs],
-                            finally_k=100,
-                        )
-                        if es_vectorstore is not None else None
-                    )
-                    per_kb_tool = KnowledgeRetrieverTool(
-                        vector_retriever=per_kb_milvus,
-                        elastic_retriever=per_kb_es,
-                        max_content=max_token,
-                        rrf_remove_zero_score=True,
-                        sort_by_source_and_index=True,
-                    )
-                    kb_docs = await per_kb_tool.ainvoke({'query': question})
-                    if allowed_file_ids is not None and kb_docs:
-                        allowed_set = set(allowed_file_ids)
-                        kb_docs = [
-                            doc
-                            for doc in kb_docs
-                            if cls._doc_matches_file_filter(doc, int(kb_id), allowed_set)
-                        ]
-                    docs_count = len(kb_docs) if kb_docs else 0
-                    if kb_docs:
-                        finally_docs.extend(kb_docs)
-                    kb_succeed.append(kb_id)
-                    logger.info(
-                        f'[queryChunksFromDB] kb={kb_id} ok docs={docs_count}'
-                    )
-                except Exception as exc:
-                    err_msg = str(exc) or exc.__class__.__name__
-                    failures.append({
-                        'id': int(kb_id) if isinstance(kb_id, (int, str)) and str(kb_id).isdigit() else kb_id,
-                        'name': kb_name,
-                        'error': err_msg,
-                    })
-                    logger.warning(
-                        f'[queryChunksFromDB] kb={kb_id} failed: {err_msg}'
-                    )
-                    continue
-
-            if failures:
-                logger.warning(
-                    f'[queryChunksFromDB] partial failure:'
-                    f' succeed={kb_succeed}'
-                    f' failed={[f["id"] for f in failures]}'
+            rerank_started_at = time.monotonic()
+            ranked_docs = await cls._rerank_retrieval_candidates(
+                question=question,
+                candidates=candidates,
+            )
+            rerank_ms = int((time.monotonic() - rerank_started_at) * 1000)
+            formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(
+                ranked_docs,
+                max_token,
+            )
+            failures = cls._deduplicate_knowledge_failures(failures)
+            total_ms = int((time.monotonic() - started_at) * 1000)
+            selected_summary = [
+                (
+                    int(getattr(info.get('knowledge'), 'id', 0) or 0),
+                    round(float(info.get('probe_score', -1.0)), 4),
                 )
-
-            if not finally_docs:
-                return [], [], failures
-
-            # Cap to match old MultiRetriever finally_k=100 ceiling.
-            if len(finally_docs) > max_total_docs:
-                finally_docs = finally_docs[:max_total_docs]
-
-            formatted_results = []
-            for doc in finally_docs:
-                file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
-                content = doc.page_content.strip()
-                formatted_results.append(
-                    f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
-                )
+                for info in selected_infos
+            ]
+            logger.info(
+                f'[queryChunksFromDB] two-stage retrieval requested={len(knowledge_rows)}'
+                f' probed={len(probe_infos)} selected={len(selected_infos)}'
+                f' selected_summary={selected_summary}'
+                f' candidates={len(candidates)} final_docs={len(finally_docs)}'
+                f' final_chars={len(chr(10).join(formatted_results))}'
+                f' probe_ms={probe_ms} deep_ms={deep_ms}'
+                f' rerank_ms={rerank_ms} total_ms={total_ms}'
+                f' failures={len(failures)}'
+            )
             return formatted_results, finally_docs, failures
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
-            return [], None, failures
+            return [], None, cls._deduplicate_knowledge_failures(failures)
 
     @classmethod
     def _get_allowed_file_ids_for_space(

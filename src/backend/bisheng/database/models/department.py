@@ -24,10 +24,9 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 logger = logging.getLogger(__name__)
-
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 
 def _normalize_id_scalar_rows(rows) -> list[int]:
@@ -815,7 +814,7 @@ class DepartmentDao:
         parent_path: str,
         last_sync_ts: int,
     ) -> Department | None:
-        """Update parent linkage without changing department lifecycle status."""
+        """Update parent linkage and keep the entire materialized subtree aligned."""
 
         def final_path(path_prefix: str, child_id: int) -> str:
             base = (path_prefix or "").strip()

@@ -78,9 +78,30 @@ interface SpaceSidebarProps {
     onOpenSpaceSettings: (space: KnowledgeSpace) => void;
     onOpenSpaceMembers: (space: KnowledgeSpace) => void;
     onPinSpace: (space: KnowledgeSpace, pinned: boolean, group: SpaceGroup) => void;
+    /** System admins may drag to define the shared order of non-personal levels. */
+    canReorderSpaces?: boolean;
+    onReorderSpace?: (
+        space: KnowledgeSpace,
+        prevSpaceId: string | null,
+        nextSpaceId: string | null,
+        group: SpaceGroup,
+    ) => void;
     onDeleteSpace: (space: KnowledgeSpace) => void;
     onLeaveSpace: (space: KnowledgeSpace) => void;
     onGlobalSearchSelectFile: (spaceId: number, fileId: number, fileName: string) => void;
+}
+
+/** Where a dragged space would land relative to the row under the pointer. */
+type DropPosition = "before" | "after";
+
+interface SpaceDragState {
+    groupKey: SpaceGroupKey;
+    spaceId: string;
+}
+
+interface SpaceDropTarget {
+    spaceId: string;
+    position: DropPosition;
 }
 
 function SpaceMenu({
@@ -226,11 +247,15 @@ export function SpaceSidebar({
     onOpenSpaceSettings,
     onOpenSpaceMembers,
     onPinSpace,
+    canReorderSpaces = false,
+    onReorderSpace,
     onDeleteSpace,
     onLeaveSpace,
     onGlobalSearchSelectFile,
 }: SpaceSidebarProps) {
     const [sidebarWidth, setSidebarWidth] = useState(getSavedWidth);
+    const [spaceDrag, setSpaceDrag] = useState<SpaceDragState | null>(null);
+    const [spaceDropTarget, setSpaceDropTarget] = useState<SpaceDropTarget | null>(null);
     const isDraggingRef = useRef(false);
     const dragStartXRef = useRef(0);
     const dragStartWidthRef = useRef(0);
@@ -263,6 +288,62 @@ export function SpaceSidebar({
         document.addEventListener("mousemove", onMouseMove);
         document.addEventListener("mouseup", onMouseUp);
     }, [sidebarWidth]);
+
+    // Personal spaces are per-user, so there is no shared order to define for them.
+    const isGroupReorderable = useCallback((group: SpaceGroup) => (
+        canReorderSpaces && Boolean(onReorderSpace) && group.level !== SpaceLevel.PERSONAL
+    ), [canReorderSpaces, onReorderSpace]);
+
+    const handleSpaceDragStart = useCallback((group: SpaceGroup, space: KnowledgeSpace) => {
+        setSpaceDrag({ groupKey: group.key, spaceId: space.id });
+    }, []);
+
+    const handleSpaceDragEnd = useCallback(() => {
+        setSpaceDrag(null);
+        setSpaceDropTarget(null);
+    }, []);
+
+    const handleSpaceDragOver = useCallback((
+        event: React.DragEvent<HTMLDivElement>,
+        group: SpaceGroup,
+        space: KnowledgeSpace,
+    ) => {
+        // Only a drag started in this same group can be dropped here.
+        if (!spaceDrag || spaceDrag.groupKey !== group.key || spaceDrag.spaceId === space.id) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const position: DropPosition = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+        setSpaceDropTarget((prev) => (
+            prev && prev.spaceId === space.id && prev.position === position
+                ? prev
+                : { spaceId: space.id, position }
+        ));
+    }, [spaceDrag]);
+
+    const handleSpaceDrop = useCallback((
+        event: React.DragEvent<HTMLDivElement>,
+        group: SpaceGroup,
+        target: KnowledgeSpace,
+    ) => {
+        event.preventDefault();
+        const dropPosition = spaceDropTarget?.spaceId === target.id ? spaceDropTarget.position : "before";
+        const dragged = spaceDrag && spaceDrag.groupKey === group.key
+            ? group.spaces.find((item) => item.id === spaceDrag.spaceId)
+            : undefined;
+        handleSpaceDragEnd();
+        if (!dragged || dragged.id === target.id || !onReorderSpace) return;
+
+        // Resolve the neighbours the row lands between, ignoring the dragged row itself
+        // — that pair is exactly what the backend needs to place it.
+        const remaining = group.spaces.filter((item) => item.id !== dragged.id);
+        const targetIndex = remaining.findIndex((item) => item.id === target.id);
+        if (targetIndex < 0) return;
+        const insertAt = dropPosition === "before" ? targetIndex : targetIndex + 1;
+        const prevSpace = remaining[insertAt - 1] ?? null;
+        const nextSpace = remaining[insertAt] ?? null;
+        onReorderSpace(dragged, prevSpace?.id ?? null, nextSpace?.id ?? null, group);
+    }, [handleSpaceDragEnd, onReorderSpace, spaceDrag, spaceDropTarget]);
 
     return (
         <aside
@@ -385,7 +466,29 @@ export function SpaceSidebar({
                                                     <div
                                                         key={`${group.key}-${space.id}`}
                                                         data-testid={`space-row-${space.id}`}
-                                                        className={`${s.spaceRow} ${activeSpaceId === space.id ? s.spaceRowActive : ""}`}
+                                                        className={[
+                                                            s.spaceRow,
+                                                            activeSpaceId === space.id ? s.spaceRowActive : "",
+                                                            spaceDrag?.spaceId === space.id ? s.spaceRowDragging : "",
+                                                            spaceDropTarget?.spaceId === space.id && spaceDropTarget.position === "before"
+                                                                ? s.spaceRowDropBefore : "",
+                                                            spaceDropTarget?.spaceId === space.id && spaceDropTarget.position === "after"
+                                                                ? s.spaceRowDropAfter : "",
+                                                        ].filter(Boolean).join(" ")}
+                                                        draggable={isGroupReorderable(group)}
+                                                        onDragStart={isGroupReorderable(group)
+                                                            ? () => handleSpaceDragStart(group, space)
+                                                            : undefined}
+                                                        onDragEnd={isGroupReorderable(group) ? handleSpaceDragEnd : undefined}
+                                                        onDragOver={isGroupReorderable(group)
+                                                            ? (event) => handleSpaceDragOver(event, group, space)
+                                                            : undefined}
+                                                        onDragLeave={isGroupReorderable(group)
+                                                            ? () => setSpaceDropTarget((prev) => (prev?.spaceId === space.id ? null : prev))
+                                                            : undefined}
+                                                        onDrop={isGroupReorderable(group)
+                                                            ? (event) => handleSpaceDrop(event, group, space)
+                                                            : undefined}
                                                     >
                                                         <button
                                                             type="button"

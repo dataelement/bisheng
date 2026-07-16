@@ -206,7 +206,7 @@ describe("FilePublishDialog", () => {
         );
 
         await screen.findByText("公共知识库");
-        expect(screen.getByText("团队知识库")).toBeInTheDocument();
+        expect(screen.getByText("团队/科室知识库")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "选择公共空间根目录" })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "展开团队空间目录" }));

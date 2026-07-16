@@ -24,6 +24,7 @@ import {
     getSpaceInfoApi,
     importWebLinkApi,
     pinSpaceApi,
+    reorderSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
     updateFileEncoding,
@@ -470,6 +471,38 @@ export default function PortalKnowledgeWorkbench() {
             showToast({ message: pinned ? "已置顶" : "已取消置顶", severity: NotificationSeverity.SUCCESS });
         } catch {
             showToast({ message: "操作失败", severity: NotificationSeverity.ERROR });
+        }
+    }, [queryClient, showToast]);
+
+    const handleReorderSpace = useCallback(async (
+        space: KnowledgeSpace,
+        prevSpaceId: string | null,
+        nextSpaceId: string | null,
+        group: SpaceGroup,
+    ) => {
+        const queryKey = ["knowledgeSpaces", "level", group.level];
+        const previousSpaces = queryClient.getQueryData<KnowledgeSpace[]>(queryKey);
+        // Apply the move locally first so the row settles where it was dropped instead
+        // of snapping back until the refetch lands.
+        if (previousSpaces) {
+            const remaining = previousSpaces.filter((item) => item.id !== space.id);
+            const anchorId = nextSpaceId ?? prevSpaceId;
+            const anchorIndex = anchorId ? remaining.findIndex((item) => item.id === anchorId) : -1;
+            const insertAt = anchorIndex < 0
+                ? remaining.length
+                : (nextSpaceId ? anchorIndex : anchorIndex + 1);
+            queryClient.setQueryData<KnowledgeSpace[]>(queryKey, [
+                ...remaining.slice(0, insertAt),
+                space,
+                ...remaining.slice(insertAt),
+            ]);
+        }
+        try {
+            await reorderSpaceApi(space.id, { prev_space_id: prevSpaceId, next_space_id: nextSpaceId });
+            await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+        } catch {
+            if (previousSpaces) queryClient.setQueryData(queryKey, previousSpaces);
+            showToast({ message: "排序失败", severity: NotificationSeverity.ERROR });
         }
     }, [queryClient, showToast]);
 
@@ -2442,6 +2475,10 @@ export default function PortalKnowledgeWorkbench() {
                         onOpenSpaceSettings={(space) => void handleOpenSpaceSettings(space)}
                         onOpenSpaceMembers={handleOpenSpaceMembers}
                         onPinSpace={(space, pinned, group) => void handlePinSpace(space, pinned, group)}
+                        canReorderSpaces={isSystemAdmin}
+                        onReorderSpace={(space, prevSpaceId, nextSpaceId, group) =>
+                            void handleReorderSpace(space, prevSpaceId, nextSpaceId, group)
+                        }
                         onDeleteSpace={(space) => void handleDeleteSpace(space)}
                         onLeaveSpace={(space) => void handleLeaveSpace(space)}
                         onGlobalSearchSelectFile={(spaceId, fileId, fileName) =>

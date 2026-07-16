@@ -11,6 +11,7 @@ from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventSe
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
     ShougangPortalFavoriteCreateReq,
@@ -169,6 +170,18 @@ async def sync_shougang_portal_space_business_domain_codes(
     try:
         result = await svc.sync_shougang_portal_space_business_domain_codes(req)
         return resp_200(ShougangPortalSpaceBusinessDomainCodesSyncResp(**result).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.get('/spaces/domain-bindable')
+async def get_shougang_portal_domain_bindable_spaces(
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        spaces = await svc.list_shougang_portal_domain_bindable_spaces()
+        response = ShougangPortalDomainBindableSpacesResp(spaces=spaces)
+        return resp_200(response.model_dump(mode='json'))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 

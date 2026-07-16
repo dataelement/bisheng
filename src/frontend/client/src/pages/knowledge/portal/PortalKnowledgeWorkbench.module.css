@@ -311,6 +311,37 @@
   background: #f4f8ff;
 }
 
+/* Admin drag-to-reorder: the row being dragged, and the insertion line showing
+   where it would land. position: relative anchors the ::after indicator. */
+.spaceRowDragging {
+  opacity: 0.5;
+}
+
+.spaceRowDropBefore,
+.spaceRowDropAfter {
+  position: relative;
+}
+
+.spaceRowDropBefore::after,
+.spaceRowDropAfter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #165dff;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.spaceRowDropBefore::after {
+  top: -1px;
+}
+
+.spaceRowDropAfter::after {
+  bottom: -1px;
+}
+
 .spaceSelectButton {
   min-width: 0;
   flex: 1;
