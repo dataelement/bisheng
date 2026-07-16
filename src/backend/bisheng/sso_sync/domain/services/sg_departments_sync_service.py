@@ -81,10 +81,11 @@ class SgDepartmentsSyncService:
                 )
 
         parent_cache: dict[str, Department] = {}
+        apply_order = cls._order_parent_first(normalized)
         with bypass_tenant_filter():
             token = set_current_tenant_id(ROOT_TENANT_ID)
             try:
-                for row in normalized:
+                for row in apply_order:
                     if row.index in info_map:
                         continue
                     info_map[row.index] = await cls._apply_one(
@@ -99,7 +100,7 @@ class SgDepartmentsSyncService:
                     if fresh is not None:
                         parent_cache[row.code] = fresh
 
-                await cls._relink_batch_children(normalized, payload.mdm_id, parent_cache)
+                await cls._relink_batch_children(apply_order, payload.mdm_id, parent_cache)
 
                 for row in normalized:
                     info = info_map.get(row.index)
@@ -239,6 +240,32 @@ class SgDepartmentsSyncService:
             if not progressed:
                 break
 
+    @staticmethod
+    def _order_parent_first(items: list[_NormalizedItem]) -> list[_NormalizedItem]:
+        """Return a stable parent-before-child order for one SG sync batch."""
+        first_index_by_code: dict[str, int] = {}
+        for index, item in enumerate(items):
+            first_index_by_code.setdefault(item.code, index)
+
+        state = [0] * len(items)
+        ordered: list[_NormalizedItem] = []
+
+        def visit(index: int) -> None:
+            if state[index] == 2:
+                return
+            if state[index] == 1:
+                return
+            state[index] = 1
+            parent_index = first_index_by_code.get(items[index].parent_code)
+            if parent_index is not None and parent_index != index:
+                visit(parent_index)
+            state[index] = 2
+            ordered.append(items[index])
+
+        for index in range(len(items)):
+            visit(index)
+        return ordered
+
     @classmethod
     async def _relink_db_children_waiting_for_parent(
         cls,
@@ -299,7 +326,15 @@ class SgDepartmentsSyncService:
     def _needs_relink(child: Department, parent: Department) -> bool:
         if getattr(child, "sync_parent_external_id", None):
             return True
-        return (getattr(child, "parent_id", None) or 0) != (getattr(parent, "id", None) or 0)
+        if (getattr(child, "parent_id", None) or 0) != (getattr(parent, "id", None) or 0):
+            return True
+        parent_path = (getattr(parent, "path", None) or "").strip()
+        if parent_path and not parent_path.endswith("/"):
+            parent_path = f"{parent_path}/"
+        if not parent_path.startswith("/"):
+            parent_path = f"/{parent_path}" if parent_path else "/"
+        expected_path = f"{parent_path}{int(child.id)}/".replace("//", "/")
+        return getattr(child, "path", None) != expected_path
 
     @classmethod
     async def _relink_child_to_parent(

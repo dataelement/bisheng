@@ -4,6 +4,8 @@ Uses a self-contained SQLite engine with Department/UserDepartment/User tables.
 Follows the same pattern as test_tenant_dao.py (F001).
 """
 
+from contextlib import asynccontextmanager
+
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
@@ -41,7 +43,9 @@ def dao_engine():
                 mounted_tenant_id INTEGER,
                 is_deleted INTEGER NOT NULL DEFAULT 0,
                 last_sync_ts BIGINT NOT NULL DEFAULT 0,
+                sync_parent_external_id VARCHAR(128),
                 default_role_ids JSON,
+                concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
                 create_user INTEGER,
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -202,7 +206,8 @@ class TestDepartmentModel:
 
     def test_update_paths_batch(self, session):
         """Batch path update simulating a department move."""
-        from sqlalchemy import update as sa_update, func as sa_func
+        from sqlalchemy import func as sa_func
+        from sqlalchemy import update as sa_update
 
         root = _create_dept(session, 'BS@upb1', 'Root')
         root.path = f'/{root.id}/'
@@ -234,6 +239,123 @@ class TestDepartmentModel:
         session.refresh(grandchild)
         assert child.path == new_prefix
         assert grandchild.path == f'/99/{child.id}/{grandchild.id}/'
+
+    @pytest.mark.asyncio
+    async def test_update_parent_link_updates_entire_subtree(
+        self,
+        async_db_session,
+        monkeypatch,
+    ):
+        import bisheng.database.models.department as department_module
+        from bisheng.database.models.department import DepartmentDao
+
+        await async_db_session.execute(
+            text("ALTER TABLE department ADD COLUMN sync_parent_external_id VARCHAR(128)")
+        )
+        await async_db_session.execute(
+            text(
+                "ALTER TABLE department ADD COLUMN "
+                "concurrent_session_limit INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+        await async_db_session.execute(
+            text(
+                "INSERT INTO department "
+                "(id, dept_id, name, parent_id, path, source, external_id) VALUES "
+                "(1, 'SG@root', 'Root', NULL, '/1/', 'sg', 'R1'), "
+                "(2, 'SG@new', 'New Parent', 1, '/1/2/', 'sg', 'N1'), "
+                "(10, 'SG@parent', 'Parent', 1, '/1/10/', 'sg', 'P1'), "
+                "(11, 'SG@child', 'Child', 10, '/1/10/11/', 'sg', 'C1')"
+            )
+        )
+        await async_db_session.commit()
+
+        @asynccontextmanager
+        async def _fake_get_session():
+            yield async_db_session
+
+        monkeypatch.setattr(
+            department_module,
+            "get_async_db_session",
+            _fake_get_session,
+        )
+
+        await DepartmentDao.aupdate_parent_link(
+            dept_id=10,
+            parent_id=2,
+            parent_path="/1/2/",
+            last_sync_ts=123,
+        )
+
+        rows = (
+            await async_db_session.execute(
+                text("SELECT id, parent_id, path FROM department WHERE id IN (10, 11) ORDER BY id")
+            )
+        ).all()
+        assert [tuple(row) for row in rows] == [
+            (10, 2, "/1/2/10/"),
+            (11, 10, "/1/2/10/11/"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_external_upsert_updates_entire_subtree(
+        self,
+        async_db_session,
+        monkeypatch,
+    ):
+        import bisheng.database.models.department as department_module
+        from bisheng.database.models.department import DepartmentDao
+
+        await async_db_session.execute(
+            text("ALTER TABLE department ADD COLUMN sync_parent_external_id VARCHAR(128)")
+        )
+        await async_db_session.execute(
+            text(
+                "ALTER TABLE department ADD COLUMN "
+                "concurrent_session_limit INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+        await async_db_session.execute(
+            text(
+                "INSERT INTO department "
+                "(id, dept_id, name, parent_id, path, source, external_id) VALUES "
+                "(1, 'SG@root', 'Root', NULL, '/1/', 'sg', 'R1'), "
+                "(2, 'SG@new', 'New Parent', 1, '/1/2/', 'sg', 'N1'), "
+                "(10, 'SG@parent', 'Parent', 1, '/1/10/', 'sg', 'P1'), "
+                "(11, 'SG@child', 'Child', 10, '/1/10/11/', 'sg', 'C1')"
+            )
+        )
+        await async_db_session.commit()
+
+        @asynccontextmanager
+        async def _fake_get_session():
+            yield async_db_session
+
+        monkeypatch.setattr(
+            department_module,
+            "get_async_db_session",
+            _fake_get_session,
+        )
+
+        await DepartmentDao.aupsert_by_external_id(
+            source="sg",
+            external_id="P1",
+            name="Parent",
+            parent_id=2,
+            path="/1/2/",
+            sort_order=0,
+            last_sync_ts=123,
+        )
+
+        rows = (
+            await async_db_session.execute(
+                text("SELECT id, parent_id, path FROM department WHERE id IN (10, 11) ORDER BY id")
+            )
+        ).all()
+        assert [tuple(row) for row in rows] == [
+            (10, 2, "/1/2/10/"),
+            (11, 10, "/1/2/10/11/"),
+        ]
 
     def test_check_name_duplicate_true(self, session):
         parent = _create_dept(session, 'BS@nd1', 'Parent')

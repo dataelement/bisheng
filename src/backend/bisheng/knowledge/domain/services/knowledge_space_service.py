@@ -30,7 +30,7 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     FavoriteSpaceProtectedError,
@@ -54,7 +54,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError,
     SpaceInvalidLevelError,
     SpaceInvalidScopeOwnerError,
-    SpaceLimitError,
     SpaceNameDuplicateError,
     SpaceNameSensitiveWordError,
     SpaceNotFoundError,
@@ -153,6 +152,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
+    ShougangPortalDomainBindableSpaceResp,
     ShougangPortalDomainFileCountItem,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
@@ -290,8 +290,6 @@ if TYPE_CHECKING:
     )
     from bisheng.message.domain.services.message_service import MessageService
 
-# Maximum number of Knowledge Spaces a user can create
-_MAX_SPACE_PER_USER = 200
 # Maximum number of spaces a user can subscribe to (not as creator)
 _MAX_SUBSCRIBE_PER_USER = 50
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
@@ -2410,14 +2408,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         approval_request: bool = False,
     ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
         name = self._normalize_space_name(name)
-        if not skip_user_limit:
-            count = await KnowledgeDao.async_count_spaces_by_user(
-                self.login_user.user_id,
-                exclude_department_spaces=True,
-            )
-            if count >= _MAX_SPACE_PER_USER:
-                raise SpaceLimitError()
-
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
@@ -2474,7 +2464,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         system_managed: bool = False,
         validate_tag_libraries: bool = True,
     ) -> Knowledge:
-        """Create a new knowledge space (max 200 per user).
+        """Create a new knowledge space without a per-user count limit.
+
+        ``skip_user_limit`` is retained for compatibility with existing callers.
 
         ``validate_tag_libraries=False`` binds the requested libraries without the
         non-empty check — for system-managed spaces that bind a default library which
@@ -2499,14 +2491,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         name = self._normalize_space_name(name)
         if not system_managed and self._normalize_space_level(space_level) == KnowledgeSpaceLevelEnum.PERSONAL:
             raise SpacePersonalCreateForbiddenError()
-        if not skip_user_limit:
-            count = await KnowledgeDao.async_count_spaces_by_user(
-                self.login_user.user_id,
-                exclude_department_spaces=True,
-            )
-            if count >= _MAX_SPACE_PER_USER:
-                raise SpaceLimitError()
-
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
@@ -3944,6 +3928,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         updated = await KnowledgeDao.async_update_space_business_domain_codes(bindings)
         return {"updated": updated}
+
+    async def list_shougang_portal_domain_bindable_spaces(
+        self,
+    ) -> list[ShougangPortalDomainBindableSpaceResp]:
+        if not self.login_user.is_admin():
+            raise UnAuthorizedError()
+
+        public_space_ids, department_space_ids = await asyncio.gather(
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC),
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.DEPARTMENT),
+        )
+        space_level_by_id = {int(space_id): KnowledgeSpaceLevelEnum.PUBLIC for space_id in public_space_ids}
+        for space_id in department_space_ids:
+            space_level_by_id.setdefault(int(space_id), KnowledgeSpaceLevelEnum.DEPARTMENT)
+        if not space_level_by_id:
+            return []
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(
+            list(space_level_by_id),
+            order_by="name",
+        )
+        return [
+            ShougangPortalDomainBindableSpaceResp(
+                id=int(space.id),
+                name=str(space.name or ""),
+                description=str(space.description or ""),
+                space_level=space_level_by_id[int(space.id)],
+                business_domain_codes=getattr(space, "business_domain_codes", None) or [],
+            )
+            for space in spaces
+            if int(space.id) in space_level_by_id
+        ]
 
     async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> dict:
         if not (req.q or "").strip():
@@ -10556,12 +10572,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cleaned = encoding.strip()
         if not cleaned:
             raise ValueError("encoding cannot be empty after strip")
-        db_knowledge = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
-        self._ensure_business_domain_allowed_for_space(
-            db_knowledge,
-            self._extract_business_domain_code_from_encoding(cleaned),
-        )
         old_encoding = file_record.file_encoding
+        old_business_domain_code = self._extract_business_domain_code_from_encoding(old_encoding or "")
+        new_business_domain_code = self._extract_business_domain_code_from_encoding(cleaned)
+        if old_business_domain_code != new_business_domain_code:
+            db_knowledge = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+            self._ensure_business_domain_allowed_for_space(
+                db_knowledge,
+                new_business_domain_code,
+            )
         old_subcategory_code = self.normalize_file_category_code(
             getattr(file_record, "file_subcategory_code", None),
         )

@@ -24,7 +24,7 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_field_target_document_title: "目标文档",
       com_approval_business_type_knowledge_space_create: "新建知识库",
       com_approval_business_type_knowledge_space_file_publish: "发布文件",
-      com_approval_space_level_team: "团队知识库",
+      com_approval_space_level_team: "团队/科室知识库",
       com_approval_auth_type_approval: "需审批",
       com_approval_value_yes: "是",
     };
@@ -134,7 +134,7 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.getByText("知识库名称")).toBeInTheDocument();
     expect(screen.getByText("团队资料")).toBeInTheDocument();
     expect(screen.getByText("知识库层级")).toBeInTheDocument();
-    expect(screen.getByText("团队知识库")).toBeInTheDocument();
+    expect(screen.getByText("团队/科室知识库")).toBeInTheDocument();
     expect(screen.getByText("加入方式")).toBeInTheDocument();
     expect(screen.getByText("需审批")).toBeInTheDocument();
     expect(screen.getByText("发布到广场")).toBeInTheDocument();
