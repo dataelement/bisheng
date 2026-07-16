@@ -29,6 +29,9 @@ from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.services.auth import LoginUser
 
+# Comment recorded on a task auto-approved because its approver is the applicant.
+SELF_APPROVAL_COMMENT = '发起人与审批人为同一人，自动通过'
+
 
 class _SystemLoginUser:
     def __init__(self, user_id: int, tenant_id: int = 0) -> None:
@@ -628,6 +631,43 @@ class ApprovalCenterService:
                 )
         return {'revoked_keys': [row.menu_key for row in rows], 'instance_id': instance_id}
 
+    async def auto_approve_self_tasks(self, *, instance: ApprovalInstance, tasks: list[ApprovalTask]) -> bool:
+        """Auto-approve a freshly created node's task when its approver is the applicant.
+
+        Nobody should have to approve their own request. Rather than dropping the
+        approver (which would turn a self-only node into an APPROVER_EMPTY exception),
+        the task is created and immediately approved through the normal ``decide_task``
+        path, so or/all node modes, sibling skipping, advancement, finalization and the
+        outbox all behave exactly as they do for a human approval — and the action stays
+        auditable (operator = applicant, with SELF_APPROVAL_COMMENT).
+
+        Chains naturally: advancing creates the next node's tasks, which run this hook
+        again, so a flow whose every node resolves to the applicant approves end to end.
+
+        Returns whether a task was auto-approved, so callers can skip re-reading the
+        instance when nothing happened.
+        """
+        self_task = next(
+            (
+                task
+                for task in tasks
+                if task.approver_user_id == instance.applicant_user_id
+                and task.status == ApprovalTaskStatus.PENDING
+            ),
+            None,
+        )
+        if self_task is None:
+            return False
+        await self.decide_task(
+            task_id=self_task.id,
+            action='approve',
+            operator_user_id=instance.applicant_user_id,
+            operator_user_name=instance.applicant_user_name or '',
+            operator_tenant_id=instance.tenant_id,
+            comment=SELF_APPROVAL_COMMENT,
+        )
+        return True
+
     async def decide_task(
         self,
         *,
@@ -914,6 +954,9 @@ class ApprovalCenterService:
         instance.current_node_name = next_node.node_name
         await self.instance_repository.update_instance(instance)
         for task in created_tasks:
+            if task.approver_user_id == instance.applicant_user_id:
+                # Auto-approved right below; don't ask the applicant to approve themselves.
+                continue
             await self.__class__._send_approval_notify(
                 sender=instance.applicant_user_id,
                 receiver_user_ids=[task.approver_user_id],
@@ -922,6 +965,7 @@ class ApprovalCenterService:
                 instance_id=instance.id,
                 task_id=task.id,
             )
+        await self.auto_approve_self_tasks(instance=instance, tasks=created_tasks)
 
     @staticmethod
     async def _send_approval_notify(
