@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.common.errcode.knowledge_space import SpaceFileDuplicateError
+from bisheng.common.errcode.knowledge_space import SpaceFileDuplicateError, SpaceFileNameDuplicateError
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.services.web_link_import_service import (
     WEB_LINK_LOGIN_ENTRY_MARKDOWN,
@@ -41,13 +41,11 @@ def _import_result(*, markdown: str, final_url: str, content_hash: str) -> WebLi
 async def test_import_web_link_skips_content_dedup_for_placeholder_markdown() -> None:
     service = _service()
     dedup_calls: list[tuple] = []
-    existing = SimpleNamespace(id=99)
+    existing = SimpleNamespace(id=99, md5="existing-content-hash")
 
     def _get_file_by_condition(knowledge_id, md5_=None, file_name=None):
         dedup_calls.append((md5_, file_name))
-        if md5_:
-            return [existing]
-        return []
+        return [existing]
 
     import_result = _import_result(
         markdown=f"{WEB_LINK_LOGIN_ENTRY_MARKDOWN}\n",
@@ -55,66 +53,100 @@ async def test_import_web_link_skips_content_dedup_for_placeholder_markdown() ->
         content_hash="placeholder-hash-a",
     )
 
-    with patch.object(service, "_require_permission_id", new=AsyncMock()), patch(
-        f"{_KS}.KnowledgeDao.aquery_by_id",
-        new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
-    ), patch.object(service, "_ensure_space_async_task_tenant_consistency"), patch(
-        f"{_KS}.KnowledgeWebLinkImportService.fetch",
-        new=AsyncMock(return_value=import_result),
-    ), patch(
-        f"{_KS}.KnowledgeFileDao.get_file_by_condition",
-        side_effect=_get_file_by_condition,
-    ), patch(
-        f"{_KS}.QuotaService.get_knowledge_space_upload_limit_bytes",
-        new=AsyncMock(return_value=None),
-    ), patch(
-        f"{_KS}.SpaceFileDao.get_user_total_file_size",
-        new=AsyncMock(return_value=0),
-    ), patch(
-        f"{_KS}.QuotaService.get_tenant_storage_remaining_bytes",
-        new=AsyncMock(return_value=None),
-    ), patch(
-        f"{_KS}.KnowledgeFile",
-        side_effect=lambda **kwargs: MagicMock(**kwargs, id=101),
-    ), patch(
-        f"{_KS}.KnowledgeFileDao.insert_one",
-        new=AsyncMock(),
-    ), patch.object(service, "_create_primary_document_for_file", new=AsyncMock()), patch(
-        f"{_KS}.get_minio_storage_sync",
-    ), patch(
-        f"{_KS}.process_knowledge_file",
-        new=AsyncMock(),
+    with (
+        patch.object(service, "_require_permission_id", new=AsyncMock()),
+        patch(
+            f"{_KS}.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
+        ),
+        patch.object(service, "_ensure_space_async_task_tenant_consistency"),
+        patch(
+            f"{_KS}.KnowledgeWebLinkImportService.fetch",
+            new=AsyncMock(return_value=import_result),
+        ),
+        patch(
+            f"{_KS}.KnowledgeFileDao.get_file_by_condition",
+            side_effect=_get_file_by_condition,
+        ),
     ):
-        await service.import_web_link(
-            knowledge_id=1,
-            url="https://www.rfc-editor.org/rfc/rfc7230.txt",
-        )
+        with pytest.raises(SpaceFileNameDuplicateError):
+            await service.import_web_link(
+                knowledge_id=1,
+                url="https://www.rfc-editor.org/rfc/rfc7230.txt",
+            )
 
-    assert all(call[0] is None for call in dedup_calls)
-    assert any(call[1] is not None for call in dedup_calls)
+    assert len(dedup_calls) == 1
+    assert dedup_calls[0][0] is None
+    assert dedup_calls[0][1] is not None
 
 
 @pytest.mark.asyncio
 async def test_import_web_link_still_blocks_real_duplicate_content() -> None:
     service = _service()
-    existing = SimpleNamespace(id=99)
+    existing = SimpleNamespace(id=99, md5="real-content-hash")
+    dedup_calls: list[tuple] = []
     import_result = _import_result(
         markdown="Same real article body.\n",
         final_url="https://example.com/a",
         content_hash="real-content-hash",
     )
 
-    with patch.object(service, "_require_permission_id", new=AsyncMock()), patch(
-        f"{_KS}.KnowledgeDao.aquery_by_id",
-        new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
-    ), patch.object(service, "_ensure_space_async_task_tenant_consistency"), patch(
-        f"{_KS}.KnowledgeWebLinkImportService.fetch",
-        new=AsyncMock(return_value=import_result),
-    ), patch(
-        f"{_KS}.KnowledgeFileDao.get_file_by_condition",
-        side_effect=lambda knowledge_id, md5_=None, file_name=None: [existing] if md5_ else [],
+    with (
+        patch.object(service, "_require_permission_id", new=AsyncMock()),
+        patch(
+            f"{_KS}.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
+        ),
+        patch.object(service, "_ensure_space_async_task_tenant_consistency"),
+        patch(
+            f"{_KS}.KnowledgeWebLinkImportService.fetch",
+            new=AsyncMock(return_value=import_result),
+        ),
+        patch(
+            f"{_KS}.KnowledgeFileDao.get_file_by_condition",
+            side_effect=lambda knowledge_id, md5_=None, file_name=None: (
+                dedup_calls.append((md5_, file_name)) or [existing]
+            ),
+        ),
     ):
         with pytest.raises(SpaceFileDuplicateError):
+            await service.import_web_link(
+                knowledge_id=1,
+                url="https://example.com/b",
+            )
+
+    assert len(dedup_calls) == 1
+    assert dedup_calls[0][0] == "real-content-hash"
+    assert dedup_calls[0][1] is not None
+
+
+@pytest.mark.asyncio
+async def test_import_web_link_preserves_name_only_duplicate_error() -> None:
+    service = _service()
+    existing = SimpleNamespace(id=99, md5="different-content-hash")
+    import_result = _import_result(
+        markdown="New article body.\n",
+        final_url="https://example.com/a",
+        content_hash="new-content-hash",
+    )
+
+    with (
+        patch.object(service, "_require_permission_id", new=AsyncMock()),
+        patch(
+            f"{_KS}.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
+        ),
+        patch.object(service, "_ensure_space_async_task_tenant_consistency"),
+        patch(
+            f"{_KS}.KnowledgeWebLinkImportService.fetch",
+            new=AsyncMock(return_value=import_result),
+        ),
+        patch(
+            f"{_KS}.KnowledgeFileDao.get_file_by_condition",
+            return_value=[existing],
+        ),
+    ):
+        with pytest.raises(SpaceFileNameDuplicateError):
             await service.import_web_link(
                 knowledge_id=1,
                 url="https://example.com/b",

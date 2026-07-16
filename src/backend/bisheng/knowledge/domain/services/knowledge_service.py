@@ -1280,8 +1280,11 @@ class KnowledgeService(KnowledgeUtils):
         file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
         # Does it contain duplicate files?
-        content_repeat = KnowledgeFileDao.get_file_by_condition(md5_=md5_, knowledge_id=knowledge.id)
-        name_repeat = KnowledgeFileDao.get_file_by_condition(file_name=original_file_name, knowledge_id=knowledge.id)
+        repeat_files = KnowledgeFileDao.get_file_by_condition(
+            knowledge_id=knowledge.id,
+            md5_=md5_,
+            file_name=original_file_name,
+        )
 
         if not file_info.excel_rule:
             file_info.excel_rule = ExcelRule()
@@ -1293,8 +1296,9 @@ class KnowledgeService(KnowledgeUtils):
         # filename (e.g. F028 conversation export → import, which appends "(N)")
         # force a fresh insert. Otherwise re-importing the same conversation
         # collides on content md5 here and is silently rejected as a duplicate.
-        if (content_repeat or name_repeat) and not skip_dedup:
-            db_file = content_repeat[0] if content_repeat else name_repeat[0]
+        if repeat_files and not skip_dedup:
+            # Preserve the existing precedence: content duplicates win over name-only duplicates.
+            db_file = next((file for file in repeat_files if file.md5 == md5_), repeat_files[0])
             old_name = db_file.file_name
             file_type = file_name.rsplit(".", 1)[-1]
             obj_name = f"tmp/{db_file.id}.{file_type}"

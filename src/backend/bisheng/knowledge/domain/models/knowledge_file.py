@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
@@ -203,16 +203,6 @@ class QAKnowledgeUpsert(QAKnowledgeBase):
 
 
 class KnowledgeFileDao(KnowledgeFileBase):
-    _DUPLICATE_EXCLUDED_STATUSES: ClassVar[tuple[int, ...]] = (
-        KnowledgeFileStatus.FAILED.value,
-        KnowledgeFileStatus.TIMEOUT.value,
-        KnowledgeFileStatus.VIOLATION.value,
-    )
-
-    @classmethod
-    def _apply_duplicate_filters(cls, statement):
-        return statement.where(~KnowledgeFile.status.in_(cls._DUPLICATE_EXCLUDED_STATUSES))
-
     @classmethod
     async def query_by_id(cls, file_id: int) -> KnowledgeFile | None:
         async with get_async_db_session() as session:
@@ -427,17 +417,19 @@ class KnowledgeFileDao(KnowledgeFileBase):
             await session.commit()
 
     @classmethod
-    def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    def get_file_by_condition(cls, knowledge_id: int, md5_: str | None = None, file_name: str | None = None):
         with get_sync_db_session() as session:
-            sql = cls._apply_duplicate_filters(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-            if md5_:
+            sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+            if md5_ and file_name:
+                sql = sql.where(or_(KnowledgeFile.md5 == md5_, KnowledgeFile.file_name == file_name))
+            elif md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
-            if file_name:
+            elif file_name:
                 sql = sql.where(KnowledgeFile.file_name == file_name)
             return session.exec(sql).all()
 
     @classmethod
-    async def get_repeat_file(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    async def get_repeat_file(cls, knowledge_id: int, md5_: str | None = None, file_name: str | None = None):
         # Mirror the list-rendering rule: hide files that are no longer the
         # primary version of any chain. Legacy files (no version row at all)
         # still count as visible. Otherwise an orphaned non-primary leftover
@@ -459,7 +451,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id
         )
 
-        sql = cls._apply_duplicate_filters(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
+        sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         sql = sql.where(
             or_(
                 ~exists(any_version),  # legacy file outside the version system
