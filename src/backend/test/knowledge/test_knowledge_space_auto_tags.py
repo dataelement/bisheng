@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -242,11 +242,20 @@ def test_auto_tag_writes_ai_matches_even_when_manual_match_empty():
 
 
 def test_cap_ai_tags_for_file_respects_existing_ai_tag_count():
-    module_path = "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service"
-
     with patch.object(KnowledgeSpaceAutoTagService, "_count_file_ai_auto_tags", return_value=3):
         capped = KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(99, ["A", "B", "C"])
     assert capped == ["A", "B"]
 
     with patch.object(KnowledgeSpaceAutoTagService, "_count_file_ai_auto_tags", return_value=5):
         assert KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(99, ["A"]) == []
+
+
+def test_count_file_ai_auto_tags_includes_pending_review_tags():
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service"
+    session = MagicMock()
+    session.exec.side_effect = [SimpleNamespace(one=lambda: 2), SimpleNamespace(one=lambda: 3)]
+    ctx = MagicMock()
+    ctx.__enter__.return_value = session
+
+    with patch(f"{module_path}.get_sync_db_session", return_value=ctx):
+        assert KnowledgeSpaceAutoTagService._count_file_ai_auto_tags(42) == 5

@@ -9,6 +9,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+    KnowledgeSpaceAutoTagService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import (
     KnowledgeSpaceReviewTagService,
 )
@@ -62,6 +65,7 @@ def test_review_tag_llm_uses_zero_temperature():
         ),
         patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()) as get_llm,
         patch.object(KnowledgeSpaceReviewTagService, "_invoke_llm", return_value=["新标签"]),
+        patch.object(KnowledgeSpaceAutoTagService, "_cap_ai_tags_for_file", side_effect=lambda _fid, tags: tags),
         patch.object(KnowledgeSpaceReviewTagService, "_append_file_tags") as append_file_tags,
     ):
         KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(knowledge, db_file)
@@ -113,3 +117,36 @@ def test_review_tag_should_run_with_default_library_when_no_explicit_binding():
 
     with patch(_LINK_DAO_PATCH, return_value=[1]):
         assert KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)
+
+
+def test_review_tag_match_limits_to_five_tags():
+    selected = [f"新标签-{i}" for i in range(8)]
+    matched = KnowledgeSpaceReviewTagService._match_library_tags(selected, ["已有标签"])
+    assert matched == [f"新标签-{i}" for i in range(5)]
+
+
+def test_review_tag_cap_skips_when_file_already_has_five_ai_tags():
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_review_tag_service"
+    knowledge = SimpleNamespace(id=1)
+    db_file = SimpleNamespace(id=2, tenant_id=1, user_id=7, abstract="评审内容")
+
+    with (
+        patch.object(KnowledgeSpaceReviewTagService, "_should_run", return_value=True),
+        patch(f"{module_path}.KnowledgeSpaceAutoTagService._resolve_library_ids", return_value=[10]),
+        patch(f"{module_path}.KnowledgeSpaceAutoTagService._collect_library_tags", return_value=(["已有标签"], [])),
+        patch(
+            f"{module_path}.LLMService.get_knowledge_llm",
+            return_value=SimpleNamespace(review_tag_enabled=True, extract_title_model_id=123, review_tag_prompt=""),
+        ),
+        patch(
+            f"{module_path}.SensitiveWordPolicyService.check_text",
+            return_value=SimpleNamespace(enabled=False, hits=[]),
+        ),
+        patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()),
+        patch.object(KnowledgeSpaceReviewTagService, "_invoke_llm", return_value=["新标签-1", "新标签-2"]),
+        patch.object(KnowledgeSpaceAutoTagService, "_cap_ai_tags_for_file", return_value=[]),
+        patch.object(KnowledgeSpaceReviewTagService, "_append_file_tags") as append_file_tags,
+    ):
+        KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(knowledge, db_file)
+
+    append_file_tags.assert_not_called()

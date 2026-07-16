@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+    AUTO_TAG_MAX_AI_TAGS_PER_FILE,
     KnowledgeSpaceAutoTagService,
 )
 from bisheng.knowledge.domain.services.tag_library_tag_service import (
@@ -45,7 +46,7 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     "# task\n"
     "在满足上述所有约束条件的前提下，针对收到的文档内容，请你：\n"
     "1. 分析文档类型与核心主题；\n"
-    "2. 提取 5～10 个精准、多维度的标签，覆盖文档类型、业务领域、关键实体、核心主题等维度；\n"
+    "2. 提取最多 5 个精准、多维度的标签，覆盖文档类型、业务领域、关键实体、核心主题等维度；\n"
     "3. 标签应简洁、规范、具代表性，避免过于宽泛或冗余；\n"
     "4. 候选标签需与用户提供的标签库进行比对，若候选标签已存在于标签库中，则排除该标签；\n"
     "5. 按相关性从高到低排序。\n\n"
@@ -135,6 +136,15 @@ class KnowledgeSpaceReviewTagService:
                     knowledge.id,
                     db_file.id,
                     len(selected),
+                )
+                return
+
+            matched = KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(db_file.id, matched)
+            if not matched:
+                logger.info(
+                    "review_tag_cap_reached space_id={} file_id={}",
+                    knowledge.id,
+                    db_file.id,
                 )
                 return
 
@@ -249,6 +259,8 @@ class KnowledgeSpaceReviewTagService:
         for tag in selected:
             if tag not in not_allowed and tag not in matched:
                 matched.append(tag)
+            if len(matched) >= AUTO_TAG_MAX_AI_TAGS_PER_FILE:
+                break
         return matched
 
     @staticmethod

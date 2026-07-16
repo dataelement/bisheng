@@ -9,6 +9,7 @@ from sqlmodel import func, select
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagLink, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -250,18 +251,33 @@ class KnowledgeSpaceAutoTagService:
 
     @classmethod
     def _count_file_ai_auto_tags(cls, file_id: int) -> int:
+        """Count approved and pending-review AI tags linked to a space file."""
+        file_id_str = str(file_id)
         with get_sync_db_session() as session:
-            count = session.exec(
+            approved_count = session.exec(
                 select(func.count())
                 .select_from(TagLink)
                 .join(Tag, Tag.id == TagLink.tag_id)
                 .where(
-                    TagLink.resource_id == str(file_id),
+                    TagLink.resource_id == file_id_str,
                     TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
                     Tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG.value,
                 )
             ).one()
-        return int(count or 0)
+            pending_review_count = session.exec(
+                select(func.count())
+                .select_from(ReviewTagLink)
+                .join(ReviewTag, ReviewTag.id == ReviewTagLink.tag_id)
+                .where(
+                    ReviewTagLink.resource_id == file_id_str,
+                    ReviewTagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    ReviewTagLink.is_deleted == False,  # noqa: E712
+                    ReviewTag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG.value,
+                    ReviewTag.review_status == 0,
+                    ReviewTag.is_deleted == False,  # noqa: E712
+                )
+            ).one()
+        return int(approved_count or 0) + int(pending_review_count or 0)
 
     @classmethod
     def _cap_ai_tags_for_file(cls, file_id: int, tag_names: list[str]) -> list[str]:
