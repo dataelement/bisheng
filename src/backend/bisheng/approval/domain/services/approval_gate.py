@@ -285,6 +285,21 @@ class ApprovalGate:
             object_name=business_name,
             ip_address=req.ip_address,
         )
+
+        # Nobody approves their own request: if the first node resolves to the applicant
+        # it is approved immediately, which may cascade through later self-approved nodes
+        # and finalize the whole instance (business action fires via the outbox).
+        # Imported here because approval_center_service imports this module.
+        from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+
+        center_service = ApprovalCenterService(instance_repository=self.instance_repository)
+        if await center_service.auto_approve_self_tasks(instance=instance, tasks=tasks):
+            # decide_task updated the instance behind our back; re-read to see whether the
+            # cascade finished the whole flow rather than stopping at a later node.
+            refreshed = await self.instance_repository.get_instance(instance.id)
+            if refreshed is not None and refreshed.status == ApprovalInstanceStatus.APPROVED:
+                return ApprovalGateResult(decision=ApprovalGateDecision.PASS, instance_id=instance.id)
+
         return ApprovalGateResult(
             decision=ApprovalGateDecision.PENDING,
             instance_id=instance.id,
