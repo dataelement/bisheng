@@ -255,18 +255,23 @@ html {
 
 /* Green brand theme — toggled via `theme-green` class on <html>.
    Re-points the brand palette + the few brand-tinted tokens. Frontend-only.
-   Mirrors the blue ramp: 500 = main #187C54, 600 = pressed, 50 = #E4F1EC tint. */
+   Ramp re-derived 2026-07-15 anchored on the FIXED primary #169C47 (the old
+   steps sat at hue ~157° teal while 500 is 142° green, so 500 jumped out):
+   light side keeps the OLD ramp's saturation/brightness envelope (the Arco-
+   algorithm version hit v=100 and read neon; designer nixed it) with only the
+   hue rotated onto the 500 family (−2°/step, same drift as the blue lights);
+   dark side mirrors the blue ramp's dark-side HSV geometry. */
 .theme-green {
-  --brand-50: 228 241 236;   /* #E4F1EC — light tint / selection bg */
-  --brand-100: 204 228 218;  /* #CCE4DA */
-  --brand-200: 163 210 192;  /* #A3D2C0 */
-  --brand-300: 111 186 160;  /* #6FBAA0 */
-  --brand-400: 61 155 120;   /* #3D9B78 */
-  --brand-500: 22 156 71;    /* #169C47 — main brand green */
-  --brand-600: 19 99 69;     /* #136345 — button / pressed */
-  --brand-700: 15 77 54;     /* #0F4D36 */
-  --brand-800: 10 56 38;     /* #0A3826 */
-  --brand-900: 6 38 25;      /* #062619 */
+  --brand-50: 228 241 231;   /* #E4F1E7 — light tint / selection bg */
+  --brand-100: 204 228 210;  /* #CCE4D2 */
+  --brand-200: 163 210 176;  /* #A3D2B0 */
+  --brand-300: 111 186 133;  /* #6FBA85 */
+  --brand-400: 61 155 92;    /* #3D9B5C */
+  --brand-500: 22 156 71;    /* #169C47 — main brand green (FIXED, do not touch) */
+  --brand-600: 9 139 53;     /* #098B35 — button / pressed */
+  --brand-700: 7 105 41;     /* #076929 */
+  --brand-800: 7 78 32;      /* #074E20 */
+  --brand-900: 6 50 22;      /* #063216 */
   --brand-main: 22 156 71;   /* #169C47 */
   --brand-muted: 92 138 119; /* #5C8A77 — muted/low-sat brand accent (e.g. pin) */
 
@@ -281,7 +286,7 @@ html {
      matching --brand-500. The old 154 67% 29% rounded to rgb(24,123,81), so
      bg-primary (e.g. picker checkboxes) drifted ~3/255 off the brand green. */
   --primary: 142 75% 35%;
-  --surface-active-alt: rgb(228 241 236);
+  --surface-active-alt: rgb(228 241 231); /* = --brand-50 (keep in sync) */
   --surface-primary-alt: #f4faf7;
   --search-input: hsla(152, 40%, 99%, 1);
 }
