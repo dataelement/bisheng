@@ -64,11 +64,11 @@ const HIDDEN_DETAIL_KEYS = new Set([
 
 function StatusBadge({ enabled }: { enabled?: boolean }) {
   return enabled ? (
-    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-green-50 text-green-600 border border-green-200">
+    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-green-50 text-green-600 border border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-500/30">
       已启用
     </span>
   ) : (
-    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
+    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 dark:bg-gray-50/10 dark:text-gray-400 dark:border-gray-50/20">
       已停用
     </span>
   );
@@ -87,9 +87,9 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center gap-2 py-3">
-      <span className="text-text-secondary">{icon}</span>
-      <span className="text-sm font-semibold text-text-primary">{title}</span>
-      {hint && <span className="text-xs text-text-secondary">{hint}</span>}
+      <span className="text-muted-foreground">{icon}</span>
+      <span className="text-sm font-semibold text-foreground">{title}</span>
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
       <div className="ml-auto">{action}</div>
     </div>
   );
@@ -112,8 +112,8 @@ function ActionBtn({
     variant === "primary"
       ? "inline-flex items-center gap-1 rounded px-3 py-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
       : variant === "outline"
-        ? "inline-flex items-center gap-1 rounded border border-border-subtle px-3 py-1.5 text-xs text-text-primary hover:bg-gray-50"
-        : "inline-flex items-center justify-center rounded p-1 text-text-secondary hover:bg-gray-100 hover:text-text-primary";
+        ? "inline-flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
+        : "inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-gray-100 dark:hover:bg-gray-50/15 hover:text-foreground";
   return (
     <button type="button" className={`${base}${className ? ` ${className}` : ""}`} onClick={onClick} aria-label={label} title={label}>
       {children}
@@ -254,12 +254,12 @@ function AddScenarioDialog({
           <DialogTitle>{t("approvalPage.addScenarioTitle", { defaultValue: "新增审批场景" })}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <label className="block text-sm text-text-secondary">
+          <label className="block text-sm text-muted-foreground">
             {t("approvalPage.scenarioNameLabel", { defaultValue: "场景名称" })}
             <select
               value={selected}
               onChange={(e) => setSelected(e.target.value)}
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             >
               {available.length === 0 && (
                 <option value="">{t("approvalPage.allPresetsAdded", { defaultValue: "（所有预置场景已添加）" })}</option>
@@ -272,16 +272,16 @@ function AddScenarioDialog({
             </select>
           </label>
           {preset && (
-            <div className="rounded-lg bg-gray-50 p-3 text-xs text-text-secondary space-y-1.5">
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-50/[0.06] p-3 text-xs text-muted-foreground space-y-1.5">
               {conditionFieldLabels && (
                 <div>
-                  <span className="font-medium text-text-primary">{t("approvalPage.conditionLabel")}：</span>
+                  <span className="font-medium text-foreground">{t("approvalPage.conditionLabel")}：</span>
                   {conditionFieldLabels}
                 </div>
               )}
               {approverSourceLabels && (
                 <div>
-                  <span className="font-medium text-text-primary">{t("approvalPage.approverSourceLabel")}：</span>
+                  <span className="font-medium text-foreground">{t("approvalPage.approverSourceLabel")}：</span>
                   {approverSourceLabels}
                 </div>
               )}
@@ -292,7 +292,7 @@ function AddScenarioDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
           >
             {t("cancel", { defaultValue: "取消" })}
           </button>
@@ -391,24 +391,24 @@ function RouteDialog({
           <DialogTitle>{initial.id ? t("approvalPage.editRoute") : t("approvalPage.addRoute")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <label className="block text-sm text-text-secondary">
+          <label className="block text-sm text-muted-foreground">
             {t("approvalPage.routeNameLabel")}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="如：管理员直接通过"
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
           </label>
 
           {/* Condition */}
-          <div className="rounded-lg border border-border-subtle bg-gray-50 p-3 space-y-3">
-            <div className="text-xs font-medium text-text-secondary">{t("approvalPage.matchConditionHint")}</div>
+          <div className="rounded-lg border border-border bg-gray-50 dark:bg-gray-50/[0.06] p-3 space-y-3">
+            <div className="text-xs font-medium text-muted-foreground">{t("approvalPage.matchConditionHint")}</div>
             <div className="flex items-center gap-2">
               <select
                 value={condField}
                 onChange={(e) => handleFieldChange(e.target.value)}
-                className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none"
               >
                 <option value="">{t("approvalPage.noCondition")}</option>
                 {conditionFields.map((f) => (
@@ -421,7 +421,7 @@ function RouteDialog({
               </select>
               {condField && (
                 <>
-                  <span className="text-xs text-text-secondary">=</span>
+                  <span className="text-xs text-muted-foreground">=</span>
                   {hasEnumValues ? (
                     condField === 'applicant_role' ? (
                       // Searchable dropdown for applicant_role (may have many system roles)
@@ -440,7 +440,7 @@ function RouteDialog({
                       <select
                         value={condValue}
                         onChange={(e) => setCondValue(e.target.value)}
-                        className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                        className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none"
                       >
                         <option value="">{t("approvalPage.pleaseSelect")}</option>
                         {effectiveValues.map((v) => (
@@ -455,36 +455,36 @@ function RouteDialog({
                       value={condValue}
                       onChange={(e) => setCondValue(e.target.value)}
                       placeholder={t("approvalPage.inputConditionValue")}
-                      className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                      className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none"
                     />
                   )}
                 </>
               )}
             </div>
             {condField && !condValue && (
-              <p className="text-xs text-amber-500">{t("approvalPage.conditionValueWarning")}</p>
+              <p className="text-xs text-amber-500 dark:text-amber-400">{t("approvalPage.conditionValueWarning")}</p>
             )}
           </div>
 
           {/* Route type */}
-          <label className="block text-sm text-text-secondary">
+          <label className="block text-sm text-muted-foreground">
             {t("approvalPage.routeTypeLabel")}
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             >
               <option value="pass">{t("approvalPage.routeTypePassFull")}</option>
               <option value="flow">{t("approvalPage.routeTypeFlowFull")}</option>
             </select>
           </label>
           {type === "flow" && (
-            <label className="block text-sm text-text-secondary">
+            <label className="block text-sm text-muted-foreground">
               {t("approvalPage.bindFlow")}
               <select
                 value={flowId}
                 onChange={(e) => setFlowId(e.target.value)}
-                className={`mt-1 block h-10 w-full rounded-lg border bg-background-primary px-3 text-sm text-text-primary outline-none ${!flowId ? "border-red-400" : "border-border-subtle"}`}
+                className={`mt-1 block h-10 w-full rounded-lg border bg-background px-3 text-sm text-foreground outline-none ${!flowId ? "border-red-400 dark:border-red-500/60" : "border-border"}`}
               >
                 <option value="">{t("approvalPage.selectFlow")}</option>
                 {flows.map((f) => (
@@ -494,7 +494,7 @@ function RouteDialog({
                 ))}
               </select>
               {!flowId && (
-                <p className="mt-1 text-xs text-red-500">{t("approvalPage.flowRequiredHint")}</p>
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{t("approvalPage.flowRequiredHint")}</p>
               )}
             </label>
           )}
@@ -503,7 +503,7 @@ function RouteDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
           >
             {t("approvalPage.cancel")}
           </button>
@@ -554,13 +554,13 @@ function FlowDialog({
           <DialogTitle>{initial.id ? t("approvalPage.editFlow") : t("approvalPage.createFlow")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <label className="block text-sm text-text-secondary">
+          <label className="block text-sm text-muted-foreground">
             {t("approvalPage.flowNameLabel")}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="如：菜单权限审批流程 A"
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
           </label>
         </div>
@@ -568,7 +568,7 @@ function FlowDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
           >
             {t("approvalPage.cancel")}
           </button>
@@ -734,22 +734,22 @@ function NodeDialog({
           <DialogTitle>{initial.id ? t("approvalPage.editNode") : t("approvalPage.addNode")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <label className="block text-sm text-text-secondary">
+          <label className="block text-sm text-muted-foreground">
             {t("approvalPage.nodeNameLabel")}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="如：申请人部门管理员审批"
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
           </label>
-          <div className="text-sm text-text-secondary">
+          <div className="text-sm text-muted-foreground">
             {t("approvalPage.approverSourceSectionLabel")}
             <div className="mt-1 flex flex-wrap gap-2">
               {sources.map((s) => (
                 <span
                   key={s.type}
-                  className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 py-0.5 text-xs text-foreground"
                 >
                   {s.type === "direct_user" ? (
                     <button
@@ -765,7 +765,7 @@ function NodeDialog({
                   <button
                     type="button"
                     onClick={() => removeSource(s.type)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     ×
                   </button>
@@ -774,7 +774,7 @@ function NodeDialog({
               <select
                 value=""
                 onChange={(e) => e.target.value && addSource(e.target.value)}
-                className="h-7 rounded-full border border-dashed border-border-subtle bg-gray-50 px-2 text-xs text-text-secondary outline-none"
+                className="h-7 rounded-full border border-dashed border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 text-xs text-muted-foreground outline-none"
               >
                 <option value="">＋ {t("approvalPage.addApprover")}</option>
                 {effectiveSourceOptions.filter((o) => !sources.some((s) => s.type === o.value)).map(
@@ -787,12 +787,12 @@ function NodeDialog({
               </select>
             </div>
           </div>
-          <label className="block text-sm text-text-secondary">
+          <label className="block text-sm text-muted-foreground">
             {t("approvalPage.nodeModeLabel")}
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value)}
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             >
               <option value="or">{t("approvalPage.nodeModeOrFull")}</option>
               <option value="and">{t("approvalPage.nodeModeAndFull")}</option>
@@ -803,7 +803,7 @@ function NodeDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
           >
             {t("approvalPage.cancel")}
           </button>
@@ -843,21 +843,21 @@ function NodeDialog({
             value={userSearch}
             onChange={(e) => setUserSearch(e.target.value)}
             placeholder={t("approvalPage.searchUser")}
-            className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+            className="block h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
           />
           <div
-            className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle"
+            className="max-h-60 overflow-y-auto rounded-lg border border-border divide-y divide-border"
             onScroll={handleUserListScroll}
           >
             {userList.length === 0 && !userLoading && (
-              <div className="py-4 text-center text-xs text-text-secondary">暂无用户</div>
+              <div className="py-4 text-center text-xs text-muted-foreground">暂无用户</div>
             )}
             {userList.map((u) => {
               const checked = selectedUserIds.includes(u.user_id);
               return (
                 <label
                   key={u.user_id}
-                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-50/10"
                 >
                   <input
                     type="checkbox"
@@ -871,18 +871,18 @@ function NodeDialog({
                         setSelectedUserNames((names) => [...names, u.user_name]);
                       }
                     }}
-                    className="h-4 w-4 rounded border-border-subtle accent-primary"
+                    className="h-4 w-4 rounded border-border accent-primary"
                   />
-                  <span className="text-sm text-text-primary">{u.user_name}</span>
+                  <span className="text-sm text-foreground">{u.user_name}</span>
                 </label>
               );
             })}
             {userLoading && (
-              <div className="py-2 text-center text-xs text-text-secondary">加载中…</div>
+              <div className="py-2 text-center text-xs text-muted-foreground">加载中…</div>
             )}
           </div>
           {selectedUserIds.length > 0 && (
-            <div className="text-xs text-text-secondary">
+            <div className="text-xs text-muted-foreground">
               已选 {selectedUserIds.length} 人：{selectedUserNames.join("、")}
             </div>
           )}
@@ -891,7 +891,7 @@ function NodeDialog({
           <button
             type="button"
             onClick={() => setUserPickerOpen(false)}
-            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
           >
             {t("approvalPage.cancel")}
           </button>
@@ -913,17 +913,17 @@ function NodeDialog({
 // ─── Approval progress timeline (for exception detail) ───────────────────────
 
 const NODE_BADGE_CLS: Record<string, string> = {
-  approved:  "bg-green-50 text-green-600",
-  rejected:  "bg-red-50 text-red-600",
-  pending:   "bg-blue-50 text-blue-600",
-  skipped:   "bg-gray-100 text-gray-500",
-  cancelled: "bg-gray-100 text-gray-500",
+  approved:  "bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  rejected:  "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+  pending:   "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  skipped:   "bg-gray-100 text-gray-500 dark:bg-gray-50/10 dark:text-gray-400",
+  cancelled: "bg-gray-100 text-gray-500 dark:bg-gray-50/10 dark:text-gray-400",
 };
 
 function taskIcon(status: string): { icon: string; cls: string } {
   if (status === "approved")  return { icon: "✓", cls: "text-green-600" };
   if (status === "rejected")  return { icon: "✗", cls: "text-red-500" };
-  if (status === "skipped" || status === "cancelled") return { icon: "⊘", cls: "text-gray-400" };
+  if (status === "skipped" || status === "cancelled") return { icon: "⊘", cls: "text-muted-foreground" };
   return { icon: "●", cls: "text-blue-500" };
 }
 
@@ -952,11 +952,11 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
   let stepIdx = 0;
 
   const renderConnector = (isLast: boolean) =>
-    !isLast ? <span className="mt-1 w-px flex-1 bg-gray-200 min-h-[12px]" /> : null;
+    !isLast ? <span className="mt-1 w-px flex-1 bg-border min-h-[12px]" /> : null;
 
   return (
-    <div className="mt-4 rounded-lg border border-border-subtle bg-gray-50 px-4 py-3 space-y-0">
-      <div className="mb-2 text-xs font-semibold text-text-secondary">{t("approvalPage.timeline_title")}</div>
+    <div className="mt-4 rounded-lg border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-4 py-3 space-y-0">
+      <div className="mb-2 text-xs font-semibold text-muted-foreground">{t("approvalPage.timeline_title")}</div>
 
       {/* submit / resubmit logs */}
       {submitLogs.map((log, i) => {
@@ -970,14 +970,14 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
               {renderConnector(isLast)}
             </div>
             <div className={`min-w-0 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
-              <div className="text-xs font-medium text-text-primary">
+              <div className="text-xs font-medium text-foreground">
                 {isSubmit ? t("approvalPage.timeline_submitApply") : t("approvalPage.timeline_resubmit")}
               </div>
               {log.operator_user_name && (
-                <div className="text-[11px] text-text-secondary">{log.operator_user_name}</div>
+                <div className="text-[11px] text-muted-foreground">{log.operator_user_name}</div>
               )}
               {log.create_time && (
-                <div className="text-[11px] text-text-tertiary">{formatDateTime(log.create_time)}</div>
+                <div className="text-[11px] text-muted-foreground/70">{formatDateTime(log.create_time)}</div>
               )}
             </div>
           </div>
@@ -999,10 +999,10 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
           : matchedTasks.some((t) => t.status === "skipped") ? "skipped"
           : (matchedTasks[0]?.status ?? "pending");
         const s = aggStatus.toLowerCase();
-        const dotColor = isNotStarted ? "bg-gray-300"
+        const dotColor = isNotStarted ? "bg-muted-foreground/40"
           : s === "approved" ? "bg-green-500"
           : s === "rejected" ? "bg-red-500"
-          : (s === "cancelled" || s === "skipped") ? "bg-gray-400"
+          : (s === "cancelled" || s === "skipped") ? "bg-muted-foreground"
           : "bg-blue-500";
         const isLast = stepIdx === totalSteps - (hasTrailingLogs ? trailingLogs.length : 0)
           && i === nodes.length - 1 && !hasTrailingLogs;
@@ -1017,7 +1017,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
             </div>
             <div className={`min-w-0 flex-1 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={`text-xs font-medium ${isNotStarted ? "text-text-secondary" : "text-text-primary"}`}>
+                <span className={`text-xs font-medium ${isNotStarted ? "text-muted-foreground" : "text-foreground"}`}>
                   {node.node_name || "--"}
                 </span>
                 {!isNotStarted && badgeCls && badgeText && (
@@ -1027,7 +1027,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
                 )}
               </div>
               {isNotStarted && (
-                <div className="text-[11px] text-text-secondary">{t("approvalPage.timeline_notArrived")}</div>
+                <div className="text-[11px] text-muted-foreground">{t("approvalPage.timeline_notArrived")}</div>
               )}
               {matchedTasks.length > 0 && (
                 <div className="mt-1.5 space-y-1">
@@ -1036,21 +1036,21 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
                     const { icon, cls } = taskIcon(ts);
                     const tLabel = nodeBadgeText[ts] ?? ts;
                     return (
-                      <div key={task.task_id ?? task.id} className="rounded border border-border-subtle bg-white px-2.5 py-1.5">
+                      <div key={task.task_id ?? task.id} className="rounded border border-border bg-card px-2.5 py-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1">
                             <span className={`text-[11px] font-bold ${cls}`}>{icon}</span>
                             {task.approver_user_name && (
-                              <span className="text-xs text-text-primary">{task.approver_user_name}</span>
+                              <span className="text-xs text-foreground">{task.approver_user_name}</span>
                             )}
-                            <span className="text-[11px] text-text-secondary">{tLabel}</span>
+                            <span className="text-[11px] text-muted-foreground">{tLabel}</span>
                           </div>
                           {task.update_time && ts !== "pending" && (
-                            <span className="shrink-0 text-[10px] text-text-tertiary">{formatDateTime(task.update_time)}</span>
+                            <span className="shrink-0 text-[10px] text-muted-foreground/70">{formatDateTime(task.update_time)}</span>
                           )}
                         </div>
                         {task.comment && (
-                          <div className="mt-1 rounded bg-gray-50 px-2 py-1 text-[11px] text-text-secondary break-all">
+                          <div className="mt-1 rounded bg-gray-100 px-2 py-1 text-[11px] text-muted-foreground break-all dark:bg-gray-50/10">
                             {task.comment}
                           </div>
                         )}
@@ -1069,7 +1069,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
         stepIdx++;
         const isLast = stepIdx === totalSteps;
         const a = String(log.action || "").toLowerCase();
-        const dotCls = a === "approved" ? "bg-green-500" : a === "rejected" ? "bg-red-500" : "bg-gray-400";
+        const dotCls = a === "approved" ? "bg-green-500" : a === "rejected" ? "bg-red-500" : "bg-muted-foreground";
         const titleMap: Record<string, string> = {
           withdrawn: t("approvalPage.timeline_actionWithdrawn"),
           cancelled: t("approvalPage.timeline_actionCancelled"),
@@ -1087,17 +1087,17 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
               {renderConnector(isLast)}
             </div>
             <div className={`min-w-0 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
-              <div className="text-xs font-medium text-text-primary">{title}</div>
+              <div className="text-xs font-medium text-foreground">{title}</div>
               {log.operator_user_name && (
-                <div className="text-[11px] text-text-secondary">{log.operator_user_name}</div>
+                <div className="text-[11px] text-muted-foreground">{log.operator_user_name}</div>
               )}
               {log.detail?.comment && (
-                <div className="mt-1 rounded bg-gray-50 px-2 py-1 text-[11px] text-text-secondary break-all">
+                <div className="mt-1 rounded bg-gray-100 px-2 py-1 text-[11px] text-muted-foreground break-all dark:bg-gray-50/10">
                   {log.detail.comment}
                 </div>
               )}
               {log.create_time && (
-                <div className="text-[11px] text-text-tertiary">{formatDateTime(log.create_time)}</div>
+                <div className="text-[11px] text-muted-foreground/70">{formatDateTime(log.create_time)}</div>
               )}
             </div>
           </div>
@@ -1105,7 +1105,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
       })}
 
       {nodes.length === 0 && submitLogs.length === 0 && (
-        <div className="text-xs text-text-secondary py-2">{t("approvalPage.timeline_empty")}</div>
+        <div className="text-xs text-muted-foreground py-2">{t("approvalPage.timeline_empty")}</div>
       )}
     </div>
   );
@@ -1604,8 +1604,8 @@ export default function ApprovalPage() {
   return (
     <div className="flex h-full flex-col bg-background-main-content">
       {/* page header */}
-      <div className="border-b border-border-subtle px-6 pt-6 pb-0">
-        <h1 className="text-xl font-semibold text-text-primary">{t("approvalPage.title")}</h1>
+      <div className="border-b border-border px-6 pt-6 pb-0">
+        <h1 className="text-xl font-semibold text-foreground">{t("approvalPage.title")}</h1>
         {/* tabs */}
         <div className="mt-4 flex gap-1">
           {(["flow", "exception"] as const).map((tab) => (
@@ -1615,8 +1615,8 @@ export default function ApprovalPage() {
               onClick={() => { setActiveTab(tab); void loadPage(); }}
               className={`rounded-t px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab
-                  ? "border border-b-0 border-border-subtle bg-white text-primary"
-                  : "text-text-secondary hover:text-text-primary"
+                  ? "border border-b-0 border-border bg-card text-primary"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {tab === "flow" ? t("approvalPage.tabFlow") : t("approvalPage.tabException")}
@@ -1629,13 +1629,13 @@ export default function ApprovalPage() {
       {activeTab === "flow" && (
         <div className="flex flex-1 overflow-hidden">
           {/* left: scenario list */}
-          <aside className="flex w-[268px] shrink-0 flex-col border-r border-border-subtle bg-white">
-            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-              <span className="text-sm font-semibold text-text-primary">{t("approvalPage.scenarioSection")}</span>
+          <aside className="flex w-[268px] shrink-0 flex-col border-r border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <span className="text-sm font-semibold text-foreground">{t("approvalPage.scenarioSection")}</span>
               <button
                 type="button"
                 onClick={() => setShowAddScenario(true)}
-                className="inline-flex items-center gap-1 rounded border border-border-subtle px-2.5 py-1 text-xs text-text-primary hover:bg-gray-50"
+                className="inline-flex items-center gap-1 rounded border border-border px-2.5 py-1 text-xs text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
               >
                 <Plus size={12} />
                 {t("approvalPage.add")}
@@ -1652,11 +1652,11 @@ export default function ApprovalPage() {
                     className={`group relative w-full rounded-lg border px-3 py-3 text-left transition-colors ${
                       active
                         ? "border-primary/30 bg-primary/5"
-                        : "border-border-subtle bg-white hover:bg-gray-50"
+                        : "border-border bg-card hover:bg-gray-50 dark:hover:bg-gray-50/10"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="flex-1 min-w-0 text-sm font-medium text-text-primary leading-snug truncate">
+                      <span className="flex-1 min-w-0 text-sm font-medium text-foreground leading-snug truncate">
                         {s.scenario_name}
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
@@ -1670,7 +1670,7 @@ export default function ApprovalPage() {
                           e.stopPropagation();
                           setEditScenarioDialog({ open: true, scenario: s, name: s.scenario_name });
                         }}
-                        className="text-gray-400 hover:text-gray-600"
+                        className="text-muted-foreground hover:text-foreground"
                       >
                         <Pencil size={13} />
                       </button>
@@ -1681,7 +1681,7 @@ export default function ApprovalPage() {
                           e.stopPropagation();
                           handleDeleteScenario(s);
                         }}
-                        className="text-gray-400 hover:text-red-500"
+                        className="text-muted-foreground hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1692,7 +1692,7 @@ export default function ApprovalPage() {
                 );
               })}
               {scenarios.length === 0 && (
-                <div className="py-8 text-center text-xs text-text-secondary">
+                <div className="py-8 text-center text-xs text-muted-foreground">
                   {t("approvalPage.noScenarios")}
                 </div>
               )}
@@ -1702,20 +1702,20 @@ export default function ApprovalPage() {
           {/* right: scenario detail */}
           <main className="flex flex-1 flex-col overflow-y-auto">
             {!selectedScenario ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-text-secondary">
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                 {t("approvalPage.selectScenarioHint")}
               </div>
             ) : (
               <div className="flex flex-col gap-0">
                 {/* scenario header */}
-                <div className="flex items-center justify-between border-b border-border-subtle bg-white px-6 py-4">
+                <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-base font-semibold text-text-primary">
+                    <span className="text-base font-semibold text-foreground">
                       {selectedScenario.scenario_name}
                     </span>
                     <StatusBadge enabled={selectedScenario.enabled} />
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>{t("approvalPage.enabled")}</span>
                     <Switch
                       checked={!!selectedScenario.enabled}
@@ -1726,7 +1726,7 @@ export default function ApprovalPage() {
 
                 <div className="flex flex-col gap-px">
                   {/* ── condition branches ─────────────────────────────── */}
-                  <div className="bg-white px-6 pt-0 pb-4">
+                  <div className="bg-card px-6 pt-0 pb-4">
                     <SectionHeader
                       icon={<Filter size={14} />}
                       title={t("approvalPage.routeTitle")}
@@ -1740,9 +1740,9 @@ export default function ApprovalPage() {
                         </ActionBtn>
                       }
                     />
-                    <div className="rounded-lg border border-border-subtle overflow-hidden">
+                    <div className="rounded-lg border border-border overflow-hidden">
                       {routes.length === 0 && (
-                        <div className="py-6 text-center text-xs text-text-secondary">
+                        <div className="py-6 text-center text-xs text-muted-foreground">
                           {t("approvalPage.noRoutes")}
                         </div>
                       )}
@@ -1755,20 +1755,20 @@ export default function ApprovalPage() {
                           <div
                             key={route.id}
                             className={`flex items-center gap-3 px-4 py-3 ${
-                              idx < routes.length - 1 ? "border-b border-border-subtle" : ""
+                              idx < routes.length - 1 ? "border-b border-border" : ""
                             }`}
                           >
                             {/* index */}
-                            <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded bg-gray-100 text-xs font-medium text-gray-500">
+                            <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded bg-gray-100 text-xs font-medium text-gray-500 dark:bg-gray-50/10 dark:text-gray-400">
                               {idx + 1}
                             </span>
                             {/* name + condition */}
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-text-primary leading-tight">
+                              <div className="text-sm font-medium text-foreground leading-tight">
                                 {route.route_name || `分支 #${route.id}`}
                               </div>
                               {matchLabel && (
-                                <div className="mt-0.5 text-xs text-text-secondary">
+                                <div className="mt-0.5 text-xs text-muted-foreground">
                                   {matchLabel}
                                 </div>
                               )}
@@ -1776,19 +1776,19 @@ export default function ApprovalPage() {
                             {/* route result */}
                             <div className="shrink-0 flex items-center gap-2">
                               {route.route_type === "pass" ? (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs text-green-600">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs text-green-600 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-400">
                                   <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                                   {t("approvalPage.routeTypePassFull")}
                                 </span>
                               ) : (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs text-text-primary">
+                                  <span className="text-xs text-foreground">
                                     {flowName ?? `流程 #${route.flow_definition_id}`}
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => void handleFlowPreview(route)}
-                                    className="inline-flex items-center gap-1 rounded border border-border-subtle px-2 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
+                                    className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
                                   >
                                     <Eye size={11} /> {t("approvalPage.flowPreview")}
                                   </button>
@@ -1819,7 +1819,7 @@ export default function ApprovalPage() {
                                 <Pencil size={13} />
                               </ActionBtn>
                               <ActionBtn label={t("approvalPage.delete")} onClick={() => handleDeleteRoute(route)}>
-                                <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
+                                <Trash2 size={13} className="text-muted-foreground hover:text-red-500 dark:hover:text-red-400" />
                               </ActionBtn>
                             </div>
                           </div>
@@ -1832,7 +1832,7 @@ export default function ApprovalPage() {
                   <div className="h-2 bg-background-main-content" />
 
                   {/* ── approval flows ─────────────────────────────────── */}
-                  <div className="bg-white px-6 pt-0 pb-6">
+                  <div className="bg-card px-6 pt-0 pb-6">
                     <SectionHeader
                       icon={<Users size={14} />}
                       title={t("approvalPage.flowTitle")}
@@ -1865,7 +1865,7 @@ export default function ApprovalPage() {
                           setSelectedFlowId(id);
                           setNodes(id ? await listApprovalNodesApi(id) : []);
                         }}
-                        className="h-9 rounded-lg border border-border-subtle bg-white px-3 text-sm text-text-primary outline-none"
+                        className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
                       >
                         <option value="">{t("approvalPage.selectFlow")}</option>
                         {flows.map((f) => (
@@ -1932,13 +1932,13 @@ export default function ApprovalPage() {
 
                     {/* node list */}
                     {!selectedFlowId ? (
-                      <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
+                      <div className="rounded-lg border border-dashed border-border py-8 text-center text-xs text-muted-foreground">
                         {t("approvalPage.selectFlowHint")}
                       </div>
                     ) : (() => {
                       const displayNodes = isNodeEditMode ? draftNodes : nodes;
                       return displayNodes.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
+                      <div className="rounded-lg border border-dashed border-border py-8 text-center text-xs text-muted-foreground">
                         {isNodeEditMode
                           ? t("approvalPage.noNodes")
                           : <>{t("approvalPage.noNodes")} — <button type="button" className="text-primary underline" onClick={enterNodeEditMode}>{t("approvalPage.editNodesBtn", { defaultValue: "编辑节点" })}</button></>
@@ -1947,12 +1947,12 @@ export default function ApprovalPage() {
                     ) : (
                       <>
                       {isNodeEditMode && (
-                        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                           <Pencil size={11} className="shrink-0" />
                           <span>{t("approvalPage.nodeEditModeHint", { defaultValue: "编辑中 — 增删改节点后点击「保存更改」才会生效，并自动创建新版本快照" })}</span>
                         </div>
                       )}
-                      <div className="rounded-lg border border-border-subtle overflow-hidden">
+                      <div className="rounded-lg border border-border overflow-hidden">
                         {displayNodes.map((node, idx) => {
                           const sources: { type: string; label: string }[] =
                             (node.approver_config?.sources as any[]) ?? [];
@@ -1960,19 +1960,19 @@ export default function ApprovalPage() {
                             <div
                               key={node.id}
                               className={`px-4 py-3 ${
-                                idx < nodes.length - 1 ? "border-b border-border-subtle" : ""
+                                idx < nodes.length - 1 ? "border-b border-border" : ""
                               }`}
                             >
                               {/* node header row */}
                               <div className="flex items-center gap-3">
-                                <span className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
+                                <span className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600 dark:bg-gray-50/10 dark:text-gray-300">
                                   {idx + 1}
                                 </span>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-text-primary">
+                                  <div className="text-sm font-medium text-foreground">
                                     {node.node_name || node.node_code}
                                   </div>
-                                  <div className="mt-0.5 text-xs text-text-secondary">
+                                  <div className="mt-0.5 text-xs text-muted-foreground">
                                     当前节点通过后，才会生成下一节点任务
                                   </div>
                                 </div>
@@ -1991,7 +1991,7 @@ export default function ApprovalPage() {
                                       setDraftNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, node_mode: e.target.value } : n));
                                       setIsNodeDirty(true);
                                     }}
-                                    className="h-7 rounded border border-border-subtle bg-white px-2 text-xs text-text-primary outline-none"
+                                    className="h-7 rounded border border-border bg-background px-2 text-xs text-foreground outline-none"
                                   >
                                     <option value="or">{t("approvalPage.nodeModeOr")}</option>
                                     <option value="and">{t("approvalPage.nodeModeAnd")}</option>
@@ -2000,7 +2000,7 @@ export default function ApprovalPage() {
                                     <Pencil size={13} />
                                   </ActionBtn>
                                   <ActionBtn onClick={() => handleDeleteNode(node)}>
-                                    <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
+                                    <Trash2 size={13} className="text-muted-foreground hover:text-red-500 dark:hover:text-red-400" />
                                   </ActionBtn>
                                 </div>
                               </div>
@@ -2012,9 +2012,9 @@ export default function ApprovalPage() {
                                     return userNames.map((name: string) => (
                                       <span
                                         key={`${src.type}-${name}`}
-                                        className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                        className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2.5 py-0.5 text-xs text-foreground"
                                       >
-                                        <Users size={10} className="text-text-secondary" />
+                                        <Users size={10} className="text-muted-foreground" />
                                         {name}
                                       </span>
                                     ));
@@ -2022,9 +2022,9 @@ export default function ApprovalPage() {
                                   return (
                                     <span
                                       key={src.type}
-                                      className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                      className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2.5 py-0.5 text-xs text-foreground"
                                     >
-                                      <Users size={10} className="text-text-secondary" />
+                                      <Users size={10} className="text-muted-foreground" />
                                       {(() => {
                                         const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
                                         return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
@@ -2036,13 +2036,13 @@ export default function ApprovalPage() {
                                   <button
                                     type="button"
                                     onClick={() => setNodeDialog({ open: true, initial: node })}
-                                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-border-subtle px-2.5 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
+                                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
                                   >
                                     <Plus size={10} /> {t("approvalPage.addApprover")}
                                     <ChevronDown size={10} />
                                   </button>
                                 )}
-                                <span className="inline-flex items-center rounded border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-secondary">
+                                <span className="inline-flex items-center rounded border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 py-0.5 text-xs text-muted-foreground">
                                   {node.node_mode === "and" ? t("approvalPage.nodeModeAnd") : t("approvalPage.nodeModeOr")}
                                 </span>
                               </div>
@@ -2065,7 +2065,7 @@ export default function ApprovalPage() {
       {activeTab === "exception" && (
         <div className="flex-1 overflow-y-auto p-6">
           {exceptions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-sm text-text-secondary">
+            <div className="flex flex-col items-center justify-center h-64 text-sm text-muted-foreground">
               {t("approvalPage.noExceptions")}
             </div>
           ) : (
@@ -2073,7 +2073,7 @@ export default function ApprovalPage() {
               {exceptions.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-xl border border-border-subtle bg-white p-4"
+                  className="rounded-xl border border-border bg-card p-4"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -2081,10 +2081,10 @@ export default function ApprovalPage() {
                         <span className={[
                           "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
                           item.exception_type === "execute_failed"
-                            ? "bg-red-100 text-red-700"
+                            ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
                             : item.exception_type === "approver_empty"
-                              ? "bg-orange-100 text-orange-700"
-                              : "bg-yellow-100 text-yellow-700",
+                              ? "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400"
+                              : "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
                         ].join(" ")}>
                           {item.exception_type === "route_missing"
                             ? t("approvalPage.exceptionTypeMissing")
@@ -2096,18 +2096,18 @@ export default function ApprovalPage() {
                         </span>
                         {/* open / resolved status badge */}
                         {item.status === "open" && (
-                          <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
+                          <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400">
                             {t("approvalPage.exceptionStatusOpen")}
                           </span>
                         )}
                         {item.status === "resolved" && (
-                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-500/15 dark:text-green-400">
                             {t("approvalPage.exceptionStatusResolved")}
                           </span>
                         )}
-                        <span className="text-xs text-text-secondary">#{item.id}</span>
+                        <span className="text-xs text-muted-foreground">#{item.id}</span>
                       </div>
-                      <div className="mt-1 text-xs text-text-secondary">
+                      <div className="mt-1 text-xs text-muted-foreground">
                         {t("approvalPage.exceptionInstanceInfo", {
                           id: item.instance_id ?? "--",
                           time: formatDateTime(item.create_time),
@@ -2165,7 +2165,7 @@ export default function ApprovalPage() {
                       {item.status === "open" && (
                         <ActionBtn
                           variant="outline"
-                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10"
                           onClick={() => { setCancelDialogItem(item); setCancelReason(""); }}
                         >
                           {t("approvalPage.cancelExceptionAction")}
@@ -2175,22 +2175,22 @@ export default function ApprovalPage() {
                   </div>
                   {/* Business info row */}
                   {(item.business_name || item.scenario_name || item.applicant_user_name) && (
-                    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-text-secondary">
+                    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                       {item.business_name && (
                         <span>
-                          <span className="text-text-tertiary">{t("approvalPage.exceptionBusiness")}：</span>
-                          <span className="font-medium text-text-primary">{item.business_name}</span>
+                          <span className="text-muted-foreground/70">{t("approvalPage.exceptionBusiness")}：</span>
+                          <span className="font-medium text-foreground">{item.business_name}</span>
                         </span>
                       )}
                       {item.scenario_name && (
                         <span>
-                          <span className="text-text-tertiary">{t("approvalPage.exceptionScenario")}：</span>
+                          <span className="text-muted-foreground/70">{t("approvalPage.exceptionScenario")}：</span>
                           {item.scenario_name}
                         </span>
                       )}
                       {item.applicant_user_name && (
                         <span>
-                          <span className="text-text-tertiary">{t("approvalPage.exceptionApplicant")}：</span>
+                          <span className="text-muted-foreground/70">{t("approvalPage.exceptionApplicant")}：</span>
                           {item.applicant_user_name}
                         </span>
                       )}
@@ -2202,13 +2202,13 @@ export default function ApprovalPage() {
                       ([k, v]) => !HIDDEN_DETAIL_KEYS.has(k) && v !== null && v !== undefined && v !== "",
                     );
                     return visibleEntries.length > 0 ? (
-                      <div className="mt-3 rounded-lg border border-border-subtle bg-gray-50 divide-y divide-border-subtle">
+                      <div className="mt-3 rounded-lg border border-border bg-gray-50 dark:bg-gray-50/[0.06] divide-y divide-border">
                         {visibleEntries.map(([k, v]) => (
                           <div key={k} className="flex items-start gap-3 px-3 py-2 text-xs">
-                            <span className="w-36 shrink-0 text-text-tertiary">
+                            <span className="w-36 shrink-0 text-muted-foreground/70">
                               {t(`approvalPage.exceptionDetailKey_${k}` as any, { defaultValue: k })}
                             </span>
-                            <span className="break-all text-text-primary">{String(v)}</span>
+                            <span className="break-all text-foreground">{String(v)}</span>
                           </div>
                         ))}
                       </div>
@@ -2216,7 +2216,7 @@ export default function ApprovalPage() {
                   })()}
                   {/* error_summary for execute_failed */}
                   {item.exception_type === "execute_failed" && item.error_summary && (
-                    <div className="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 break-all">
+                    <div className="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 break-all dark:bg-red-500/10 dark:border-red-500/25 dark:text-red-400">
                       {item.error_summary}
                     </div>
                   )}
@@ -2236,11 +2236,11 @@ export default function ApprovalPage() {
                       </button>
                       {expandedProgressIds.has(item.id) && (
                         loadingProgressId === item.id ? (
-                          <div className="mt-2 text-xs text-text-secondary">加载中…</div>
+                          <div className="mt-2 text-xs text-muted-foreground">加载中…</div>
                         ) : instanceDetailCache[item.id] ? (
                           <ApprovalTimeline detail={instanceDetailCache[item.id]} />
                         ) : (
-                          <div className="mt-2 text-xs text-text-secondary">暂无进度数据</div>
+                          <div className="mt-2 text-xs text-muted-foreground">暂无进度数据</div>
                         )
                       )}
                     </div>
@@ -2293,7 +2293,7 @@ export default function ApprovalPage() {
           </DialogHeader>
           <div className="py-2 max-h-[60vh] overflow-y-auto">
             {flowPreviewDialog.nodes.length === 0 ? (
-              <div className="py-8 text-center text-sm text-text-secondary">
+              <div className="py-8 text-center text-sm text-muted-foreground">
                 {t("approvalPage.noNodes")}
               </div>
             ) : (
@@ -2302,15 +2302,15 @@ export default function ApprovalPage() {
                   const sources: { type: string; user_names?: string[]; userNames?: string[] }[] =
                     (node.approver_config?.sources as any[]) ?? [];
                   return (
-                    <div key={node.id} className="rounded-lg border border-border-subtle p-3">
+                    <div key={node.id} className="rounded-lg border border-border p-3">
                       <div className="flex items-center gap-2">
                         <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                           {idx + 1}
                         </span>
-                        <span className="text-sm font-medium text-text-primary">
+                        <span className="text-sm font-medium text-foreground">
                           {node.node_name || node.node_code}
                         </span>
-                        <span className="ml-auto inline-flex items-center rounded border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-secondary">
+                        <span className="ml-auto inline-flex items-center rounded border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 py-0.5 text-xs text-muted-foreground">
                           {node.node_mode === "and" ? t("approvalPage.nodeModeAnd") : t("approvalPage.nodeModeOr")}
                         </span>
                       </div>
@@ -2322,9 +2322,9 @@ export default function ApprovalPage() {
                               return userNames.map((name: string) => (
                                 <span
                                   key={`${src.type}-${name}`}
-                                  className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                                  className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 py-0.5 text-xs text-foreground"
                                 >
-                                  <Users size={10} className="text-text-secondary" />
+                                  <Users size={10} className="text-muted-foreground" />
                                   {name}
                                 </span>
                               ));
@@ -2333,9 +2333,9 @@ export default function ApprovalPage() {
                             return (
                               <span
                                 key={src.type}
-                                className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                                className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 py-0.5 text-xs text-foreground"
                               >
-                                <Users size={10} className="text-text-secondary" />
+                                <Users size={10} className="text-muted-foreground" />
                                 {opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type)}
                               </span>
                             );
@@ -2361,13 +2361,13 @@ export default function ApprovalPage() {
             <DialogTitle>{t("approvalPage.edit")}</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <label className="block text-sm text-text-secondary">
+            <label className="block text-sm text-muted-foreground">
               {t("approvalPage.scenarioSection")}
               <input
                 value={editScenarioDialog.name}
                 onChange={(e) => setEditScenarioDialog((prev) => ({ ...prev, name: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && void handleSaveScenarioName()}
-                className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+                className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
               />
             </label>
           </div>
@@ -2375,7 +2375,7 @@ export default function ApprovalPage() {
             <button
               type="button"
               onClick={() => setEditScenarioDialog({ open: false, scenario: null, name: "" })}
-              className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+              className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
             >
               {t("approvalPage.cancel")}
             </button>
@@ -2402,10 +2402,10 @@ export default function ApprovalPage() {
               value={exceptionPickerSearch}
               onChange={(e) => setExceptionPickerSearch(e.target.value)}
               placeholder={t("approvalPage.searchUser")}
-              className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              className="block h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
             <div
-              className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle"
+              className="max-h-60 overflow-y-auto rounded-lg border border-border divide-y divide-border"
               onScroll={(e) => {
                 if (!exceptionPickerHasMore || exceptionPickerLoading) return;
                 const el = e.currentTarget;
@@ -2417,14 +2417,14 @@ export default function ApprovalPage() {
               }}
             >
               {exceptionPickerList.length === 0 && !exceptionPickerLoading && (
-                <div className="py-4 text-center text-xs text-text-secondary">{t("approvalPage.noUsers")}</div>
+                <div className="py-4 text-center text-xs text-muted-foreground">{t("approvalPage.noUsers")}</div>
               )}
               {exceptionPickerList.map((u) => {
                 const checked = exceptionPickerTempIds.includes(u.user_id);
                 return (
                   <label
                     key={u.user_id}
-                    className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50"
+                    className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-50/10"
                   >
                     <input
                       type="checkbox"
@@ -2440,18 +2440,18 @@ export default function ApprovalPage() {
                           setExceptionPickerTempNames((names) => [...names, u.user_name]);
                         }
                       }}
-                      className="h-4 w-4 rounded border-border-subtle accent-primary"
+                      className="h-4 w-4 rounded border-border accent-primary"
                     />
-                    <span className="text-sm text-text-primary">{u.user_name}</span>
+                    <span className="text-sm text-foreground">{u.user_name}</span>
                   </label>
                 );
               })}
               {exceptionPickerLoading && (
-                <div className="py-2 text-center text-xs text-text-secondary">{t("approvalPage.loading")}</div>
+                <div className="py-2 text-center text-xs text-muted-foreground">{t("approvalPage.loading")}</div>
               )}
             </div>
             {exceptionPickerTempIds.length > 0 && (
-              <div className="text-xs text-text-secondary">
+              <div className="text-xs text-muted-foreground">
                 已选 {exceptionPickerTempIds.length} 人：{exceptionPickerTempNames.join("、")}
               </div>
             )}
@@ -2460,7 +2460,7 @@ export default function ApprovalPage() {
             <button
               type="button"
               onClick={() => setExceptionPickerOpen(false)}
-              className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+              className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
             >
               {t("approvalPage.cancel")}
             </button>
@@ -2491,20 +2491,20 @@ export default function ApprovalPage() {
               <DialogTitle>{t("approvalPage.cancelExceptionTitle")}</DialogTitle>
             </DialogHeader>
             <div className="py-2 space-y-3">
-              <p className="text-sm text-text-secondary">{t("approvalPage.cancelExceptionHint")}</p>
+              <p className="text-sm text-muted-foreground">{t("approvalPage.cancelExceptionHint")}</p>
               <textarea
                 rows={3}
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
                 placeholder={t("approvalPage.cancelReasonPlaceholder") as string}
-                className="w-full resize-none rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
               />
             </div>
             <DialogFooter>
               <button
                 type="button"
                 onClick={() => { setCancelDialogItem(null); setCancelReason(""); }}
-                className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-gray-50 dark:hover:bg-gray-50/10"
               >
                 {t("approvalPage.cancelBtn")}
               </button>
