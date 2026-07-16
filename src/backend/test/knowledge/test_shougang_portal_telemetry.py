@@ -15,6 +15,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (  # noqa: E402
     PortalDocumentReadEventData,
     PortalFavoriteEventData,
     PortalQaEventData,
+    PortalSearchEventData,
 )
 from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService  # noqa: E402
 
@@ -23,6 +24,7 @@ def test_portal_telemetry_event_types_and_schemas():
     assert BaseTelemetryTypeEnum.PORTAL_FAVORITE.value == "portal_favorite"
     assert BaseTelemetryTypeEnum.PORTAL_QA.value == "portal_qa"
     assert BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value == "portal_document_read"
+    assert BaseTelemetryTypeEnum.PORTAL_SEARCH.value == "portal_search"
 
     event = BaseTelemetryEvent(
         event_type=BaseTelemetryTypeEnum.PORTAL_FAVORITE,
@@ -45,6 +47,22 @@ def test_portal_telemetry_event_types_and_schemas():
     assert dumped["event_data"]["portal_favorite_source_file_id"] == 1580
     assert "query" not in dumped["event_data"]
     assert "answer" not in dumped["event_data"]
+
+    search = BaseTelemetryEvent(
+        tenant_id=5,
+        event_type=BaseTelemetryTypeEnum.PORTAL_SEARCH,
+        user_context=UserContext(user_id=7, user_name="user-7"),
+        event_data=PortalSearchEventData(
+            source_app="shougang_portal",
+            scene="knowledge_search",
+            entry_point="search_page",
+            query="安全生产",
+            normalized_query="安全生产",
+        ),
+    ).model_dump()
+    assert search["tenant_id"] == 5
+    assert search["event_data"]["normalized_query"] == "安全生产"
+    assert "portal_search_normalized_query" not in search["event_data"]
 
 
 def test_portal_telemetry_service_builds_event_data():
@@ -75,6 +93,18 @@ def test_portal_telemetry_service_builds_event_data():
 
     assert isinstance(qa, PortalQaEventData)
     assert isinstance(read, PortalDocumentReadEventData)
+
+    search = PortalTelemetryEventService.build_event_data(
+        BaseTelemetryTypeEnum.PORTAL_SEARCH,
+        {
+            "source_app": "shougang_portal",
+            "scene": "knowledge_search",
+            "entry_point": "search_page",
+            "query": "STEEL",
+            "normalized_query": "steel",
+        },
+    )
+    assert isinstance(search, PortalSearchEventData)
 
 
 def test_portal_telemetry_recorder_is_best_effort(monkeypatch):

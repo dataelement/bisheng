@@ -1,10 +1,11 @@
+import re
 import secrets
 import string
 from copy import deepcopy
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 def _strip(value: Any) -> str:
@@ -13,6 +14,7 @@ def _strip(value: Any) -> str:
 
 _DOCUMENT_TYPE_CHILD_CODE_RANDOM_ALPHABET = string.ascii_uppercase + string.digits
 _DOCUMENT_TYPE_CHILD_CODE_RANDOM_LENGTH = 4
+_BUSINESS_DOMAIN_CODE_PATTERN = re.compile(r"^[A-Z0-9_]{1,16}$")
 
 
 def _normalize_document_type_code(value: Any) -> str:
@@ -323,11 +325,36 @@ class PortalRecommendationConfig(BaseModel):
     provider: str
     home_strategy: str
     detail_strategy: str
+    home_total_count: int = Field(default=20, ge=1, le=50, strict=True)
+    hot_half_life_days: int = Field(default=7, ge=1, le=90, strict=True)
+    home_entry_source_weight: float = Field(default=0.3, ge=0, le=1, allow_inf_nan=False)
+    stable_shuffle_score_gap: float = Field(default=5, ge=0, le=100, allow_inf_nan=False)
+    stable_shuffle_cycle_days: int = Field(default=7, ge=1, le=30, strict=True)
+    personalized_shadow_enabled: StrictBool = False
+    personalized_rollout_percent: int = Field(default=0, ge=0, le=100, strict=True)
+
+
+class PortalDepartmentBusinessDomainBinding(BaseModel):
+    department_id: int = Field(gt=0, strict=True)
+    business_domain_codes: list[str] = Field(min_length=1)
+
+    @field_validator("business_domain_codes", mode="before")
+    @classmethod
+    def normalize_business_domain_codes(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, (list, tuple, set)):
+            raise ValueError("business_domain_codes must be a list")
+        normalized = sorted({_strip(code).upper() for code in value if _strip(code)})
+        invalid = [code for code in normalized if not _BUSINESS_DOMAIN_CODE_PATTERN.fullmatch(code)]
+        if invalid:
+            raise ValueError("business domain code is invalid")
+        return normalized
 
 
 class PortalDisplayHomeConfig(BaseModel):
     page_size: int | None = None
-    section_page_size: int = 6
+    section_page_size: int = Field(default=6, ge=1, le=50, strict=True)
     hot_tags_count: int = 8
     qa_hot_count: int = 4
     domain_count: int = 6
@@ -402,6 +429,7 @@ class PortalConfig(BaseModel):
     agent_config: PortalAgentConfig = Field(default_factory=PortalAgentConfig)
     search: PortalSearchConfig = Field(default_factory=PortalSearchConfig)
     recommendation: PortalRecommendationConfig
+    department_business_domain_bindings: list[PortalDepartmentBusinessDomainBinding] = Field(default_factory=list)
     display: PortalDisplayConfig
     banners: list[PortalBannerSlide] = Field(default_factory=list)
     integrations: PortalIntegrationsConfig = Field(default_factory=PortalIntegrationsConfig)
@@ -413,6 +441,25 @@ class PortalConfig(BaseModel):
         if not isinstance(value, dict):
             return value
         data = deepcopy(value)
+
+        # Before personalized recommendations, home sections could be configured
+        # above the new Top-N default of 20. Preserve those valid legacy configs
+        # only when home_total_count was not explicitly supplied; explicit values
+        # still go through the cross-field validation below.
+        raw_recommendation = data.get("recommendation")
+        raw_display = data.get("display")
+        raw_home = raw_display.get("home") if isinstance(raw_display, dict) else None
+        section_page_size = raw_home.get("section_page_size") if isinstance(raw_home, dict) else None
+        if (
+            isinstance(raw_recommendation, dict)
+            and "home_total_count" not in raw_recommendation
+            and isinstance(section_page_size, int)
+            and not isinstance(section_page_size, bool)
+        ):
+            recommendation = dict(raw_recommendation)
+            recommendation["home_total_count"] = max(20, section_page_size)
+            data["recommendation"] = recommendation
+
         raw_agent_config = data.get("agent_config")
         agent_config = dict(raw_agent_config) if isinstance(raw_agent_config, dict) else {}
         raw_applications = agent_config.get("applications")
@@ -484,6 +531,32 @@ class PortalConfig(BaseModel):
         data["agent_config"] = agent_config
         data.pop("apps", None)
         return data
+
+    @model_validator(mode="after")
+    def validate_personalized_recommendation_config(self):
+        if self.recommendation.home_total_count < self.display.home.section_page_size:
+            raise ValueError("recommendation.home_total_count must be >= display.home.section_page_size")
+
+        enabled_domain_codes = {
+            domain.code
+            for domain in self.domains
+            if domain.enabled and domain.code and _BUSINESS_DOMAIN_CODE_PATTERN.fullmatch(domain.code)
+        }
+        normalized_bindings: list[PortalDepartmentBusinessDomainBinding] = []
+        seen_department_ids: set[int] = set()
+        for binding in self.department_business_domain_bindings:
+            if binding.department_id in seen_department_ids:
+                raise ValueError("department_id must be unique in department business domain bindings")
+            unknown_codes = set(binding.business_domain_codes) - enabled_domain_codes
+            if unknown_codes:
+                raise ValueError("business domain binding references a missing or disabled domain")
+            seen_department_ids.add(binding.department_id)
+            normalized_bindings.append(binding)
+        self.department_business_domain_bindings = sorted(
+            normalized_bindings,
+            key=lambda item: item.department_id,
+        )
+        return self
 
 
 class PortalBishengRuntimeConfig(BaseModel):

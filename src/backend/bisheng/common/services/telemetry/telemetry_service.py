@@ -5,13 +5,20 @@ from asyncio import Semaphore
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from elasticsearch import AsyncElasticsearch, Elasticsearch, exceptions as es_exceptions
+from elasticsearch import AsyncElasticsearch, Elasticsearch
+from elasticsearch import exceptions as es_exceptions
 
-from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, BaseTelemetryEvent, UserContext, \
-    UserGroupInfo, UserRoleInfo, UserDepartmentInfo
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.common.errcode.tenant import NoTenantContextError
+from bisheng.common.schemas.telemetry.base_telemetry_schema import (
+    BaseTelemetryEvent,
+    T_EventData,
+    UserContext,
+    UserDepartmentInfo,
+    UserGroupInfo,
+    UserRoleInfo,
+)
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
@@ -23,6 +30,7 @@ INDEX_MAPPING = {
         "properties": {
             "event_id": {"type": "keyword"},
             "event_type": {"type": "keyword"},
+            "tenant_id": {"type": "integer"},
             "trace_id": {"type": "keyword"},
             "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
             "user_context": {
@@ -245,6 +253,7 @@ class BaseTelemetryService(object):
 
                 # Build. Event
                 event_info = BaseTelemetryEvent(
+                    tenant_id=get_current_tenant_id() or DEFAULT_TENANT_ID,
                     event_type=event_type,
                     user_context=user_context,  # Allow for None May need to be adjusted Schema Allow Optional
                     trace_id=trace_id,
@@ -291,6 +300,7 @@ class BaseTelemetryService(object):
             user_context = self._init_user_context_sync(user_id)
 
             event_info = BaseTelemetryEvent(
+                tenant_id=get_current_tenant_id() or DEFAULT_TENANT_ID,
                 event_type=event_type,
                 user_context=user_context,
                 trace_id=trace_id,

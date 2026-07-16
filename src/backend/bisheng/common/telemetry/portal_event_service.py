@@ -7,6 +7,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentReadEventData,
     PortalFavoriteEventData,
     PortalQaEventData,
+    PortalSearchEventData,
 )
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
@@ -34,6 +35,7 @@ class PortalTelemetryEventService:
         BaseTelemetryTypeEnum.PORTAL_QA: PortalQaEventData,
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ: PortalDocumentReadEventData,
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD: PortalDocumentDownloadEventData,
+        BaseTelemetryTypeEnum.PORTAL_SEARCH: PortalSearchEventData,
     }
 
     @classmethod
@@ -41,7 +43,13 @@ class PortalTelemetryEventService:
         cls,
         event_type: BaseTelemetryTypeEnum,
         payload: dict[str, Any],
-    ) -> PortalFavoriteEventData | PortalQaEventData | PortalDocumentReadEventData | PortalDocumentDownloadEventData:
+    ) -> (
+        PortalFavoriteEventData
+        | PortalQaEventData
+        | PortalDocumentReadEventData
+        | PortalDocumentDownloadEventData
+        | PortalSearchEventData
+    ):
         data_cls = cls._event_data_classes[event_type]
         return data_cls(**payload)
 
@@ -51,7 +59,13 @@ class PortalTelemetryEventService:
         *,
         user_id: int,
         event_type: BaseTelemetryTypeEnum,
-        event_data: PortalFavoriteEventData | PortalQaEventData | PortalDocumentReadEventData | PortalDocumentDownloadEventData,
+        event_data: (
+            PortalFavoriteEventData
+            | PortalQaEventData
+            | PortalDocumentReadEventData
+            | PortalDocumentDownloadEventData
+            | PortalSearchEventData
+        ),
     ) -> None:
         try:
             telemetry_service.log_event_sync(
