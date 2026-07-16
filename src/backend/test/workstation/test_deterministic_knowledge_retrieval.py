@@ -32,7 +32,61 @@ def test_build_user_content_includes_pre_retrieved_knowledge_context():
 
     assert '<retrieved_knowledge_context>' in content
     assert '固体废物鉴别标准' in content
+    assert '<selected_knowledge_bases>' not in content
+    assert '首钢知识空间' not in content
     assert 'search_knowledge_bases' not in content
+
+
+def test_build_user_content_does_not_include_selected_kb_metadata_without_retrieval():
+    content = chat_service._build_user_content(
+        question='检索制度',
+        knowledge_bases_info=_selected_kbs(),
+    )
+
+    assert content == '检索制度'
+
+
+def test_final_retrieval_context_including_failures_respects_character_limit():
+    context = chat_service._join_retrieval_blocks_with_limit(
+        ['知识内容' * 20, '检索失败信息' * 20],
+        50,
+    )
+
+    assert len(context) == 50
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_kb_selection_keeps_only_routing_metadata(monkeypatch):
+    monkeypatch.setattr(
+        chat_service.KnowledgeDao,
+        'aget_list_by_ids',
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    id=3476,
+                    name='首钢知识空间',
+                    description='不应进入模型消息',
+                    type=KnowledgeTypeEnum.SPACE.value,
+                )
+            ]
+        ),
+    )
+    data = SimpleNamespace(
+        use_knowledge_base=SimpleNamespace(
+            organization_knowledge_ids=[],
+            knowledge_space_ids=[3476],
+        )
+    )
+
+    result = await chat_service._resolve_user_kb_selection(data)
+
+    assert result == [
+        {
+            'id': 3476,
+            'type': KnowledgeTypeEnum.SPACE.value,
+            'source': 'space',
+        }
+    ]
 
 
 @pytest.mark.asyncio

@@ -399,11 +399,10 @@ def _build_user_content(
       (2) 问题 + 上传文件内容
       (3) 问题 + 文件内容 + 已预检索的知识库内容
     """
-    has_kb = bool(knowledge_bases_info)
     has_file = bool(file_context)
     has_retrieved_kb = bool(retrieved_knowledge_context)
 
-    if not has_kb and not has_file and not has_retrieved_kb:
+    if not has_file and not has_retrieved_kb:
         logger.info(
             f'[build_user_content] scenario=plain question_len={len(question)}'
             f' preview={question[:120]!r}'
@@ -411,21 +410,6 @@ def _build_user_content(
         return question
 
     parts: list[str] = []
-    if has_kb:
-        kb_brief = [
-            {
-                'id': kb.get('id'),
-                'name': kb.get('name', ''),
-                'description': kb.get('description', '') or '',
-                'tags': kb.get('tags') or [],
-            }
-            for kb in knowledge_bases_info
-        ]
-        parts.append(
-            '<selected_knowledge_bases>\n'
-            f'{json.dumps(kb_brief, ensure_ascii=False)}\n'
-            '</selected_knowledge_bases>'
-        )
     if has_retrieved_kb:
         parts.append(
             '<retrieved_knowledge_context>\n'
@@ -439,8 +423,6 @@ def _build_user_content(
 
     # 调试日志用于复现实际发送给模型的提示词。
     scenario_parts = []
-    if has_kb:
-        scenario_parts.append('kb')
     if has_retrieved_kb:
         scenario_parts.append('retrieved')
     if has_file:
@@ -880,18 +862,36 @@ def _split_selected_knowledge_ids(knowledge_bases_info: list[dict]) -> tuple[lis
     return space_ids, organization_ids
 
 
-def _format_retrieved_knowledge_context(docs: list) -> list[str]:
-    formatted_results: list[str] = []
-    for doc in docs:
-        meta = getattr(doc, 'metadata', {}) or {}
-        file_name = meta.get('source') or meta.get('document_name') or meta.get('file_name') or ''
-        content = (getattr(doc, 'page_content', '') or '').strip()
-        if not content:
+def _join_retrieval_blocks_with_limit(blocks: list[str], max_chars: int) -> str:
+    """Join already formatted retrieval blocks without exceeding maxTokens.
+
+    `maxTokens` is the historical field name; the workstation UI defines it
+    as a maximum character count. The document selection path keeps chunk
+    boundaries intact, while this final guard also covers retrieval-error
+    blocks added after citation annotation.
+    """
+    try:
+        content_limit = max(int(max_chars), 0)
+    except (TypeError, ValueError):
+        content_limit = 0
+    if content_limit <= 0:
+        return ''
+
+    selected: list[str] = []
+    used_chars = 0
+    for block in blocks:
+        text = str(block or '')
+        if not text:
             continue
-        formatted_results.append(
-            f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
-        )
-    return formatted_results
+        separator_chars = 1 if selected else 0
+        if used_chars + separator_chars + len(text) <= content_limit:
+            selected.append(text)
+            used_chars += separator_chars + len(text)
+            continue
+        if not selected:
+            selected.append(text[:content_limit])
+        break
+    return '\n'.join(selected)
 
 
 async def _retrieve_selected_knowledge_context(
@@ -936,10 +936,13 @@ async def _retrieve_selected_knowledge_context(
     docs = list(finally_docs or [])
     if docs:
         docs = annotate_rag_documents_with_citations(docs)
+        formatted_results, docs = WorkStationService._truncate_ranked_documents_by_chars(
+            docs,
+            max_token,
+        )
         citation_items = collect_rag_citation_registry_items(docs)
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
-        formatted_results = _format_retrieved_knowledge_context(docs)
 
     for failure in failures or []:
         kb_name = failure.get('name') or failure.get('id') or ''
@@ -951,7 +954,9 @@ async def _retrieve_selected_knowledge_context(
     if not formatted_results:
         return '没有找到相关内容。'
 
-    context = '\n'.join(formatted_results)
+    context = _join_retrieval_blocks_with_limit(formatted_results, max_token)
+    if not context:
+        return '没有找到相关内容。'
     logger.info(
         f'[pre_retrieve_kb] retrieved context chars={len(context)}'
         f' docs={len(docs)} failures={len(failures or [])}'
@@ -961,11 +966,7 @@ async def _retrieve_selected_knowledge_context(
 
 
 async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
-    """Translate APIChatCompletion.use_knowledge_base into KB metadata dicts.
-
-    Returns [] if the user hasn't picked any KB. Each KB dict carries the set
-    of tag names attached to files inside it for prompt context.
-    """
+    """Resolve selected knowledge IDs to the minimum routing metadata."""
     ukb = data.use_knowledge_base
     if not ukb:
         return []
@@ -982,57 +983,9 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
         return []
     actual_space_id_set = {int(kb.id) for kb in kbs if _is_knowledge_space_kb(kb)}
 
-    # Best-effort aggregation of file-level tags per KB. A KB with many files
-    # can have a large tag set; we cap the total tags advertised per KB at 50
-    # to avoid prompt bloat.
-    tags_by_kb: dict[int, list[str]] = {}
-    try:
-        from bisheng.database.models.tag import TagDao
-        from bisheng.database.models.group_resource import ResourceTypeEnum
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-        for kb in kbs:
-            try:
-                files = await KnowledgeFileDao.aget_file_by_filters(
-                    knowledge_id=kb.id, page=1, page_size=500,
-                )
-            except Exception:
-                files = []
-            file_ids = [str(f.id) for f in files] if files else []
-            if not file_ids:
-                tags_by_kb[kb.id] = []
-                continue
-            try:
-                # 按数据库真实类型选择标签资源类型，避免前端传错分组导致空间标签丢失。
-                resource_type = (
-                    ResourceTypeEnum.SPACE_FILE
-                    if int(kb.id) in actual_space_id_set
-                    else ResourceTypeEnum.KNOWLEDGE_FILE
-                )
-                tag_map = TagDao.get_tags_by_resource(resource_type, file_ids)
-                seen: set[str] = set()
-                names: list[str] = []
-                for tags in tag_map.values():
-                    for tag in tags:
-                        if tag.name and tag.name not in seen:
-                            seen.add(tag.name)
-                            names.append(tag.name)
-                            if len(names) >= 50:
-                                break
-                    if len(names) >= 50:
-                        break
-                tags_by_kb[kb.id] = names
-            except Exception as exc:
-                logger.warning(f'Failed to aggregate tags for kb={kb.id}: {exc}')
-                tags_by_kb[kb.id] = []
-    except Exception as exc:
-        logger.warning(f'Tag aggregation unavailable: {exc}')
-
     resolved = [
         {
             'id': kb.id,
-            'name': kb.name,
-            'description': kb.description or '',
-            'tags': tags_by_kb.get(kb.id, []),
             'type': kb.type,
             'source': 'space' if int(kb.id) in actual_space_id_set else 'organization',
         }
@@ -1042,7 +995,6 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
         f'[resolve_user_kb] resolved {len(resolved)} kbs'
         f' ids={[kb["id"] for kb in resolved]}'
         f' request_space_ids={list(request_space_id_set)}'
-        f' tag_counts={[len(kb["tags"]) for kb in resolved]}'
     )
     return resolved
 
