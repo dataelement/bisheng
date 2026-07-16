@@ -1,10 +1,11 @@
 """F033 T-01: unit tests for ``_resolve_department_space_scope`` (design B1).
 
 The resolver is the single source of truth for "is this resource a department
-knowledge space, and which department ids may be authorized". It composes three
-DAO reads (binding -> bound department -> active subtree ids). Returning ``None``
-is how the four grant/authorize call sites fall back to the *unchanged* behavior
-for normal spaces and non-space resources.
+knowledge space, and which department path/ids may be authorized". It always
+resolves the binding and bound department, while callers can skip the active
+subtree-id expansion when a path predicate is sufficient. Returning ``None`` is
+how the grant/authorize call sites fall back to the unchanged behavior for
+normal spaces and non-space resources.
 
 These tests mock the DB boundary (the DAO classmethods) and assert the
 orchestration: the resource_type gate, the no-binding fallback, the subtree
@@ -59,7 +60,34 @@ async def test_department_space_resolves_bound_subtree(monkeypatch):
 
     assert scope is not None
     assert scope.department_id == 10
+    assert scope.department_path == "/10/"
     assert scope.subtree_dept_ids == frozenset({10, 11, 12})
+
+
+async def test_department_space_scope_can_skip_subtree_expansion(monkeypatch):
+    binding = DepartmentKnowledgeSpace(department_id=10, space_id=42)
+    dept = Department(id=10, dept_id="d10", name="研发", path="/10/", status="active")
+    _patch_binding(monkeypatch, binding)
+
+    async def _aget_by_id(cls, dept_id):
+        return dept
+
+    async def _unexpected_subtree_query(cls, path_prefix):
+        raise AssertionError("subtree ids must not be loaded for path-scoped reads")
+
+    monkeypatch.setattr(DepartmentDao, "aget_by_id", classmethod(_aget_by_id))
+    monkeypatch.setattr(DepartmentDao, "aget_subtree_ids", classmethod(_unexpected_subtree_query))
+
+    scope = await resource_permission._resolve_department_space_scope(
+        "knowledge_space",
+        "42",
+        load_subtree_ids=False,
+    )
+
+    assert scope is not None
+    assert scope.department_id == 10
+    assert scope.department_path == "/10/"
+    assert scope.subtree_dept_ids == frozenset()
 
 
 async def test_archived_bound_department_yields_empty_subtree(monkeypatch):
@@ -74,4 +102,5 @@ async def test_archived_bound_department_yields_empty_subtree(monkeypatch):
 
     assert scope is not None
     assert scope.department_id == 10
+    assert scope.department_path is None
     assert scope.subtree_dept_ids == frozenset()

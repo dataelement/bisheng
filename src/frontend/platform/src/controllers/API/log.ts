@@ -155,7 +155,7 @@ export async function getMarksApi({ status, pageSize, page }): Promise<{}> {
 }
 
 // 创建标注任务
-export async function createMarkApi(data: { app_list: string[], user_list: string[] }) {
+export async function createMarkApi(data: { app_list: string[], user_list: number[] }) {
     return await axios.post('/api/v1/mark/create_task', data)
 }
 

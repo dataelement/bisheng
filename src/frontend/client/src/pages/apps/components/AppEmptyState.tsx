@@ -11,7 +11,7 @@ export function AppEmptyState() {
   const localize = useLocalize();
   return (
     <div className="flex flex-col items-center">
-      <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+      <EmptyStateIllustration className="size-[120px] mb-4" />
       <div className="text-[14px] font-normal text-[#999999] flex items-center gap-1">
         {localize('com_app.empty_go_explore')}
         <Link

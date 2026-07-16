@@ -4,7 +4,7 @@ Part of F009-org-sync.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
@@ -410,22 +410,6 @@ class OrgSyncConfigDao:
             result = await session.exec(statement)
             return result.all()
 
-    @classmethod
-    async def aget_all_active(cls) -> list[OrgSyncConfig]:
-        """F015: return every active OrgSyncConfig regardless of schedule_type.
-
-        The 6h forced reconcile beat (``reconcile_all_organizations``) uses
-        this DAO entry to fan out across every active config. Callers must
-        filter ``provider='sso_realtime'`` (the F014 seed id=9999) since the
-        seed is not a real provider.
-        """
-        async with get_async_db_session() as session:
-            statement = select(OrgSyncConfig).where(
-                OrgSyncConfig.status == "active",
-            )
-            result = await session.exec(statement)
-            return result.all()
-
 
 class OrgSyncLogDao:
     @classmethod
@@ -530,74 +514,3 @@ class OrgSyncLogDao:
             error_details=error_details,
         )
         return await cls.acreate(log)
-
-    @classmethod
-    async def acount_recent_conflicts(
-        cls,
-        external_id: str,
-        days: int = 7,
-    ) -> int:
-        """F015: count ts_conflict warn events for one external_id.
-
-        Backs the weekly report threshold (AC-12). Uses the
-        ``idx_conflict_lookup`` composite index.
-        """
-        threshold = datetime.utcnow() - timedelta(days=days)
-        async with get_async_db_session() as session:
-            stmt = (
-                select(func.count())
-                .select_from(OrgSyncLog)
-                .where(
-                    OrgSyncLog.level == "warn",
-                    OrgSyncLog.event_type == "ts_conflict",
-                    OrgSyncLog.external_id == external_id,
-                    OrgSyncLog.create_time > threshold,
-                )
-            )
-            count = await session.scalar(stmt)
-            return int(count or 0)
-
-    @classmethod
-    async def aget_conflicts_since(
-        cls,
-        since: datetime,
-        event_type: str = "ts_conflict",
-        level: str = "warn",
-    ) -> list[OrgSyncLog]:
-        """F015: fetch event rows for the weekly aggregation window.
-
-        ``since`` is interpreted inclusively so the caller can align with
-        the cron job's ``datetime.utcnow() - timedelta(days=7)`` window.
-        """
-        async with get_async_db_session() as session:
-            stmt = (
-                select(OrgSyncLog)
-                .where(
-                    OrgSyncLog.level == level,
-                    OrgSyncLog.event_type == event_type,
-                    OrgSyncLog.create_time >= since,
-                )
-                .order_by(OrgSyncLog.create_time.asc())
-            )
-            result = await session.exec(stmt)
-            return result.all()
-
-    @classmethod
-    async def aget_latest_event(
-        cls,
-        event_type: str,
-    ) -> OrgSyncLog | None:
-        """F015: last event row of the given type (used by daily escalation).
-
-        Returns ``None`` when no such row exists — callers treat this as
-        "weekly report never ran yet" and skip escalation.
-        """
-        async with get_async_db_session() as session:
-            stmt = (
-                select(OrgSyncLog)
-                .where(OrgSyncLog.event_type == event_type)
-                .order_by(OrgSyncLog.create_time.desc())
-                .limit(1)
-            )
-            result = await session.exec(stmt)
-            return result.first()

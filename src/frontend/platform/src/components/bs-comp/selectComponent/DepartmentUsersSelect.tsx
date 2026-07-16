@@ -7,6 +7,7 @@ import {
   getDepartmentChildrenApi,
   getDepartmentMembersApi,
   getDepartmentPathTreeApi,
+  searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
@@ -116,7 +117,12 @@ export default function DepartmentUsersSelect({
       if (!did || loadingDeptIds.has(did) || deptUsersMap[did]) return
       setLoadingDeptIds((prev) => new Set(prev).add(did))
       try {
-        const res = await getDepartmentMembersApi(node.dept_id, { page: 1, limit: 200, keyword: "" })
+        const res = await getDepartmentMembersApi(node.dept_id, {
+          page: 1,
+          limit: 200,
+          keyword: "",
+          is_primary: rootDeptId != null ? 1 : undefined,
+        })
         const users = (res?.data || []).map((u) => ({
           value: Number(u.user_id),
           label: u.user_name,
@@ -131,7 +137,7 @@ export default function DepartmentUsersSelect({
         })
       }
     },
-    [deptUsersMap, loadingDeptIds],
+    [deptUsersMap, loadingDeptIds, rootDeptId],
   )
 
   const runUserSearch = useCallback(async (q: string) => {
@@ -140,17 +146,34 @@ export default function DepartmentUsersSelect({
     searchAbortRef.current = ac
     setSearchingUsers(true)
     try {
-      const res = await getUsersApi(
-        { name: q, page: 1, pageSize: 200, withDepartmentPath: true },
-        { signal: ac.signal },
-      )
-      if (!ac.signal.aborted) setSearchedUsers((res?.data || []) as UserListItem[])
+      if (rootDeptId != null) {
+        const res = await searchGlobalMembersApi(
+          { keyword: q, page: 1, limit: 50, rootDeptId },
+          { signal: ac.signal },
+        )
+        if (!ac.signal.aborted) {
+          setSearchedUsers(
+            (res?.data || []).map((u) => ({
+              user_id: u.user_id,
+              user_name: u.user_name,
+              external_id: u.external_id,
+              department_path: u.primary_department_path,
+            })),
+          )
+        }
+      } else {
+        const res = await getUsersApi(
+          { name: q, page: 1, pageSize: 200, withDepartmentPath: true },
+          { signal: ac.signal },
+        )
+        if (!ac.signal.aborted) setSearchedUsers((res?.data || []) as UserListItem[])
+      }
     } catch {
       // ignore abort / network
     } finally {
       if (!ac.signal.aborted) setSearchingUsers(false)
     }
-  }, [])
+  }, [rootDeptId])
 
   const handleKeywordChange = (next: string) => {
     setKeyword(next)
@@ -225,13 +248,14 @@ export default function DepartmentUsersSelect({
   const renderDeptNode = (node: DepartmentTreeNode, depth: number, ancestorNames: string[]) => {
     const did = Number(node.id)
     const isExpanded = tree.expanded.has(did)
+    const shouldShowRows = !node.has_children || isExpanded
     const pathLabel = [...ancestorNames, node.name].filter(Boolean).join(" / ")
     const childIds = tree.getChildIds(did)
     const childNodes = (childIds ?? [])
       .map((id) => tree.getNode(id))
       .filter((n): n is DepartmentTreeNode => !!n)
     const users = deptUsersMap[did] || []
-    if (isExpanded && !deptUsersMap[did] && !loadingDeptIds.has(did)) void loadDeptUsers(node)
+    if (shouldShowRows && !deptUsersMap[did] && !loadingDeptIds.has(did)) void loadDeptUsers(node)
 
     return (
       <div key={`d-${did}`}>
@@ -259,7 +283,7 @@ export default function DepartmentUsersSelect({
           <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate font-medium">{node.name}</span>
         </div>
-        {isExpanded && (
+        {shouldShowRows && (
           <>
             {loadingDeptIds.has(did) && (
               <div className="flex items-center py-1 pl-1.5 text-xs text-muted-foreground">
@@ -268,6 +292,14 @@ export default function DepartmentUsersSelect({
               </div>
             )}
             {users.map((u) => renderUserRow(u, depth + 1, pathLabel))}
+            {rootDeptId === did &&
+              !node.has_children &&
+              deptUsersMap[did] &&
+              users.length === 0 && (
+                <div className="px-2 py-3 text-center text-sm text-muted-foreground">
+                  {emptyMessage || t("system.treeDepartmentSelectEmpty")}
+                </div>
+              )}
             {childNodes.map((c) => renderDeptNode(c, depth + 1, [...ancestorNames, node.name]))}
           </>
         )}

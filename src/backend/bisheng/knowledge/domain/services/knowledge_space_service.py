@@ -3157,18 +3157,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         html_snapshot_bytes = (import_result.html_snapshot or "").encode("utf-8")
 
         skip_content_dedup = is_web_link_non_dedup_markdown(import_result.markdown)
-        content_repeat = (
-            []
-            if skip_content_dedup
-            else KnowledgeFileDao.get_file_by_condition(
-                knowledge_id=knowledge_id,
-                md5_=import_result.content_hash,
-            )
+        repeat_files = KnowledgeFileDao.get_file_by_condition(
+            knowledge_id=knowledge_id,
+            md5_=None if skip_content_dedup else import_result.content_hash,
+            file_name=file_name,
         )
-        name_repeat = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, file_name=file_name)
-        duplicate_file = content_repeat[0] if content_repeat else (name_repeat[0] if name_repeat else None)
+        content_duplicate = (
+            None
+            if skip_content_dedup
+            else next((file for file in repeat_files if file.md5 == import_result.content_hash), None)
+        )
+        duplicate_file = content_duplicate or (repeat_files[0] if repeat_files else None)
         if duplicate_file and not overwrite:
-            if content_repeat:
+            if content_duplicate:
                 raise SpaceFileDuplicateError()
             raise SpaceFileNameDuplicateError()
 

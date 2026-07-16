@@ -13,6 +13,7 @@ import { CirclePause } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
+import { resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
@@ -148,10 +149,10 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
                     let errorMsg = ''
                     if (data.category === 'error') {
-                        errorMsg = data.message.status_message || 'error'
+                        errorMsg = resolveChatErrorMessage(data.message, t)
                         toast({
                             variant: 'error',
-                            description: t(`errors.${data.message.status_code}`, { defaultValue: errorMsg })
+                            description: errorMsg
                         })
                     }
                     // 异常类型处理，提示

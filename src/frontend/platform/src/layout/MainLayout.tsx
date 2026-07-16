@@ -69,16 +69,16 @@ export default function MainLayout() {
         navigator('/reset')
     }
 
-    // 系统超管（租户超管仍走自定义角色 web_menu；部门管理员由服务端合并全量菜单）
+    // Super admins and child tenant admins receive the full admin menu.
+    // Tenant management remains super-admin-only; department admins receive menus from the backend.
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
     const isDeptAdmin = Boolean(user.is_department_admin)
     const isChildAdmin = Boolean(user.is_child_admin)
     const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
-    // 侧栏：数据集 / 日志 — 超管与部门管理员
-    const isFullAdminShell = isSuperAdmin || isDeptAdmin
-    // 侧栏：系统管理 — 超管 / 部门管理员 / Child Admin。SystemPage 内部按
-    // PRD §3.3 已为 Child Admin 分了 Tab 视角（组织 + 角色）
-    const showSystemNav = isFullAdminShell || isChildAdmin
+    // Covers admin entries such as datasets that have no independent web_menu route key.
+    const isFullAdminShell = isSuperAdmin || isDeptAdmin || isChildAdmin
+    // SystemPage limits each admin type to the tabs it can manage.
+    const showSystemNav = isFullAdminShell
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
     // Admin-area approval scope (falls back to the legacy global flag for
@@ -96,7 +96,7 @@ export default function MainLayout() {
                 || user.web_menu?.includes('frontend')
                 || canManageWorkbenchConfig
         }
-        return user.web_menu?.includes(menu) || isSuperAdmin
+        return user.web_menu?.includes(menu) || isSuperAdmin || isChildAdmin
     }
 
     const u = user as User

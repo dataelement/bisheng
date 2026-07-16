@@ -374,6 +374,14 @@ class TenantDao:
                 return [row for row in result.all()]
 
     @classmethod
+    async def aget_active_ids(cls) -> set[int]:
+        """Return all active tenant ids for batch leaf-tenant derivation."""
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(select(Tenant.id).where(Tenant.status == "active"))
+                return {int(row) for row in result.all()}
+
+    @classmethod
     def get_children_ids_active(cls, root_id: int = ROOT_TENANT_ID) -> list[int]:
         """Sync counterpart of :meth:`aget_children_ids_active`.
 
@@ -785,6 +793,29 @@ class UserTenantDao:
                     )
                 )
                 return result.first()
+
+    @classmethod
+    async def aget_active_tenant_ids_by_user_ids(
+        cls,
+        user_ids: list[int],
+    ) -> dict[int, int]:
+        """Batch return ``user_id → active leaf tenant_id``."""
+        if not user_ids:
+            return {}
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(UserTenant.user_id, UserTenant.tenant_id)
+                    .where(
+                        UserTenant.user_id.in_(user_ids),
+                        UserTenant.is_active == 1,
+                    )
+                    .order_by(UserTenant.user_id.asc(), UserTenant.id.asc())
+                )
+                current_by_user: dict[int, int] = {}
+                for row in result.all():
+                    current_by_user.setdefault(int(row.user_id), int(row.tenant_id))
+                return current_by_user
 
     @classmethod
     async def aget_active_user_ids_by_tenant(cls, tenant_id: int) -> list[int]:

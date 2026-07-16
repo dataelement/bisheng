@@ -1,4 +1,5 @@
 # register tasks
+from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.information.reconcile import reconcile_all_tenants
@@ -21,6 +22,6 @@ from bisheng.worker.telemetry.mid_table import (
     sync_mid_user_increment,
     sync_mid_user_interact_dtl,
 )
+from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
 from bisheng.worker.test.test import add
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, stop_workflow
-from bisheng.worker.admin_scope.tasks import admin_scope_cleanup

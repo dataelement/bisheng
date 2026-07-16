@@ -6,40 +6,44 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bisheng.database.models.role_access import AccessType
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 
 
 def _install_service_stubs() -> None:
-    if 'bisheng.api' not in sys.modules:
-        api_module = ModuleType('bisheng.api')
+    if "bisheng.api" not in sys.modules:
+        api_module = ModuleType("bisheng.api")
         api_module.__path__ = []
-        sys.modules['bisheng.api'] = api_module
-    if 'bisheng.api.services' not in sys.modules:
-        services_module = ModuleType('bisheng.api.services')
+        sys.modules["bisheng.api"] = api_module
+    if "bisheng.api.services" not in sys.modules:
+        services_module = ModuleType("bisheng.api.services")
         services_module.__path__ = []
-        sys.modules['bisheng.api.services'] = services_module
-    if 'bisheng.api.services.knowledge_imp' not in sys.modules:
-        knowledge_imp_module = ModuleType('bisheng.api.services.knowledge_imp')
-        sys.modules['bisheng.api.services.knowledge_imp'] = knowledge_imp_module
-    knowledge_imp_module = sys.modules['bisheng.api.services.knowledge_imp']
+        sys.modules["bisheng.api.services"] = services_module
+    if "bisheng.api.services.knowledge_imp" not in sys.modules:
+        knowledge_imp_module = ModuleType("bisheng.api.services.knowledge_imp")
+        sys.modules["bisheng.api.services.knowledge_imp"] = knowledge_imp_module
+    knowledge_imp_module = sys.modules["bisheng.api.services.knowledge_imp"]
 
     class _DummyKnowledgeUtils:
         pass
 
-    knowledge_imp_module.KnowledgeUtils = getattr(knowledge_imp_module, 'KnowledgeUtils', _DummyKnowledgeUtils)
+    knowledge_imp_module.KnowledgeUtils = getattr(knowledge_imp_module, "KnowledgeUtils", _DummyKnowledgeUtils)
     knowledge_imp_module.delete_knowledge_file_vectors = getattr(
-        knowledge_imp_module, 'delete_knowledge_file_vectors', lambda *args, **kwargs: None,
+        knowledge_imp_module,
+        "delete_knowledge_file_vectors",
+        lambda *args, **kwargs: None,
     )
     knowledge_imp_module.process_file_task = getattr(
-        knowledge_imp_module, 'process_file_task', lambda *args, **kwargs: None,
+        knowledge_imp_module,
+        "process_file_task",
+        lambda *args, **kwargs: None,
     )
-    if 'bisheng.api.services.audit_log' not in sys.modules:
-        audit_log_module = ModuleType('bisheng.api.services.audit_log')
-        sys.modules['bisheng.api.services.audit_log'] = audit_log_module
-    audit_log_module = sys.modules['bisheng.api.services.audit_log']
+    if "bisheng.api.services.audit_log" not in sys.modules:
+        audit_log_module = ModuleType("bisheng.api.services.audit_log")
+        sys.modules["bisheng.api.services.audit_log"] = audit_log_module
+    audit_log_module = sys.modules["bisheng.api.services.audit_log"]
 
     class _DummyAuditLogService:
         @staticmethod
@@ -58,33 +62,35 @@ def _install_service_stubs() -> None:
         def delete_knowledge_file(*args, **kwargs):
             return None
 
-    audit_log_module.AuditLogService = getattr(audit_log_module, 'AuditLogService', _DummyAuditLogService)
+    audit_log_module.AuditLogService = getattr(audit_log_module, "AuditLogService", _DummyAuditLogService)
 
-    if 'bisheng.api.v1' not in sys.modules:
-        v1_module = ModuleType('bisheng.api.v1')
+    if "bisheng.api.v1" not in sys.modules:
+        v1_module = ModuleType("bisheng.api.v1")
         v1_module.__path__ = []
-        sys.modules['bisheng.api.v1'] = v1_module
-    if 'bisheng.api.v1.schema' not in sys.modules:
-        schema_module = ModuleType('bisheng.api.v1.schema')
+        sys.modules["bisheng.api.v1"] = v1_module
+    if "bisheng.api.v1.schema" not in sys.modules:
+        schema_module = ModuleType("bisheng.api.v1.schema")
         schema_module.__path__ = []
-        sys.modules['bisheng.api.v1.schema'] = schema_module
-    if 'bisheng.api.v1.schema.knowledge' not in sys.modules:
-        schema_knowledge_module = ModuleType('bisheng.api.v1.schema.knowledge')
-        sys.modules['bisheng.api.v1.schema.knowledge'] = schema_knowledge_module
-    schema_knowledge_module = sys.modules['bisheng.api.v1.schema.knowledge']
+        sys.modules["bisheng.api.v1.schema"] = schema_module
+    if "bisheng.api.v1.schema.knowledge" not in sys.modules:
+        schema_knowledge_module = ModuleType("bisheng.api.v1.schema.knowledge")
+        sys.modules["bisheng.api.v1.schema.knowledge"] = schema_knowledge_module
+    schema_knowledge_module = sys.modules["bisheng.api.v1.schema.knowledge"]
 
     class _DummyKnowledgeFileResp:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
     schema_knowledge_module.KnowledgeFileResp = getattr(
-        schema_knowledge_module, 'KnowledgeFileResp', _DummyKnowledgeFileResp,
+        schema_knowledge_module,
+        "KnowledgeFileResp",
+        _DummyKnowledgeFileResp,
     )
 
-    if 'bisheng.api.v1.schemas' not in sys.modules:
-        schemas_module = ModuleType('bisheng.api.v1.schemas')
-        sys.modules['bisheng.api.v1.schemas'] = schemas_module
-    schemas_module = sys.modules['bisheng.api.v1.schemas']
+    if "bisheng.api.v1.schemas" not in sys.modules:
+        schemas_module = ModuleType("bisheng.api.v1.schemas")
+        sys.modules["bisheng.api.v1.schemas"] = schemas_module
+    schemas_module = sys.modules["bisheng.api.v1.schemas"]
 
     class _DummySchema:
         def __init__(self, *args, **kwargs):
@@ -94,42 +100,42 @@ def _install_service_stubs() -> None:
             return self.kwargs
 
     for attr in (
-        'FileChunk',
-        'FileProcessBase',
-        'KnowledgeFileOne',
-        'KnowledgeFileProcess',
-        'UpdatePreviewFileChunk',
-        'ExcelRule',
-        'KnowledgeFileReProcess',
+        "FileChunk",
+        "FileProcessBase",
+        "KnowledgeFileOne",
+        "KnowledgeFileProcess",
+        "UpdatePreviewFileChunk",
+        "ExcelRule",
+        "KnowledgeFileReProcess",
     ):
         setattr(schemas_module, attr, _DummySchema)
 
-    if 'bisheng.database.models.tag' not in sys.modules:
-        tag_module = ModuleType('bisheng.database.models.tag')
-        sys.modules['bisheng.database.models.tag'] = tag_module
-    tag_module = sys.modules['bisheng.database.models.tag']
-    tag_module.TagDao = getattr(tag_module, 'TagDao', SimpleNamespace())
+    if "bisheng.database.models.tag" not in sys.modules:
+        tag_module = ModuleType("bisheng.database.models.tag")
+        sys.modules["bisheng.database.models.tag"] = tag_module
+    tag_module = sys.modules["bisheng.database.models.tag"]
+    tag_module.TagDao = getattr(tag_module, "TagDao", SimpleNamespace())
     tag_module.TagBusinessTypeEnum = getattr(
         tag_module,
-        'TagBusinessTypeEnum',
-        SimpleNamespace(KNOWLEDGE='knowledge', KNOWLEDGE_FILE='knowledge_file'),
+        "TagBusinessTypeEnum",
+        SimpleNamespace(KNOWLEDGE="knowledge", KNOWLEDGE_FILE="knowledge_file"),
     )
-    tag_module.Tag = getattr(tag_module, 'Tag', SimpleNamespace)
+    tag_module.Tag = getattr(tag_module, "Tag", SimpleNamespace)
 
-    if 'bisheng.worker' not in sys.modules:
-        worker_module = ModuleType('bisheng.worker')
+    if "bisheng.worker" not in sys.modules:
+        worker_module = ModuleType("bisheng.worker")
         worker_module.__path__ = []
-        sys.modules['bisheng.worker'] = worker_module
+        sys.modules["bisheng.worker"] = worker_module
 
-    if 'bisheng.worker.knowledge' not in sys.modules:
-        worker_knowledge_module = ModuleType('bisheng.worker.knowledge')
+    if "bisheng.worker.knowledge" not in sys.modules:
+        worker_knowledge_module = ModuleType("bisheng.worker.knowledge")
         worker_knowledge_module.__path__ = []
-        sys.modules['bisheng.worker.knowledge'] = worker_knowledge_module
+        sys.modules["bisheng.worker.knowledge"] = worker_knowledge_module
 
-    if 'bisheng.worker.knowledge.file_worker' not in sys.modules:
-        file_worker_module = ModuleType('bisheng.worker.knowledge.file_worker')
-        sys.modules['bisheng.worker.knowledge.file_worker'] = file_worker_module
-    file_worker_module = sys.modules['bisheng.worker.knowledge.file_worker']
+    if "bisheng.worker.knowledge.file_worker" not in sys.modules:
+        file_worker_module = ModuleType("bisheng.worker.knowledge.file_worker")
+        sys.modules["bisheng.worker.knowledge.file_worker"] = file_worker_module
+    file_worker_module = sys.modules["bisheng.worker.knowledge.file_worker"]
 
     class _DummyFileWorkerTask:
         @staticmethod
@@ -140,23 +146,23 @@ def _install_service_stubs() -> None:
         def apply_async(*args, **kwargs):
             return None
 
-    if not hasattr(file_worker_module, 'delete_knowledge_file_celery'):
+    if not hasattr(file_worker_module, "delete_knowledge_file_celery"):
         file_worker_module.delete_knowledge_file_celery = _DummyFileWorkerTask()
-    elif not hasattr(file_worker_module.delete_knowledge_file_celery, 'apply_async'):
+    elif not hasattr(file_worker_module.delete_knowledge_file_celery, "apply_async"):
         file_worker_module.delete_knowledge_file_celery.apply_async = lambda *args, **kwargs: None
-    if not hasattr(file_worker_module, 'parse_knowledge_file_celery'):
+    if not hasattr(file_worker_module, "parse_knowledge_file_celery"):
         file_worker_module.parse_knowledge_file_celery = _DummyFileWorkerTask()
-    elif not hasattr(file_worker_module.parse_knowledge_file_celery, 'apply_async'):
+    elif not hasattr(file_worker_module.parse_knowledge_file_celery, "apply_async"):
         file_worker_module.parse_knowledge_file_celery.apply_async = lambda *args, **kwargs: None
-    sys.modules['bisheng.worker.knowledge'].file_worker = file_worker_module
+    sys.modules["bisheng.worker.knowledge"].file_worker = file_worker_module
 
 
 def _load_service_module():
     _install_service_stubs()
-    services_package = importlib.import_module('bisheng.knowledge.domain.services')
-    sys.modules.pop('bisheng.knowledge.domain.services.knowledge_service', None)
-    module = importlib.import_module('bisheng.knowledge.domain.services.knowledge_service')
-    setattr(services_package, 'knowledge_service', module)
+    services_package = importlib.import_module("bisheng.knowledge.domain.services")
+    sys.modules.pop("bisheng.knowledge.domain.services.knowledge_service", None)
+    module = importlib.import_module("bisheng.knowledge.domain.services.knowledge_service")
+    services_package.knowledge_service = module
     return module
 
 
@@ -165,19 +171,16 @@ def _load_service_class():
 
 
 def _make_file_process_req(knowledge_id=1, file_paths=None):
-    file_paths = file_paths or ['/tmp/doc.txt']
+    file_paths = file_paths or ["/tmp/doc.txt"]
 
     class _Req:
         def __init__(self):
             self.knowledge_id = knowledge_id
-            self.file_list = [
-                SimpleNamespace(file_path=file_path, excel_rule=None)
-                for file_path in file_paths
-            ]
+            self.file_list = [SimpleNamespace(file_path=file_path, excel_rule=None) for file_path in file_paths]
             self.callback_url = None
 
         def model_dump(self, include=None):
-            return {'knowledge_id': self.knowledge_id}
+            return {"knowledge_id": self.knowledge_id}
 
     return _Req()
 
@@ -186,41 +189,50 @@ def test_save_knowledge_file_rejects_upload_batch_over_role_space_file_quota():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     knowledge = SimpleNamespace(id=1, user_id=9)
-    login_user = SimpleNamespace(user_id=7, user_name='alice', tenant_id=1, is_admin=lambda: False)
+    login_user = SimpleNamespace(user_id=7, user_name="alice", tenant_id=1, is_admin=lambda: False)
     added_file = SimpleNamespace(
         id=81,
         status=KnowledgeFileStatus.WAITING.value,
         file_size=6,
-        model_dump=lambda: {'id': 81, 'file_size': 6},
+        model_dump=lambda: {"id": 81, "file_size": 6},
     )
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_sync',
-    ), patch.object(
-        service_module.KnowledgeFileDao,
-        'get_user_upload_total_file_size',
-        return_value=5,
-    ), patch.object(
-        service_module.FileProcessBase,
-        'model_fields',
-        {},
-        create=True,
-    ), patch.object(
-        KnowledgeService,
-        'process_one_file',
-        return_value=added_file,
-    ), patch.object(
-        service_module.KnowledgeFileDao,
-        'delete_batch',
-    ) as mock_delete:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_sync",
+        ),
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "get_user_upload_total_file_size",
+            return_value=5,
+        ),
+        patch.object(
+            service_module.FileProcessBase,
+            "model_fields",
+            {},
+            create=True,
+        ),
+        patch.object(
+            KnowledgeService,
+            "process_one_file",
+            return_value=added_file,
+        ),
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "delete_batch",
+        ) as mock_delete,
+    ):
         with pytest.raises(SpaceFileSizeLimitError):
             KnowledgeService.save_knowledge_file(
-                login_user, _make_file_process_req(), upload_limit_bytes=10,
+                login_user,
+                _make_file_process_req(),
+                upload_limit_bytes=10,
             )
 
     mock_delete.assert_called_once_with([81])
@@ -230,43 +242,51 @@ def test_save_knowledge_file_allows_upload_batch_within_role_space_file_quota():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     knowledge = SimpleNamespace(id=1, user_id=9)
-    login_user = SimpleNamespace(user_id=7, user_name='alice', tenant_id=1, is_admin=lambda: False)
+    login_user = SimpleNamespace(user_id=7, user_name="alice", tenant_id=1, is_admin=lambda: False)
     added_file = SimpleNamespace(
         id=82,
         status=KnowledgeFileStatus.WAITING.value,
         file_size=4,
-        model_dump=lambda: {'id': 82, 'file_size': 4},
+        model_dump=lambda: {"id": 82, "file_size": 4},
     )
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_sync',
-    ), patch.object(
-        service_module.KnowledgeFileDao,
-        'get_user_upload_total_file_size',
-        return_value=5,
-    ), patch.object(
-        service_module.FileProcessBase,
-        'model_fields',
-        {},
-        create=True,
-    ), patch.object(
-        KnowledgeService,
-        'process_one_file',
-        return_value=added_file,
-    ), patch.object(
-        KnowledgeService,
-        'get_preview_cache_key',
-        return_value='preview-key',
-        create=True,
-    ), patch.object(
-        service_module.KnowledgeFileDao,
-        'delete_batch',
-    ) as mock_delete:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_sync",
+        ),
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "get_user_upload_total_file_size",
+            return_value=5,
+        ),
+        patch.object(
+            service_module.FileProcessBase,
+            "model_fields",
+            {},
+            create=True,
+        ),
+        patch.object(
+            KnowledgeService,
+            "process_one_file",
+            return_value=added_file,
+        ),
+        patch.object(
+            KnowledgeService,
+            "get_preview_cache_key",
+            return_value="preview-key",
+            create=True,
+        ),
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "delete_batch",
+        ) as mock_delete,
+    ):
         _, failed_files, process_files, preview_cache_keys = KnowledgeService.save_knowledge_file(
             login_user,
             _make_file_process_req(),
@@ -275,7 +295,7 @@ def test_save_knowledge_file_allows_upload_batch_within_role_space_file_quota():
 
     assert failed_files == []
     assert process_files == [added_file]
-    assert preview_cache_keys == ['preview-key']
+    assert preview_cache_keys == ["preview-key"]
     mock_delete.assert_not_called()
 
 
@@ -286,34 +306,40 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
     login_user = SimpleNamespace(
         user_id=7,
         is_admin=lambda: False,
-        rebac_list_accessible=AsyncMock(return_value=['1']),
+        rebac_list_accessible=AsyncMock(return_value=["1"]),
     )
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aget_knowledge_ids_created_by',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'filter_knowledge_ids_by_permission_async',
-        new_callable=AsyncMock,
-        return_value=[1],
-    ) as mock_filter_ids, patch.object(
-        service_module.KnowledgeDao,
-        'aget_user_knowledge',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'acount_user_knowledge',
-        new_callable=AsyncMock,
-        return_value=0,
-    ), patch.object(
-        service_module.KnowledgeService,
-        'aconvert_knowledge_read',
-        new_callable=AsyncMock,
-        return_value=[],
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aget_knowledge_ids_created_by",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "filter_knowledge_ids_by_permission_async",
+            new_callable=AsyncMock,
+            return_value=[1],
+        ) as mock_filter_ids,
+        patch.object(
+            service_module.KnowledgeDao,
+            "aget_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "acount_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch.object(
+            service_module.KnowledgeService,
+            "aconvert_knowledge_read",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         result, total = await KnowledgeService.get_knowledge(
             request=MagicMock(),
@@ -323,11 +349,11 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
 
     assert result == []
     assert total == 0
-    login_user.rebac_list_accessible.assert_awaited_once_with('can_read', 'knowledge_library')
+    login_user.rebac_list_accessible.assert_awaited_once_with("can_read", "knowledge_library")
     mock_filter_ids.assert_awaited_once_with(
         login_user,
         [1],
-        'use_kb',
+        "use_kb",
     )
 
 
@@ -338,34 +364,40 @@ async def test_get_knowledge_merges_creator_owned_ids_into_use_kb_filter_candida
     login_user = SimpleNamespace(
         user_id=7,
         is_admin=lambda: False,
-        rebac_list_accessible=AsyncMock(return_value=['1']),
+        rebac_list_accessible=AsyncMock(return_value=["1"]),
     )
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aget_knowledge_ids_created_by',
-        new_callable=AsyncMock,
-        return_value=[9],
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'filter_knowledge_ids_by_permission_async',
-        new_callable=AsyncMock,
-        return_value=[1, 9],
-    ) as mock_filter_ids, patch.object(
-        service_module.KnowledgeDao,
-        'aget_user_knowledge',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'acount_user_knowledge',
-        new_callable=AsyncMock,
-        return_value=0,
-    ), patch.object(
-        service_module.KnowledgeService,
-        'aconvert_knowledge_read',
-        new_callable=AsyncMock,
-        return_value=[],
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aget_knowledge_ids_created_by",
+            new_callable=AsyncMock,
+            return_value=[9],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "filter_knowledge_ids_by_permission_async",
+            new_callable=AsyncMock,
+            return_value=[1, 9],
+        ) as mock_filter_ids,
+        patch.object(
+            service_module.KnowledgeDao,
+            "aget_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "acount_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch.object(
+            service_module.KnowledgeService,
+            "aconvert_knowledge_read",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         await KnowledgeService.get_knowledge(
             request=MagicMock(),
@@ -376,7 +408,7 @@ async def test_get_knowledge_merges_creator_owned_ids_into_use_kb_filter_candida
     filter_args = mock_filter_ids.await_args.args
     assert filter_args[0] is login_user
     assert set(filter_args[1]) == {1, 9}
-    assert filter_args[2] == 'use_kb'
+    assert filter_args[2] == "use_kb"
 
 
 @pytest.mark.asyncio
@@ -386,46 +418,52 @@ async def test_get_knowledge_supports_view_permission_filter_override():
     login_user = SimpleNamespace(
         user_id=7,
         is_admin=lambda: False,
-        rebac_list_accessible=AsyncMock(return_value=['1']),
+        rebac_list_accessible=AsyncMock(return_value=["1"]),
     )
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aget_knowledge_ids_created_by',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'filter_knowledge_ids_by_permission_async',
-        new_callable=AsyncMock,
-        return_value=[1],
-    ) as mock_filter_ids, patch.object(
-        service_module.KnowledgeDao,
-        'aget_user_knowledge',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'acount_user_knowledge',
-        new_callable=AsyncMock,
-        return_value=0,
-    ), patch.object(
-        service_module.KnowledgeService,
-        'aconvert_knowledge_read',
-        new_callable=AsyncMock,
-        return_value=[],
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aget_knowledge_ids_created_by",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "filter_knowledge_ids_by_permission_async",
+            new_callable=AsyncMock,
+            return_value=[1],
+        ) as mock_filter_ids,
+        patch.object(
+            service_module.KnowledgeDao,
+            "aget_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "acount_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch.object(
+            service_module.KnowledgeService,
+            "aconvert_knowledge_read",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
             knowledge_type=KnowledgeTypeEnum.NORMAL,
-            permission_id='view_kb',
+            permission_id="view_kb",
         )
 
     filter_args = mock_filter_ids.await_args.args
     assert filter_args[0] is login_user
     assert filter_args[1] == [1]
-    assert filter_args[2] == 'view_kb'
+    assert filter_args[2] == "view_kb"
 
 
 @pytest.mark.asyncio
@@ -436,19 +474,22 @@ async def test_aconvert_knowledge_read_uses_permission_service_async_bridge_for_
     knowledge = SimpleNamespace(
         id=81,
         user_id=15,
-        model_dump=lambda: {'id': 81, 'name': 'kb', 'description': '', 'type': 0, 'user_id': 15},
+        model_dump=lambda: {"id": 81, "name": "kb", "description": "", "type": 0, "user_id": 15},
     )
 
-    with patch.object(
-        service_module.UserDao,
-        'get_user_by_ids',
-        return_value=[SimpleNamespace(user_id=15, user_name='owner')],
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'check_access_async',
-        new_callable=AsyncMock,
-        return_value=True,
-    ) as mock_check_access:
+    with (
+        patch.object(
+            service_module.UserDao,
+            "get_user_by_ids",
+            return_value=[SimpleNamespace(user_id=15, user_name="owner")],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "check_access_async",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_check_access,
+    ):
         result = await KnowledgeService.aconvert_knowledge_read(login_user, [knowledge])
 
     assert len(result) == 1
@@ -467,20 +508,24 @@ def test_create_knowledge_hook_writes_knowledge_library_owner_tuple():
     login_user = SimpleNamespace(user_id=7)
     knowledge = SimpleNamespace(id=11)
 
-    with patch(
-        'bisheng.permission.domain.services.owner_service.OwnerService.write_owner_tuple_sync',
-    ) as mock_write_owner, patch.object(
-        service_module.KnowledgeAuditTelemetryService,
-        'audit_create_knowledge',
-        create=True,
-    ), patch.object(
-        service_module.KnowledgeAuditTelemetryService,
-        'telemetry_new_knowledge',
-        create=True,
+    with (
+        patch(
+            "bisheng.permission.domain.services.owner_service.OwnerService.write_owner_tuple_sync",
+        ) as mock_write_owner,
+        patch.object(
+            service_module.KnowledgeAuditTelemetryService,
+            "audit_create_knowledge",
+            create=True,
+        ),
+        patch.object(
+            service_module.KnowledgeAuditTelemetryService,
+            "telemetry_new_knowledge",
+            create=True,
+        ),
     ):
         assert KnowledgeService.create_knowledge_hook(MagicMock(), login_user, knowledge) is True
 
-    mock_write_owner.assert_called_once_with(7, 'knowledge_library', '11')
+    mock_write_owner.assert_called_once_with(7, "knowledge_library", "11")
 
 
 def test_delete_knowledge_hook_deletes_knowledge_library_tuples():
@@ -489,16 +534,19 @@ def test_delete_knowledge_hook_deletes_knowledge_library_tuples():
     login_user = SimpleNamespace(user_id=7)
     knowledge = SimpleNamespace(id=13)
 
-    with patch(
-        'bisheng.permission.domain.services.owner_service.OwnerService.delete_resource_tuples_sync',
-    ) as mock_delete_tuples, patch.object(
-        service_module.KnowledgeAuditTelemetryService,
-        'audit_delete_knowledge',
-        create=True,
+    with (
+        patch(
+            "bisheng.permission.domain.services.owner_service.OwnerService.delete_resource_tuples_sync",
+        ) as mock_delete_tuples,
+        patch.object(
+            service_module.KnowledgeAuditTelemetryService,
+            "audit_delete_knowledge",
+            create=True,
+        ),
     ):
         KnowledgeService.delete_knowledge_hook(MagicMock(), login_user, knowledge)
 
-    mock_delete_tuples.assert_called_once_with('knowledge_library', '13')
+    mock_delete_tuples.assert_called_once_with("knowledge_library", "13")
 
 
 def test_get_knowledge_info_uses_view_permission_id():
@@ -507,27 +555,31 @@ def test_get_knowledge_info_uses_view_permission_id():
     login_user = SimpleNamespace(is_admin=lambda: False, user_id=7)
     knowledge = SimpleNamespace(id=31, user_id=9, model_dump=lambda: {})
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'get_list_by_ids',
-        return_value=[knowledge],
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'check_permission_id_sync',
-        return_value=True,
-    ) as mock_check_permission, patch.object(
-        service_module.KnowledgeService,
-        'convert_knowledge_read',
-        return_value=['ok'],
-    ) as mock_convert:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "get_list_by_ids",
+            return_value=[knowledge],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "check_permission_id_sync",
+            return_value=True,
+        ) as mock_check_permission,
+        patch.object(
+            service_module.KnowledgeService,
+            "convert_knowledge_read",
+            return_value=["ok"],
+        ) as mock_convert,
+    ):
         result = KnowledgeService.get_knowledge_info(
             request=MagicMock(),
             login_user=login_user,
             knowledge_id=[31],
         )
 
-    assert result == ['ok']
-    mock_check_permission.assert_called_once_with(login_user, 31, 'view_kb')
+    assert result == ["ok"]
+    mock_check_permission.assert_called_once_with(login_user, 31, "view_kb")
     mock_convert.assert_called_once_with(login_user, [knowledge])
 
 
@@ -537,14 +589,17 @@ def test_judge_knowledge_access_uses_permission_service_sync_bridge():
     login_user = SimpleNamespace(user_id=7)
     knowledge = SimpleNamespace(id=32, user_id=10)
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_access_sync',
-    ) as mock_ensure_access:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_access_sync",
+        ) as mock_ensure_access,
+    ):
         result = KnowledgeService.judge_knowledge_access(
             login_user=login_user,
             knowledge_id=32,
@@ -567,37 +622,44 @@ def test_update_knowledge_uses_permission_service_write_sync_bridge():
     db_knowledge = SimpleNamespace(
         id=41,
         user_id=12,
-        name='old',
-        description='old-desc',
+        type=KnowledgeTypeEnum.NORMAL.value,
+        name="old",
+        description="old-desc",
         model_dump=lambda: {
-            'id': 41,
-            'name': 'new',
-            'description': 'new-desc',
-            'type': 0,
-            'user_id': 12,
+            "id": 41,
+            "name": "new",
+            "description": "new-desc",
+            "type": 0,
+            "user_id": 12,
         },
     )
-    req = SimpleNamespace(knowledge_id=41, name='new', description='new-desc')
+    req = SimpleNamespace(knowledge_id=41, name="new", description="new-desc")
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=db_knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_sync',
-    ) as mock_ensure_write, patch.object(
-        service_module.KnowledgeDao,
-        'get_knowledge_by_name',
-        return_value=None,
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'update_one',
-        return_value=db_knowledge,
-    ), patch.object(
-        service_module.UserDao,
-        'get_user',
-        return_value=SimpleNamespace(user_name='owner'),
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=db_knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_sync",
+        ) as mock_ensure_write,
+        patch.object(
+            service_module.KnowledgeDao,
+            "get_knowledge_by_name",
+            return_value=None,
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "update_one",
+            return_value=db_knowledge,
+        ),
+        patch.object(
+            service_module.UserDao,
+            "get_user",
+            return_value=SimpleNamespace(user_name="owner"),
+        ),
     ):
         KnowledgeService.update_knowledge(MagicMock(), login_user, req)
 
@@ -608,34 +670,97 @@ def test_update_knowledge_uses_permission_service_write_sync_bridge():
     )
 
 
+def test_update_knowledge_checks_duplicate_name_with_existing_type():
+    service_module = _load_service_module()
+    KnowledgeService = service_module.KnowledgeService
+    login_user = SimpleNamespace(user_id=7)
+    db_knowledge = SimpleNamespace(
+        id=43,
+        user_id=12,
+        type=KnowledgeTypeEnum.QA.value,
+        name="old",
+        description="old-desc",
+        model_dump=lambda: {
+            "id": 43,
+            "name": "new",
+            "description": "new-desc",
+            "type": KnowledgeTypeEnum.QA.value,
+            "user_id": 12,
+        },
+    )
+    req = SimpleNamespace(knowledge_id=43, name="new", description="new-desc")
+
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=db_knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_sync",
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "get_knowledge_by_name",
+            return_value=None,
+        ) as mock_get_by_name,
+        patch.object(
+            service_module.KnowledgeDao,
+            "update_one",
+            return_value=db_knowledge,
+        ),
+        patch.object(
+            service_module.UserDao,
+            "get_user",
+            return_value=SimpleNamespace(user_name="owner"),
+        ),
+    ):
+        KnowledgeService.update_knowledge(MagicMock(), login_user, req)
+
+    mock_get_by_name.assert_called_once_with(
+        "new",
+        12,
+        KnowledgeTypeEnum.QA.value,
+    )
+
+
 def test_delete_knowledge_uses_permission_service_delete_sync_bridge():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     login_user = SimpleNamespace(user_id=7)
     knowledge = SimpleNamespace(id=42, user_id=12)
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_delete_sync',
-    ) as mock_ensure_delete, patch.object(
-        KnowledgeService,
-        'delete_knowledge_file_in_vector',
-    ), patch.object(
-        KnowledgeService,
-        'delete_knowledge_file_in_minio',
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'delete_knowledge',
-    ), patch.object(
-        KnowledgeService.audit_telemetry_service,
-        'telemetry_delete_knowledge',
-    ), patch.object(
-        KnowledgeService,
-        'delete_knowledge_hook',
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_delete_sync",
+        ) as mock_ensure_delete,
+        patch.object(
+            KnowledgeService,
+            "delete_knowledge_file_in_vector",
+        ),
+        patch.object(
+            KnowledgeService,
+            "delete_knowledge_file_in_minio",
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "delete_knowledge",
+        ),
+        patch.object(
+            KnowledgeService.audit_telemetry_service,
+            "telemetry_delete_knowledge",
+        ),
+        patch.object(
+            KnowledgeService,
+            "delete_knowledge_hook",
+        ),
     ):
         KnowledgeService.delete_knowledge(MagicMock(), login_user, 42)
 
@@ -649,34 +774,42 @@ def test_delete_knowledge_uses_permission_service_delete_sync_bridge():
 def test_delete_knowledge_file_uses_permission_service_write_sync_bridge():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
-    login_user = SimpleNamespace(user_id=7, user_name='tester')
+    login_user = SimpleNamespace(user_id=7, user_name="tester")
     db_file = SimpleNamespace(id=91, knowledge_id=51)
     knowledge = SimpleNamespace(id=51, user_id=13)
 
-    with patch.object(
-        service_module.KnowledgeFileDao,
-        'select_list',
-        return_value=[db_file],
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_sync',
-    ) as mock_ensure_write, patch.object(
-        service_module,
-        'delete_knowledge_file_vectors',
-    ), patch.object(
-        service_module.KnowledgeFileDao,
-        'delete_batch',
-    ), patch.object(
-        service_module.KnowledgeAuditTelemetryService,
-        'telemetry_delete_knowledge_file',
-        create=True,
-    ), patch.object(
-        service_module.KnowledgeService,
-        'delete_knowledge_file_hook',
+    with (
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "select_list",
+            return_value=[db_file],
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_sync",
+        ) as mock_ensure_write,
+        patch.object(
+            service_module,
+            "delete_knowledge_file_vectors",
+        ),
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "delete_batch",
+        ),
+        patch.object(
+            service_module.KnowledgeAuditTelemetryService,
+            "telemetry_delete_knowledge_file",
+            create=True,
+        ),
+        patch.object(
+            service_module.KnowledgeService,
+            "delete_knowledge_file_hook",
+        ),
     ):
         KnowledgeService.delete_knowledge_file(MagicMock(), login_user, [91])
 
@@ -694,16 +827,19 @@ async def test_get_readable_knowledge_uses_permission_service_bridge():
     knowledge = SimpleNamespace(id=21, user_id=8)
     login_user = SimpleNamespace(user_id=7)
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aquery_by_id',
-        new_callable=AsyncMock,
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_read_async',
-        new_callable=AsyncMock,
-    ) as mock_ensure_read:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_read_async",
+            new_callable=AsyncMock,
+        ) as mock_ensure_read,
+    ):
         result = await KnowledgeService._get_readable_knowledge(
             login_user=login_user,
             knowledge_id=21,
@@ -724,16 +860,19 @@ async def test_get_writable_knowledge_uses_permission_service_bridge():
     knowledge = SimpleNamespace(id=22, user_id=9)
     login_user = SimpleNamespace(user_id=7)
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aquery_by_id',
-        new_callable=AsyncMock,
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_async',
-        new_callable=AsyncMock,
-    ) as mock_ensure_write:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_async",
+            new_callable=AsyncMock,
+        ) as mock_ensure_write,
+    ):
         result = await KnowledgeService._get_writable_knowledge(
             login_user=login_user,
             knowledge_id=22,
@@ -755,34 +894,40 @@ async def test_retry_files_uses_permission_service_write_async_bridge():
     knowledge = SimpleNamespace(id=51, user_id=13)
     db_file = SimpleNamespace(id=91, knowledge_id=51)
 
-    with patch.object(
-        service_module.KnowledgeFileDao,
-        'aget_file_by_ids',
-        new_callable=AsyncMock,
-        return_value=[db_file],
-    ), patch.object(
-        service_module.KnowledgeDao,
-        'aquery_by_id',
-        new_callable=AsyncMock,
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_async',
-        new_callable=AsyncMock,
-    ) as mock_ensure_write, patch.object(
-        service_module.KnowledgeService,
-        'process_retry_files',
-        new_callable=AsyncMock,
-        return_value=([], []),
-        create=True,
-    ), patch.object(
-        service_module.KnowledgeService,
-        'upload_knowledge_file_hook',
+    with (
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "aget_file_by_ids",
+            new_callable=AsyncMock,
+            return_value=[db_file],
+        ),
+        patch.object(
+            service_module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_async",
+            new_callable=AsyncMock,
+        ) as mock_ensure_write,
+        patch.object(
+            service_module.KnowledgeService,
+            "process_retry_files",
+            new_callable=AsyncMock,
+            return_value=([], []),
+            create=True,
+        ),
+        patch.object(
+            service_module.KnowledgeService,
+            "upload_knowledge_file_hook",
+        ),
     ):
         await KnowledgeService.retry_files(
             request=MagicMock(),
             login_user=login_user,
-            req_data={'file_objs': [{'id': 91}]},
+            req_data={"file_objs": [{"id": 91}]},
         )
 
     mock_ensure_write.assert_awaited_once_with(
@@ -798,14 +943,17 @@ def test_judge_qa_knowledge_write_uses_permission_service_write_sync_bridge():
     login_user = SimpleNamespace(user_id=7)
     qa_knowledge = SimpleNamespace(id=61, user_id=14, type=KnowledgeTypeEnum.QA.value)
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=qa_knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_write_sync',
-    ) as mock_ensure_write:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=qa_knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_write_sync",
+        ) as mock_ensure_write,
+    ):
         result = KnowledgeService.judge_qa_knowledge_write(login_user, 61)
 
     assert result is qa_knowledge
@@ -822,50 +970,58 @@ def test_judge_qa_knowledge_view_uses_view_permission_only():
     login_user = SimpleNamespace(user_id=7)
     qa_knowledge = SimpleNamespace(id=61, user_id=14, type=KnowledgeTypeEnum.QA.value)
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'query_by_id',
-        return_value=qa_knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'check_permission_id_sync',
-        return_value=True,
-    ) as mock_check_permission:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "query_by_id",
+            return_value=qa_knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "check_permission_id_sync",
+            return_value=True,
+        ) as mock_check_permission,
+    ):
         result = KnowledgeService.judge_qa_knowledge_view(login_user, 61)
 
     assert result is qa_knowledge
-    mock_check_permission.assert_called_once_with(login_user, 61, 'view_kb')
+    mock_check_permission.assert_called_once_with(login_user, 61, "view_kb")
 
 
 def test_batch_download_files_uses_permission_service_read_async_bridge():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     login_user = SimpleNamespace(user_id=7)
-    knowledge = SimpleNamespace(id=71, user_id=15, name='kb-download')
-    db_file = SimpleNamespace(id=101, knowledge_id=71, object_name='minio/object', file_name='doc.txt')
-    fake_minio = SimpleNamespace(get_share_link_sync=lambda object_name: f'url:{object_name}')
+    knowledge = SimpleNamespace(id=71, user_id=15, name="kb-download")
+    db_file = SimpleNamespace(id=101, knowledge_id=71, object_name="minio/object", file_name="doc.txt")
+    fake_minio = SimpleNamespace(get_share_link_sync=lambda object_name: f"url:{object_name}")
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aquery_by_id',
-        new_callable=AsyncMock,
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_read_async',
-        new_callable=AsyncMock,
-    ) as mock_ensure_read, patch.object(
-        service_module.KnowledgeFileDao,
-        'select_list',
-        return_value=[db_file],
-    ), patch.object(
-        service_module,
-        'get_minio_storage_sync',
-        return_value=fake_minio,
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_read_async",
+            new_callable=AsyncMock,
+        ) as mock_ensure_read,
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "select_list",
+            return_value=[db_file],
+        ),
+        patch.object(
+            service_module,
+            "get_minio_storage_sync",
+            return_value=fake_minio,
+        ),
     ):
         result = asyncio.run(KnowledgeService.batch_download_files(login_user, 71, [101]))
 
-    assert result == 'url:minio/object'
+    assert result == "url:minio/object"
     mock_ensure_read.assert_awaited_once_with(
         login_user=login_user,
         owner_user_id=15,
@@ -878,47 +1034,55 @@ async def test_aget_knowledge_files_uses_permission_service_read_async_bridge():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     login_user = SimpleNamespace(user_id=7)
-    knowledge = SimpleNamespace(id=81, user_id=16, index_name='kb-index')
+    knowledge = SimpleNamespace(id=81, user_id=16, index_name="kb-index")
 
-    with patch.object(
-        service_module.KnowledgeDao,
-        'aquery_by_id',
-        new_callable=AsyncMock,
-        return_value=knowledge,
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'ensure_knowledge_read_async',
-        new_callable=AsyncMock,
-    ) as mock_ensure_read, patch.object(
-        service_module.KnowledgeFileDao,
-        'aget_file_by_filters',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        service_module.KnowledgeFileDao,
-        'acount_file_by_filters',
-        new_callable=AsyncMock,
-        return_value=0,
-    ), patch.object(
-        service_module.TagDao,
-        'get_tags_by_resource',
-        return_value={},
-        create=True,
-    ), patch.object(
-        KnowledgeService,
-        'get_knowledge_files_title',
-        return_value={},
-    ), patch.object(
-        KnowledgeService.permission_service,
-        'check_access_async',
-        new_callable=AsyncMock,
-        return_value=False,
-    ) as mock_check_write:
+    with (
+        patch.object(
+            service_module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=knowledge,
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "ensure_knowledge_read_async",
+            new_callable=AsyncMock,
+        ) as mock_ensure_read,
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "aget_file_by_filters",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            service_module.KnowledgeFileDao,
+            "acount_file_by_filters",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch.object(
+            service_module.TagDao,
+            "get_tags_by_resource",
+            return_value={},
+            create=True,
+        ),
+        patch.object(
+            KnowledgeService,
+            "get_knowledge_files_title",
+            return_value={},
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "check_access_async",
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_check_write,
+    ):
         data, total, writeable = await KnowledgeService.aget_knowledge_files(
             request=MagicMock(),
             login_user=login_user,
             knowledge_id=81,
-            file_name='',
+            file_name="",
             status=[2],
             page=1,
             page_size=100,

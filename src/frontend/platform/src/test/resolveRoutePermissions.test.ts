@@ -96,11 +96,18 @@ describe("resolveRoutePermissions", () => {
     expect(perms.filter((p) => p === "model")).toHaveLength(1)
   })
 
-  it("handles missing web_menu gracefully", () => {
+  it("grants Child Admin every admin route permission except tenant management", () => {
     expect(resolveRoutePermissions({})).toEqual([])
     expect(resolveRoutePermissions({ is_child_admin: true })).toEqual([
-      "sys",
+      "board",
+      "build",
+      "create_app",
+      "knowledge",
       "model",
+      "evaluation",
+      "mark_task",
+      "log",
+      "sys",
       "workstation",
     ])
   })
@@ -116,6 +123,6 @@ describe("resolveRoutePermissions", () => {
     })
     expect(perms).toContain("sys")
     expect(perms).toContain("workstation")
-    expect(perms).not.toContain("create_app")
+    expect(perms).toContain("create_app")
   })
 })

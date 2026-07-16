@@ -259,7 +259,7 @@ export default function ExplorePlaza() {
                     )}
                     {!loading && agents.length === 0 && (
                         <div className="flex flex-col items-center">
-                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
                             <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">{localize('com_app_explore_no_agents')}</p>
                         </div>
                     )}

@@ -367,7 +367,7 @@ export function ChannelMemberDialog({
                                 </div>
                             ) : members.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center py-8 text-center">
-                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <EmptyStateIllustration className="size-[120px] mb-4" />
                                     <p className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_subscription.nofound_mathcing_member")}
                                     </p>

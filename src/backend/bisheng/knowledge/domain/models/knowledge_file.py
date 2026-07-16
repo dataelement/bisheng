@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
@@ -13,6 +13,7 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
 
+KNOWLEDGE_FILE_NAME_MAX_LENGTH = 500
 KNOWLEDGE_REMARK_MAX_LENGTH = 4096
 
 
@@ -77,7 +78,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     user_name: str | None = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     thumbnails: str | None = Field(default=None, description="File thumbnails in Stored object name")
-    file_name: str = Field(max_length=200, index=True)
+    file_name: str = Field(max_length=KNOWLEDGE_FILE_NAME_MAX_LENGTH, index=True)
     file_type: int = Field(default=FileType.FILE.value, description="File type. 0: dir; 1: file")
     file_source: str | None = Field(default=FileSource.UPLOAD.value, description="File source")
     level: int | None = Field(default=0)
@@ -202,16 +203,6 @@ class QAKnowledgeUpsert(QAKnowledgeBase):
 
 
 class KnowledgeFileDao(KnowledgeFileBase):
-    _DUPLICATE_EXCLUDED_STATUSES: ClassVar[tuple[int, ...]] = (
-        KnowledgeFileStatus.FAILED.value,
-        KnowledgeFileStatus.TIMEOUT.value,
-        KnowledgeFileStatus.VIOLATION.value,
-    )
-
-    @classmethod
-    def _apply_duplicate_filters(cls, statement):
-        return statement.where(~KnowledgeFile.status.in_(cls._DUPLICATE_EXCLUDED_STATUSES))
-
     @classmethod
     async def query_by_id(cls, file_id: int) -> KnowledgeFile | None:
         async with get_async_db_session() as session:
@@ -426,17 +417,19 @@ class KnowledgeFileDao(KnowledgeFileBase):
             await session.commit()
 
     @classmethod
-    def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    def get_file_by_condition(cls, knowledge_id: int, md5_: str | None = None, file_name: str | None = None):
         with get_sync_db_session() as session:
-            sql = cls._apply_duplicate_filters(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-            if md5_:
+            sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+            if md5_ and file_name:
+                sql = sql.where(or_(KnowledgeFile.md5 == md5_, KnowledgeFile.file_name == file_name))
+            elif md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
-            if file_name:
+            elif file_name:
                 sql = sql.where(KnowledgeFile.file_name == file_name)
             return session.exec(sql).all()
 
     @classmethod
-    async def get_repeat_file(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    async def get_repeat_file(cls, knowledge_id: int, md5_: str | None = None, file_name: str | None = None):
         # Mirror the list-rendering rule: hide files that are no longer the
         # primary version of any chain. Legacy files (no version row at all)
         # still count as visible. Otherwise an orphaned non-primary leftover
@@ -458,7 +451,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id
         )
 
-        sql = cls._apply_duplicate_filters(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
+        sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         sql = sql.where(
             or_(
                 ~exists(any_version),  # legacy file outside the version system

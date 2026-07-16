@@ -652,10 +652,16 @@ class _DepartmentSpaceScope:
     """
 
     department_id: int
+    department_path: str | None
     subtree_dept_ids: frozenset[int]
 
 
-async def _resolve_department_space_scope(resource_type: str, resource_id: str) -> "_DepartmentSpaceScope | None":
+async def _resolve_department_space_scope(
+    resource_type: str,
+    resource_id: str,
+    *,
+    load_subtree_ids: bool = True,
+) -> "_DepartmentSpaceScope | None":
     """Single judgment source for "is this a department knowledge space".
 
     Returns the scope when ``resource_type`` is ``knowledge_space`` and the
@@ -687,11 +693,17 @@ async def _resolve_department_space_scope(resource_type: str, resource_id: str) 
     department_id = int(binding.department_id)
     dept = await DepartmentDao.aget_by_id(department_id)
     if dept is None or getattr(dept, "status", "active") != "active":
-        return _DepartmentSpaceScope(department_id=department_id, subtree_dept_ids=frozenset())
+        return _DepartmentSpaceScope(
+            department_id=department_id,
+            department_path=None,
+            subtree_dept_ids=frozenset(),
+        )
 
-    subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path)
+    department_path = getattr(dept, "path", None)
+    subtree_ids = await DepartmentDao.aget_subtree_ids(department_path) if load_subtree_ids and department_path else []
     return _DepartmentSpaceScope(
         department_id=department_id,
+        department_path=department_path,
         subtree_dept_ids=frozenset(int(i) for i in subtree_ids),
     )
 
@@ -787,39 +799,48 @@ async def _list_knowledge_space_grant_users(
     keyword: str,
     page: int,
     page_size: int,
-    restrict_dept_ids: frozenset[int] | None = None,
+    restrict_dept_path: str | None = None,
 ) -> list[dict]:
     from sqlmodel import select
 
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
-    from bisheng.database.models.tenant import Tenant, UserTenant
+    from bisheng.database.models.department import Department, DepartmentDao, UserDepartment, UserDepartmentDao
+    from bisheng.database.models.tenant import UserTenant
     from bisheng.user.domain.models.user import User
 
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
-            stmt = (
-                select(User)
-                .join(UserTenant, UserTenant.user_id == User.user_id)
-                .join(Tenant, Tenant.id == UserTenant.tenant_id)
+            active_tenant_member = (
+                select(UserTenant.id)
                 .where(
+                    UserTenant.user_id == User.user_id,
                     UserTenant.tenant_id == tenant_id,
                     UserTenant.status == "active",
-                    Tenant.status == "active",
-                    User.delete == 0,
                 )
+                .exists()
+            )
+            stmt = (
+                select(User.user_id, User.user_name, User.external_id)
+                .where(User.delete == 0, active_tenant_member)
                 .order_by(User.user_id.desc())
             )
             # F033: department knowledge space -> only members of the bound
             # department subtree (a user is visible if ANY of their departments
-            # is in the subtree). Filter at SQL level so pagination stays correct.
-            if restrict_dept_ids is not None:
-                stmt = (
-                    stmt.join(UserDepartment, UserDepartment.user_id == User.user_id)
-                    .where(UserDepartment.department_id.in_(restrict_dept_ids))
-                    .distinct()
+            # is in the subtree). Correlate by path instead of expanding the whole
+            # subtree into a large IN list; EXISTS also avoids duplicate user rows.
+            if restrict_dept_path is not None:
+                in_department_subtree = (
+                    select(UserDepartment.id)
+                    .join(Department, Department.id == UserDepartment.department_id)
+                    .where(
+                        UserDepartment.user_id == User.user_id,
+                        Department.path.like(f"{restrict_dept_path}%"),
+                        Department.status == "active",
+                    )
+                    .exists()
                 )
+                stmt = stmt.where(in_department_subtree)
             if keyword:
                 # Prefix match (``keyword%``) so the user_name index (Field(index=True))
                 # can be used — a leading-wildcard ``%keyword%`` forces a full scan of the
@@ -1711,14 +1732,16 @@ async def get_grant_subject_users(
     )
     if tenant_id is None:
         return resp_200([])
-    scope = await _resolve_department_space_scope(resource_type, resource_id)
+    scope = await _resolve_department_space_scope(resource_type, resource_id, load_subtree_ids=False)
+    if scope is not None and not scope.department_path:
+        return resp_200([])
     return resp_200(
         await _list_knowledge_space_grant_users(
             tenant_id=tenant_id,
             keyword=keyword,
             page=page,
             page_size=page_size,
-            restrict_dept_ids=scope.subtree_dept_ids if scope else None,
+            restrict_dept_path=scope.department_path if scope else None,
         )
     )
 
@@ -1763,17 +1786,12 @@ async def _grant_dept_lazy_preamble(resource_type: str, resource_id: str, login_
     )
     if tenant_id is None:
         return None, None, None, True
-    scope = await _resolve_department_space_scope(resource_type, resource_id)
+    scope = await _resolve_department_space_scope(resource_type, resource_id, load_subtree_ids=False)
     restrict_root_path = None
     if scope is not None:
-        if not scope.subtree_dept_ids:
+        if not scope.department_path:
             return None, tenant_id, None, True  # bound dept archived/missing → no target
-        from bisheng.database.models.department import DepartmentDao
-
-        bound = await DepartmentDao.aget_by_id(scope.department_id)
-        if bound is None or getattr(bound, "path", None) is None:
-            return None, tenant_id, None, True
-        restrict_root_path = bound.path
+        restrict_root_path = scope.department_path
     return None, tenant_id, restrict_root_path, False
 
 
@@ -1849,7 +1867,7 @@ async def get_grant_subject_user_groups(
     ):
         return PermissionDeniedError.return_resp()
     # F033: department knowledge spaces disable the user-group dimension.
-    if await _resolve_department_space_scope(resource_type, resource_id) is not None:
+    if await _resolve_department_space_scope(resource_type, resource_id, load_subtree_ids=False) is not None:
         return resp_200([])
     tenant_id = await _resolve_grant_subject_tenant_id(
         resource_type=resource_type,

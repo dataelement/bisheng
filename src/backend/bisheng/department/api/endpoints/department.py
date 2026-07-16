@@ -46,6 +46,7 @@ async def global_members_search(
     keyword: str = "",
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=50),
+    root_dept_id: int | None = Query(None, ge=1),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """全组织按用户名搜索成员（主属部门路径）；可见范围与 :meth:`DepartmentService.aget_tree` 一致。
@@ -59,6 +60,7 @@ async def global_members_search(
             page,
             limit,
             login_user,
+            root_dept_id=root_dept_id,
         )
         return resp_200(data)
     except BaseErrorCode as e:

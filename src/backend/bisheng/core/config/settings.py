@@ -167,11 +167,6 @@ class CeleryConf(BaseModel):
             self.task_routers = {
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
-                "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},
-                # Org Sync Tasks (low frequency, reuse knowledge queue)
-                "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},
-                # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
-                "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
             }
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
@@ -223,26 +218,6 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.admin_scope.tasks.admin_scope_cleanup",
                 "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
             }
-        # v2.5.1 F015: 6h forced reconcile of every OrgSyncConfig +
-        # weekly/daily ts_conflict reporting. Cron strings are sourced
-        # from ``settings.reconcile`` so operators can override via env
-        # without touching the code path.
-        if "reconcile_all_organizations" not in self.beat_schedule:
-            self.beat_schedule["reconcile_all_organizations"] = {
-                "task": "bisheng.worker.org_sync.reconcile_tasks.reconcile_all_organizations",
-                "schedule": crontab.from_string("0 */6 * * *"),  # every 6h
-            }
-        if "report_ts_conflicts_weekly" not in self.beat_schedule:
-            self.beat_schedule["report_ts_conflicts_weekly"] = {
-                "task": "bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_weekly",
-                "schedule": crontab.from_string("0 9 * * MON"),  # Mon 09:00
-            }
-        if "report_ts_conflicts_daily_escalation" not in self.beat_schedule:
-            self.beat_schedule["report_ts_conflicts_daily_escalation"] = {
-                "task": "bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_daily_escalation",
-                "schedule": crontab.from_string("0 9 * * *"),  # every 09:00
-            }
-
         if "sync_information_article_hourly" not in self.beat_schedule:
             self.beat_schedule["sync_information_article_hourly"] = {
                 "task": "bisheng.worker.information.article.sync_information_article",

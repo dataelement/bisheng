@@ -584,11 +584,12 @@ export function KnowledgeSpaceSidebar({
                             {localize("com_knowledge.go_to_knowledge_square")}
                         </Button>
                         <Button
-                            variant="secondary"
+                            color="primary"
+                            variant="filled"
+                            icon={<Outlined.Plus />}
                             onClick={onCreateSpace}
-                            className="h-8 w-full gap-1 rounded-[6px] bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                            className="w-full"
                         >
-                            <Plus className="size-4" />
                             {localize("com_knowledge.create_knowledge_space")}
                         </Button>
                     </div>
