@@ -28,12 +28,12 @@ from bisheng.api.v1.schemas import (
     UpdatePreviewFileChunk,
 )
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
-    KnowledgeFileFailedError,
     KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotQAError,
@@ -41,9 +41,8 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
 )
-from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
-from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
@@ -483,8 +482,14 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge(cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate) -> Knowledge:
         from bisheng.llm.domain.share_fallback import get_model_by_id_with_share_fallback
 
-        # Determine if the Knowledge Base is Renamed
-        repeat_knowledge = KnowledgeDao.get_knowledge_by_name(knowledge.name, login_user.user_id)
+        knowledge_type = (
+            knowledge.type if isinstance(knowledge.type, KnowledgeTypeEnum) else KnowledgeTypeEnum(knowledge.type)
+        )
+        repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
+            knowledge.name,
+            login_user.user_id,
+            knowledge_type,
+        )
         if repeat_knowledge:
             raise KnowledgeExistError.http_exception()
 
@@ -514,13 +519,13 @@ class KnowledgeService(KnowledgeUtils):
     ) -> Knowledge:
         from bisheng.llm.domain.share_fallback import aget_model_by_id_with_share_fallback
 
-        repeat_knowledge = await KnowledgeDao.aget_user_knowledge(
-            login_user.user_id,
-            None,
-            KnowledgeTypeEnum(knowledge.type) if not isinstance(knowledge.type, KnowledgeTypeEnum) else knowledge.type,
+        knowledge_type = (
+            knowledge.type if isinstance(knowledge.type, KnowledgeTypeEnum) else KnowledgeTypeEnum(knowledge.type)
+        )
+        repeat_knowledge = await KnowledgeDao.aget_knowledge_by_name(
             knowledge.name,
-            page=1,
-            limit=1,
+            login_user.user_id,
+            knowledge_type,
         )
         if repeat_knowledge:
             raise KnowledgeExistError.http_exception()
@@ -669,7 +674,11 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
 
         if knowledge.name and knowledge.name != db_knowledge.name:
-            repeat_knowledge = KnowledgeDao.get_knowledge_by_name(knowledge.name, db_knowledge.user_id)
+            repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
+                knowledge.name,
+                db_knowledge.user_id,
+                db_knowledge.type,
+            )
             if repeat_knowledge and repeat_knowledge.id != db_knowledge.id:
                 raise KnowledgeExistError.http_exception()
             db_knowledge.name = knowledge.name
@@ -907,7 +916,16 @@ class KnowledgeService(KnowledgeUtils):
 
         file_share_url = minio_client.clear_minio_share_host(file_path)
         preview_exts = {
-            "doc", "docx", "wps", "xls", "xlsx", "et", "ppt", "pptx", "dps", "ofd",
+            "doc",
+            "docx",
+            "wps",
+            "xls",
+            "xlsx",
+            "et",
+            "ppt",
+            "pptx",
+            "dps",
+            "ofd",
         } | MEDIA_FILE_EXTENSIONS
         if file_ext.lower() in preview_exts:
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
