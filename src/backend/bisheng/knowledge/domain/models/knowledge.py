@@ -86,6 +86,13 @@ class KnowledgeBase(SQLModelSerializable):
         default_factory=list,
         sa_column=Column(JsonType, nullable=True, comment='门户业务域编码列表，仅知识空间使用'),
     )
+    sort_weight: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True, index=True,
+            comment='管理员手动排序权重，越小越靠前；NULL 表示未排过，排在已排序的之后',
+        ),
+    )
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -887,6 +894,25 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def async_update_sort_weights(cls, weight_by_space_id: Dict[int, int]) -> None:
+        """Write manual sort weights for the given spaces.
+
+        Used both for a single drag (one row) and for (re)assigning a whole level's
+        weights, so it stays one round-trip per row rather than loading the ORM
+        objects. Callers own the ordering semantics.
+        """
+        if not weight_by_space_id:
+            return
+        async with get_async_db_session() as session:
+            for space_id, weight in weight_by_space_id.items():
+                await session.exec(
+                    update(Knowledge)
+                    .where(Knowledge.id == int(space_id))
+                    .values(sort_weight=int(weight))
+                )
+            await session.commit()
+
+    @classmethod
     def get_public_spaces(cls, order_by: str = 'update_time') -> List[Knowledge]:
         """ Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
         statement = select(Knowledge).where(
@@ -1078,6 +1104,15 @@ class KnowledgeDao(KnowledgeBase):
 
     @staticmethod
     def _apply_space_order(statement, order_by: str):
+        if order_by == 'sort_weight':
+            # Admin-defined manual order. Spaces never dragged (NULL weight) fall back
+            # to recency behind the ordered ones. CASE keeps NULLS-LAST portable across
+            # MySQL and DM8 instead of relying on dialect-specific NULLS LAST.
+            return statement.order_by(
+                case((Knowledge.sort_weight.is_(None), 1), else_=0),
+                Knowledge.sort_weight.asc(),
+                Knowledge.update_time.desc(),
+            )
         if order_by == 'create_time':
             return statement.order_by(Knowledge.create_time.desc())
         elif order_by == 'name':

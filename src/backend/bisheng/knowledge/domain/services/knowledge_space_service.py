@@ -7428,6 +7428,91 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "has_more": end < total,
         }
 
+    # Sparse spacing between manual sort weights. A drag only rewrites the moved row
+    # (midpoint of its new neighbours); the gap is only re-spread when it runs out.
+    _SORT_WEIGHT_STEP = 1000
+
+    async def _load_level_spaces_in_display_order(self, level: KnowledgeSpaceLevelEnum) -> list[Knowledge]:
+        space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(level)
+        if not space_ids:
+            return []
+        return await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by="sort_weight")
+
+    async def _respread_level_sort_weights(self, spaces: list[Knowledge]) -> dict[int, int]:
+        """Assign evenly spaced weights following the list's current order.
+
+        Runs on the level's first drag (every weight still NULL) and, rarely, when a
+        midpoint gap is exhausted. Returns the weights it wrote.
+        """
+        weights = {int(space.id): (index + 1) * self._SORT_WEIGHT_STEP for index, space in enumerate(spaces)}
+        await KnowledgeDao.async_update_sort_weights(weights)
+        for space in spaces:
+            space.sort_weight = weights[int(space.id)]
+        return weights
+
+    async def reorder_space(
+        self,
+        space_id: int,
+        prev_space_id: int | None = None,
+        next_space_id: int | None = None,
+    ) -> None:
+        """Move a space between two neighbours in its level's admin-defined order.
+
+        Callers pass the ids the space is dropped between (either may be None at the
+        list edges); the new weight is the midpoint, so only this row is written no
+        matter how many spaces the level holds.
+        """
+        if not self.login_user.is_admin():
+            raise SpacePermissionDeniedError()
+
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        level = self._normalize_space_level(scope.level if scope is not None else None)
+        if level not in {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+            KnowledgeSpaceLevelEnum.TEAM,
+        }:
+            # Personal spaces are per-user and have no shared order to define.
+            raise SpaceInvalidLevelError()
+
+        spaces = await self._load_level_spaces_in_display_order(level)
+        space_by_id = {int(item.id): item for item in spaces}
+        if int(space_id) not in space_by_id:
+            raise SpaceNotFoundError()
+        for neighbour_id in (prev_space_id, next_space_id):
+            if neighbour_id is not None and int(neighbour_id) not in space_by_id:
+                # Neighbour from another level (or a stale client view) would place the
+                # space against an order it isn't part of.
+                raise SpaceInvalidLevelError()
+
+        if any(item.sort_weight is None for item in spaces):
+            # First drag in this level: freeze the order currently on screen, then move.
+            await self._respread_level_sort_weights(spaces)
+
+        prev_weight = space_by_id[int(prev_space_id)].sort_weight if prev_space_id is not None else None
+        next_weight = space_by_id[int(next_space_id)].sort_weight if next_space_id is not None else None
+
+        if prev_weight is None and next_weight is None:
+            return  # Only space in the level; nothing to order against.
+        if prev_weight is None:
+            new_weight = next_weight - self._SORT_WEIGHT_STEP
+        elif next_weight is None:
+            new_weight = prev_weight + self._SORT_WEIGHT_STEP
+        else:
+            new_weight = (prev_weight + next_weight) // 2
+            if new_weight in (prev_weight, next_weight):
+                # Gap exhausted between these two: re-spread the level, then retry the
+                # midpoint against the refreshed neighbour weights.
+                await self._respread_level_sort_weights(spaces)
+                prev_weight = space_by_id[int(prev_space_id)].sort_weight
+                next_weight = space_by_id[int(next_space_id)].sort_weight
+                new_weight = (prev_weight + next_weight) // 2
+
+        await KnowledgeDao.async_update_sort_weights({int(space_id): new_weight})
+
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:

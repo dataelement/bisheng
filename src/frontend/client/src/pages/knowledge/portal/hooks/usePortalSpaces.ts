@@ -99,19 +99,19 @@ export function usePortalSpaces({
 
     const publicSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.PUBLIC],
-        queryFn: () => getSpacesByLevelApi(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME }),
+        queryFn: () => getSpacesByLevelApi(SpaceLevel.PUBLIC, { order_by: SpaceSortType.SORT_WEIGHT }),
         enabled: shouldLoadGroup("public"),
         placeholderData: (prev) => prev,
     });
     const departmentSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT],
-        queryFn: () => getSpacesByLevelApi(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME }),
+        queryFn: () => getSpacesByLevelApi(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.SORT_WEIGHT }),
         enabled: shouldLoadGroup("department"),
         placeholderData: (prev) => prev,
     });
     const teamSpacesQuery = useQuery({
         queryKey: ["knowledgeSpaces", "level", SpaceLevel.TEAM],
-        queryFn: () => getSpacesByLevelApi(SpaceLevel.TEAM, { order_by: SpaceSortType.UPDATE_TIME }),
+        queryFn: () => getSpacesByLevelApi(SpaceLevel.TEAM, { order_by: SpaceSortType.SORT_WEIGHT }),
         enabled: shouldLoadGroup("team"),
         placeholderData: (prev) => prev,
     });

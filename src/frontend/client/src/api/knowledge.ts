@@ -108,7 +108,9 @@ export enum SortType {
 /** Sort values accepted by space list APIs (mine/joined/managed) */
 export enum SpaceSortType {
     NAME = "name",
-    UPDATE_TIME = "update_time"
+    UPDATE_TIME = "update_time",
+    /** Admin-defined manual order; spaces never dragged fall back to recency. */
+    SORT_WEIGHT = "sort_weight"
 }
 
 /** Sort direction */
@@ -1171,6 +1173,21 @@ export async function getSpacesByLevelApi(spaceLevel: SpaceLevel, params?: {
         },
     });
     return extractKnowledgeSpaceList(res).map(mapSpace);
+}
+
+/**
+ * Move a space between two neighbours in its level's admin-defined order.
+ * Pass the ids it was dropped between; either is null at the list edges.
+ * System admin only.
+ */
+export async function reorderSpaceApi(
+    spaceId: string,
+    neighbours: { prev_space_id: string | null; next_space_id: string | null },
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${spaceId}/sort`, {
+        prev_space_id: neighbours.prev_space_id ? Number(neighbours.prev_space_id) : null,
+        next_space_id: neighbours.next_space_id ? Number(neighbours.next_space_id) : null,
+    });
 }
 
 export async function getGroupedSpacesApi(params?: {
