@@ -1629,6 +1629,326 @@ def test_shougang_portal_file_search_request_defaults_to_relevance_sort():
 
 
 @pytest.mark.asyncio
+async def test_public_latest_selected_uses_authoritative_public_spaces_without_permissions(service):
+    public_spaces = [
+        _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC),
+        _make_space(space_id=18, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC),
+    ]
+    public_spaces[0].name = "轧线技术案例库"
+    public_spaces[1].name = "冷轧技术手册"
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name="热轧治理实践.pdf"),
+        _make_file(file_id=1801, knowledge_id=18, file_name="冷轧缺陷处理.pdf"),
+    ]
+
+    async def fake_get_files(**kwargs):
+        assert kwargs["knowledge_ids"] == [12, 18]
+        assert kwargs["status"] == [KnowledgeFileStatus.SUCCESS.value]
+        assert kwargs["file_ids"] == [1801, 1580]
+        return files
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12, 18],
+        ) as mock_public_space_ids,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=public_spaces,
+        ) as mock_spaces,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.PortalTelemetryEventService.list_document_read_counts_by_space_ids",
+            new_callable=AsyncMock,
+            return_value=[
+                {"file_id": 1801, "read_count": 20},
+                {"file_id": 1580, "read_count": 10},
+            ],
+        ) as mock_read_counts,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters",
+            new_callable=AsyncMock,
+            side_effect=fake_get_files,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
+        patch.object(
+            service,
+            "_get_shougang_portal_visible_search_spaces",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not resolve user-visible spaces"),
+        ) as mock_visible_spaces,
+        patch.object(
+            service,
+            "_get_effective_permission_ids",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not evaluate space permissions"),
+        ) as mock_effective_permissions,
+        patch.object(
+            service,
+            "_public_space_viewer_permission_ids",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not query public viewer permissions"),
+        ) as mock_public_viewer_permissions,
+        patch.object(
+            service,
+            "_filter_visible_child_items",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not evaluate file permissions"),
+        ) as mock_child_permissions,
+        patch.object(
+            service,
+            "_filter_shougang_portal_visible_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not enter generic visibility filtering"),
+        ) as mock_file_visibility,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                public_only=True,
+                space_ids=[999],
+                sort="portal_read_count_desc",
+                limit=2,
+            )
+        )
+
+    mock_public_space_ids.assert_awaited_once_with(KnowledgeSpaceLevelEnum.PUBLIC)
+    mock_spaces.assert_awaited_once_with([12, 18], order_by="update_time")
+    mock_read_counts.assert_awaited_once_with([12, 18], offset=0, limit=100)
+    mock_visible_spaces.assert_not_awaited()
+    mock_effective_permissions.assert_not_awaited()
+    mock_public_viewer_permissions.assert_not_awaited()
+    mock_child_permissions.assert_not_awaited()
+    mock_file_visibility.assert_not_awaited()
+    assert [item["id"] for item in result["data"]] == [1801, 1580]
+    assert result["has_more"] is False
+    assert result["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_public_latest_selected_discards_stale_candidates_and_keeps_cursor_order(service):
+    public_space = _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC)
+    public_space.name = "公共案例库"
+    first_valid = _make_file(file_id=1580, knowledge_id=12, file_name="第一篇.pdf")
+    second_valid = _make_file(file_id=1582, knowledge_id=12, file_name="第二篇.pdf")
+
+    async def fake_get_files(**kwargs):
+        assert kwargs["knowledge_ids"] == [12]
+        assert kwargs["file_ids"] == [9999, 1580, 1582]
+        return [second_valid, first_valid]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[public_space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.PortalTelemetryEventService.list_document_read_counts_by_space_ids",
+            new_callable=AsyncMock,
+            return_value=[
+                {"file_id": 9999, "read_count": 30},
+                {"file_id": 1580, "read_count": 20},
+                {"file_id": 1582, "read_count": 10},
+            ],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters",
+            new_callable=AsyncMock,
+            side_effect=fake_get_files,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
+        patch.object(
+            service,
+            "_filter_shougang_portal_visible_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("trusted public candidates must bypass generic visibility filtering"),
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                public_only=True,
+                space_ids=[999],
+                sort="portal_read_count_desc",
+                limit=1,
+            )
+        )
+
+    assert [item["id"] for item in result["data"]] == [1580]
+    assert result["has_more"] is True
+    assert result["next_cursor"]
+
+
+@pytest.mark.asyncio
+async def test_public_latest_selected_updated_time_sort_still_bypasses_permissions(service):
+    public_space = _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC)
+    public_space.name = "公共案例库"
+    old_file = _make_file(file_id=1580, knowledge_id=12, file_name="较早文档.pdf")
+    old_file.update_time = datetime(2026, 4, 13, 10, 30, 0)
+    new_file = _make_file(file_id=1582, knowledge_id=12, file_name="较新文档.pdf")
+    new_file.update_time = datetime(2026, 4, 15, 10, 30, 0)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[public_space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor",
+            new_callable=AsyncMock,
+            return_value=[old_file, new_file],
+        ) as mock_batch_files,
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
+        patch.object(
+            service,
+            "_get_shougang_portal_visible_search_spaces",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not resolve user-visible spaces"),
+        ),
+        patch.object(
+            service,
+            "_filter_shougang_portal_visible_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public latest selected must not evaluate file permissions"),
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                public_only=True,
+                space_ids=[999],
+                sort="updated_at_asc",
+            )
+        )
+
+    assert mock_batch_files.await_args.kwargs["knowledge_ids"] == [12]
+    assert mock_batch_files.await_args.kwargs["order_sort"] == "asc"
+    assert [item["id"] for item in result["data"]] == [1580, 1582]
+
+
+@pytest.mark.asyncio
+async def test_public_only_without_latest_selected_keeps_existing_permission_path(service):
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_visible_search_spaces",
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as mock_visible_spaces,
+        patch.object(
+            service,
+            "_get_shougang_portal_public_search_spaces",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("public_only alone must not activate the permission bypass"),
+        ) as mock_public_spaces,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(public_only=True, space_ids=[12])
+        )
+
+    mock_visible_spaces.assert_awaited_once_with([12], None)
+    mock_public_spaces.assert_not_awaited()
+    assert result == {"data": [], "has_more": False, "next_cursor": None}
+
+
+@pytest.mark.asyncio
+async def test_latest_selected_explicit_updated_time_sort_bypasses_hot_read_ranking(service):
+    space = _make_space(space_id=12, user_id=7)
+    old_file = _make_file(file_id=1580, knowledge_id=12, file_name="较早文档.pdf")
+    old_file.update_time = datetime(2026, 4, 13, 10, 30, 0)
+    new_file = _make_file(file_id=1582, knowledge_id=12, file_name="较新文档.pdf")
+    new_file.update_time = datetime(2026, 4, 15, 10, 30, 0)
+    files = [old_file, new_file]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor",
+            new_callable=AsyncMock,
+            return_value=files,
+        ) as mock_batch_files,
+        patch.object(
+            service,
+            "_list_shougang_portal_hot_read_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("explicit time sorting must bypass hot-read ranking"),
+        ),
+        patch.object(
+            service,
+            "_filter_visible_child_items",
+            new_callable=AsyncMock,
+            side_effect=lambda items, **_: items,
+        ),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                recommendation="latest_selected",
+                space_ids=[12],
+                sort="updated_at_asc",
+            )
+        )
+
+    assert mock_batch_files.await_args.kwargs["order_sort"] == "asc"
+    assert [item["id"] for item in result["data"]] == [1580, 1582]
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_file_search_filters_document_type_before_pagination(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = "报告知识库"
