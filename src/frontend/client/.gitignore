@@ -1,1 +1,4 @@
 .DS_Store
+
+# rspress docs-site build output (`npm run build:docs`)
+doc_build/
