@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -21,17 +21,12 @@ from bisheng.knowledge.domain.repositories.implementations.portal_recommendation
 from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_repository import (
     PortalRecommendationProjectionUpsert,
 )
-from bisheng.shougang_portal_config.domain.models.department_business_domain import (
-    DepartmentBusinessDomain,
-)
-from bisheng.shougang_portal_config.domain.repositories.implementations.department_business_domain_repository_impl import (
-    DepartmentBusinessDomainRepositoryImpl,
-)
 from bisheng.shougang_portal_config.domain.repositories.implementations.portal_admin_config_repository_impl import (
     PortalAdminConfigRepositoryImpl,
 )
-from bisheng.shougang_portal_config.domain.repositories.interfaces.department_business_domain_repository import (
-    DepartmentBusinessDomainBinding,
+from bisheng.shougang_portal_config.domain.repositories.implementations.portal_department_repository_impl import (
+    PortalDepartmentRepositoryImpl,
+    normalize_department_id_rows,
 )
 from bisheng.shougang_portal_config.domain.repositories.interfaces.portal_admin_config_repository import (
     portal_admin_config_physical_key,
@@ -58,49 +53,43 @@ async def test_config_repository_flushes_without_committing():
     session.commit.assert_not_awaited()
 
 
-async def test_binding_repository_uses_strict_tenant_even_when_root_is_visible(async_db_session):
+async def test_portal_department_repository_uses_strict_tenant_and_primary_membership(async_db_session):
     register_tenant_filter_events()
     with bypass_tenant_filter():
-        async_db_session.add_all(
-            [
-                DepartmentBusinessDomain(
-                    tenant_id=1,
-                    department_id=10,
-                    business_domain_code="ROOT",
-                ),
-                DepartmentBusinessDomain(
-                    tenant_id=5,
-                    department_id=10,
-                    business_domain_code="CHILD",
-                ),
-            ]
+        await async_db_session.exec(
+            text(
+                "INSERT INTO department (id, dept_id, name, tenant_id) VALUES "
+                "(10, 'ROOT-D10', 'root', 1), "
+                "(50, 'CHILD-D50', 'child-primary', 5), "
+                "(51, 'CHILD-D51', 'child-secondary', 5)"
+            )
+        )
+        await async_db_session.exec(
+            text(
+                "INSERT INTO user_department (user_id, department_id, is_primary) VALUES "
+                "(7, 10, 1), (7, 50, 1), (7, 51, 0)"
+            )
         )
         await async_db_session.commit()
 
     tenant_token = set_current_tenant_id(5)
     visible_token = set_visible_tenant_ids(frozenset({1, 5}))
     try:
-        repository = DepartmentBusinessDomainRepositoryImpl(async_db_session)
-
-        rows = await repository.list_by_department_id(10)
-        await repository.replace_all(
-            [DepartmentBusinessDomainBinding(department_id=10, business_domain_code="NEXT")],
-            create_user=7,
-        )
-        await async_db_session.commit()
+        repository = PortalDepartmentRepositoryImpl(async_db_session)
+        department_ids = await repository.list_primary_department_ids_for_user(7)
     finally:
         visible_tenant_ids.reset(visible_token)
         current_tenant_id.reset(tenant_token)
 
-    assert [(row.tenant_id, row.business_domain_code) for row in rows] == [(5, "CHILD")]
-    with bypass_tenant_filter():
-        result = await async_db_session.exec(
-            text(
-                "SELECT tenant_id, business_domain_code FROM department_business_domain "
-                "ORDER BY tenant_id, business_domain_code"
-            )
-        )
-    assert result.all() == [(1, "ROOT"), (5, "NEXT")]
+    assert department_ids == [50]
+
+
+def test_portal_department_repository_normalizes_driver_result_shapes():
+    engine = create_engine("sqlite://")
+    with engine.connect() as connection:
+        row = connection.execute(text("SELECT 52")).one()
+
+    assert normalize_department_id_rows([50, (51,), row]) == [50, 51, 52]
 
 
 async def test_projection_repository_is_version_idempotent_and_strict_tenant(async_db_session):

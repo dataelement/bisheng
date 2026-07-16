@@ -60,12 +60,24 @@ def _is_http_url(value: Any) -> bool:
 class PortalDomainConfig(BaseModel):
     name: str
     space_ids: list[int] = Field(default_factory=list)
+    department_ids: list[int] = Field(default_factory=list)
     color: str
     bg: str
     icon: str
     background_image: str = ""
     enabled: bool = True
     code: str = ""
+
+    @field_validator("department_ids")
+    @classmethod
+    def normalize_department_ids(cls, department_ids: list[int]) -> list[int]:
+        normalized: list[int] = []
+        for department_id in department_ids:
+            if department_id <= 0:
+                raise ValueError("department id must be positive")
+            if department_id not in normalized:
+                normalized.append(department_id)
+        return normalized
 
     @model_validator(mode="after")
     def normalize(self):
@@ -334,24 +346,6 @@ class PortalRecommendationConfig(BaseModel):
     personalized_rollout_percent: int = Field(default=0, ge=0, le=100, strict=True)
 
 
-class PortalDepartmentBusinessDomainBinding(BaseModel):
-    department_id: int = Field(gt=0, strict=True)
-    business_domain_codes: list[str] = Field(min_length=1)
-
-    @field_validator("business_domain_codes", mode="before")
-    @classmethod
-    def normalize_business_domain_codes(cls, value: Any) -> list[str]:
-        if value is None:
-            return []
-        if not isinstance(value, (list, tuple, set)):
-            raise ValueError("business_domain_codes must be a list")
-        normalized = sorted({_strip(code).upper() for code in value if _strip(code)})
-        invalid = [code for code in normalized if not _BUSINESS_DOMAIN_CODE_PATTERN.fullmatch(code)]
-        if invalid:
-            raise ValueError("business domain code is invalid")
-        return normalized
-
-
 class PortalDisplayHomeConfig(BaseModel):
     page_size: int | None = None
     section_page_size: int = Field(default=6, ge=1, le=50, strict=True)
@@ -429,7 +423,6 @@ class PortalConfig(BaseModel):
     agent_config: PortalAgentConfig = Field(default_factory=PortalAgentConfig)
     search: PortalSearchConfig = Field(default_factory=PortalSearchConfig)
     recommendation: PortalRecommendationConfig
-    department_business_domain_bindings: list[PortalDepartmentBusinessDomainBinding] = Field(default_factory=list)
     display: PortalDisplayConfig
     banners: list[PortalBannerSlide] = Field(default_factory=list)
     integrations: PortalIntegrationsConfig = Field(default_factory=PortalIntegrationsConfig)
@@ -537,25 +530,6 @@ class PortalConfig(BaseModel):
         if self.recommendation.home_total_count < self.display.home.section_page_size:
             raise ValueError("recommendation.home_total_count must be >= display.home.section_page_size")
 
-        enabled_domain_codes = {
-            domain.code
-            for domain in self.domains
-            if domain.enabled and domain.code and _BUSINESS_DOMAIN_CODE_PATTERN.fullmatch(domain.code)
-        }
-        normalized_bindings: list[PortalDepartmentBusinessDomainBinding] = []
-        seen_department_ids: set[int] = set()
-        for binding in self.department_business_domain_bindings:
-            if binding.department_id in seen_department_ids:
-                raise ValueError("department_id must be unique in department business domain bindings")
-            unknown_codes = set(binding.business_domain_codes) - enabled_domain_codes
-            if unknown_codes:
-                raise ValueError("business domain binding references a missing or disabled domain")
-            seen_department_ids.add(binding.department_id)
-            normalized_bindings.append(binding)
-        self.department_business_domain_bindings = sorted(
-            normalized_bindings,
-            key=lambda item: item.department_id,
-        )
         return self
 
 

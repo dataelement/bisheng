@@ -1,4 +1,4 @@
-"""F056: portal recommendation bindings and rebuildable file projection.
+"""F056: rebuildable portal recommendation file projection.
 
 Revision ID: v2_5_0_sg_f056_portal_recommendation
 Revises: f057_message_push_outbox, f058_approval_notification_outbox
@@ -27,16 +27,10 @@ down_revision: str | Sequence[str] | None = (
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_DEPARTMENT_TABLE = "department_business_domain"
 _PROJECTION_TABLE = "portal_recommendation_file_projection"
 
-_DEPARTMENT_UNIQUE = "uk_dept_business_domain"
 _PROJECTION_UNIQUE = "uk_portal_rec_projection_file"
 
-_DEPARTMENT_INDEXES = {
-    "ix_dbd_tenant_department": ["tenant_id", "department_id"],
-    "ix_dbd_tenant_domain": ["tenant_id", "business_domain_code"],
-}
 _PROJECTION_INDEXES = {
     "ix_prfp_domain_recency": [
         "tenant_id",
@@ -53,48 +47,6 @@ _PROJECTION_INDEXES = {
     ],
     "ix_prfp_space_recommendable": ["tenant_id", "space_id", "recommendable"],
 }
-
-
-def _create_department_table() -> None:
-    op.create_table(
-        _DEPARTMENT_TABLE,
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
-        sa.Column(
-            "tenant_id",
-            sa.Integer(),
-            nullable=False,
-            server_default=sa.text("1"),
-            comment="Tenant ID",
-        ),
-        sa.Column("department_id", sa.Integer(), nullable=False, comment="Exact department ID"),
-        sa.Column(
-            "business_domain_code",
-            sa.String(length=16),
-            nullable=False,
-            comment="Normalized business domain code",
-        ),
-        sa.Column("create_user", sa.Integer(), nullable=True, comment="Latest configuring user ID"),
-        sa.Column(
-            "create_time",
-            sa.DateTime(),
-            nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
-        ),
-        sa.Column(
-            "update_time",
-            sa.DateTime(),
-            nullable=False,
-            server_default=UPDATE_TIME_SERVER_DEFAULT,
-        ),
-        sa.UniqueConstraint(
-            "tenant_id",
-            "department_id",
-            "business_domain_code",
-            name=_DEPARTMENT_UNIQUE,
-        ),
-        mysql_charset="utf8mb4",
-        mysql_collate="utf8mb4_unicode_ci",
-    )
 
 
 def _create_projection_table() -> None:
@@ -163,11 +115,8 @@ def _create_indexes(table_name: str, indexes: dict[str, list[str]]) -> None:
 
 def upgrade() -> None:
     connection = op.get_bind()
-    if not table_exists(connection, _DEPARTMENT_TABLE):
-        _create_department_table()
     if not table_exists(connection, _PROJECTION_TABLE):
         _create_projection_table()
-    _create_indexes(_DEPARTMENT_TABLE, _DEPARTMENT_INDEXES)
     _create_indexes(_PROJECTION_TABLE, _PROJECTION_INDEXES)
 
 
@@ -188,4 +137,3 @@ def _drop_feature_table(table_name: str, indexes: dict[str, list[str]], unique_n
 
 def downgrade() -> None:
     _drop_feature_table(_PROJECTION_TABLE, _PROJECTION_INDEXES, _PROJECTION_UNIQUE)
-    _drop_feature_table(_DEPARTMENT_TABLE, _DEPARTMENT_INDEXES, _DEPARTMENT_UNIQUE)

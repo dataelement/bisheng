@@ -12,7 +12,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 2026-07-15 用户确认；两轮规格审查后 LGTM |
 | tasks.md | ✅ 已拆解 | 三轮评审后 LGTM；第三轮经用户明确授权并记录流程偏差 |
-| 实现 | ✅ 核心实现完成 | 两个功能分支均完成代码、定向回归和跨仓审查，保留本地且未 commit/push |
+| 实现 | 🔄 基线整合修订中 | 功能代码已合并到两仓最新基线，部门业务域改为复用远端 `domains[].department_ids` 唯一配置源 |
 | 上线门禁 | ⛔ 集成环境阻塞 | T068 性能、T069 强制 E2E 与 DM8 实库迁移仍须在完整集成环境完成 |
 
 ## 开发模式
@@ -20,7 +20,7 @@
 - BiSheng 后端 Test-First：测试任务先于配对实现任务；基础设施任务按仓库规则前置。
 - 门户后端 Test-First；门户前端 Test-Alongside，但测试任务仍先定义契约。
 - BiSheng Platform/Client 本特性均无改动；门户前端是独立仓库分区，不与 BiSheng 前端任务混写。
-- 所有新表包含 tenant_id，并注册租户自动过滤；业务代码不得手写租户过滤。
+- 新增推荐投影表包含 tenant_id 并注册租户自动过滤；业务代码不得手写租户过滤。
 - 权限只复用 PermissionService 与请求级完整权限上下文，custom ACL 和异常一律失败关闭。
 - MySQL/DM8 双库迁移必须可升级、可回滚，并把当前两个 Alembic head 合并为单 head。
 - Worker 子任务通过 Celery headers 传播 tenant_id，并由 prerun ContextVar 恢复；统一进入 knowledge_celery。
@@ -29,7 +29,7 @@
 ## 执行阶段
 
 1. T001-T008：基础设施与共享契约。
-2. T009-T018：聚合配置、精确部门绑定与迁移。
+2. T009-T018：聚合配置、精确部门解析与迁移。
 3. T019-T031：推荐算法、权限选择、browse 与行为遥测。
 4. T032-T040：投影、池、Worker、对账与事件触发。
 5. T041-T064：门户配置、首页、更多页、搜索和预览。
@@ -54,13 +54,12 @@
 
 ### 阶段 1：基础设施与共享契约
 
-- [x] **T001 基础设施：部门业务域 ORM 与 Repository 接口**
+- [x] **T001 基础设施：门户主部门 Repository 接口**
   **文件**:
-  - src/backend/bisheng/shougang_portal_config/domain/models/department_business_domain.py
-  - src/backend/bisheng/shougang_portal_config/domain/repositories/interfaces/department_business_domain_repository.py
+  - src/backend/bisheng/shougang_portal_config/domain/repositories/interfaces/portal_department_repository.py
   **逻辑**:
-  - 定义 tenant_id、department_id、business_domain_code、审计时间及租户内唯一约束。
-  - 接口提供按部门读取、按部门集合读取、同 session 全量替换和删除；写入只 flush、不 commit。
+  - 只定义严格租户下查询用户全部 `is_primary=true` 部门 ID 的接口，不新增部门业务域持久化对象。
+  - 业务域映射唯一来源为远端聚合配置 `domains[].department_ids`。
   **覆盖 AC**: —（基础设施）
   **依赖**: 无
 
@@ -79,8 +78,8 @@
   - src/backend/bisheng/core/database/alembic/versions/v2_5_0_sg_f056_portal_recommendation.py
   **逻辑**:
   - down_revision 同时引用 f057_message_push_outbox 与 f058_approval_notification_outbox，升级后保持单 head。
-  - 创建 T001/T002 两表、唯一约束和 spec 所列索引；使用 dialect_helpers，upgrade/downgrade 对称且幂等守卫。
-  **回滚**: 先删索引和唯一约束，再按依赖顺序删除两表。
+  - 只创建 T002 推荐投影表、唯一约束和 spec 所列索引；使用 dialect_helpers，upgrade/downgrade 对称且幂等守卫。
+  **回滚**: 先删索引和唯一约束，再删除推荐投影表。
   **覆盖 AC**: —（基础设施）
   **依赖**: T001, T002
 
@@ -88,7 +87,7 @@
   **文件**:
   - src/backend/bisheng/shougang_portal_config/domain/schemas/portal_config_schema.py
   **逻辑**:
-  - 在 portal 下新增 department_business_domain_bindings；推荐配置增加 Top N、四个算法参数、影子模式与灰度。
+  - 对齐远端 `PortalDomainConfig.department_ids`，正数校验并按首次出现顺序去重；推荐配置增加 Top N、四个算法参数、影子模式与灰度。
   - 保留旧配置默认迁移，并校验 1 <= section_page_size <= home_total_count <= 50 及全部范围。
   **覆盖 AC**: —（基础设施）
   **依赖**: 无
@@ -127,31 +126,31 @@
   **文件**:
   - src/backend/bisheng/core/database/tenant_filter.py
   **逻辑**:
-  - 强制导入两个新租户模型，使自动过滤和 tenant_id 写入生效。
+  - 强制导入推荐投影租户模型，使自动过滤和 tenant_id 写入生效。
   **覆盖 AC**: —（基础设施）
   **依赖**: T001, T002
 
-### 阶段 2：聚合配置、绑定与迁移
+### 阶段 2：聚合配置、部门解析与迁移
 
 - [x] **T009 测试：聚合配置校验、版本和事务**
   **文件**:
   - src/backend/test/shougang_portal_config/test_personalized_recommendation_config.py
   **测试**:
-  - 覆盖旧配置默认迁移、合法/非法范围、无效业务域、绑定规范化和清空全量替换。
-  - 并发保存断言当前租户版本唯一严格递增；任一失败断言配置和绑定均未提交。
+  - 覆盖旧配置默认迁移、合法/非法范围、`department_ids` 正数校验、稳定去重和旧独立字段忽略。
+  - 并发保存断言当前租户版本唯一严格递增；任一失败断言聚合配置未提交。
   - 热度配置 fingerprint 变化在保存成功后递增 desired generation 并投递携带不可变 generation/fingerprint 的重算任务；稳定打散参数只失效 Top N。
-  - 部门绑定成功变化只发布新旧绑定差集涉及部门的用户域/Top N 失效，不全租户清理；失败事务不发布失效事件。
+  - `domains` 中部门映射变化只发布 old/new 映射涉及部门的用户域/Top N 失效，不全租户清理；失败事务不发布失效事件。
   - internal 未认证为 401/403，合法管理员只读取 token 当前租户。
   **覆盖 AC**: AC-01, AC-05, AC-06, AC-07, AC-08, AC-09, AC-22, AC-51
   **依赖**: T001, T004, T005
 
-- [x] **T010 实现：专用配置与绑定 Repository**
+- [x] **T010 实现：专用配置与门户部门 Repository**
   **文件**:
   - src/backend/bisheng/shougang_portal_config/domain/repositories/implementations/portal_admin_config_repository_impl.py
-  - src/backend/bisheng/shougang_portal_config/domain/repositories/implementations/department_business_domain_repository_impl.py
+  - src/backend/bisheng/shougang_portal_config/domain/repositories/implementations/portal_department_repository_impl.py
   **逻辑**:
   - 物理 key：tenant 1 使用 shougang_portal_config，其他租户使用带 tenant_id 的 key。
-  - 配置行锁读取、flush 写入；绑定在同一 AsyncSession 内按规范化结果全量替换，不调用自动 commit 的 BaseRepository 写方法。
+  - 配置行锁读取、flush 写入；主部门查询 join `Department`/`UserDepartment` 并强制严格租户过滤，不维护独立绑定表。
   **配对测试**: T009
   **覆盖 AC**: AC-01, AC-05, AC-07, AC-08
   **依赖**: T009
@@ -161,10 +160,10 @@
   - src/backend/bisheng/shougang_portal_config/domain/services/portal_config_service.py
   - src/backend/bisheng/shougang_portal_config/domain/services/department_business_domain_service.py
   **逻辑**:
-  - 验证业务域存在，规范化编码并去重；在一个事务里锁配置、计算 old_version+1、写聚合配置和绑定。
+  - 在一个事务里锁配置、计算 old_version+1 并写完整聚合配置；`domains[].department_ids` 是唯一映射源。
   - 唯一冲突按有界次数重试；成功返回服务端版本并按变化范围失效缓存，失败完整回滚且不发布失效事件。
   - 提交成功后比较旧/新 fingerprint：热度参数变化通过状态 Repository 递增 desired generation，再投递携带该 generation/fingerprint 的不可变重算任务；稳定打散参数变化仅失效 Top N。
-  - 绑定提交成功后计算新旧绑定差集，只按受影响 department_ids 分页投递用户业务域与 Top N 失效；事务回滚时不投递。
+  - 配置提交成功后计算启用且合法业务域的 old/new `(department_id, code)` 集合，只按受影响 department_ids 投递用户业务域与 Top N 失效；事务回滚时不投递。
   **配对测试**: T009
   **覆盖 AC**: AC-01, AC-05, AC-06, AC-07, AC-08, AC-22
   **依赖**: T010
@@ -185,7 +184,7 @@
   **测试**:
   - 唯一主部门多业务域去重；父子部门各自绑定但绝不继承。
   - 主+次部门只读主部门；0 个或多个主部门、无绑定时返回空特征且不查询次部门。
-  - 两租户同部门 ID 的绑定互不影响。
+  - Repository 在 root 与 child 同时可见时仍只读取当前严格租户的主部门。
   **覆盖 AC**: AC-02, AC-03, AC-04
   **依赖**: T001
 
@@ -194,7 +193,7 @@
   - src/backend/bisheng/shougang_portal_config/domain/services/department_business_domain_service.py
   **逻辑**:
   - 查询全部 is_primary=true 行并要求恰好一条；不复用会 first() 吞重复的旧 DAO。
-  - 返回主部门精确绑定的去重编码；0 个或多个主部门均返回无业务域特征，不修改部门权限继承语义。
+  - 从 `domains[].department_ids` 返回主部门精确命中的启用合法编码；0 个或多个主部门均返回无业务域特征，不修改部门权限继承语义。
   **配对测试**: T013
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-22
   **依赖**: T011, T013
@@ -203,7 +202,7 @@
   **文件**:
   - src/backend/test/knowledge/test_portal_recommendation_migration.py
   **测试**:
-  - MySQL/DM8 编译或真实 fixture 校验两表、唯一约束、索引与 server default。
+  - MySQL/DM8 编译或真实 fixture 校验推荐投影表、唯一约束、索引与 server default，并断言不创建独立部门业务域表。
   - 断言 revision 合并当前两 heads，upgrade 后单 head，downgrade 干净移除本特性对象。
   **覆盖 AC**: AC-49
   **依赖**: T003
@@ -213,7 +212,7 @@
   - src/backend/bisheng/core/database/alembic/versions/v2_5_0_sg_f056_portal_recommendation.py
   - src/backend/test/fixtures/table_definitions.py
   **逻辑**:
-  - 根据 T015 补齐 DM8 长度、默认值和索引兼容；SQLite 测试 fixture 注册两表。
+  - 根据 T015 补齐 DM8 长度、默认值和索引兼容；SQLite 测试 fixture 只注册推荐投影表。
   **配对测试**: T015
   **覆盖 AC**: AC-49
   **依赖**: T015
@@ -479,10 +478,11 @@
 - [x] **T041 测试：门户配置兼容、管理 API 与远端版本**
   **文件**:
   - backend/tests/test_personalized_portal_config.py
-  - backend/tests/test_department_business_domain_config.py
+  - backend/tests/test_admin_config_api.py
+  - frontend/tests/adminDomains.test.ts
   **测试**:
-  - 旧配置加载默认值、合法/非法推荐参数、无效/重复部门绑定、清空保存。
-  - GET/POST department-business-domains 与既有 recommendation 路由；远端整份聚合 PUT 接收服务端版本。
+  - 旧配置加载默认值、合法/非法推荐参数，以及 `domains[].department_ids` 正数、去重、清空保存。
+  - 复用既有 GET/POST domains 与 recommendation 路由；远端整份聚合 PUT 接收服务端版本。
   - 同一门户部署使用 runtime 管理 token 对应的单一 BiSheng tenant。
   **覆盖 AC**: AC-01, AC-05, AC-06, AC-07, AC-08, AC-42, AC-51
   **依赖**: T012
@@ -492,8 +492,8 @@
   - backend/app/schemas/portal_config.py
   - backend/app/config/portal_config.py
   **逻辑**:
-  - 与 BiSheng portal 子配置同构；增加绑定、Top N、四参数、影子和灰度。
-  - 加载旧 JSON 时补默认，保存时执行交叉范围和业务域引用校验。
+  - 与 BiSheng portal 子配置同构；复用远端 `DomainConfig.department_ids`，增加 Top N、四参数、影子和灰度。
+  - 加载旧 JSON 时补默认，保存时执行交叉范围和部门 ID 校验。
   **配对测试**: T041
   **覆盖 AC**: AC-01, AC-05, AC-06, AC-07, AC-42
   **依赖**: T041
@@ -514,18 +514,18 @@
   **文件**:
   - backend/app/services/portal_config_service.py
   **逻辑**:
-  - update_department_business_domains 与既有 update_recommendation 都用 T043 返回的规范化聚合文档刷新本地状态。
+  - 既有 update_domains 与 update_recommendation 都用 T043 返回的规范化聚合文档刷新本地状态。
   - 返回新配置分区与服务端 version，不回用客户端旧 version；远端失败时不发布半完成的本地配置。
   **配对测试**: T041
   **覆盖 AC**: AC-01, AC-05, AC-07, AC-08
   **依赖**: T043
 
-- [x] **T045 实现：门户部门绑定管理路由**
+- [x] **T045 实现：复用门户业务域管理路由**
   **文件**:
   - backend/app/api/routes/admin_config.py
   **逻辑**:
-  - 新增 GET/POST /api/v1/admin/config/department-business-domains；推荐参数继续现有 recommendation。
-  - 复用管理员认证，返回规范化分区与服务端 version；部门树读取可复用，但不复用旧知识库绑定写语义。
+  - 复用 GET/POST /api/v1/admin/config/domains；推荐参数继续现有 recommendation，不新增独立部门业务域路由。
+  - 复用管理员认证、部门树读取和远端业务域编辑器，返回规范化分区与服务端 version。
   **配对测试**: T041
   **覆盖 AC**: AC-01, AC-05, AC-07
   **依赖**: T044
@@ -615,23 +615,24 @@
   **覆盖 AC**: AC-33, AC-35
   **依赖**: T052
 
-- [x] **T054 测试：前端绑定与推荐配置**
+- [x] **T054 测试：前端业务域部门多选与推荐配置**
   **文件**:
-  - frontend/tests/departmentBusinessDomainBindings.test.ts
+  - frontend/tests/adminDomains.test.ts
   - frontend/tests/portalConfig.test.ts
   **测试**:
-  - 部门精确单选、业务域多选、无继承开关、重复部门/非法空值校验和清空保存。
+  - 每个业务域部门多选、同一部门可属于多业务域、无级联继承、非法 ID 校验和清空保存。
   - Top N、四参数、影子和 0-100 灰度边界；旧配置默认兼容。
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-06, AC-07, AC-42
   **依赖**: T045
 
-- [x] **T055 实现：前端配置 API 与独立绑定面板**
+- [x] **T055 实现：复用业务域编辑器的部门多选**
   **文件**:
   - frontend/src/api/adminConfig.ts
-  - frontend/src/pages/admin/DepartmentBusinessDomainBindingsPanel.tsx
+  - frontend/src/utils/adminDomains.ts
+  - frontend/src/pages/AdminPage.tsx
   **逻辑**:
-  - 增加绑定 GET/POST DTO，并接受服务端 version；部门使用精确单选，业务域从配置 domains 多选。
-  - 不提供继承开关，禁止重复部门并支持删除行/清空绑定。
+  - 在远端既有 `DomainConfig` DTO 和编辑弹窗中复用 `department_ids`；一个业务域可精确多选部门。
+  - 父子部门独立选择且不级联，同一部门可属于多个业务域，支持删除业务域或清空选择。
   **配对测试**: T054
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-07
   **依赖**: T054
@@ -646,12 +647,12 @@
   **覆盖 AC**: AC-06, AC-42
   **依赖**: T055
 
-- [x] **T057 实现：管理页挂载独立面板**
+- [x] **T057 实现：管理页复用远端业务域配置**
   **文件**:
   - frontend/src/pages/AdminPage.tsx
   **逻辑**:
-  - 独立挂载部门业务域绑定与推荐个性化面板，保持现有页面结构。
-  - 不把精确绑定合入业务域/知识空间旧表单；保存后使用 API 返回的新 version 刷新。
+  - 保留远端业务域编辑器内的部门多选，只独立挂载推荐个性化面板。
+  - 保存后使用 API 返回的新 version 刷新，不维护第二份绑定状态。
   **配对测试**: T054
   **覆盖 AC**: AC-01, AC-02, AC-06, AC-42
   **依赖**: T055, T056
@@ -741,7 +742,7 @@
   - docs/specs/2026-07-14-首页个性化推荐技术方案.md
   **逻辑**:
   - 第 12.2、实现清单和配置同步表删除两个独立 BiSheng 同步接口。
-  - 改为复用 PUT /api/v1/shougang-portal/config，并说明配置+规范化绑定表同事务提交和服务端返回新版本。
+  - 改为复用 PUT /api/v1/shougang-portal/config，并说明 `domains[].department_ids` 是唯一映射源且服务端返回新版本。
   **覆盖 AC**: AC-01, AC-08
   **依赖**: T043
 
@@ -794,16 +795,17 @@
 | 任务 | 计划偏差 | 原因与影响 | 处理 |
 |------|----------|------------|------|
 | SDD tasks review | 超过仓库默认最多两轮，执行第三轮修订与复审 | 第二轮仍发现缓存失效、兴趣 Top 50、热门词遥测和门户接口拆分缺口；用户于 2026-07-15 明确授权继续 | 第三轮已关闭报告问题，随后创建功能分支并完成实现 |
+| 2026-07-16 基线整合修订 | 远端门户已在 `domains[].department_ids` 实现部门多选，原计划的独立字段、表、路由和界面成为重复事实源 | 用户要求合并最新基线并直接复用远端配置 | 删除独立持久化契约，保留严格租户主部门 Repository；配置映射变化继续按 old/new 部门失效缓存；7 个定向测试文件共 65 passed |
 | T066 BiSheng 定向与静态门禁 | 核心定向 191 passed / 6 warnings；扩展基线集合另有 6 个 setup errors | 基线测试引用当前服务不存在的 `force_sync_user_for_maintenance`；全量 changed Ruff 另有 329 个历史错误 | 未扩大修改范围；新增 F056 文件 Ruff 通过，新增代码行命中 0；compileall、单 Alembic head、架构与 RBAC/ReBAC 守卫通过 |
-| T066 数据库迁移 | MySQL 与 DM8 均完成离线编译；未执行 DM8 实库升级/回滚 | 本机无 `dmSQLAlchemy` 与可连接 DM8 实例 | 按仓库 `DaMengImpl` 机制离线验证，两库均生成 2 张表与 5 个索引；实库验证保留为上线门禁 |
+| T066 数据库迁移 | MySQL 与 DM8 均完成离线编译；未执行 DM8 实库升级/回滚 | 本机无 `dmSQLAlchemy` 与可连接 DM8 实例 | 基线整合后迁移只保留推荐投影表及 3 个索引，不再创建部门业务域表；实库验证保留为上线门禁 |
 | T067 Portal 后端全量 | 345 passed / 8 failed | 2 个存量 QA 展示名断言与 `master` 当前路由行为不一致；2 个存量 chat fake 未实现已有上游路由；4 个因环境缺 `pytest-asyncio` | F056 定向 55 passed，`compileall` 通过；不修改无关基线 |
 | T067 Portal 前端全量 | `npm test` 被 2 类存量 TypeScript 错误阻塞；`npm run lint` 有 13 errors/6 warnings | QA template 测试缺 `home_icon/homeIcon`，存量测试仍导入已不存在的 `fetchHomeContent`；lint 命中无关存量文件 | F056 定向 28 passed，定向 ESLint 通过，`npm run build` 通过 |
 | T068 性能 | BLOCKED | 当前工作区无可连通的 DB/Redis/ES/OpenFGA/BiSheng/Portal 完整压测环境与账号 | 见 `performance-results.md`；不用单元测试耗时冒充 P95 |
 | T069 E2E | BLOCKED | 缺完整集成环境、当前用户 token 和 custom ACL/撤权测试数据 | 见 `e2e-results.md`；保留上线前强制场景和解除阻塞条件 |
-| T070 跨仓代码审查 | PASS | 无 P0/P1/P2 新问题；此前 generic 投影补偿、ES 有界分页、UTC watermark、上海自然日、14+3、生命周期失效及 AC-47 补建问题均已关闭 | 允许交付集成环境；正式全量前仍需通过 T068、T069 与 DM8 实库门禁 |
+| T070 跨仓代码审查 | PASS | DM8 标量 Row/tuple 兼容和公共空间转私有撤权窗口已修复并补回归；此前 generic 投影补偿、ES 有界分页、UTC watermark、上海自然日、14+3、生命周期失效及 AC-47 补建问题均已关闭 | 无 P0/P1/P2 新问题；允许交付集成环境，正式全量前仍需通过 T068、T069 与 DM8 实库门禁 |
 
 ## 上线完成定义（尚待 T068、T069 与 DM8 实库门禁）
 
 - 每项任务目标文件与 tasks.md 一致，配对测试先完成并通过，L1 task review 无 HIGH。
 - 52 条 AC 均有可执行证据；数据库、Redis、ES、权限和 Worker 均保持租户隔离。
-- 两仓功能分支保留本地，不 commit、不 push；技术方案纳入门户功能分支。
+- 两仓功能代码已合并到各自本地基线分支；未获明确指令前不 push，技术方案随门户基线同步维护。

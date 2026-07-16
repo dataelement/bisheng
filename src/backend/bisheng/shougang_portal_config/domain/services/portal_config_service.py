@@ -8,9 +8,6 @@ from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.shougang_portal_config.domain.repositories.implementations.department_business_domain_repository_impl import (
-    DepartmentBusinessDomainRepositoryImpl,
-)
 from bisheng.shougang_portal_config.domain.repositories.implementations.portal_admin_config_repository_impl import (
     PortalAdminConfigRepositoryImpl,
 )
@@ -71,6 +68,9 @@ class ShougangPortalConfigService:
         tenant_id: int | None = None,
         create_user: int | None = None,
     ) -> ShougangPortalAdminConfig:
+        # Kept in the public signature for compatibility with the endpoint;
+        # the aggregate Config model has no creator column.
+        del create_user
         resolved_tenant_id = cls._resolve_tenant_id(tenant_id)
         normalized_input = ShougangPortalAdminConfig.model_validate(payload.model_dump(mode="json"))
 
@@ -79,7 +79,6 @@ class ShougangPortalConfigService:
                 return await cls._save_config_once(
                     normalized_input,
                     tenant_id=resolved_tenant_id,
-                    create_user=create_user,
                 )
             except IntegrityError:
                 if attempt + 1 >= cls._MAX_SAVE_ATTEMPTS:
@@ -97,14 +96,11 @@ class ShougangPortalConfigService:
         payload: ShougangPortalAdminConfig,
         *,
         tenant_id: int,
-        create_user: int | None,
     ) -> ShougangPortalAdminConfig:
         affected_department_ids: list[int] = []
         rebuild_pools = False
         async with get_async_db_session() as session:
             config_repository = PortalAdminConfigRepositoryImpl(session)
-            binding_repository = DepartmentBusinessDomainRepositoryImpl(session)
-            binding_service = DepartmentBusinessDomainService(binding_repository)
             async with session.begin():
                 stored = await config_repository.get_for_update(tenant_id)
                 stored_version = 0
@@ -116,23 +112,16 @@ class ShougangPortalConfigService:
 
                 normalized = payload.model_copy(deep=True)
                 normalized.version = stored_version + 1
-                bindings = normalized.portal.department_business_domain_bindings
-                await binding_service.validate_departments_exist(bindings)
-
                 old_bindings = (
-                    {
-                        (binding.department_id, code)
-                        for binding in stored_config.portal.department_business_domain_bindings
-                        for code in binding.business_domain_codes
-                    }
+                    DepartmentBusinessDomainService.domain_department_pairs(
+                        stored_config.portal.domains,
+                    )
                     if stored_config is not None
                     else set()
                 )
-                new_bindings = {
-                    (binding.department_id, code)
-                    for binding in bindings
-                    for code in binding.business_domain_codes
-                }
+                new_bindings = DepartmentBusinessDomainService.domain_department_pairs(
+                    normalized.portal.domains,
+                )
                 if old_bindings != new_bindings:
                     affected_department_ids = sorted(
                         {department_id for department_id, _code in old_bindings | new_bindings}
@@ -148,10 +137,6 @@ class ShougangPortalConfigService:
                 )
 
                 await config_repository.write_value(tenant_id, normalized.model_dump_json())
-                await binding_repository.replace_all(
-                    binding_service.flatten_bindings(bindings),
-                    create_user=create_user,
-                )
         try:
             _enqueue_recommendation_config_post_commit(
                 tenant_id=tenant_id,

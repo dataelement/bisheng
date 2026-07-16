@@ -58,7 +58,7 @@ def _config_payload() -> dict:
 def test_old_config_receives_personalized_recommendation_defaults():
     config = ShougangPortalAdminConfig.model_validate(_config_payload())
 
-    assert config.portal.department_business_domain_bindings == []
+    assert config.portal.domains[0].department_ids == []
     assert config.portal.recommendation.home_total_count == 20
     assert config.portal.recommendation.hot_half_life_days == 7
     assert config.portal.recommendation.home_entry_source_weight == 0.3
@@ -94,15 +94,13 @@ def test_legacy_section_size_above_recommendation_limit_is_rejected():
         ShougangPortalAdminConfig.model_validate(payload)
 
 
-def test_department_bindings_are_normalized_deduplicated_and_sorted():
+def test_domain_department_ids_are_normalized_and_deduplicated_in_input_order():
     payload = _config_payload()
-    payload["portal"]["department_business_domain_bindings"] = [
-        {"department_id": 12, "business_domain_codes": [" safe ", "SAFE", "safe"]},
-    ]
+    payload["portal"]["domains"][0]["department_ids"] = [12, 10, 12, 11]
 
     config = ShougangPortalAdminConfig.model_validate(payload)
 
-    assert config.portal.department_business_domain_bindings[0].business_domain_codes == ["SAFE"]
+    assert config.portal.domains[0].department_ids == [12, 10, 11]
 
 
 @pytest.mark.parametrize(
@@ -139,39 +137,49 @@ def test_home_total_count_must_cover_home_section_page_size():
         ShougangPortalAdminConfig.model_validate(payload)
 
 
-@pytest.mark.parametrize("code", ["MISSING", "OLD", "bad-code!"])
-def test_binding_rejects_missing_disabled_or_invalid_business_domain(code: str):
+@pytest.mark.parametrize("department_id", [0, -1])
+def test_domain_department_ids_must_be_positive(department_id: int):
     payload = _config_payload()
-    payload["portal"]["department_business_domain_bindings"] = [
-        {"department_id": 12, "business_domain_codes": [code]},
-    ]
+    payload["portal"]["domains"][0]["department_ids"] = [department_id]
 
     with pytest.raises(ValidationError):
         ShougangPortalAdminConfig.model_validate(payload)
 
 
-def test_duplicate_department_binding_is_rejected():
+def test_same_department_can_be_bound_to_multiple_domains():
     payload = _config_payload()
+    payload["portal"]["domains"][0]["department_ids"] = [12]
+    payload["portal"]["domains"][1]["department_ids"] = [12]
+
+    config = ShougangPortalAdminConfig.model_validate(payload)
+
+    assert [domain.department_ids for domain in config.portal.domains] == [[12], [12]]
+
+
+def test_disabled_or_uncoded_domain_with_department_ids_remains_schema_compatible():
+    payload = _config_payload()
+    payload["portal"]["domains"][0]["enabled"] = False
+    payload["portal"]["domains"][0]["department_ids"] = [12]
+    payload["portal"]["domains"][1]["code"] = ""
+    payload["portal"]["domains"][1]["department_ids"] = [13]
+
+    config = ShougangPortalAdminConfig.model_validate(payload)
+
+    assert config.portal.domains[0].department_ids == [12]
+    assert config.portal.domains[1].department_ids == [13]
+
+
+def test_legacy_independent_binding_field_is_ignored_in_favor_of_domain_config():
+    payload = _config_payload()
+    payload["portal"]["domains"][0]["department_ids"] = [12]
     payload["portal"]["department_business_domain_bindings"] = [
-        {"department_id": 12, "business_domain_codes": ["SAFE"]},
-        {"department_id": 12, "business_domain_codes": ["SAFE"]},
+        {"department_id": 99, "business_domain_codes": ["SAFE"]},
     ]
 
-    with pytest.raises(ValidationError, match="department_id"):
-        ShougangPortalAdminConfig.model_validate(payload)
+    config = ShougangPortalAdminConfig.model_validate(payload)
 
-
-def test_empty_department_binding_is_rejected_and_clearing_uses_empty_list():
-    payload = _config_payload()
-    payload["portal"]["department_business_domain_bindings"] = [
-        {"department_id": 12, "business_domain_codes": []},
-    ]
-
-    with pytest.raises(ValidationError):
-        ShougangPortalAdminConfig.model_validate(payload)
-
-    payload["portal"]["department_business_domain_bindings"] = []
-    assert ShougangPortalAdminConfig.model_validate(payload).portal.department_business_domain_bindings == []
+    assert config.portal.domains[0].department_ids == [12]
+    assert "department_business_domain_bindings" not in config.portal.model_dump()
 
 
 def test_explicit_valid_personalized_config_round_trips():

@@ -89,6 +89,87 @@ def test_public_fast_path_rejects_current_space_level_custom_binding():
     ) is False
 
 
+@pytest.mark.asyncio
+async def test_personalized_public_fast_path_preserves_public_download_permission():
+    service = object.__new__(KnowledgeSpaceService)
+    service._portal_file_download_map = {}
+    service._public_space_viewer_permission_ids = AsyncMock(
+        return_value={"view_file", "download_file"}
+    )
+    service._build_child_permission_context = AsyncMock()
+    file = SimpleNamespace(id=101, knowledge_id=10, file_level_path=None)
+
+    allowed = await service._check_portal_recommendation_item_permission(
+        file,
+        space_id=10,
+        public_space_ids={10},
+        live_bindings=[],
+        permission_contexts={},
+        public_permissions_by_space={},
+    )
+
+    assert allowed is True
+    assert service._portal_file_download_map == {101: True}
+    service._build_child_permission_context.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_personalized_public_fast_path_falls_back_after_public_permission_revocation():
+    service = object.__new__(KnowledgeSpaceService)
+    service._portal_file_download_map = {}
+    service._public_space_viewer_permission_ids = AsyncMock(return_value=set())
+    service._build_child_permission_context = AsyncMock(return_value={"scope": "current"})
+    service._get_child_item_effective_permission_ids = AsyncMock(return_value=set())
+    file = SimpleNamespace(id=103, knowledge_id=10, file_level_path=None)
+
+    allowed = await service._check_portal_recommendation_item_permission(
+        file,
+        space_id=10,
+        public_space_ids={10},
+        live_bindings=[],
+        permission_contexts={},
+        public_permissions_by_space={},
+    )
+
+    assert allowed is False
+    assert service._portal_file_download_map == {103: False}
+    service._build_child_permission_context.assert_awaited_once_with(10)
+    service._get_child_item_effective_permission_ids.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("permission_ids", "expected_allowed", "expected_download"),
+    [
+        ({"view_file", "download_file"}, True, True),
+        ({"view_file"}, True, False),
+        ({"download_file"}, False, True),
+    ],
+)
+async def test_personalized_non_public_path_preserves_effective_download_permission(
+    permission_ids,
+    expected_allowed,
+    expected_download,
+):
+    service = object.__new__(KnowledgeSpaceService)
+    service._portal_file_download_map = {}
+    service._build_child_permission_context = AsyncMock(return_value={"scope": "current"})
+    service._get_child_item_effective_permission_ids = AsyncMock(return_value=permission_ids)
+    file = SimpleNamespace(id=102, knowledge_id=11, file_level_path=None)
+
+    allowed = await service._check_portal_recommendation_item_permission(
+        file,
+        space_id=11,
+        public_space_ids={10},
+        live_bindings=[],
+        permission_contexts={},
+        public_permissions_by_space={},
+    )
+
+    assert allowed is expected_allowed
+    assert service._portal_file_download_map == {102: expected_download}
+
+
 @pytest.mark.parametrize("request_limit", [1, 10_000])
 def test_personalized_target_ignores_request_limit_and_uses_configured_top_n(request_limit):
     assert KnowledgeSpaceService._personalized_recommendation_target_count(

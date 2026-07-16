@@ -259,8 +259,8 @@ from bisheng.share_link.domain.models.share_link import (
     ShareMode,
 )
 from bisheng.share_link.domain.repositories.implementations.share_link_repository_impl import ShareLinkRepositoryImpl
-from bisheng.shougang_portal_config.domain.repositories.implementations.department_business_domain_repository_impl import (
-    DepartmentBusinessDomainRepositoryImpl,
+from bisheng.shougang_portal_config.domain.repositories.implementations.portal_department_repository_impl import (
+    PortalDepartmentRepositoryImpl,
 )
 from bisheng.shougang_portal_config.domain.services.department_business_domain_service import (
     DepartmentBusinessDomainService,
@@ -4223,9 +4223,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if user_domains is None:
             async with get_async_db_session() as session:
                 domain_service = DepartmentBusinessDomainService(
-                    DepartmentBusinessDomainRepositoryImpl(session)
+                    PortalDepartmentRepositoryImpl(session)
                 )
-                user_domains = await domain_service.get_user_business_domain_codes(self.login_user.user_id)
+                user_domains = await domain_service.get_user_business_domain_codes(
+                    self.login_user.user_id,
+                    config.portal.domains if config is not None else [],
+                )
             try:
                 await redis_repository.set_user_domains(
                     tenant_id,
@@ -4539,6 +4542,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         recommendation_service = PortalRecommendationService()
         permission_contexts: dict[int, dict] = {}
+        public_permissions_by_space: dict[int, set[str]] = {}
         non_primary_file_ids_by_space: dict[int, set[int]] = {}
 
         async def build_permission_context() -> dict:
@@ -4585,28 +4589,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         if candidate.file_id in non_primary:
                             result[candidate.key] = False
                             continue
-                    if self._can_fast_allow_public_recommendation(
-                        item,
-                        public_space_ids=public_space_ids,
-                        live_bindings=_request_context["live_bindings"],
-                    ):
-                        result[candidate.key] = True
-                        continue
-                    context = permission_contexts.get(candidate.space_id)
-                    if context is None:
-                        try:
-                            context = await self._build_child_permission_context(candidate.space_id)
-                        except Exception as exc:
-                            raise PortalRecommendationPermissionContextUnavailable(
-                                "failed to build request permission context"
-                            ) from exc
-                        permission_contexts[candidate.space_id] = context
-                    permission_ids = await self._get_child_item_effective_permission_ids(
+                    result[candidate.key] = await self._check_portal_recommendation_item_permission(
                         item,
                         space_id=candidate.space_id,
-                        context=context,
+                        public_space_ids=public_space_ids,
+                        live_bindings=_request_context["live_bindings"],
+                        permission_contexts=permission_contexts,
+                        public_permissions_by_space=public_permissions_by_space,
                     )
-                    result[candidate.key] = "view_file" in permission_ids
                 except PortalRecommendationPermissionContextUnavailable:
                     raise
                 except Exception as exc:
@@ -4812,6 +4802,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
             int(file.knowledge_id) in public_space_ids
             and not PortalRecommendationProjectionService.has_custom_acl(file, live_bindings)
         )
+
+    async def _check_portal_recommendation_item_permission(
+        self,
+        file: KnowledgeFile,
+        *,
+        space_id: int,
+        public_space_ids: set[int],
+        live_bindings: list[dict],
+        permission_contexts: dict[int, dict],
+        public_permissions_by_space: dict[int, set[str]],
+    ) -> bool:
+        """Authorize one recommendation and retain its real download capability."""
+        if self._can_fast_allow_public_recommendation(
+            file,
+            public_space_ids=public_space_ids,
+            live_bindings=live_bindings,
+        ):
+            public_permissions = public_permissions_by_space.get(space_id)
+            if public_permissions is None:
+                public_permissions = await self._public_space_viewer_permission_ids(
+                    [("knowledge_space", space_id)]
+                )
+                public_permissions_by_space[space_id] = public_permissions
+            # The visible-space list is request-cached briefly. Re-check the
+            # current public relation before using the fast path so a
+            # public-to-private transition cannot authorize from stale scope.
+            if "view_file" in public_permissions:
+                self._portal_file_download_map[int(file.id)] = "download_file" in public_permissions
+                return True
+
+        context = permission_contexts.get(space_id)
+        if context is None:
+            try:
+                context = await self._build_child_permission_context(space_id)
+            except Exception as exc:
+                raise PortalRecommendationPermissionContextUnavailable(
+                    "failed to build request permission context"
+                ) from exc
+            permission_contexts[space_id] = context
+        permission_ids = await self._get_child_item_effective_permission_ids(
+            file,
+            space_id=space_id,
+            context=context,
+        )
+        self._portal_file_download_map[int(file.id)] = "download_file" in permission_ids
+        return "view_file" in permission_ids
 
     @staticmethod
     def _enqueue_recommendation_file_refresh(file_id: int) -> None:

@@ -16,11 +16,10 @@
 
 | 领域对象 | Owner Feature | 说明 |
 |---------|---------------|------|
-| DepartmentBusinessDomainBinding | F056-home-personalized-recommendation | 部门与一个或多个业务域的精确绑定；不包含父子部门继承语义 |
 | PortalRecommendationFileProjection | F056-home-personalized-recommendation | 文件业务域、空间、推荐资格、权限范围和投影版本的在线推荐投影 |
 | PortalRecommendationPoolState | F056-home-personalized-recommendation | Redis 中租户级业务域池、通用兜底池、热门轮换状态及 active pool version |
 | PortalUserRecommendationState | F056-home-personalized-recommendation | Redis 中用户兴趣 Top 50、近 90 天浏览状态、行为版本和短期 Top N |
-| ShougangPortalAdminConfig（扩展） | F056-home-personalized-recommendation | 在既有聚合配置中增加部门绑定、推荐数量、算法、影子模式和灰度参数 |
+| ShougangPortalAdminConfig（扩展） | F056-home-personalized-recommendation | 对齐远端 `domains[].department_ids`，并增加推荐数量、算法、影子模式和灰度参数 |
 | PortalTelemetryEvent（扩展） | F056-home-personalized-recommendation | 新增 `portal_search`；阅读事件增加推荐场景和入口来源 |
 
 ### 复用对象（Owner 不变）
@@ -35,7 +34,7 @@
 
 **规则**：
 
-- 部门业务域绑定不得写 OpenFGA tuple，也不得扩大可见空间或文件范围。
+- `domains[].department_ids` 业务域映射不得写 OpenFGA tuple，也不得扩大可见空间或文件范围。
 - 推荐投影与 Redis 池是派生数据，不能成为权限事实源。
 - F056 不得为 `KnowledgeFile` 增加重复业务域源字段，必须复用现有文件编码/`split_rule` 解析。
 - 新增领域对象或改变 Owner 前必须先更新本表。
@@ -48,8 +47,8 @@
 
 | ID | 不变量描述 | 涉及领域对象 | 来源 spec |
 |----|------------|--------------|-----------|
-| INV-SG-1 | 用户业务域只取唯一主部门直接绑定的业务域；不读取次要部门，不向父部门或子部门继承 | DepartmentBusinessDomainBinding, UserDepartment | F056 |
-| INV-SG-2 | 业务域匹配只参与推荐打分，不授予 `view_space` 或 `view_file`，也不改变 `visible_space_ids` | DepartmentBusinessDomainBinding, PermissionTuple | F056 |
+| INV-SG-1 | 用户业务域只从当前租户聚合配置 `domains[].department_ids` 精确匹配唯一主部门；不读取次要部门，不向父部门或子部门继承 | ShougangPortalAdminConfig, UserDepartment | F056 |
+| INV-SG-2 | 业务域匹配只参与推荐打分，不授予 `view_space` 或 `view_file`，也不改变 `visible_space_ids` | ShougangPortalAdminConfig, PermissionTuple | F056 |
 | INV-SG-3 | 已读文章不从候选中排除，只根据最近浏览时间施加可配置算法中定义的固定四档扣分 | PortalUserRecommendationState | F056 |
 | INV-SG-4 | 个性化候选必须先轻量打分，再对最终返回候选做权限检查；非公共空间执行完整 `view_file` 校验 | PortalRecommendationFileProjection, PermissionTuple | F056 |
 | INV-SG-5 | 公共空间仅复用已确认的公开快速路径；非公共空间不能以投影、池命中或业务域匹配替代权限检查 | PortalRecommendationFileProjection, PermissionTuple | F056 |
@@ -57,7 +56,7 @@
 | INV-SG-7 | 第一阶段 custom ACL 文件不得进入共享池；投影滞后时仍由最终权限校验阻止越权 | PortalRecommendationFileProjection | F056 |
 | INV-SG-8 | 搜索原文和浏览原始事件以 ES 为事实源；Redis 只保存近 90 天浏览时间、派生兴趣、版本和短期结果，不持久化原始搜索词 | PortalTelemetryEvent, PortalUserRecommendationState | F056 |
 | INV-SG-9 | 所有推荐 Redis key 必须包含租户前缀；Celery 任务必须恢复租户上下文并沿用租户 fan-out | PortalRecommendationPoolState, PortalUserRecommendationState | F056 |
-| INV-SG-10 | 首钢门户配置只通过既有 `/api/v1/shougang-portal/config` 聚合接口同步；配置按当前租户持久化，版本由 BiSheng 服务端在租户内单调递增，绑定表和配置同事务提交 | ShougangPortalAdminConfig, DepartmentBusinessDomainBinding | F056 |
+| INV-SG-10 | 首钢门户配置只通过既有 `/api/v1/shougang-portal/config` 聚合接口同步；配置按当前租户持久化，版本由 BiSheng 服务端在租户内单调递增；`domains[].department_ids` 是唯一部门业务域事实源，不复制到独立字段或表 | ShougangPortalAdminConfig | F056 |
 | INV-SG-11 | 匿名首页保持现有公共推荐与公共缓存；登录用户失败降级必须携带当前用户 token，禁止使用系统账号代取 | ShougangPortalAdminConfig, KnowledgeFile | F056 |
 | INV-SG-12 | 热度参数变更必须使用双版本池重算并原子切换 active pool version；重算完成前继续使用上一有效版本 | PortalRecommendationPoolState, ShougangPortalAdminConfig | F056 |
 
@@ -106,3 +105,4 @@ F008 ──┘
 | 日期 | 变更内容 | 影响范围 |
 |------|---------|---------|
 | 2026-07-15 | 建立 v2.5.0-sg 契约，登记 F056 对象、依赖及推荐权限不变量 | F056 |
+| 2026-07-16 | 对齐远端业务域部门绑定实现，删除独立绑定领域对象和表，改用 `domains[].department_ids` 唯一配置源 | F056 |

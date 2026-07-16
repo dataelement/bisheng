@@ -562,18 +562,6 @@ CREATE INDEX IF NOT EXISTS ix_message_push_outbox_action_code
 # F056: portal personalized recommendation
 # ---------------------------------------------------------------------------
 
-TABLE_DEPARTMENT_BUSINESS_DOMAIN = """\
-CREATE TABLE IF NOT EXISTS department_business_domain (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id INTEGER NOT NULL DEFAULT 1,
-    department_id INTEGER NOT NULL,
-    business_domain_code VARCHAR(16) NOT NULL,
-    create_user INTEGER,
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    UNIQUE(tenant_id, department_id, business_domain_code)
-)"""
-
 TABLE_PORTAL_RECOMMENDATION_FILE_PROJECTION = """\
 CREATE TABLE IF NOT EXISTS portal_recommendation_file_projection (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -590,14 +578,6 @@ CREATE TABLE IF NOT EXISTS portal_recommendation_file_projection (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     UNIQUE(tenant_id, file_id)
 )"""
-
-INDEX_DBD_TENANT_DEPARTMENT = """\
-CREATE INDEX IF NOT EXISTS ix_dbd_tenant_department
-    ON department_business_domain (tenant_id, department_id)"""
-
-INDEX_DBD_TENANT_DOMAIN = """\
-CREATE INDEX IF NOT EXISTS ix_dbd_tenant_domain
-    ON department_business_domain (tenant_id, business_domain_code)"""
 
 INDEX_PRFP_DOMAIN_RECENCY = """\
 CREATE INDEX IF NOT EXISTS ix_prfp_domain_recency
@@ -652,7 +632,6 @@ TABLE_DEFINITIONS: dict[str, str] = {
     # F057: message push outbox for Shougang enterprise WeChat.
     "message_push_outbox": TABLE_MESSAGE_PUSH_OUTBOX,
     # F056: portal personalized recommendation.
-    "department_business_domain": TABLE_DEPARTMENT_BUSINESS_DOMAIN,
     "portal_recommendation_file_projection": TABLE_PORTAL_RECOMMENDATION_FILE_PROJECTION,
 }
 
@@ -668,8 +647,6 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY,
     INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE,
     INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE,
-    INDEX_DBD_TENANT_DEPARTMENT,
-    INDEX_DBD_TENANT_DOMAIN,
     INDEX_PRFP_DOMAIN_RECENCY,
     INDEX_PRFP_GENERIC_RECENCY,
     INDEX_PRFP_SPACE_RECOMMENDABLE,
@@ -707,9 +684,6 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY))
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE))
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_ACTION_CODE))
-        if "department_business_domain" in table_names:
-            conn.execute(text(INDEX_DBD_TENANT_DEPARTMENT))
-            conn.execute(text(INDEX_DBD_TENANT_DOMAIN))
         if "portal_recommendation_file_projection" in table_names:
             conn.execute(text(INDEX_PRFP_DOMAIN_RECENCY))
             conn.execute(text(INDEX_PRFP_GENERIC_RECENCY))

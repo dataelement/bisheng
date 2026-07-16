@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -6,9 +6,6 @@ from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     ShougangPortalAdminConfig,
     redact_portal_admin_config,
-)
-from bisheng.shougang_portal_config.domain.services.department_business_domain_service import (
-    DepartmentBusinessDomainValidationError,
 )
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
@@ -47,12 +44,9 @@ async def save_shougang_portal_config(
     payload: ShougangPortalAdminConfig,
     admin_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
-    try:
-        saved = await ShougangPortalConfigService.save_config(
-            payload,
-            tenant_id=_current_admin_tenant_id(admin_user),
-            create_user=admin_user.user_id,
-        )
-    except DepartmentBusinessDomainValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    saved = await ShougangPortalConfigService.save_config(
+        payload,
+        tenant_id=_current_admin_tenant_id(admin_user),
+        create_user=admin_user.user_id,
+    )
     return resp_200(redact_portal_admin_config(saved))

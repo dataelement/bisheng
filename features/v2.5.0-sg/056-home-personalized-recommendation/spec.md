@@ -18,18 +18,17 @@
 ### IN
 
 - BiSheng 既有首钢门户聚合配置扩展：
-  - `portal` 配置下新增 `department_business_domain_bindings`。
+  - 复用远端门户已实现的 `portal.domains[].department_ids` 作为部门与业务域唯一配置源。
   - `portal.recommendation` 新增推荐总数、四个算法参数、影子模式和灰度比例。
-  - 配置版本由服务端单调递增；聚合配置与规范化绑定表同事务保存。
+  - 配置版本由服务端单调递增；不再复制部门业务域绑定到独立表。
 - MySQL/DM8 兼容的数据模型与迁移：
-  - `department_business_domain`。
   - `portal_recommendation_file_projection`。
 - 共享候选池、用户兴趣 Top 50、近 90 天浏览状态、行为版本、用户短期 Top N。
 - `personalized_v1` 在线召回、动态归一化、浏览扣分、稳定打散、兜底合并和最终权限校验。
 - 扩展既有 BiSheng `POST /api/v1/knowledge/shougang-portal/files/browse`。
 - 扩展门户搜索和阅读遥测；搜索原始事件仍以 ES 为事实源。
 - 文件/ACL 增量投影任务、6 小时聚合、每日增量对账、每周全量对账及双版本池切换。
-- 门户管理后台的独立部门业务域绑定界面与推荐参数界面。
+- 门户管理后台复用既有业务域编辑器中的部门多选，并增加推荐参数界面。
 - 门户首页 SSE 登录/匿名分流、稳定灰度、影子计算、安全降级。
 - “更多”页一次加载完整 Top N、显式搜索上报和准确预览入口。
 
@@ -62,9 +61,9 @@
 
 作为已登录门户用户，我希望首页推荐综合主部门业务域、个人搜索兴趣、热度、新鲜度和最近浏览情况，以便优先看到对我更相关且我确实有权访问的内容。
 
-### US-02：管理员维护精确部门绑定
+### US-02：管理员在业务域配置中维护精确部门绑定
 
-作为门户管理员，我希望在独立界面为一个部门绑定一个或多个业务域，且父子部门互不继承，以便准确表达组织与业务域关系。
+作为门户管理员，我希望在既有业务域编辑器中为一个业务域选择多个部门，且父子部门互不继承；同一部门可被多个业务域选择，以便准确表达组织与业务域关系。
 
 ### US-03：管理员安全灰度算法
 
@@ -82,13 +81,13 @@
 
 | ID | 角色 | 操作 | 预期结果 |
 |----|------|------|---------|
-| AC-01 | 管理员 | 在当前租户为同一部门选择多个业务域并保存 | 当前租户的门户配置、BiSheng 聚合配置和 `department_business_domain` 中得到规范化、去重后的精确绑定，不影响其他租户 |
+| AC-01 | 管理员 | 在当前租户的多个业务域中选择同一部门并保存 | `domains[].department_ids` 在门户与 BiSheng 聚合配置中保持同构、正数且去重；不创建独立绑定副本，不影响其他租户 |
 | AC-02 | 管理员 | 分别配置父部门与子部门 | 用户只命中其唯一主部门自身绑定，不向父/子部门双向继承 |
 | AC-03 | 系统 | 用户存在主部门和次要部门 | 只读取 `is_primary=true` 的唯一主部门，不读取次要部门 |
 | AC-04 | 系统 | 用户无主部门、存在多个主部门或主部门无绑定 | 禁用业务域特征，不回退读取次要部门，其他有效特征继续动态归一化 |
-| AC-05 | 管理员 | 清空或删除某部门绑定并保存 | 以全量替换语义删除旧行；未出现在请求中的旧绑定不残留 |
+| AC-05 | 管理员 | 从业务域中取消部门或删除业务域并保存 | 新聚合配置直接成为唯一事实源；旧映射不再参与推荐，受影响部门用户缓存被失效 |
 | AC-06 | 管理员 | 保存推荐配置 | `1 <= section_page_size <= home_total_count <= 50` 且四个算法参数、影子开关、0～100 灰度通过校验后生效 |
-| AC-07 | 管理员 | 保存非法参数或不存在的业务域编码 | 请求被明确拒绝，旧配置与旧绑定保持不变，不发生半提交或静默回退 |
+| AC-07 | 管理员 | 保存非法推荐参数或非法部门 ID | 请求被明确拒绝，旧聚合配置保持不变，不发生半提交或静默回退 |
 | AC-08 | 系统 | 同一租户串行或并发成功保存聚合配置 | 每个成功事务获得该租户内唯一且严格单调递增的 `version`；客户端传入版本不能降低、固定或制造重复服务端版本 |
 | AC-09 | 系统 | 热度半衰期或首页来源权重变化，且多次重算并发/乱序完成 | 仅最新 desired generation 可原子切换；旧任务晚完成不能把 active pool 回切，重算期间继续使用上一有效版本 |
 
@@ -150,7 +149,7 @@
 | AC-46 | 系统 | Redis 行为状态缺失 | 作为冷启动，按业务域或通用兜底继续；不让在线请求同步聚合 ES |
 | AC-47 | 系统 | Redis 共享池缺失 | 从推荐投影做有界最新内容补偿并异步补建池，不扫描完整文件表 |
 | AC-48 | 系统 | ES 暂时不可用 | 继续使用最近有效共享池；搜索兴趣重算可重试但首页请求不等待 ES |
-| AC-49 | 系统 | 执行数据库升级 | MySQL 与 DM8 均可创建/回滚两张表、唯一约束和索引 |
+| AC-49 | 系统 | 执行数据库升级 | MySQL 与 DM8 均可创建/回滚推荐文件投影表、唯一约束和索引；不会创建独立部门业务域表 |
 | AC-50 | 系统 | 运行性能验收 | 10000 轻量候选、最多 200 次权限检查下推荐 P95 < 800 ms，首个首页 SSE 区块 P95 < 1 s |
 | AC-51 | 系统 | 未携带当前租户管理员 token 调用 `/config/internal` | 返回既有 401/403 响应，不返回未脱敏聚合配置；合法管理员只读取其 token 对应租户 |
 | AC-52 | 系统 | 运行搜索事件保留任务 | 只删除当前租户 `portal_search` 中 timestamp 早于当前 UTC 时间 90 天的 ES 事件，其他事件和其他租户不受影响 |
@@ -163,8 +162,8 @@
 |----|------|---------|
 | E-01 | 同一用户没有主部门 | 业务域集合为空，禁用业务域权重 |
 | E-02 | 同一用户有多个 `is_primary=true` 记录 | 视为组织数据异常，记录无敏感信息告警并禁用业务域权重 |
-| E-03 | 部门绑定含大小写混合或重复编码 | 保存时统一大写、去空白、去重并按编码稳定排序 |
-| E-04 | 绑定引用不存在或已禁用业务域 | 整次保存失败，旧配置与绑定表不变 |
+| E-03 | 同一业务域的 `department_ids` 含重复 ID | 保存时保留首次出现顺序并去重；非正整数由同构 schema 拒绝 |
+| E-04 | 已禁用或无合法编码的业务域仍保留历史 `department_ids` | 聚合配置保持兼容可读；推荐解析时忽略该业务域，不把它转成用户特征 |
 | E-05 | `home_total_count` 小于首页展示数 | 整次保存失败并返回字段级错误 |
 | E-06 | 用户兴趣池为空 | 动态移除兴趣权重，不按 0 分稀释其他特征 |
 | E-07 | 热门 P95 样本过少或为 0 | 回退租户级 P95；仍无有效分母时热门分为 0 |
@@ -194,8 +193,8 @@
 |----|------|------|------|
 | AD-01 | 推荐计算位置 | 放在 BiSheng knowledge Domain Service | 复用文件解析、权限上下文、Redis/ES 和 Worker，避免门户 N+1 |
 | AD-02 | 配置同步协议 | 只扩展既有 `GET/PUT /api/v1/shougang-portal/config` 聚合接口 | 保持单一事实源；覆盖技术方案旧稿 12.2 的两个独立 BiSheng 同步端点 |
-| AD-03 | 门户管理接口 | 新增 `GET/POST /api/v1/admin/config/department-business-domains`；推荐继续既有 `/recommendation` | 管理职责独立，但远端仍整包同步 |
-| AD-04 | 用户业务域 | 唯一主部门精确绑定，多业务域去重，无继承 | 对齐已确认业务规则 |
+| AD-03 | 门户管理入口 | 复用远端基线既有业务域编辑与保存入口；推荐继续既有 `/recommendation` | 避免重复配置界面和重复持久化结构，远端仍整包同步 |
+| AD-04 | 用户业务域 | 从 `domains[].department_ids` 解析唯一主部门的全部启用业务域，多业务域去重，无继承 | 对齐已确认业务规则并保持单一事实源 |
 | AD-05 | 文件业务域 | 复用文件编码/`split_rule` 解析并写推荐投影 | 避免三份源字段漂移 |
 | AD-06 | 候选存储 | 租户共享池 + 活跃用户兴趣 Top 50，不维护每用户完整长期池 | 降低文件/ACL/组织变化的扇出 |
 | AD-07 | 候选结构 | 业务域池、用户兴趣池、通用兜底池；热门和新鲜按 3:1 组装 | 兼顾热门、新内容和冷启动 |
@@ -210,44 +209,25 @@
 | AD-16 | 灰度算法 | 对 UTF-8 字符串 `"{tenant_id}:{user_id}:personalized_v1"` 做 SHA-256，取 digest 前 8 字节按 unsigned big-endian 转整数后 `% 100` | 跨语言结果固定，同一用户稳定且无需存灰度名单 |
 | AD-17 | 降级身份 | 始终使用当前用户 token 调用 `latest_selected` | 降级不改变权限主体 |
 | AD-18 | API 分页 | `personalized_v1` 一次返回完整 Top N，固定无后续页 | 首页和“更多”顺序一致，避免伪无限流 |
-| AD-19 | 门户部署与租户 | 一个门户部署使用 runtime admin token 绑定一个 BiSheng 租户；不同租户使用不同部署/token | 兼容现有全局 PortalConfigService，同时保证远端聚合配置和绑定表属于同一租户 |
+| AD-19 | 门户部署与租户 | 一个门户部署使用 runtime admin token 绑定一个 BiSheng 租户；不同租户使用不同部署/token | 兼容现有全局 PortalConfigService，同时保证远端聚合配置属于同一租户 |
 
 ---
 
 ## 5. 数据库、配置与 Redis 模型
 
-### 5.1 `department_business_domain`
+### 5.1 部门业务域唯一配置源：`domains[].department_ids`
 
-该表由 F056 持有，记录“当前租户内某个部门直接绑定某个业务域”的规范化行。
+F056 不创建 `department_business_domain` 表，也不维护独立绑定字段。门户远端基线已经在每个业务域对象中提供 `department_ids`，门户与 BiSheng 的聚合 schema 保持同构：
 
-| 字段 | 类型/约束 | 说明 |
-|------|-----------|------|
-| `id` | bigint PK | 主键 |
-| `tenant_id` | int, not null | 由租户上下文自动注入和过滤 |
-| `department_id` | int, not null | 精确部门 ID |
-| `business_domain_code` | varchar(16), not null | 去空白并统一大写 |
-| `create_user` | int, nullable | 最近一次配置操作人 |
-| `create_time` | datetime, not null | 服务端默认时间 |
-| `update_time` | datetime, not null | 使用 `UPDATE_TIME_SERVER_DEFAULT` |
+- `department_ids` 缺失时默认空列表，兼容旧配置。
+- 每个 ID 必须为正整数，按首次出现顺序去重。
+- 一个业务域可绑定多个部门，同一部门也可出现在多个业务域中。
+- 已禁用或编码为空/非法的业务域可以保留历史配置，但推荐解析时不产生业务域特征。
+- 父、子、次要部门不会因为树关系或成员关系被自动加入。
 
-约束和索引：
+在线解析先在严格租户过滤下查询用户全部 `is_primary=true` 记录并要求恰好一条，再从启用且编码合法的 `domains` 中精确匹配该主部门 ID。配置保存比较 old/new 的 `(department_id, domain_code)` 集合，映射变化后只失效涉及部门用户的业务域与 Top N 缓存。
 
-```text
-UNIQUE (tenant_id, department_id, business_domain_code)
-INDEX  (tenant_id, department_id)
-INDEX  (tenant_id, business_domain_code)
-```
-
-全量保存规范：
-
-1. 校验部门存在于当前租户。
-2. 校验业务域存在于同一份聚合配置的 `domains`。
-3. 业务域编码去空白、统一大写、去重并排序。
-4. 同一 `department_id` 在配置列表中只能出现一次。
-5. `PortalAdminConfigRepository` 与绑定 Repository 共享同一 session；在一个 DB transaction 中锁定/读取当前租户配置，计算新版本，flush Config JSON，并全量替换当前租户绑定行，Repository 方法不得自行 commit。
-6. 任一步失败时回滚配置和绑定表。
-
-并发版本实现必须兼容 MySQL 和 DM8：已有配置行使用行锁读取后递增；首次并发创建依赖 Config key 唯一约束并做有界重试，确保每个成功事务获得不同版本。
+聚合配置版本的并发实现必须兼容 MySQL 和 DM8：已有配置行使用行锁读取后递增；首次并发创建依赖 Config key 唯一约束并做有界重试，确保每个成功事务获得不同版本。
 
 ### 5.2 `portal_recommendation_file_projection`
 
@@ -301,10 +281,20 @@ tenant_id > 1: shougang_portal_config:t:{tenant_id}
 {
   "version": 12,
   "portal": {
-    "department_business_domain_bindings": [
+    "domains": [
       {
-        "department_id": 10,
-        "business_domain_codes": ["PP", "SAFE"]
+        "name": "生产",
+        "code": "PP",
+        "department_ids": [10, 12],
+        "space_ids": [],
+        "enabled": true
+      },
+      {
+        "name": "安全",
+        "code": "SAFE",
+        "department_ids": [10],
+        "space_ids": [],
+        "enabled": true
       }
     ],
     "recommendation": {
@@ -379,7 +369,7 @@ sg:rec:v1:reconcile:{tenant}:watermark
 | active pool version | JSON/STRING | 常驻，包含 generation、pool_version、热度配置 fingerprint |
 | desired generation | STRING integer | 常驻，每次计划重算时原子递增 |
 | 共享池、hot/fresh、轮换状态 | ZSET/HASH | 常驻滚动；切换后旧版本延迟清理 |
-| 用户业务域 | SET/JSON | 30 分钟，绑定或主部门变化主动失效 |
+| 用户业务域 | SET/JSON | 30 分钟，`domains[].department_ids` 映射或主部门变化主动失效 |
 | 用户最近浏览 | ZSET(`file_id -> last_read_ts`) | 90 天滚动 |
 | 用户兴趣 | ZSET(`space_id:file_id -> score`) | 30 分钟，最多 50 |
 | 用户行为版本 | STRING integer | 常驻，搜索和浏览原子递增 |
@@ -407,7 +397,7 @@ Redis Repository 必须支持 pipeline/批量读取、缺失降级、原子 `INC
 |--------|------|------|------|
 | GET | `/api/v1/shougang-portal/config` | 当前租户管理员 | 返回当前租户脱敏后的完整新 schema |
 | GET | `/api/v1/shougang-portal/config/internal` | 当前租户管理员 | 返回当前租户内部完整新 schema；补齐现有端点缺失的 `UserPayload.get_admin_user` 认证 |
-| PUT | `/api/v1/shougang-portal/config` | 当前租户管理员 | 规范化、校验并同事务保存当前租户配置与部门绑定；返回服务端新版本 |
+| PUT | `/api/v1/shougang-portal/config` | 当前租户管理员 | 规范化、校验并原子保存包含 `domains[].department_ids` 的当前租户聚合配置；返回服务端新版本 |
 
 不新增以下旧方案端点：
 
@@ -425,10 +415,13 @@ Redis Repository 必须支持 pipeline/批量读取、缺失降级、原子 `INC
   "data": {
     "version": 13,
     "portal": {
-      "department_business_domain_bindings": [
+      "domains": [
         {
-          "department_id": 10,
-          "business_domain_codes": ["PP", "SAFE"]
+          "name": "生产",
+          "code": "PP",
+          "department_ids": [10, 12],
+          "space_ids": [],
+          "enabled": true
         }
       ],
       "recommendation": {
@@ -539,51 +532,32 @@ recommendation_scene = personalized_v1 | latest_selected | null
 
 ### 6.4 门户管理 API
 
-保留既有：
+复用远端基线既有接口，不新增独立部门业务域路由：
 
 ```text
+GET  /api/v1/admin/config/domains
+POST /api/v1/admin/config/domains
 GET  /api/v1/admin/config/recommendation
 POST /api/v1/admin/config/recommendation
 ```
 
-新增：
-
-```text
-GET  /api/v1/admin/config/department-business-domains
-POST /api/v1/admin/config/department-business-domains
-```
-
-POST 请求：
+业务域保存请求中的相关片段：
 
 ```json
 {
-  "bindings": [
+  "domains": [
     {
-      "department_id": 10,
-      "business_domain_codes": ["PP", "SAFE"]
+      "name": "生产",
+      "code": "PP",
+      "department_ids": [10, 12],
+      "space_ids": [],
+      "enabled": true
     }
   ]
 }
 ```
 
 门户先用本地同构 schema 校验并更新聚合配置，再由 `RemotePortalAdminConfigStore` 使用完整聚合 PUT 同步 BiSheng；远端失败时沿用配置存储现有的一致性/错误反馈策略，不把本地保存伪装成远端成功。
-
-部门绑定管理接口成功响应：
-
-```json
-{
-  "status_code": 200,
-  "status_message": "SUCCESS",
-  "data": {
-    "bindings": [
-      {
-        "department_id": 10,
-        "business_domain_codes": ["PP", "SAFE"]
-      }
-    ]
-  }
-}
-```
 
 ### 6.5 门户搜索遥测入口
 
@@ -623,7 +597,6 @@ Content-Type: application/json
 config Router
   -> ShougangPortalConfigService
     -> PortalAdminConfigRepository
-    -> DepartmentBusinessDomainRepository
       -> one shared DB transaction
 
 Router
@@ -631,7 +604,7 @@ Router
     -> KnowledgeSpaceService dispatch
       -> PortalRecommendationService
         -> DepartmentBusinessDomainService
-          -> DepartmentBusinessDomainRepository
+          -> PortalDepartmentRepository
         -> PortalRecommendationProjectionRepository
         -> PortalRecommendationRedisRepository
         -> existing permission/file repositories
@@ -639,7 +612,7 @@ Router
 ```
 
 - Endpoint 只做认证、schema 和响应包装。
-- 配置 Service 只编排两个 Repository；行锁、`with_for_update`、flush 和唯一冲突转换全部封装在 `PortalAdminConfigRepository`，不得在 Service 写 ORM。
+- 配置 Service 只编排 `PortalAdminConfigRepository`；行锁、`with_for_update`、flush 和唯一冲突转换全部封装在 Repository，部门映射直接来自聚合 JSON，不写第二份持久化数据。
 - `KnowledgeSpaceService` 只负责识别 `personalized_v1` 并委托新 Service。
 - 新 Service 不直接写 ORM 查询。
 - DB/Redis 批量读写分别封装在 Repository 接口与实现中。
@@ -650,9 +623,9 @@ Router
 
 | 组件/方法 | 输入 | 输出 | 职责 |
 |-----------|------|------|------|
-| `ShougangPortalConfigService.save_config` | aggregate config + admin | saved config | 规范化、版本递增、配置与绑定同事务 |
+| `ShougangPortalConfigService.save_config` | aggregate config + admin | saved config | 规范化、版本递增、old/new 部门域映射差异失效 |
 | `PortalRecommendationService.recommend` | request + login user | file DTO list | 整体编排、预算、兜底和观测 |
-| `resolve_user_domains` | tenant/user | domain code set | 只读唯一主部门直接绑定 |
+| `resolve_user_domains` | tenant/user + `portal.domains` | domain code set | 严格租户查询唯一主部门并精确匹配 `department_ids` |
 | `collect_candidates` | domains, interest, pool version | lightweight candidates | 全量相关池召回、去重、10000 熔断 |
 | `score_candidates` | candidates + signals + config | ordered candidates | 动态归一化、浏览扣分、稳定打散 |
 | `select_authorized_top_n` | ordered candidates + context | authorized IDs | 10/200/700ms 渐进权限检查 |
@@ -663,11 +636,11 @@ Router
 
 ### 7.3 用户业务域解析
 
-1. Repository 查询当前租户、当前用户所有 `UserDepartment` 中 `is_primary=true` 的记录。
-2. 恰好 1 条时查询该 `department_id` 的直接绑定。
+1. `PortalDepartmentRepository` 在严格租户过滤下 join `Department`/`UserDepartment`，查询当前用户所有 `is_primary=true` 的记录。
+2. 恰好 1 条时，从当前同租户聚合配置的启用业务域中精确筛选包含该 `department_id` 的 `department_ids`。
 3. 0 条或多于 1 条时返回空集合并记录原因。
 4. 不查询父部门 path，不展开 children，不读取次要部门。
-5. 结果去重后缓存 30 分钟；绑定或主部门变化时主动失效。
+5. 合法业务域编码去重后缓存 30 分钟；`domains` 映射或主部门变化时主动失效。
 
 ### 7.4 兴趣候选
 
@@ -776,7 +749,7 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 |------|------|------|
 | `refresh_portal_recommendation_projection` | 文件发布/删除/移动/状态/版本/业务域/ACL 变化 | 幂等 upsert 单文件或分页子树投影，更新受影响池成员 |
 | `rebuild_user_interest_top50` | 显式搜索 | 聚合 ES 90 天搜索并合并当前查询，写用户兴趣池 |
-| `invalidate_portal_recommendation_user_state` | 主部门或部门绑定变化 | 删除受影响用户业务域和 Top N key，不重建共享文件池 |
+| `invalidate_portal_recommendation_user_state` | 主部门或 `domains[].department_ids` 映射变化 | 删除受影响用户业务域和 Top N key，不重建共享文件池 |
 | `rebuild_portal_recommendation_pools` | 每 6 小时或热度配置变化 | 重算热度、轮换、新鲜路和共享池 |
 | `reconcile_portal_recommendation_incremental` | 每日低峰 | 按 `update_time + file_id` watermark 分页补漏 |
 | `reconcile_portal_recommendation_full` | 每周低峰 | 分页重建/核对投影与 Redis 池 |
@@ -787,7 +760,7 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 
 - 路由到现有 `knowledge_celery` 队列。
 - 发布时把 `tenant_id` 写入 headers；执行前由既有 hooks 恢复 ContextVar。
-- 部门绑定变化只失效受影响用户的业务域/Top N 缓存，不重建文件共享池。
+- `domains[].department_ids` 映射变化只失效受影响用户的业务域/Top N 缓存，不重建文件共享池。
 - 单文件投影以 `projection_version` 防止旧事件覆盖新状态。
 - 子树刷新按固定批次分页，支持重试和重复执行。
 - watermark 只有在当前页成功提交后推进。
@@ -838,15 +811,14 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 - `latest_selected` 及其他列表模式保留现有分页/排序行为。
 - 前端不得重新排序或重新计算分数。
 
-### 9.3 独立部门业务域绑定界面
+### 9.3 复用业务域编辑器的部门多选
 
-管理后台新增独立配置区，不嵌入现有 Domain 空间绑定卡片：
+管理后台复用远端基线已实现的业务域编辑弹窗，在每个 Domain 对象上维护 `department_ids`：
 
-- 每行一个部门单选和业务域多选。
-- 部门选择项来自当前组织树；同一部门不能重复出现。
-- 业务域选择项来自当前 `domains` 配置，可绑定 1 个或多个。
-- 不展示“包含子部门”开关，不暗示任何继承。
-- 支持新增行、删除行、清空某部门全部绑定。
+- 部门选择项来自当前组织树，一个业务域可选择多个部门。
+- 同一部门可被多个业务域独立选择，从而形成多业务域特征。
+- 父部门和子部门独立勾选，不级联，也不展示“包含子部门”开关。
+- 删除业务域或取消部门选择后，完整 `domains` 配置成为新的唯一事实源。
 - 保存前显示字段级校验；保存成功后刷新服务端返回的规范化值和版本。
 
 推荐配置区新增：
@@ -893,7 +865,7 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 - 门户管理接口可以分区维护本地配置。
 - `RemotePortalAdminConfigStore` 始终把完整聚合配置同步到既有
   `PUT /api/v1/shougang-portal/config`。
-- BiSheng 在该聚合保存事务内规范化并同步部门绑定表。
+- BiSheng 直接读取聚合配置中的 `domains[].department_ids`，不复制到独立字段或表。
 
 ---
 
@@ -904,7 +876,7 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 | HTTP/Body | MMMEE Code | Error Class | 场景 | 处理 | 关联 AC |
 |-----------|------------|-------------|------|------|---------|
 | 401/403（既有认证响应） | —（复用既有认证错误） | `AuthJWTException` / `HTTPException` | 匿名调用个性化或非管理员修改/读取内部配置 | 沿用现有认证/管理员依赖 | AC-23, AC-24, AC-51 |
-| 422（既有 schema 响应） | —（不新增业务码） | `RequestValidationError` | 字段越界、交叉数量非法、重复部门、无效编码 | 拒绝整个请求，不保存 | AC-06, AC-07 |
+| 422（既有 schema 响应） | —（不新增业务码） | `RequestValidationError` | 字段越界、交叉数量非法、非正部门 ID | 拒绝整个请求，不保存 | AC-06, AC-07 |
 | HTTP 500 + body `status_code=500` | —（系统异常，不新增业务码） | `Exception` | 配置事务、Redis/DB/ES 编排或个性化传输失败 | 配置回滚；推荐请求由门户按 AC-39 降级 | AC-07, AC-08, AC-39 |
 | 200 + 实际列表 | — | — | 单候选拒绝、权限选择整体异常、候选不足或达到预算 | 只返回已确认结果/空，固定无后续页 | AC-28～AC-31 |
 
@@ -935,12 +907,11 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 
 | 文件 | 说明 |
 |------|------|
-| `src/backend/bisheng/shougang_portal_config/domain/models/department_business_domain.py` | 部门业务域绑定 ORM |
-| `src/backend/bisheng/shougang_portal_config/domain/repositories/interfaces/department_business_domain_repository.py` | 绑定 Repository 接口 |
-| `src/backend/bisheng/shougang_portal_config/domain/repositories/implementations/department_business_domain_repository_impl.py` | 绑定查询与同事务全量替换 |
+| `src/backend/bisheng/shougang_portal_config/domain/repositories/interfaces/portal_department_repository.py` | 严格租户下全部主部门记录查询接口 |
+| `src/backend/bisheng/shougang_portal_config/domain/repositories/implementations/portal_department_repository_impl.py` | `Department`/`UserDepartment` 精确主部门查询实现 |
 | `src/backend/bisheng/shougang_portal_config/domain/repositories/interfaces/portal_admin_config_repository.py` | 租户化 Config key、锁定读取和非提交写入接口 |
 | `src/backend/bisheng/shougang_portal_config/domain/repositories/implementations/portal_admin_config_repository_impl.py` | SQLAlchemy 行锁、flush、唯一冲突转换与共享事务实现 |
-| `src/backend/bisheng/shougang_portal_config/domain/services/department_business_domain_service.py` | 绑定规范化、全量替换和只读查询边界 |
+| `src/backend/bisheng/shougang_portal_config/domain/services/department_business_domain_service.py` | 从 `domains[].department_ids` 解析唯一主部门业务域及映射差异 |
 | `src/backend/bisheng/knowledge/domain/models/portal_recommendation_file_projection.py` | 推荐文件投影 ORM |
 | `src/backend/bisheng/knowledge/domain/repositories/interfaces/portal_recommendation_repository.py` | 投影、轻量候选和对账查询接口 |
 | `src/backend/bisheng/knowledge/domain/repositories/implementations/portal_recommendation_repository_impl.py` | DB Repository 实现 |
@@ -953,8 +924,8 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 | `src/backend/bisheng/knowledge/domain/services/portal_recommendation_pool_service.py` | 热度、新鲜度、轮换、共享池与兴趣池 |
 | `src/backend/bisheng/knowledge/domain/services/portal_recommendation_behavior_service.py` | 搜索/阅读派生状态、行为版本和异步兴趣任务 |
 | `src/backend/bisheng/worker/knowledge/portal_recommendation.py` | 增量、兴趣、6 小时、每日、每周任务 |
-| `src/backend/bisheng/core/database/alembic/versions/*_portal_recommendation.py` | 基于全部当前 heads 接续/合并的迁移；创建两张表和索引并最终保持单 head |
-| `src/backend/test/shougang_portal_config/test_personalized_recommendation_config.py` | 聚合 schema、版本、事务和绑定测试 |
+| `src/backend/bisheng/core/database/alembic/versions/*_portal_recommendation.py` | 基于全部当前 heads 接续/合并的迁移；只创建推荐投影表和索引并最终保持单 head |
+| `src/backend/test/shougang_portal_config/test_personalized_recommendation_config.py` | 聚合 schema、版本及 `domains[].department_ids` 兼容测试 |
 | `src/backend/test/knowledge/test_portal_recommendation_algorithm.py` | 算法、池组装、轮换和稳定打散测试 |
 | `src/backend/test/knowledge/test_portal_recommendation_permission.py` | 权限矩阵和无泄露测试 |
 | `src/backend/test/knowledge/test_portal_recommendation_api.py` | browse 与 telemetry 集成测试 |
@@ -965,8 +936,8 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 
 | 文件 | 变更 |
 |------|------|
-| `src/backend/bisheng/shougang_portal_config/domain/schemas/portal_config_schema.py` | 同构绑定与推荐配置字段、默认迁移和校验 |
-| `src/backend/bisheng/shougang_portal_config/domain/services/portal_config_service.py` | 服务端并发单调版本、同事务写配置和绑定 |
+| `src/backend/bisheng/shougang_portal_config/domain/schemas/portal_config_schema.py` | 同构 `domains[].department_ids` 与推荐配置字段、默认迁移和校验 |
+| `src/backend/bisheng/shougang_portal_config/domain/services/portal_config_service.py` | 服务端并发单调版本、聚合配置保存和映射变化缓存失效 |
 | `src/backend/bisheng/shougang_portal_config/api/endpoints/portal_config.py` | 返回服务端新版本，保持既有路由 |
 | `src/backend/bisheng/knowledge/domain/constants.py` | `personalized_v1` 与硬预算常量 |
 | `src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py` | 个性化/遥测 schema 字段 |
@@ -977,7 +948,7 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 | `src/backend/bisheng/common/schemas/telemetry/event_data_schema.py` | 搜索及阅读来源字段 |
 | `src/backend/bisheng/common/telemetry/portal_event_service.py` | 仅扩展 portal_search 校验和 ES 事件写入，不反向依赖 knowledge 域 |
 | `src/backend/bisheng/user/domain/services/user_department_service.py` | 主部门事务成功后投递用户推荐状态失效任务 |
-| `src/backend/bisheng/core/database/tenant_filter.py` | 强制导入两张新租户表模型，确保自动过滤和写入填充生效 |
+| `src/backend/bisheng/core/database/tenant_filter.py` | 强制导入推荐投影租户表模型，确保自动过滤和写入填充生效 |
 | `src/backend/bisheng/core/config/settings.py` | 任务路由与 6 小时/每日/每周调度 |
 | `src/backend/bisheng/worker/__init__.py` | 注册推荐任务 |
 
@@ -985,12 +956,9 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 
 | 文件 | 说明 |
 |------|------|
-| `frontend/src/pages/admin/DepartmentBusinessDomainBindingsPanel.tsx` | 独立部门单选/业务域多选面板 |
 | `frontend/src/pages/admin/RecommendationPersonalizationPanel.tsx` | 推荐数量、算法、影子和灰度控件 |
-| `backend/tests/test_department_business_domain_config.py` | 门户管理 API 和同步测试 |
 | `backend/tests/test_personalized_home.py` | 登录/匿名 SSE、灰度、影子和降级测试 |
 | `backend/tests/test_portal_search_telemetry.py` | 显式搜索和预览入口测试 |
-| `frontend/tests/departmentBusinessDomainBindings.test.ts` | 独立绑定界面测试 |
 | `frontend/tests/personalizedRecommendation.test.ts` | 首页/更多/配置/灰度前端测试 |
 | `frontend/tests/searchTelemetry.test.ts` | 显式动作去重测试 |
 
@@ -998,6 +966,8 @@ cycle_bucket = floor(current_date_ordinal / stable_shuffle_cycle_days)
 
 | 文件 | 变更 |
 |------|------|
+| `backend/app/schemas/portal_config.py` | 复用远端 `DomainConfig.department_ids` 并与 BiSheng 聚合 schema 同构 |
+| `frontend/src/utils/adminDomains.ts` | 复用业务域编辑器的部门多选、正数校验和去重序列化 |
 | `docs/specs/2026-07-14-首页个性化推荐技术方案.md` | 配置同步章节改为复用聚合接口 |
 | `backend/app/schemas/portal_config.py` | 同构 schema、默认迁移、字段/交叉校验 |
 | `backend/app/config/portal_config.py` | 默认配置与兼容加载 |
