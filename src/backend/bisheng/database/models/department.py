@@ -24,10 +24,9 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 logger = logging.getLogger(__name__)
-
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 
 def _normalize_id_scalar_rows(rows) -> list[int]:
@@ -815,7 +814,7 @@ class DepartmentDao:
         parent_path: str,
         last_sync_ts: int,
     ) -> Department | None:
-        """Update parent linkage without changing department lifecycle status."""
+        """Update parent linkage and keep the entire materialized subtree aligned."""
 
         def final_path(path_prefix: str, child_id: int) -> str:
             base = (path_prefix or "").strip()
@@ -828,13 +827,23 @@ class DepartmentDao:
         existing = await cls.aget_by_id(dept_id)
         if existing is None:
             return None
+        new_path = final_path(parent_path, dept_id)
         async with get_async_db_session() as session:
+            if existing.path and existing.path != new_path:
+                await session.execute(
+                    update(Department)
+                    .where(
+                        Department.path.like(f"{existing.path}%"),
+                        Department.tenant_id == existing.tenant_id,
+                    )
+                    .values(path=func.replace(Department.path, existing.path, new_path))
+                )
             await session.execute(
                 update(Department)
                 .where(Department.id == dept_id)
                 .values(
                     parent_id=parent_id,
-                    path=final_path(parent_path, dept_id),
+                    path=new_path,
                     sync_parent_external_id=None,
                     last_sync_ts=last_sync_ts,
                 )
@@ -900,13 +909,23 @@ class DepartmentDao:
                 await session.commit()
                 await session.refresh(dept)
                 return dept
+            new_path = final_path(path, int(existing.id))
+            if existing.path and existing.path != new_path:
+                await session.execute(
+                    update(Department)
+                    .where(
+                        Department.path.like(f"{existing.path}%"),
+                        Department.tenant_id == existing.tenant_id,
+                    )
+                    .values(path=func.replace(Department.path, existing.path, new_path))
+                )
             await session.execute(
                 update(Department)
                 .where(Department.id == existing.id)
                 .values(
                     name=name,
                     parent_id=parent_id,
-                    path=final_path(path, int(existing.id)),
+                    path=new_path,
                     sort_order=sort_order,
                     status="active",
                     is_deleted=0,

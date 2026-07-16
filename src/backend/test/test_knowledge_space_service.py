@@ -1358,6 +1358,146 @@ async def test_update_file_encoding_bumps_serial_when_duplicate_across_all_space
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("new_encoding", "new_subcategory_code", "expected_subcategory_code"),
+    [
+        ("SGGF-RPT-EM-20260600000001", None, "STD-A"),
+        ("SGGF-STD-EM-20260600000001", "STD-B", "STD-B"),
+    ],
+    ids=["file-category", "file-subcategory"],
+)
+async def test_update_file_encoding_allows_classification_change_when_existing_domain_is_unbound(
+    service,
+    new_encoding,
+    new_subcategory_code,
+    expected_subcategory_code,
+):
+    service.normalize_file_category_code = lambda value: str(value).strip().upper() if value else None
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name="编码文档.pdf",
+    )
+    file_record.file_encoding = "SGGF-STD-EM-20260600000001"
+    file_record.file_subcategory_code = "STD-A"
+
+    with (
+        patch.object(
+            service,
+            "_get_file_for_action",
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ),
+        patch.object(
+            service,
+            "_require_permission_id",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(business_domain_codes=["PP"]),
+        ) as mock_get_space,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_by_file_encoding",
+            new_callable=AsyncMock,
+            return_value=0,
+            create=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update",
+            new_callable=AsyncMock,
+            side_effect=lambda record: record,
+        ),
+        patch.object(
+            service,
+            "_notify_favorite_source_changed",
+            new_callable=AsyncMock,
+        ),
+    ):
+        if new_subcategory_code is None:
+            updated = await service.update_file_encoding(501, new_encoding)
+        else:
+            updated = await service.update_file_encoding(
+                501,
+                new_encoding,
+                file_subcategory_code=new_subcategory_code,
+            )
+
+    assert updated.file_encoding == new_encoding
+    assert updated.file_subcategory_code == expected_subcategory_code
+    mock_get_space.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("allowed_codes", "should_raise"),
+    [
+        (["PP"], False),
+        (["QM"], True),
+    ],
+    ids=["bound-domain", "unbound-domain"],
+)
+async def test_update_file_encoding_validates_space_binding_when_business_domain_changes(
+    service,
+    allowed_codes,
+    should_raise,
+):
+    service.normalize_file_category_code = lambda value: str(value).strip().upper() if value else None
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name="编码文档.pdf",
+    )
+    file_record.file_encoding = "SGGF-STD-EM-20260600000001"
+
+    with (
+        patch.object(
+            service,
+            "_get_file_for_action",
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ),
+        patch.object(
+            service,
+            "_require_permission_id",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(business_domain_codes=allowed_codes),
+        ) as mock_get_space,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_by_file_encoding",
+            new_callable=AsyncMock,
+            return_value=0,
+            create=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update",
+            new_callable=AsyncMock,
+            side_effect=lambda record: record,
+        ) as mock_update,
+        patch.object(
+            service,
+            "_notify_favorite_source_changed",
+            new_callable=AsyncMock,
+        ),
+    ):
+        if should_raise:
+            with pytest.raises(BaseErrorCode) as exc_info:
+                await service.update_file_encoding(501, "SGGF-STD-PP-20260600000001")
+            assert exc_info.value.Code == 18026
+            mock_update.assert_not_awaited()
+        else:
+            updated = await service.update_file_encoding(501, "SGGF-STD-PP-20260600000001")
+            assert updated.file_encoding == "SGGF-STD-PP-20260600000001"
+            mock_update.assert_awaited_once()
+        mock_get_space.assert_awaited_once_with(10)
+
+
+@pytest.mark.asyncio
 async def test_update_file_encoding_rejects_unparseable_duplicate(service):
     def _normalize_file_category_code(value):
         if not isinstance(value, str):

@@ -354,6 +354,28 @@ class ShougangPortalSpaceBusinessDomainCodesSyncResp(BaseModel):
     updated: int = 0
 
 
+class ShougangPortalDomainBindableSpaceResp(BaseModel):
+    id: int
+    name: str
+    description: str = ""
+    space_level: KnowledgeSpaceLevelEnum
+    business_domain_codes: list[str] = Field(default_factory=list)
+    file_num: int = 0
+
+    @field_validator("business_domain_codes", mode="before")
+    @classmethod
+    def normalize_business_domain_codes(cls, value: Any):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item).strip().upper() for item in value if str(item).strip()]
+        return value
+
+
+class ShougangPortalDomainBindableSpacesResp(BaseModel):
+    spaces: list[ShougangPortalDomainBindableSpaceResp] = Field(default_factory=list)
+
+
 class ShougangPortalFileSearchReq(BaseModel):
     q: str | None = Field(default=None, description="Search keyword")
     tag: str | None = Field(default=None, description="Space tag name")

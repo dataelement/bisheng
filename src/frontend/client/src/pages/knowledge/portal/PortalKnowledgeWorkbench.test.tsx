@@ -839,7 +839,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(screen.getByTestId("active-space-title")).toHaveTextContent("团队空间147");
         });
-        expect(screen.getByRole("button", { name: "收起团队知识库" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "收起团队/科室知识库" })).toBeInTheDocument();
         expect(screen.queryByTestId("active-space-info-tooltip")).not.toBeInTheDocument();
         expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
         expect(getSpacesByLevelApi).not.toHaveBeenCalledWith(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.UPDATE_TIME });
@@ -938,9 +938,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(screen.queryByText("公共知识库")).not.toBeInTheDocument();
         expect(screen.getByRole("button", { name: "打开公共知识库分组" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "打开团队知识库分组" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "打开团队/科室知识库分组" })).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: "打开团队知识库分组" }));
+        fireEvent.click(screen.getByRole("button", { name: "打开团队/科室知识库分组" }));
 
         const teamGroup = screen.getByTestId("space-group-team");
 
@@ -968,7 +968,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
 
         fireEvent.click(screen.getByRole("button", { name: "收起知识库侧栏" }));
-        fireEvent.click(screen.getByRole("button", { name: "打开团队知识库分组" }));
+        fireEvent.click(screen.getByRole("button", { name: "打开团队/科室知识库分组" }));
 
         const teamGroup = screen.getByTestId("space-group-team");
 
@@ -1011,7 +1011,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const teamCreateButton = await screen.findByRole("button", { name: "新增团队知识库" });
+        const teamCreateButton = await screen.findByRole("button", { name: "新增团队/科室知识库" });
         expect(teamCreateButton).toBeEnabled();
 
         fireEvent.click(teamCreateButton);
@@ -1029,7 +1029,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        fireEvent.click(await screen.findByRole("button", { name: "新增团队知识库" }));
+        fireEvent.click(await screen.findByRole("button", { name: "新增团队/科室知识库" }));
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("approvalReason:true");
         fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
 
@@ -1179,7 +1179,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(within(teamGroup).queryByRole("button", { name: "新建知识库" })).not.toBeInTheDocument();
         });
-        expect(screen.getByRole("button", { name: "新增团队知识库" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "新增团队/科室知识库" })).toBeDisabled();
     });
 
     test("disables create action for groups without create permission", async () => {
@@ -1201,7 +1201,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const teamCreateButton = await screen.findByRole("button", { name: "新增团队知识库" });
+        const teamCreateButton = await screen.findByRole("button", { name: "新增团队/科室知识库" });
         expect(teamCreateButton).toBeDisabled();
 
         fireEvent.click(teamCreateButton);
@@ -1268,7 +1268,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(screen.getByTestId("active-space-title")).toHaveTextContent("公共空间01");
         });
 
-        fireEvent.click(screen.getByRole("button", { name: "展开团队知识库" }));
+        fireEvent.click(screen.getByRole("button", { name: "展开团队/科室知识库" }));
         const teamRow = screen.getByTestId("space-row-team-1");
         fireEvent.click(within(teamRow).getByRole("button", { name: "更多团队空间01操作" }));
 
@@ -2920,7 +2920,7 @@ describe("PortalKnowledgeWorkbench", () => {
         const aiDrawer = await screen.findByTestId("portal-ai-drawer");
         expect(aiDrawer).toHaveTextContent("AI对话");
         expect(aiDrawer).not.toHaveTextContent("后端开发.md");
-        expect(aiDrawer).not.toHaveTextContent("全部知识库/团队知识库/我的技术文档/后端开发.md");
+        expect(aiDrawer).not.toHaveTextContent("全部知识库/团队/科室知识库/我的技术文档/后端开发.md");
         expect(aiDrawer).not.toHaveTextContent("2.0 KB");
         expect(within(aiDrawer).getByTestId("ai-assistant-panel")).toHaveTextContent("文件AI:team-1:201");
         expect(within(aiDrawer).getByTestId("ai-assistant-panel")).toHaveTextContent("门户抽屉模式:true");

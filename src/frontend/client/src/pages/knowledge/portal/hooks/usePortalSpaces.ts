@@ -144,7 +144,7 @@ export function usePortalSpaces({
             },
             {
                 key: "team",
-                title: "团队知识库",
+                title: "团队/科室知识库",
                 level: SpaceLevel.TEAM,
                 iconSrc: GROUP_ICON_SRC.team,
                 spaces: teamSpacesQuery.data ?? [],

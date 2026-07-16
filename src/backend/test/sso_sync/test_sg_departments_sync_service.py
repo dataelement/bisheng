@@ -48,6 +48,116 @@ def _enter_dao_patches(stack: ExitStack, **overrides):
 
 @pytest.mark.asyncio
 class TestSgDepartmentsSyncService:
+    async def test_child_before_parent_is_applied_parent_first(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        root = SimpleNamespace(id=1, path="/1/")
+        parent = SimpleNamespace(
+            id=10,
+            path="/10/",
+            parent_id=1,
+            sync_parent_external_id=None,
+            status="active",
+            is_deleted=0,
+        )
+        child = SimpleNamespace(
+            id=11,
+            path="/10/11/",
+            parent_id=10,
+            sync_parent_external_id=None,
+            status="active",
+            is_deleted=0,
+        )
+        payload = _request(
+            SgDepartmentFieldItem(
+                uuid="u1",
+                code="C1",
+                pid="P1",
+                remark="Child",
+                state="01",
+            ),
+            SgDepartmentFieldItem(
+                uuid="u2",
+                code="P1",
+                pid="R1",
+                remark="Parent",
+                state="01",
+            ),
+        )
+        objects = {"P1": parent, "C1": child}
+        call_order: list[str] = []
+
+        async def _get_by_source(_src, ext):
+            return objects.get(ext)
+
+        async def _upsert(**kwargs):
+            external_id = kwargs["external_id"]
+            call_order.append(external_id)
+            dept = objects[external_id]
+            dept.path = f'{kwargs["path"]}{dept.id}/'
+            return dept
+
+        with ExitStack() as stack:
+            _enter_dao_patches(
+                stack,
+                **{
+                    "DepartmentDao.aget_by_source_external_id": AsyncMock(
+                        side_effect=_get_by_source,
+                    ),
+                },
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aget_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=lambda ext, _tid: root if ext == "R1" else objects.get(ext),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    f"{MODULE}.DepartmentDao.aupsert_by_external_id",
+                    new_callable=AsyncMock,
+                    side_effect=_upsert,
+                )
+            )
+            response = await SgDepartmentsSyncService.execute(payload)
+
+        assert response.esb.code == "0"
+        assert call_order == ["P1", "C1"]
+        assert child.path == "/1/10/11/"
+
+    async def test_parent_first_order_handles_multiple_levels(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        items = [
+            SimpleNamespace(code="G1", parent_code="C1"),
+            SimpleNamespace(code="C1", parent_code="P1"),
+            SimpleNamespace(code="P1", parent_code="R1"),
+        ]
+
+        ordered = SgDepartmentsSyncService._order_parent_first(items)
+
+        assert [item.code for item in ordered] == ["P1", "C1", "G1"]
+
+    async def test_same_parent_with_stale_path_requires_relink(self):
+        from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
+            SgDepartmentsSyncService,
+        )
+
+        parent = SimpleNamespace(id=10, path="/1/10/")
+        child = SimpleNamespace(
+            id=11,
+            parent_id=10,
+            path="/10/11/",
+            sync_parent_external_id=None,
+        )
+
+        assert SgDepartmentsSyncService._needs_relink(child, parent) is True
+
     async def test_root_department_upsert_success(self):
         from bisheng.sso_sync.domain.services.sg_departments_sync_service import (
             SgDepartmentsSyncService,

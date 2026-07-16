@@ -61,7 +61,7 @@ function spaceLevelLabel(level?: SpaceLevel): string {
     const map: Record<SpaceLevel, string> = {
         [SpaceLevel.PUBLIC]: "公共知识库",
         [SpaceLevel.DEPARTMENT]: "部门知识库",
-        [SpaceLevel.TEAM]: "团队知识库",
+        [SpaceLevel.TEAM]: "团队/科室知识库",
         [SpaceLevel.PERSONAL]: "个人知识库",
     };
     return level ? (map[level] ?? level) : "-";

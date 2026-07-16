@@ -1,9 +1,10 @@
 """QuotaService — three-level quota enforcement engine (F005).
 
 Three-level quota calculation:
-  1. Admin shortcircuit → -1 (unlimited)
-  2. Role-level: multi-role takes max; any -1 → unlimited; missing key → default
-  3. Tenant-level: hard limit caps effective via min(tenant_remaining, role_quota)
+  1. Resource shortcircuit → -1 for globally unlimited resource types
+  2. Admin shortcircuit → -1 (unlimited)
+  3. Role-level: multi-role takes max; any -1 → unlimited; missing key → default
+  4. Tenant-level: hard limit caps effective via min(tenant_remaining, role_quota)
 
 Quota values: -1 = unlimited, 0 = prohibited, positive int = upper limit.
 """
@@ -28,7 +29,7 @@ from bisheng.user.domain.models.user_role import UserRoleDao
 logger = logging.getLogger(__name__)
 
 DEFAULT_ROLE_QUOTA: dict[str, int] = {
-    'knowledge_space': 200,
+    'knowledge_space': -1,
     'knowledge_space_file': 500,  # GB
     'channel': 10,
     'channel_subscribe': 20,
@@ -105,6 +106,9 @@ class QuotaResourceType:
     MODEL_TOKENS_MONTHLY = 'model_tokens_monthly'
 
 
+UNLIMITED_RESOURCE_TYPES = frozenset({QuotaResourceType.KNOWLEDGE_SPACE})
+
+
 class QuotaService:
     """Stateless service for quota enforcement. All methods are @classmethod."""
 
@@ -121,6 +125,9 @@ class QuotaService:
         Returns -1 for unlimited, 0 for prohibited, or a positive limit (``float`` GB
         for ``knowledge_space_file`` when configured with decimals; otherwise ``int``).
         """
+        if resource_type in UNLIMITED_RESOURCE_TYPES:
+            return -1
+
         if login_user and login_user.is_admin():
             return -1
 
@@ -295,6 +302,9 @@ class QuotaService:
         Returns True when allowed. Raises one of the 194xx subclasses when
         exceeded.
         """
+        if resource_type in UNLIMITED_RESOURCE_TYPES:
+            return True
+
         if login_user and login_user.is_admin():
             return True
 
@@ -397,17 +407,22 @@ class QuotaService:
         items = []
         for i, resource_type in enumerate(resource_types):
             role_q = role_quotas.get(resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1))
-            tenant_q = tenant_config.get(resource_type, -1)
             tenant_used = tenant_counts[i]
             user_used = user_counts[i]
 
-            if is_admin:
+            if resource_type in UNLIMITED_RESOURCE_TYPES:
+                role_q = -1
+                tenant_q = -1
                 effective = -1
-            elif tenant_q == -1:
-                effective = role_q
             else:
-                tenant_remaining = max(tenant_q - tenant_used, 0)
-                effective = tenant_remaining if role_q == -1 else min(tenant_remaining, role_q)
+                tenant_q = tenant_config.get(resource_type, -1)
+                if is_admin:
+                    effective = -1
+                elif tenant_q == -1:
+                    effective = role_q
+                else:
+                    tenant_remaining = max(tenant_q - tenant_used, 0)
+                    effective = tenant_remaining if role_q == -1 else min(tenant_remaining, role_q)
 
             items.append(EffectiveQuotaItem(
                 resource_type=resource_type,
@@ -543,6 +558,9 @@ class QuotaService:
         """Compute multi-role quota: take max per resource type, -1 wins (AC-16)."""
         result = {}
         for resource_type in DEFAULT_ROLE_QUOTA:
+            if resource_type in UNLIMITED_RESOURCE_TYPES:
+                result[resource_type] = -1
+                continue
             if resource_type == 'knowledge_space_file':
                 result[resource_type] = cls._aggregate_knowledge_space_file_limit_gb(roles)
                 continue

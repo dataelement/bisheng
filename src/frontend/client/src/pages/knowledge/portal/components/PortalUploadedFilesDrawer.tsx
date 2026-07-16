@@ -84,7 +84,7 @@ function spaceLevelLabel(spaceLevel?: SpaceLevel): string {
         case SpaceLevel.DEPARTMENT:
             return "部门知识库";
         case SpaceLevel.TEAM:
-            return "团队知识库";
+            return "团队/科室知识库";
         case SpaceLevel.PERSONAL:
             return "个人知识库";
         default:
