@@ -32,21 +32,9 @@ import { ComponentPage, ExampleGroup, ExampleGrid, ExampleCard, CompareTable } f
 type ColorMode = 'blue' | 'green' | 'grey';
 
 const MODES: { id: ColorMode; label: string; hint: string }[] = [
-  {
-    id: 'blue',
-    label: '蓝主题',
-    hint: '默认 :root 调色板，业务代码无需任何处理。（本 tab 强制展示蓝色，与你当前的全局主题无关）',
-  },
-  {
-    id: 'green',
-    label: '绿主题',
-    hint: '祖先元素带 .theme-green → --illus-* 局部变绿。本页仅用局部包裹演示；业务里由全局主题切换生效。',
-  },
-  {
-    id: 'grey',
-    label: '灰稿',
-    hint: '给插画组件传 grey 属性（内部加 .illus-grey）：主题无关的灰稿，整图降至 80% 不透明度。',
-  },
+  { id: 'blue', label: '蓝主题', hint: '默认主题。' },
+  { id: 'green', label: '绿主题', hint: '全局切换绿主题时，插画自动变绿。' },
+  { id: 'grey', label: '灰稿', hint: '主题无关的灰稿，整图降至 80% 不透明度。' },
 ];
 
 /** Mirrors :root in style.css — display-only pin for the blue tab (see header note). */
@@ -120,49 +108,30 @@ export function IllustrationSection() {
       eng="Illustration"
       description={
         <>
-          空状态 / 状态反馈用的主题化内联 SVG 插画，统一放在{' '}
-          <code>src/components/illustrations/</code>。颜色一律走独立的{' '}
-          <code>--illus-100/300/500</code> 调色板（比 UI 品牌色更亮、忠于设计稿），随蓝⇄绿主题自动切换，另有主题无关的灰稿模式。
+          空状态 / 状态反馈用的主题化插画，颜色走独立的插画调色板（比 UI 品牌色更亮），
+          随蓝⇄绿主题自动切换，另有主题无关的灰稿模式。
         </>
       }
       whenToUse={[
-        <>
-          空状态 / 加载 / 无权限 / 成功等场景一律用这批插画组件，不再用 <code>empty.png</code>{' '}
-          等静态 PNG（PNG 无法主题化）。
-        </>,
-        <>
-          新插画填色一律 <code>rgb(var(--illus-NNN))</code>，不用 <code>--brand-*</code>
-          、不写 hex；SVG 展示属性里 <code>var()</code> 不生效 → 用内联 <code>style</code> 写。
-        </>,
-        <>
-          组件内 gradient / mask / clipPath 的 id 用 <code>useId()</code>{' '}
-          唯一化，避免多张插画同屏时串色。
-        </>,
-        <>
-          灰稿：给组件传 <code>grey</code> 属性即可（内部加 <code>.illus-grey</code>
-          ，不跟主题，整图降 80% 不透明度）。
-        </>,
-        <>
-          UI 图标（如 FolderIcon）仍用 <code>--brand-*</code>，插画调色板只给插画用。
-        </>,
+        <>空状态 / 加载 / 无权限 / 成功等场景一律用这批插画组件，不再用静态 PNG。</>,
+        <>灰稿：给组件传 <code>grey</code> 属性，主题无关、整图降 80% 不透明度。</>,
+        <>插画调色板只给插画用；UI 图标仍走品牌色。</>,
       ]}
     >
-      <ExampleGroup
-        title="调色板三态"
-        subtitle="--illus-* 三档在三种模式下的取值（style.css :root / .theme-green / .illus-grey）"
-      >
+      <ExampleGroup title="调色板三态">
+
         <CompareTable
-          head={['档', '蓝主题（默认）', '绿主题（.theme-green）', '灰稿（.illus-grey）']}
+          head={['档', '蓝主题（默认）', '绿主题', '灰稿']}
           rows={[
-            ['--illus-100 浅底', <Swatch hex="#BEDAFF" key="b" />, <Swatch hex="#DDF0E8" key="g" />, <Swatch hex="#E5E5E5" key="y" />],
-            ['--illus-300 中间调', <Swatch hex="#6AA1FF" key="b" />, <Swatch hex="#A2D7B5" key="g" />, <Swatch hex="#FFFFFF" key="y" />],
-            ['--illus-500 主体', <Swatch hex="#165DFF" key="b" />, <Swatch hex="#169C47" key="g" />, <Swatch hex="#BCBCBC" key="y" />],
-            ['整图不透明度', '100%', '100%', '80%（.brand-illustration 统一降）'],
+            ['浅底', <Swatch hex="#BEDAFF" key="b" />, <Swatch hex="#DDF0E8" key="g" />, <Swatch hex="#E5E5E5" key="y" />],
+            ['中间调', <Swatch hex="#6AA1FF" key="b" />, <Swatch hex="#A2D7B5" key="g" />, <Swatch hex="#FFFFFF" key="y" />],
+            ['主体', <Swatch hex="#165DFF" key="b" />, <Swatch hex="#169C47" key="g" />, <Swatch hex="#BCBCBC" key="y" />],
+            ['整图不透明度', '100%', '100%', '80%'],
           ]}
         />
       </ExampleGroup>
 
-      <ExampleGroup title="全部插画" subtitle="切换 tab 查看三种颜色模式下的全套表现">
+      <ExampleGroup title="全部插画">
         {/* Local segmented control — same recipe as the gallery sidebar's mode switch:
             36px total = 1px border + 2px padding + 30px options; 2px gap; radius 8 outer / 6 inner. */}
         <div className="mb-2 inline-grid h-9 grid-cols-3 gap-0.5 rounded-lg border border-border-base p-0.5">

@@ -39,7 +39,7 @@ export function FeedbackSection() {
       }
       whenToUse={[
         <>点踩为<b>延迟提交</b>：弹窗点「提交」才落库并高亮，原因选填；「取消」= 彻底放弃点踩。</>,
-        <>已点踩态再点踩 = 直接取消（<code>onLike(0)</code>），不再弹窗。</>,
+        <>已点踩态再点踩 = 直接取消，不再弹窗。</>,
         <>弹窗规格：圆角 12 / 边距 20 / 按钮 32 高 · 14px · 字重 400 · 圆角 6。</>,
       ]}
     >
@@ -51,7 +51,7 @@ export function FeedbackSection() {
           <ExampleCard title="已点赞态（liked=1）" description="点踩弹窗取消后应保持点赞高亮">
             <LoggedDemo liked={1} />
           </ExampleCard>
-          <ExampleCard title="已点踩态（liked=2）" description="再点踩=直接取消（onLike(0)），不弹窗">
+          <ExampleCard title="已点踩态（liked=2）" description="再点踩 = 直接取消，不弹窗">
             <LoggedDemo liked={2} />
           </ExampleCard>
         </ExampleGrid>

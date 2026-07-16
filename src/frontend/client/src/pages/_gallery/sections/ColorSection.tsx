@@ -44,27 +44,6 @@ function ColorCell({
   );
 }
 
-/** Labeled swatch for the functional-color state rows. */
-function StateSwatch({
-  className,
-  style,
-  label,
-  sub,
-}: {
-  className?: string;
-  style?: CSSProperties;
-  label: string;
-  sub?: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <span className={cn('inline-block h-9 w-16 rounded-md border border-black/10', className)} style={style} />
-      <span className="text-caption text-text-primary">{label}</span>
-      {sub && <code className="text-caption text-muted-foreground">{sub}</code>}
-    </div>
-  );
-}
-
 /** A light-bg + strong-text tag chip (§4 tag pairs). */
 function TagChip({
   className,
@@ -83,21 +62,98 @@ function TagChip({
 }
 
 /* ------------------------------------------------------------------ *
+ * antd-style vertical palette column (基础色板 look): seamless stacked
+ * swatches, step + hex overlaid, contrasting text, primary shade marked.
+ * ------------------------------------------------------------------ */
+
+/** Perceived-luminance pick of a readable overlay text color for a hex bg. */
+function overlayText(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
+}
+
+interface Swatch {
+  /** Shade label shown on the left (step number, or 'muted'). */
+  label: string;
+  /** Documentation hex — used for the overlaid value AND text-contrast math. */
+  hex: string;
+  /** Optional live background (e.g. rgb(var(--arco-gray-N))); defaults to hex. */
+  bg?: string;
+  /** Mark this shade as the primary (主色). */
+  primary?: boolean;
+  /** Bottom-accent color for the primary marker (a darker shade of the ramp). */
+  accent?: string;
+  /** Purpose text — revealed on hover as a tooltip. */
+  usage?: string;
+}
+
+/**
+ * Horizontal palette strip — tall, flat, sharp-cornered, seamless. Each swatch
+ * carries its own info (role / step / hex); hovering lifts it (scale + shadow,
+ * still square-cornered), no tooltip, no caption line.
+ */
+function PaletteRow({ title, swatches }: { title?: ReactNode; swatches: Swatch[] }) {
+  return (
+    <div>
+      {title && <div className="mb-3 text-body-sm font-medium text-text-primary">{title}</div>}
+      <div className="flex">
+        {swatches.map((s) => {
+          const fg = overlayText(s.hex);
+          return (
+            <div
+              key={s.label}
+              className="group relative flex h-36 min-w-0 flex-1 cursor-default flex-col justify-between p-3.5 transition-transform duration-200 ease-out hover:z-10 hover:scale-[1.06] hover:shadow-2xl"
+              style={{ background: s.bg ?? s.hex, color: fg }}
+            >
+              {/* role — hidden by default, fades in on hover (arco-style clean default) */}
+              {s.usage && (
+                <span
+                  className="text-[11px] leading-snug opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                  style={{ color: fg }}
+                >
+                  {s.usage}
+                </span>
+              )}
+              <div>
+                <div className={cn('text-body-sm leading-tight', s.primary && 'font-medium')}>
+                  {s.label}
+                </div>
+                <div className="mt-1 font-mono text-caption leading-none" style={{ opacity: 0.8 }}>
+                  {s.hex}
+                </div>
+              </div>
+              {/* primary marker — a thin bottom accent bar in a darker shade of the ramp */}
+              {s.primary && (
+                <span className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: s.accent ?? fg }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Spec data
  * ------------------------------------------------------------------ */
 
 /** §1.1 brand ramp — blue/green documentation values. */
 const BRAND_RAMP = [
-  { step: '50', blue: '#E8F3FF', green: '#E4F1EC', usage: '浅底一档：选中背景；按钮 filled 底 / outlined·text hover' },
-  { step: '100', blue: '#BEDAFF', green: '#CCE4DA', usage: '浅底二档：filled hover / outlined·text 触屏 active' },
-  { step: '200', blue: '#94BFFF', green: '#A3D2C0', usage: '浅底三档：filled 触屏 active' },
-  { step: '300', blue: '#6AA1FF', green: '#6FBAA0', usage: '' },
-  { step: '400', blue: '#4080FF', green: '#3D9B78', usage: 'hover（比主色亮一档）' },
+  { step: '50', blue: '#E8F3FF', green: '#E4F1E7', usage: '浅底一档：选中背景；按钮 filled 底 / outlined·text hover' },
+  { step: '100', blue: '#BEDAFF', green: '#CCE4D2', usage: '浅底二档：filled hover / outlined·text 触屏 active' },
+  { step: '200', blue: '#94BFFF', green: '#A3D2B0', usage: '浅底三档：filled 触屏 active' },
+  { step: '300', blue: '#6AA1FF', green: '#6FBA85', usage: '浅色过渡档 · 暂无固定用途' },
+  { step: '400', blue: '#4080FF', green: '#3D9B5C', usage: 'hover（比主色亮一档）' },
   { step: '500', blue: '#165DFF', green: '#169C47', usage: '主色（= --brand-main）' },
-  { step: '600', blue: '#024DE3', green: '#136345', usage: 'active / 按下（深一档）' },
-  { step: '700', blue: '#0239AB', green: '#0F4D36', usage: '' },
-  { step: '800', blue: '#042B80', green: '#0A3826', usage: '' },
-  { step: '900', blue: '#051D52', green: '#062619', usage: '' },
+  { step: '600', blue: '#024DE3', green: '#098B35', usage: 'active / 按下（深一档）' },
+  { step: '700', blue: '#0239AB', green: '#076929', usage: '深色档 · 暂无固定用途' },
+  { step: '800', blue: '#042B80', green: '#074E20', usage: '深色档 · 暂无固定用途' },
+  { step: '900', blue: '#051D52', green: '#063216', usage: '深色档 · 暂无固定用途' },
 ];
 
 /** §2.1 primitive Arco gray ramp — rendered live from --arco-gray-N. */
@@ -106,13 +162,41 @@ const ARCO_GRAYS = [
   { n: 2, hex: '#F2F3F5', note: 'filled 控件底 → fill-2' },
   { n: 3, hex: '#E5E6EB', note: '常规边框 → border-base / fill-3' },
   { n: 4, hex: '#C9CDD4', note: '禁用/占位 → text-4 / fill-4 / border-deep' },
-  { n: 5, hex: '#A9AEB8', note: '' },
+  { n: 5, hex: '#A9AEB8', note: '中间档 · 无 semantic 映射' },
   { n: 6, hex: '#86909C', note: '辅助文字 → text-3（全站最高频 hex ×263）' },
-  { n: 7, hex: '#6B7785', note: '' },
+  { n: 7, hex: '#6B7785', note: '中间档 · 无 semantic 映射' },
   { n: 8, hex: '#4E5969', note: '次要文字 → text-2' },
-  { n: 9, hex: '#272E3B', note: '' },
+  { n: 9, hex: '#272E3B', note: '中间档 · 无 semantic 映射' },
   { n: 10, hex: '#1D2129', note: '主文字 → text-1' },
 ];
+
+/** Concise in-card role labels (the palette shows these, not the verbose usage). */
+const BRAND_ROLE: Record<string, string> = {
+  '50': '选中背景',
+  '100': 'filled hover',
+  '200': '触屏 active',
+  '300': '过渡档',
+  '400': 'hover 态',
+  '500': '主色',
+  '600': '按下 active',
+  '700': '深色档',
+  '800': '深色档',
+  '900': '深色档',
+  muted: '低饱和点缀',
+};
+
+const ARCO_ROLE: Record<number, string> = {
+  1: 'hover 底',
+  2: 'filled 底',
+  3: '边框',
+  4: '禁用 / 占位',
+  5: '过渡',
+  6: '辅助文字',
+  7: '过渡',
+  8: '次文字',
+  9: '过渡',
+  10: '主文字',
+};
 
 /** §2.2 semantic neutral layer — token / class / value / live demo. */
 const NEUTRAL_SEMANTIC: { token: string; cls: string; value: string; usage: string; demo: ReactNode }[] = [
@@ -126,6 +210,46 @@ const NEUTRAL_SEMANTIC: { token: string; cls: string; value: string; usage: stri
   { token: '--fill-4', cls: 'bg-fill-4', value: 'gray-4 #C9CDD4', usage: '重填充：filled active', demo: <ColorCell className="bg-fill-4" /> },
   { token: '--border-base', cls: 'border-border-base', value: 'gray-3 #E5E6EB', usage: '常规边框：输入框、卡片、分割线（规范里的 border）', demo: <span className="inline-block h-8 w-24 rounded-md border border-border-base bg-white" /> },
   { token: '--border-deep', cls: 'border-border-deep', value: 'gray-4 #C9CDD4', usage: '深边框：强调分割、hover 边框', demo: <span className="inline-block h-8 w-24 rounded-md border border-border-deep bg-white" /> },
+];
+
+/** Functional colors — fixed hex (不换肤); 主色 marked with a darker (active) accent. */
+const FUNCTIONAL: { title: string; swatches: Swatch[] }[] = [
+  {
+    title: '成功 Success',
+    swatches: [
+      { label: '主色', hex: '#00B42A', primary: true, accent: '#009A29', usage: 'bg-success' },
+      { label: 'hover', hex: '#23C343', usage: 'bg-success-hover' },
+      { label: 'active', hex: '#009A29', usage: 'bg-success-active' },
+      { label: 'tint 浅底', hex: '#E8FFEA', usage: 'bg-success-tint' },
+    ],
+  },
+  {
+    title: '警告 Warning',
+    swatches: [
+      { label: '主色', hex: '#FF7D00', primary: true, accent: '#D25F00', usage: 'bg-warning' },
+      { label: 'hover', hex: '#FF9A2E', usage: 'bg-warning-hover' },
+      { label: 'active', hex: '#D25F00', usage: 'bg-warning-active' },
+      { label: 'tint 浅底', hex: '#FFF7E8', usage: 'bg-warning-tint' },
+    ],
+  },
+  {
+    title: '危险 Danger',
+    swatches: [
+      { label: '主色', hex: '#F53F3F', primary: true, accent: '#D02F33', usage: 'bg-danger' },
+      { label: 'hover', hex: '#D6373A', usage: 'bg-danger-hover' },
+      { label: 'active', hex: '#D02F33', usage: 'bg-danger-active' },
+      { label: 'tint 浅底', hex: '#FFECE8', usage: 'bg-danger-tint（仅 tag）' },
+    ],
+  },
+  {
+    title: '链接 / 信息 Info（= 品牌色，跟随主题）',
+    swatches: [
+      { label: '主色', hex: '#165DFF', primary: true, accent: '#024DE3', usage: 'blue-500' },
+      { label: 'hover', hex: '#4080FF', usage: 'blue-400' },
+      { label: 'active', hex: '#024DE3', usage: 'blue-600' },
+      { label: '浅底', hex: '#E8F3FF', usage: 'blue-50' },
+    ],
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -143,70 +267,75 @@ export function ColorSection() {
       }
       whenToUse={[
         <>
-          组件与业务代码只用 semantic 层（<code>text-text-1</code> / <code>bg-fill-1</code> /{' '}
-          <code>border-border-base</code> / <code>bg-success</code>…），不用{' '}
-          <code>--arco-gray-*</code> primitive（Tailwind 故意未接线），禁止裸 hex。
+          只用 semantic 层（<code>text-text-1</code> / <code>bg-fill-1</code> /{' '}
+          <code>border-border-base</code> / <code>bg-success</code>…），禁止裸 hex。
         </>,
         <>
-          品牌色永远走 <code>blue-*</code> 类（已重指向 <code>--brand-*</code>，自动蓝⇄绿换肤）或{' '}
-          <code>rgb(var(--brand-NNN))</code>；禁止写品牌 hex。列表/菜单选中浅底统一{' '}
-          <code>bg-blue-500/[0.07]</code>；按钮浅底走 50/100/200 实档。
+          品牌色永远走 <code>blue-*</code> 类（自动蓝⇄绿换肤），禁止写品牌 hex。列表/菜单选中浅底统一{' '}
+          <code>bg-blue-500/[0.07]</code>。
         </>,
         <>
           语义色（成功/警告/危险）<strong>不参与换肤</strong>。危险浅底分两种：按钮用主色透明阶{' '}
           <code>bg-danger/10~20</code>；tag 用实色 <code>bg-danger-tint</code>（#FFECE8）。
         </>,
-        <>同一语义只允许一个值（如次要文字只能 <code>text-text-2</code>）；新颜色先在色板找替代，确需新增走 token 评审进 primitive 层。</>,
+        <>同一语义只允许一个值（如次要文字只能 <code>text-text-2</code>）；新颜色先在色板找替代。</>,
       ]}
     >
       <ExampleGroup
-        title="品牌色 Brand（跟随蓝⇄绿主题）"
-        subtitle="蓝/绿两列为规范文档值（固定展示）。业务里写 blue-* 类即自动跟随当前主题。muted 档与固定色例外见表下说明。"
+        title="品牌色 Brand"
+        subtitle="主色 = 500 档，跟随蓝⇄绿主题。"
       >
-        <CompareTable
-          head={['档', '蓝（默认 = arcoblue）', '绿（theme-green）', '语义']}
-          rows={[
-            ...BRAND_RAMP.map((r) => [
-              <code key="s" className={r.step === '500' ? 'font-medium text-text-primary' : ''}>{r.step}</code>,
-              <ColorCell key="b" hex={r.blue} />,
-              <ColorCell key="g" hex={r.green} />,
-              r.usage,
-            ]),
-            [
-              <code key="s">muted</code>,
-              <ColorCell key="b" hex="#5773B4" />,
-              <ColorCell key="g" hex="#5C8A77" />,
-              '低饱和品牌点缀（如置顶 pin）· --brand-muted',
-            ],
-          ]}
-        />
+        <div className="space-y-8">
+          <PaletteRow
+            title="蓝（默认 = arcoblue）"
+            swatches={[
+              ...BRAND_RAMP.map((r) => ({
+                label: r.step,
+                hex: r.blue,
+                primary: r.step === '500',
+                accent: BRAND_RAMP.find((x) => x.step === '700')!.blue,
+                usage: BRAND_ROLE[r.step],
+              })),
+              { label: 'muted', hex: '#5773B4', usage: BRAND_ROLE.muted },
+            ]}
+          />
+          <PaletteRow
+            title="绿（theme-green）"
+            swatches={[
+              ...BRAND_RAMP.map((r) => ({
+                label: r.step,
+                hex: r.green,
+                primary: r.step === '500',
+                accent: BRAND_RAMP.find((x) => x.step === '700')!.green,
+                usage: BRAND_ROLE[r.step],
+              })),
+              { label: 'muted', hex: '#5C8A77', usage: BRAND_ROLE.muted },
+            ]}
+          />
+        </div>
         <p className="mt-3 text-body-sm text-muted-foreground">
-          固定色例外（永远不换肤，别误改）：审批中 tag 永远蓝 <code>#E8F3FF/#165DFF</code>
-          （ApprovalCenterDialog）；应用中心置顶 pin 用 <code>--brand-muted</code>；第三方 logo
-          原色保留。选中浅底示例：
-          <span className="ml-2 inline-flex items-center rounded-md bg-blue-500/[0.07] px-2 py-0.5 text-blue-500">
-            bg-blue-500/[0.07]
-          </span>
+          例外（固定不换肤）：审批 tag 永远蓝、第三方 logo 原色、muted 档为低饱和品牌点缀。
         </p>
       </ExampleGroup>
 
       <ExampleGroup
-        title="中性色 Neutral · primitive（Arco gray 1–10）"
-        subtitle="唯一中性色板，数值源。色块用 rgb(var(--arco-gray-N)) 实时渲染（验证 token 已生效）；组件不允许直接用这层。"
+        title="中性色 · primitive（Arco gray 1–10）"
+        subtitle="中性色数值源；组件不直接用这层，走下方 semantic。"
       >
-        <CompareTable
-          head={['Primitive Token', '色值', '去向（semantic）/ 现状']}
-          rows={ARCO_GRAYS.map((g) => [
-            <code key="t" className="whitespace-nowrap">--arco-gray-{g.n}</code>,
-            <ColorCell key="c" style={{ background: `rgb(var(--arco-gray-${g.n}))` }} label={g.hex} />,
-            g.note,
-          ])}
+        <PaletteRow
+          title="Arco gray 1–10"
+          swatches={ARCO_GRAYS.map((g) => ({
+            label: `gray-${g.n}`,
+            hex: g.hex,
+            bg: `rgb(var(--arco-gray-${g.n}))`,
+            usage: ARCO_ROLE[g.n],
+          }))}
         />
       </ExampleGroup>
 
       <ExampleGroup
-        title="中性色 Neutral · semantic（组件用这层）"
-        subtitle="text-1~4 / fill-1~4 / border-base / border-deep，全部引用 primitive。末列为 Tailwind 类实时渲染。"
+        title="中性色 · semantic（组件用这层）"
+        subtitle="文字 / 填充 / 边框，同一语义只有一个值。"
       >
         <CompareTable
           head={['Token', 'Tailwind 类', '取值', '用途', '实时示例']}
@@ -220,56 +349,17 @@ export function ColorSection() {
         />
       </ExampleGroup>
 
-      <ExampleGroup
-        title="语义色 Functional（不换肤，全主题恒定）"
-        subtitle="成功/警告/危险三态 + 浅底 tint；链接/信息 Info = 品牌色（跟主题）。色块全部用新 token 类实时渲染。"
-      >
-        <ExampleGrid cols={2}>
-          <ExampleCard title="成功 Success" description="Arco green：#00B42A / hover #23C343 / active #009A29 / tint #E8FFEA">
-            <StateSwatch className="bg-success" label="主色" sub="bg-success" />
-            <StateSwatch className="bg-success-hover" label="hover" sub="-hover" />
-            <StateSwatch className="bg-success-active" label="active" sub="-active" />
-            <StateSwatch className="bg-success-tint" label="tint" sub="-tint" />
-          </ExampleCard>
-          <ExampleCard title="警告 Warning" description="Arco orange：#FF7D00 / hover #FF9A2E / active #D25F00 / tint #FFF7E8">
-            <StateSwatch className="bg-warning" label="主色" sub="bg-warning" />
-            <StateSwatch className="bg-warning-hover" label="hover" sub="-hover" />
-            <StateSwatch className="bg-warning-active" label="active" sub="-active" />
-            <StateSwatch className="bg-warning-tint" label="tint" sub="-tint" />
-          </ExampleCard>
-          <ExampleCard title="危险 Danger" description="#F53F3F / hover #D6373A / active #D02F33（与 --btn-danger* 同值）；tint #FFECE8 仅 tag 用">
-            <StateSwatch className="bg-danger" label="主色" sub="bg-danger" />
-            <StateSwatch className="bg-danger-hover" label="hover" sub="-hover" />
-            <StateSwatch className="bg-danger-active" label="active" sub="-active" />
-            <StateSwatch className="bg-danger-tint" label="tint" sub="-tint" />
-          </ExampleCard>
-          <ExampleCard
-            title="危险浅底的两种场景"
-            description="按钮里的浅红底＝主色叠透明（hover 10% / 触屏按下 15% / filled 递进到 20%）；tag 浅红底＝实色 danger-tint。"
-          >
-            <StateSwatch className="bg-danger/10" label="按钮 10%" sub="bg-danger/10" />
-            <StateSwatch className="bg-danger/[0.15]" label="15%" sub="/[0.15]" />
-            <StateSwatch className="bg-danger/20" label="20%" sub="/20" />
-            <TagChip className="bg-danger-tint text-danger">已驳回（tag 实色）</TagChip>
-          </ExampleCard>
-          <ExampleCard
-            title="链接 / 信息 Info = 品牌色"
-            description="本项目 info 即品牌（与 antd 单独 info 蓝不同），跟随蓝⇄绿主题：文字 blue-500 → hover blue-400 → 触屏 active blue-600，浅底 blue-50。"
-          >
-            <StateSwatch className="bg-blue-500" label="主色" sub="blue-500" />
-            <StateSwatch className="bg-blue-400" label="hover" sub="blue-400" />
-            <StateSwatch className="bg-blue-600" label="active" sub="blue-600" />
-            <StateSwatch className="bg-blue-50" label="浅底" sub="blue-50" />
-          </ExampleCard>
-        </ExampleGrid>
+      <ExampleGroup title="语义色 Functional（不换肤）">
+        <div className="space-y-8">
+          {FUNCTIONAL.map((f) => (
+            <PaletteRow key={f.title} title={f.title} swatches={f.swatches} />
+          ))}
+        </div>
       </ExampleGroup>
 
-      <ExampleGroup
-        title="扩展 / 标签色 Tag（成对使用：浅底 + 深字）"
-        subtitle="Arco 1 号浅底 + 6 号主色字。技能紫与固定蓝未 token 化（紫待后续评审；固定蓝是「永远蓝」例外），此处为文档展示值。"
-      >
+      <ExampleGroup title="标签色 Tag">
         <ExampleGrid cols={1}>
-          <ExampleCard title="Tag 配对一览" description="橙/绿/红三对已走 token 类；紫与固定蓝为展示用文档值。">
+          <ExampleCard title="Tag 配对一览" description="橙 / 绿 / 红三对走 token；技能紫、审批蓝为固定例外色。">
             <TagChip style={{ background: '#F5E8FF', color: '#722ED1' }}>技能（紫 · 未 token 化）</TagChip>
             <TagChip className="bg-warning-tint text-warning">助手（橙 = warning 同值）</TagChip>
             <TagChip className="bg-success-tint text-success">已完成</TagChip>

@@ -80,10 +80,8 @@ export function TypographySection() {
         <>数字/金额加 <code>tabular-nums</code>；ID、代码用 <code>font-mono</code>。</>,
       ]}
     >
-      <ExampleGroup
-        title="字体栈 Font Family"
-        subtitle="纯系统字体栈，零加载成本：Mac/iOS 命中 SF + 苹方，Windows 命中 Segoe UI + 微软雅黑，Android 命中 Roboto + 思源黑体。"
-      >
+      <ExampleGroup title="字体栈 Font Family" subtitle="纯系统字体栈，零加载成本。">
+
         <CompareTable
           head={['Token / 类名', '实时示例 + 完整字体栈', '用途']}
           rows={FONT_STACKS.map((f) => [
@@ -108,12 +106,10 @@ export function TypographySection() {
         />
       </ExampleGroup>
 
-      <ExampleGroup
-        title="字号阶梯 Semantic"
-        subtitle="与规范 §2 Semantic 表同构，末列为该档实时渲染。移动列在窗口 ≤768px 时生效（className 不变）。"
-      >
+      <ExampleGroup title="字号阶梯 Semantic" subtitle="移动列在窗口 ≤768px 时生效。">
+
         <CompareTable
-          head={['Token', '桌面 (size/line)', '移动 (size/line)', '字重', '实时示例（内容即用途）']}
+          head={['Token', '桌面 (size/line)', '移动 (size/line)', '字重', '示例']}
           rows={SCALE.map((step) => [
             <code key="t" className="whitespace-nowrap text-body-sm text-text-primary">
               {step.cls}
@@ -127,9 +123,9 @@ export function TypographySection() {
       </ExampleGroup>
 
       {/* Font weights — the only two allowed steps */}
-      <ExampleGroup title="字重 Font Weight" subtitle="只使用 400 / 500 两档，禁用 600/700（微软雅黑缺中间字重，会合成粗体）。">
+      <ExampleGroup title="字重 Font Weight" subtitle="只用 400 / 500，禁用 600 / 700。">
         <CompareTable
-          head={['Token / 类名', '值', '实时示例（内容即用途）']}
+          head={['Token / 类名', '值', '示例']}
           rows={[
             { cls: 'font-normal', token: 'font-weight-regular', weight: 400, usage: '正文、说明' },
             { cls: 'font-medium', token: 'font-weight-medium', weight: 500, usage: '标题、强调、按钮' },

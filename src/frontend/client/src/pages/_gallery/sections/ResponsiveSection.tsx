@@ -27,7 +27,8 @@ export function ResponsiveSection() {
       ]}
       bodyTitle={null}
     >
-      <ExampleGroup title="① 两种判定口径（先分清，别混用）">
+      <ExampleGroup title="① 两种判定口径">
+
         <CompareTable
           head={['口径', '写法', '判定什么', '用于']}
           rows={[
@@ -53,29 +54,30 @@ export function ResponsiveSection() {
           rows={[
             [
               '触屏禁 hover，用 active 补偿',
-              '触屏下禁用 hover 态（防 sticky hover），按下反馈交给 active；active 深档只在触屏生效，可 hover 设备按下直接显示 hover 档。已全局落地 tailwind future.hoverOnlyWhenSupported，普通 hover: 类即可。',
-              'antd-mobile 源码通篇仅 :active；移动组件库共识',
+              '触屏下禁用 hover 态，按下反馈交给 active；active 深档只在触屏生效。',
+              '移动组件库共识',
             ],
             [
               '触达面积 ≥ 44×44px',
-              '视觉尺寸不变，用透明伪元素/padding 撑热区；<28px 小控件高频触屏场景直接升档，不硬撑。',
-              'WCAG 2.2 §2.5.5(AAA)、iOS HIG 44pt、Material 48dp',
+              '视觉尺寸不变，用透明伪元素 / padding 撑热区；小控件高频触屏场景直接升档。',
+              'WCAG · iOS HIG · Material',
             ],
             [
               '控件字号不随正文抬升',
-              '按钮/标签/菜单项保持桌面值（≥14）；唯一例外输入框 ≥16px（iOS 自动放大问题）。',
-              '字体规范 §2 / §5.1',
+              '按钮 / 标签 / 菜单项保持桌面值（≥14）；唯一例外输入框 ≥16px。',
+              '字体规范',
             ],
             [
               '一套组件一条代码路径',
-              '适配全走 media query / sm: 前缀 + useMediaQuery / usePrefersMobileLayout，在同一组件内完成。',
-              '与字体规范"media 重映射、组件不变"同思路',
+              '适配全走 media query / sm: 前缀，在同一组件内完成。',
+              '字体规范同思路',
             ],
           ]}
         />
       </ExampleGroup>
 
-      <ExampleGroup title="③ 窄屏布局惯例（已有先例，新组件沿用）">
+      <ExampleGroup title="③ 窄屏布局惯例">
+
         <CompareTable
           head={['场景', '窄屏', '桌面']}
           rows={[
@@ -86,12 +88,12 @@ export function ResponsiveSection() {
         />
       </ExampleGroup>
 
-      <ExampleGroup title="④ 组件适配细则索引" subtitle="通用原则在此；组件专属细则在各组件文档，建后登记于此。">
+      <ExampleGroup title="④ 组件适配细则索引" subtitle="组件专属细则在各组件文档的「移动端适配」节。">
         <CompareTable
           head={['组件', '细则位置']}
           rows={[
-            ['Button', 'docs-ui-refactor/组件-Button按钮.md §5.5'],
-            ['Modal / 字体 / Select …', '各组件文档补"移动端适配"节，建后登记'],
+            ['Button', '组件-Button按钮.md'],
+            ['Modal / 字体 / Select …', '各组件文档「移动端适配」节'],
           ]}
         />
       </ExampleGroup>

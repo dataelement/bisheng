@@ -36,17 +36,14 @@ export function ModalSection() {
           （壳已对齐基准候选，取消/确认按钮已统一）；不要再新增手拼 <code>AlertDialog</code> 弹窗。
         </>,
         <>纯「确认 / 取消」的二次确认不属于本页 —— 用 <code>useConfirm()</code>（见「二次确认弹窗」）。</>,
-        <>窄屏下弹层贴边距 <code>calc(100% - 2rem)</code>、footer 按钮等宽平铺（见「多端适配」§③）。</>,
+        <>窄屏下弹层贴边距、footer 按钮等宽平铺（见「多端适配」）。</>,
       ]}
     >
-      <ExampleGroup
-        title="基准候选壳（跟二次确认同源）"
-        subtitle="以 OGDialogTemplate 实时渲染 —— 这就是当前推荐的新弹窗写法。"
-      >
+      <ExampleGroup title="基准候选壳" subtitle="当前推荐的新弹窗写法。">
         <ExampleGrid cols={2}>
           <ExampleCard
             title="标准结构：标题 + 正文 + 取消/确定"
-            description="OGDialogTemplate · selectVariant: primary · 圆角16 / p-5 / 灰底毛玻璃"
+            description="圆角 16 / p-5 / 灰底毛玻璃。"
           >
             <OGDialog>
               <OGDialogTrigger asChild>
@@ -75,7 +72,7 @@ export function ModalSection() {
         </ExampleGrid>
       </ExampleGroup>
 
-      <ExampleGroup title="壳规格（已定部分）" subtitle="与二次确认弹窗同一套壳；下表为基准候选的确定值。">
+      <ExampleGroup title="壳规格（已定部分）" subtitle="与二次确认弹窗同一套壳。">
         <CompareTable
           head={['部位', '值', '备注']}
           rows={[
@@ -88,8 +85,7 @@ export function ModalSection() {
           ]}
         />
         <p className="mt-3 text-body-sm text-muted-foreground">
-          仍待定：A 套（最大人群）的遮罩 / 圆角 / 标题字重是否并入基准、z-index 档位、footer
-          按钮间距。定稿后本页升级为完整规范。
+          仍待定：遮罩 / 圆角 / 标题字重是否统一、z-index、footer 按钮间距。
         </p>
       </ExampleGroup>
     </ComponentPage>

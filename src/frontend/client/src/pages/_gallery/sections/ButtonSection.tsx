@@ -65,10 +65,8 @@ export function ButtonSection() {
         </>,
       ]}
     >
-      <ExampleGroup
-        title="常用类型（§1）"
-        subtitle="双轴组合的六个常用别名；其余组合按双轴自然推导。"
-      >
+      <ExampleGroup title="常用类型" subtitle="六个常用别名，其余组合按双轴推导。">
+
         <ExampleGrid cols={3}>
           <ExampleCard title="Primary 主按钮" description="primary × solid — 主行动点，一个区域只放一个">
             <Button color="primary" variant="solid">
@@ -109,10 +107,8 @@ export function ButtonSection() {
         </ExampleGrid>
       </ExampleGroup>
 
-      <ExampleGroup
-        title="color × variant 全矩阵"
-        subtitle="15 种组合全部成立；直接在此悬停体验 hover 色板（§5.2）。active 深一档仅触屏生效——桌面按下沿用 hover 色，不闪。"
-      >
+      <ExampleGroup title="color × variant 全矩阵">
+
         <CompareTable
           head={['variant \\ color', 'primary 品牌', 'default 中性', 'danger 危险']}
           rows={VARIANTS.map((v) => [
@@ -126,10 +122,8 @@ export function ButtonSection() {
         />
       </ExampleGroup>
 
-      <ExampleGroup
-        title="尺寸 size（§2）"
-        subtitle="三档：24 / 32 / 40px，圆角 4 / 6 / 8px；描边与无边框变体水平 padding 视觉等宽。"
-      >
+      <ExampleGroup title="尺寸 size" subtitle="三档 24 / 32 / 40px，圆角 4 / 6 / 8px。">
+
         <ExampleGrid cols={3}>
           {SIZES.map((s) => (
             <ExampleCard key={s} title={`size="${s}"`} description={SIZE_META[s]}>
@@ -147,10 +141,8 @@ export function ButtonSection() {
         </ExampleGrid>
       </ExampleGroup>
 
-      <ExampleGroup
-        title="内容形态（§3）"
-        subtitle="纯文字 / 纯 icon / 文字 + icon；一个按钮最多一个 icon。"
-      >
+      <ExampleGroup title="内容形态" subtitle="纯文字 / 纯 icon / 文字 + icon；一个按钮最多一个 icon。">
+
         <ExampleGrid cols={2}>
           <ExampleCard
             title="纯文字"
@@ -161,7 +153,7 @@ export function ButtonSection() {
           </ExampleCard>
           <ExampleCard
             title="纯 icon（shape square / circle）"
-            description="24/32/40，icon 14/16/18px；circle 正圆仅限纯 icon 按钮；必须带 Tooltip + aria-label，触屏热区自动扩到 ≥44px"
+            description="circle 正圆仅限纯 icon；必须带 Tooltip + aria-label；触屏热区 ≥44px。"
           >
             <Button color="default" variant="outlined" size="small" iconOnly aria-label="编辑">
               <Outlined.Edit />
@@ -215,15 +207,11 @@ export function ButtonSection() {
         </ExampleGrid>
       </ExampleGroup>
 
-      <ExampleGroup
-        title="状态 state（§5）"
-        subtitle="hover 请在上方矩阵直接体验；active 深一档仅触屏生效（桌面按下=hover 色，避免点击闪动）；disabled 与 loading 全类型统一；focus 环仅键盘（Tab）可见，环色随 color。"
-      >
+      <ExampleGroup title="状态 state" subtitle="disabled / loading 全类型统一；focus 环仅键盘可见。">
+
         <ExampleGrid cols={2}>
-          <ExampleCard
-            title="disabled（全类型统一）"
-            description="灰底 rgba(0,0,0,.04) + 字 rgba(0,0,0,.25) + 边 #d9d9d9，cursor: not-allowed"
-          >
+          <ExampleCard title="disabled（全类型统一）" description="灰底、不可点。">
+
             <Button disabled>主按钮</Button>
             <Button color="primary" variant="filled" disabled>
               次强调
@@ -238,10 +226,8 @@ export function ButtonSection() {
               删除
             </Button>
           </ExampleCard>
-          <ExampleCard
-            title="loading（内置 spinner）"
-            description="spinner 顶替 icon 位、整体 opacity .65、期间不可点；禁止业务页自塞 Spinner"
-          >
+          <ExampleCard title="loading（内置 spinner）" description="期间不可点；禁止业务页自塞 Spinner。">
+
             <Button loading>提交中</Button>
             <Button color="default" loading>
               提交中

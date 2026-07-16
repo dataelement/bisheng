@@ -71,13 +71,13 @@ export function ConfirmDialogSection() {
         <>带表单输入的弹窗不是二次确认 —— 属于普通 Modal（见「Modal 弹窗」）。</>,
       ]}
     >
-      <ExampleGroup title="两个变体" subtitle="useConfirm() 的全部档位；文案由业务传入。">
+      <ExampleGroup title="两个变体">
         <ExampleGrid cols={2}>
           <UseConfirmDemos />
         </ExampleGrid>
       </ExampleGroup>
 
-      <ExampleGroup title="规格 Anatomy" subtitle="定稿值 —— 也是普通 Modal 的壳基准候选来源。">
+      <ExampleGroup title="规格 Anatomy">
         <CompareTable
           head={['部位', '值', '备注']}
           rows={[
@@ -100,7 +100,7 @@ export function ConfirmDialogSection() {
                 两档：danger <code>#f53f3f</code> / primary 品牌主色（<code>selectVariant</code>{' '}
                 指定）
               </>,
-              'cva 档位 · 特例走 selectClasses 口子',
+              '特例可自定义',
             ],
             [
               '取消按钮',

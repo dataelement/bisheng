@@ -47,11 +47,11 @@ interface PageDef {
 
 /** Spec registry — the design system as consumers should use it today. */
 const SPEC_PAGES: PageDef[] = [
-  { id: 'overview', label: '总览', group: '开始', Page: OverviewSection },
+  { id: 'overview', label: '总览', group: '总则', Page: OverviewSection },
+  { id: 'responsive', label: '多端适配 Responsive', group: '总则', Page: ResponsiveSection },
   { id: 'typography', label: '字体 Typography', group: '基础 Foundation', Page: TypographySection },
   { id: 'color', label: '色彩 Colors', group: '基础 Foundation', Page: ColorSection },
   { id: 'illustration', label: '插画 Illustration', group: '基础 Foundation', Page: IllustrationSection },
-  { id: 'responsive', label: '多端适配 Responsive', group: '基础 Foundation', Page: ResponsiveSection },
   { id: 'button', label: 'Button 按钮', group: '通用 General', Page: ButtonSection },
   { id: 'modal', label: 'Modal 弹窗', group: '反馈 Feedback', draft: true, Page: ModalSection },
   { id: 'confirm', label: '二次确认弹窗', group: '反馈 Feedback', Page: ConfirmDialogSection },
@@ -60,7 +60,7 @@ const SPEC_PAGES: PageDef[] = [
 
 /** Progress registry — migration dashboards & ledgers, one per in-flight component. */
 const PROGRESS_PAGES: PageDef[] = [
-  { id: 'overview', label: '总览看板', group: '开始', Page: ProgressOverview },
+  { id: 'overview', label: '总览看板', group: '总则', Page: ProgressOverview },
   { id: 'typography', label: '字体 Typography', group: '基础 Foundation', status: 'wip', Page: TypographyProgress },
   { id: 'color', label: '色彩 Colors', group: '基础 Foundation', status: 'wip', Page: ColorProgress },
   { id: 'button', label: 'Button 按钮', group: '通用 General', status: 'wip', Page: ButtonProgress },
