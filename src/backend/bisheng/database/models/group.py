@@ -7,9 +7,9 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-
-
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.database.models.user_group import UserGroup
+
 
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='用户组名称')
@@ -96,8 +96,10 @@ class GroupDao(GroupBase):
             return result.all()
 
     @classmethod
-    def delete_group(cls, group_id: int):
+    def delete_group(cls, group_id: int) -> None:
+        """Delete every membership/admin link and the group atomically."""
         with get_sync_db_session() as session:
+            session.exec(delete(UserGroup).where(UserGroup.group_id == group_id))
             session.exec(delete(Group).where(Group.id == group_id))
             session.commit()
 
@@ -146,8 +148,10 @@ class GroupDao(GroupBase):
 
     @classmethod
     async def adelete(cls, group_id: int) -> None:
+        """Delete every membership/admin link and the group atomically."""
         async with get_async_db_session() as session:
             session.expire_on_commit = False
+            await session.exec(delete(UserGroup).where(UserGroup.group_id == group_id))
             await session.exec(delete(Group).where(Group.id == group_id))
             await session.commit()
 

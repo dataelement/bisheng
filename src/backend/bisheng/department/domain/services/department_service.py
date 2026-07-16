@@ -2248,6 +2248,7 @@ class DepartmentService:
         missing_current_group_ids = [group_id for group_id in current_group_ids if group_id not in manageable_group_ids]
         if missing_current_group_ids:
             missing_groups = await GroupDao.aget_group_by_ids(missing_current_group_ids)
+            existing_missing_group_ids = {int(group.id) for group in missing_groups}
             for group in missing_groups:
                 manageable_groups.append(
                     {
@@ -2256,6 +2257,9 @@ class DepartmentService:
                         "visibility": group.visibility,
                     }
                 )
+            existing_group_ids = manageable_group_ids | existing_missing_group_ids
+            current_group_ids = [group_id for group_id in current_group_ids if group_id in existing_group_ids]
+            locked_group_ids = [group_id for group_id in locked_group_ids if group_id in existing_group_ids]
 
         return {
             "edit_mode": edit_mode,
@@ -2351,22 +2355,16 @@ class DepartmentService:
                 await cls._apply_local_primary_department_change(user_id, int(target.id))
 
         if edit_mode != "affiliate" and data.group_ids is not None:
-            from bisheng.common.errcode.user_group import (
-                UserGroupPermissionDeniedError,
-            )
             from bisheng.user_group.domain.services.user_group_service import (
                 UserGroupService,
             )
 
             req = [int(x) for x in data.group_ids]
-            try:
-                await UserGroupService.areplace_user_memberships(
-                    user_id,
-                    req,
-                    login_user,
-                )
-            except UserGroupPermissionDeniedError:
-                raise DepartmentPermissionDeniedError() from None
+            await UserGroupService.areplace_user_memberships(
+                user_id,
+                req,
+                login_user,
+            )
 
         if edit_mode == "affiliate":
             a_ctx = await cls._assignable_role_id_set(ctx_dept.dept_id, login_user)
