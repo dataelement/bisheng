@@ -1,34 +1,21 @@
 import { PlusIcon, SearchIcon } from "@/components/bs-icons"
-import DepartmentUsersSelect, {
-  DepartmentUserOption,
-} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
+import DepartmentUsersSelect, { DepartmentUserOption } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { Switch } from "@/components/bs-ui/switch"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import {
   createDeveloperTokenApi,
   deleteDeveloperTokenApi,
+  DeveloperTokenDetail,
   DeveloperTokenGlobalConfig,
   DeveloperTokenPayload,
   DeveloperTokenRecord,
+  DeveloperTokenRouteRule,
   getDeveloperTokenDetailApi,
   getDeveloperTokenGlobalConfigApi,
   listDeveloperTokensApi,
@@ -50,6 +37,8 @@ import {
   parseLimit,
   sanitizeRateLimitInput,
 } from "./developerTokenValidation"
+import DeveloperTokenRouteAllowlist from "./DeveloperTokenRouteAllowlist"
+import { findInvalidDeveloperTokenRouteRule, normalizeDeveloperTokenRouteWhitelist } from "./developerTokenRouteValidation"
 
 const PAGE_SIZE = 20
 
@@ -63,6 +52,7 @@ interface TokenFormState {
   ip_whitelist: string
   override_rate_limit: boolean
   rate_limit_per_minute: string
+  route_whitelist: DeveloperTokenRouteRule[]
 }
 
 const emptyConfig: DeveloperTokenGlobalConfig = {
@@ -70,21 +60,18 @@ const emptyConfig: DeveloperTokenGlobalConfig = {
   rate_limit_per_minute: null,
 }
 
-function toForm(row?: DeveloperTokenRecord): TokenFormState {
+function toForm(row?: DeveloperTokenDetail): TokenFormState {
   return {
     id: row?.id,
     name: row?.name || "",
-    user: row?.user_id
-      ? [{ label: row.user_name || String(row.user_id), value: Number(row.user_id) }]
-      : [],
+    user: row?.user_id ? [{ label: row.user_name || String(row.user_id), value: Number(row.user_id) }] : [],
     binding_changed: false,
     enabled: row?.enabled ?? true,
     override_ip_whitelist: row?.override_ip_whitelist ?? false,
     ip_whitelist: row?.ip_whitelist || "",
     override_rate_limit: row?.override_rate_limit ?? false,
-    rate_limit_per_minute: row?.rate_limit_per_minute != null
-      ? String(row.rate_limit_per_minute)
-      : "",
+    rate_limit_per_minute: row?.rate_limit_per_minute != null ? String(row.rate_limit_per_minute) : "",
+    route_whitelist: row?.route_whitelist || [],
   }
 }
 
@@ -96,6 +83,7 @@ function asPayload(form: TokenFormState): DeveloperTokenPayload {
     ip_whitelist: form.ip_whitelist,
     override_rate_limit: form.override_rate_limit,
     rate_limit_per_minute: parseLimit(form.rate_limit_per_minute),
+    route_whitelist: normalizeDeveloperTokenRouteWhitelist(form.route_whitelist),
   }
   if (!form.id || form.binding_changed) {
     const selected = form.user[0]
@@ -113,11 +101,9 @@ function hasSelectedBindingContext(form: TokenFormState): boolean {
 
 function StatusBadge({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation()
-  return enabled ? (
-    <Badge variant="default">{t("system.developerToken.enabled")}</Badge>
-  ) : (
-    <Badge variant="destructive">{t("system.developerToken.disabled")}</Badge>
-  )
+  return enabled
+    ? <Badge variant="default">{t("system.developerToken.enabled")}</Badge>
+    : <Badge variant="destructive">{t("system.developerToken.disabled")}</Badge>
 }
 
 export default function DeveloperToken() {
@@ -260,6 +246,15 @@ export default function DeveloperToken() {
       showIpWhitelistError(invalidIpRule)
       return
     }
+    const invalidRouteRule = findInvalidDeveloperTokenRouteRule(form.route_whitelist)
+    if (invalidRouteRule) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: t("system.developerToken.routeRules.invalidError", { index: invalidRouteRule.index + 1 }),
+      })
+      return
+    }
     setSaving(true)
     try {
       if (form.id) {
@@ -391,7 +386,7 @@ export default function DeveloperToken() {
         </Button>
       </div>
 
-      <div className="min-h-0 rounded-md border">
+      <div className="min-h-0 overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -400,6 +395,7 @@ export default function DeveloperToken() {
               <TableHead>{t("system.developerToken.columns.binding")}</TableHead>
               <TableHead>{t("system.developerToken.columns.status")}</TableHead>
               <TableHead>{t("system.developerToken.columns.controls")}</TableHead>
+              <TableHead>{t("system.developerToken.columns.routes")}</TableHead>
               <TableHead>{t("system.developerToken.columns.lastUsed")}</TableHead>
               <TableHead className="text-right">{t("system.developerToken.columns.actions")}</TableHead>
             </TableRow>
@@ -407,13 +403,13 @@ export default function DeveloperToken() {
           <TableBody>
             {loading && rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   {t("system.developerToken.loading")}
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   {t("system.developerToken.empty")}
                 </TableCell>
               </TableRow>
@@ -441,6 +437,11 @@ export default function DeveloperToken() {
                         : t("system.developerToken.globalRate")}
                       {row.rate_limit_per_minute ? ` ${row.rate_limit_per_minute}/min` : ""}
                     </div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {row.route_rule_count > 0
+                      ? t("system.developerToken.routeRules.count", { count: row.route_rule_count })
+                      : t("system.developerToken.routeRules.allRoutes")}
                   </TableCell>
                   <TableCell className="text-xs">
                     <div>{row.last_used_time ? formatIsoDateTime(row.last_used_time) : "-"}</div>
@@ -564,6 +565,10 @@ export default function DeveloperToken() {
                 )}
               />
             </label>
+            <DeveloperTokenRouteAllowlist
+              value={form.route_whitelist}
+              onChange={(route_whitelist) => setForm({ ...form, route_whitelist })}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormOpen(false)}>

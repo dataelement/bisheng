@@ -17,6 +17,12 @@ class DeveloperTokenListQuery(BaseModel):
     enabled: bool | None = None
 
 
+class DeveloperTokenRouteRule(BaseModel):
+    match_type: str = ""
+    method: str | None = None
+    path: str = ""
+
+
 class DeveloperTokenCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     user_id: int
@@ -27,6 +33,7 @@ class DeveloperTokenCreate(BaseModel):
     ip_whitelist: str | None = ""
     override_rate_limit: bool = False
     rate_limit_per_minute: int | None = None
+    route_whitelist: list[DeveloperTokenRouteRule] | None = None
 
 
 class DeveloperTokenUpdate(BaseModel):
@@ -39,6 +46,7 @@ class DeveloperTokenUpdate(BaseModel):
     ip_whitelist: str | None = None
     override_rate_limit: bool | None = None
     rate_limit_per_minute: int | None = None
+    route_whitelist: list[DeveloperTokenRouteRule] | None = None
 
 
 class DeveloperTokenRead(BaseModel):
@@ -53,6 +61,7 @@ class DeveloperTokenRead(BaseModel):
     override_ip_whitelist: bool
     override_rate_limit: bool
     rate_limit_per_minute: int | None = None
+    route_rule_count: int = 0
     last_used_time: datetime | None = None
     last_used_ip: str | None = None
     created_by: int | None = None
@@ -63,6 +72,7 @@ class DeveloperTokenRead(BaseModel):
 
 class DeveloperTokenDetail(DeveloperTokenRead):
     ip_whitelist: str | None = None
+    route_whitelist: list[DeveloperTokenRouteRule] = Field(default_factory=list)
 
 
 class DeveloperTokenCreateResponse(BaseModel):

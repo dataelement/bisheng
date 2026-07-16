@@ -82,6 +82,7 @@ import { KnowledgeSpaceContent, type ExternalFileActionPermissions } from "../Sp
 import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { isFavoriteSpace } from "./favoriteView";
+import { buildPublicFileActionPermissions } from "./publicFilePermissions";
 import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
@@ -570,7 +571,7 @@ export default function PortalKnowledgeWorkbench() {
         const files = searchMode ? searchResults : flattenTreeFiles(treeNodes);
         return Array.from(new Set(
             files
-                .filter((file) => !isFolder(file) && !file.isCreating)
+                .filter((file) => !file.isCreating)
                 .map((file) => String(file.id))
                 .filter(Boolean),
         ));
@@ -589,21 +590,10 @@ export default function PortalKnowledgeWorkbench() {
         const resolvedPermissionIds = publicFilePermissionState.spaceId === String(activeSpace?.id)
             ? publicFilePermissionState.permissionIdsByFileId
             : {};
-        const idsWithPermission = (permissionId: string) => new Set(
-            isSystemAdmin
-                ? loadedPublicFileIds
-                : Object.entries(resolvedPermissionIds)
-                    .filter(([, permissionIds]) => permissionIds.includes(permissionId))
-                    .map(([fileId]) => fileId),
+        return buildPublicFileActionPermissions(
+            resolvedPermissionIds,
+            isSystemAdmin ? loadedPublicFileIds : undefined,
         );
-
-        return {
-            permissionEntryIds: idsWithPermission("manage_file_relation"),
-            renameEntryIds: idsWithPermission("rename_file"),
-            deleteEntryIds: idsWithPermission("delete_file"),
-            downloadEntryIds: idsWithPermission("download_file"),
-            moveEntryIds: idsWithPermission("move_file"),
-        };
     }, [activeSpace?.id, isActiveSpacePublic, isSystemAdmin, loadedPublicFileIds, publicFilePermissionState]);
     const effectivePermissionEntryIds = publicFileActionPermissions?.permissionEntryIds ?? permissionEntryIds;
     const effectiveDownloadEntryIds = publicFileActionPermissions?.downloadEntryIds ?? downloadEntryIds;

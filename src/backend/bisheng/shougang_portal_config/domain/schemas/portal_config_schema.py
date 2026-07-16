@@ -83,6 +83,14 @@ class PortalDomainConfig(BaseModel):
     def normalize(self):
         self.name = _strip(self.name)
         self.code = _strip(self.code).upper()
+        normalized_department_ids: list[int] = []
+        for value in self.department_ids:
+            department_id = int(value)
+            if department_id <= 0:
+                raise ValueError("department id must be positive")
+            if department_id not in normalized_department_ids:
+                normalized_department_ids.append(department_id)
+        self.department_ids = normalized_department_ids
         if not self.name:
             raise ValueError("domain name is required")
         return self

@@ -161,6 +161,25 @@
       "namePlaceholder": "Enter token name",
       "rateLimitPlaceholder": "Example: 60. Leave empty for no limit.",
       "ipWhitelistHelp": "Supports single IPs or CIDR ranges. Separate multiple rules with newlines, spaces, commas, or semicolons. Empty means all IPs are allowed.",
+      "routeRules": {
+        "add": "Add route rule",
+        "remove": "Remove route rule",
+        "matchType": "Match type",
+        "method": "HTTP method",
+        "anyMethod": "Any method",
+        "pathPlaceholder": "Example: /api/v1/items/{item_id}",
+        "prefixPlaceholder": "Example: /api/v1/files/*",
+        "emptyHelp": "With no rules, the token can access every endpoint that enables developer-token authentication.",
+        "prefixHelp": "PREFIX must end with /* and matches descendants only, not the prefix root or similar text paths.",
+        "invalidError": "Route rule {{index}} is invalid or duplicates another rule. Check it and try again.",
+        "allRoutes": "All enabled routes",
+        "count": "{{count}} route rules",
+        "types": {
+          "METHOD_PATH": "Method + path",
+          "PATH": "Exact path",
+          "PREFIX": "Path prefix"
+        }
+      },
       "saveConfig": "Save config",
       "search": "Search",
       "create": "Create token",
@@ -192,6 +211,7 @@
         "binding": "Bound user / tenant",
         "status": "Status",
         "controls": "Access controls",
+        "routes": "Route scope",
         "lastUsed": "Last used",
         "actions": "Actions"
       },
@@ -202,7 +222,8 @@
         "overrideIp": "Override global IP whitelist",
         "overrideRate": "Override global rate limit",
         "ipWhitelist": "IP whitelist",
-        "rateLimit": "Per-minute limit"
+        "rateLimit": "Per-minute limit",
+        "routeWhitelist": "Route allowlist"
       }
     },
     "orgAndMembers": "Organization & Members",
@@ -2080,6 +2101,8 @@
     "19803": "System-level LLM configuration (workbench / knowledge / assistant / evaluation defaults) is restricted to the global super admin",
     "19804": "LLM server endpoint does not match any prefix in settings.llm.endpoint_whitelist",
     "19809": "IP whitelist contains an invalid IP or CIDR. Check it and try again.",
+    "19811": "Route allowlist rules are invalid or duplicated. Check them and try again.",
+    "19812": "This developer token cannot access the requested route.",
     "20000": "Tenant not found",
     "20001": "Your tenant has been disabled. Please contact the administrator.",
     "20002": "User does not belong to this tenant",

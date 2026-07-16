@@ -2,18 +2,18 @@
 
 ## Metadata
 - Feature ID: `044-developer-token`
-- Status: `draft`
-- Mode: `spec-only`
+- Status: `implemented-pending-manual-verification`
+- Mode: `spec-then-implement`
 - Created: `2026-06-10`
-- Updated: `2026-06-10`
+- Updated: `2026-07-15`
 - Source request: `/Users/wenruli/Desktop/044-developer-token/development-implementation.md`
 
 ## Intake Summary
 - Problem: External callers need a non-JWT developer token mechanism for selected business APIs, while administrators need a controlled way to manage those tokens.
-- Current state: BiSheng uses FastAPI, SQLModel, Redis, tenant ContextVar isolation, JWT login, admin management APIs under `/api/v1/admin`, and external RPC endpoints under `/api/v2`. No dedicated developer token management or dependency exists.
-- Target outcome: Administrators can manage developer tokens from the Platform system page; selected business APIs can opt in to `X-Developer-Token` authentication and receive a bound `UserPayload` with a constrained tenant context.
+- Current state: Developer token management and per-token route allowlists are implemented; authenticated Platform interaction and DM8 migration execution remain manual verification items.
+- Target outcome: Preserve the existing developer-token behavior while allowing each token to restrict access to multiple manually configured route rules using method-and-path, path-only, or trailing-wildcard prefix matching.
 - Affected users/systems: Global super admins, tenant admins, ordinary users without management rights, external API callers, opt-in business API endpoints, Redis limiter, audit log, Platform system management UI.
-- Requested stopping point: `tasks.md`.
+- Requested stopping point: Updated SDD artifacts followed by implementation and verification after the required spec confirmation gate.
 
 ## Scope
 
@@ -31,6 +31,9 @@
 - Management operations and secret view enforce admin permissions and write audit logs.
 - Backend implementation follows DDD layering and MySQL/DM8 compatibility rules.
 - Platform frontend uses existing `src/frontend/platform/` conventions only.
+- Each token supports zero or more manually configured route allowlist rules.
+- Route rules support `METHOD_PATH`, `PATH`, and `PREFIX` matching; any matching rule allows the request.
+- Empty route rules preserve the existing allow-all behavior for endpoints that opt in to developer-token authentication.
 
 ### Excludes
 - No bulk retrofit of existing `/api/v1` or `/api/v2` business APIs.
@@ -39,7 +42,9 @@
 - No token automatic rotation or regeneration endpoint in this phase.
 - No new first-level menu; entry stays under the System Page tab.
 - No new independent global config table; global config uses existing `config` table semantics.
-- No direct production code implementation in this spec-only phase.
+- No automatic discovery or selection of registered FastAPI routes.
+- No arbitrary-position glob patterns, route denylist rules, or global route allowlist.
+- No bulk retrofit of business endpoints that do not already use the developer-token dependency.
 
 ## Requirements
 
@@ -164,7 +169,7 @@ As a `security operator`, I want developer token requests to enforce IP whitelis
 As a `backend maintainer`, I want developer token implementation to follow BiSheng backend conventions, so that it is maintainable and compatible with MySQL and DM8.
 
 #### Acceptance Criteria
-- `AC-REQ-006-01`: WHEN the feature is implemented THEN a `developer_token` table SHALL exist with fields for `tenant_id`, `user_id`, `name`, `token_hash`, `token_ciphertext`, `token_prefix`, enablement, override flags, whitelist, rate limit, last usage, creator/updater, logical delete, create time, and update time.
+- `AC-REQ-006-01`: WHEN the feature is implemented THEN a `developer_token` table SHALL exist with fields for `tenant_id`, `user_id`, `name`, `token_hash`, `token_ciphertext`, `token_prefix`, enablement, override flags, IP whitelist, rate limit, route allowlist, last usage, creator/updater, logical delete, create time, and update time.
 - `AC-REQ-006-02`: WHEN database migration is created THEN it SHALL use dual-DB-compatible types and avoid MySQL-only JSON or JSON query features.
 - `AC-REQ-006-03`: WHEN token lookup occurs during authentication THEN repository lookup by `token_hash` SHALL run in a tenant-filter-safe way and still enforce token-bound tenant semantics in service.
 - `AC-REQ-006-04`: WHEN admin APIs are implemented THEN routes SHALL be mounted under `/api/v1/admin/developer-tokens` and return project-standard response wrappers.
@@ -229,6 +234,41 @@ As a `security auditor`, I want sensitive developer token actions to be auditabl
 | AC-REQ-008-03 | code review + log assertion | Verify no plaintext token in denied auth logs; optional test with caplog. |
 | AC-REQ-008-04 | manual + automated dependency test | Disable token and verify dependency rejects while unrelated endpoints are unchanged. |
 
+### REQ-009: Token route allowlist
+As an `authorized admin`, I want each developer token to allow only selected routes, so that a leaked or over-privileged token cannot access every developer-token-enabled API.
+
+#### Acceptance Criteria
+- `AC-REQ-009-01`: WHEN an authorized admin creates or updates a token THEN the system SHALL accept between 0 and 200 structured route rules for that token.
+- `AC-REQ-009-02`: WHEN a token's route allowlist is missing, null, or empty THEN authentication SHALL allow every endpoint that already opts in to developer-token authentication, subject to all other token checks.
+- `AC-REQ-009-03`: WHEN a `METHOD_PATH` rule is configured THEN it SHALL match only when the uppercase HTTP method and FastAPI route template both match exactly.
+- `AC-REQ-009-04`: WHEN a `PATH` rule is configured THEN it SHALL match the exact FastAPI route template for any HTTP method.
+- `AC-REQ-009-05`: WHEN a `PREFIX` rule is configured THEN its path SHALL start with `/`, end with exactly one trailing `/*`, and contain no other `*` characters.
+- `AC-REQ-009-06`: WHEN `/api/v2/files/*` is configured THEN it SHALL match descendant route templates such as `/api/v2/files/list` and `/api/v2/files/{file_id}`, but SHALL NOT match `/api/v2/files` or `/api/v2/files-other`.
+- `AC-REQ-009-07`: WHEN multiple route rules are configured THEN authentication SHALL allow the request if any one rule matches.
+- `AC-REQ-009-08`: WHEN the route allowlist is non-empty and no rule matches THEN authentication SHALL reject the request with `19812 developer_token_route_forbidden` before invoking the business endpoint handler.
+- `AC-REQ-009-09`: WHEN route matching is evaluated THEN it SHALL use the FastAPI route template and request method, SHALL ignore query parameters, and SHALL not depend on concrete path-parameter values.
+- `AC-REQ-009-10`: WHEN a rule has an unsupported type, missing required method/path, invalid HTTP method, malformed path, invalid wildcard placement, duplicate normalized rule, or the allowlist exceeds 200 rules THEN save SHALL be rejected with `19811 developer_token_invalid_route_rule`.
+- `AC-REQ-009-11`: WHEN a syntactically valid manually entered route is not currently registered in FastAPI THEN save SHALL still succeed.
+- `AC-REQ-009-12`: WHEN an admin edits route rules in Platform THEN the UI SHALL provide a structured repeatable editor with rule type, conditional HTTP method, and route path fields, and SHALL support adding and removing rules without introducing a new UI library.
+- `AC-REQ-009-13`: WHEN token records are listed THEN each row SHALL expose the route-rule count without returning the full rule array; WHEN token detail is loaded THEN the full normalized route-rule array SHALL be returned for editing.
+
+#### Verification Methods
+| Acceptance ID | Method | Evidence Target |
+|---|---|---|
+| AC-REQ-009-01 | automated service/API test | Create/update accepts 0, 1, multiple, and 200 rules; rejects 201 rules. |
+| AC-REQ-009-02 | automated dependency test | Null and empty rules preserve allow-all compatibility. |
+| AC-REQ-009-03 | automated dependency test | Method-and-template exact match and method mismatch cases. |
+| AC-REQ-009-04 | automated dependency test | Exact template matches across multiple HTTP methods. |
+| AC-REQ-009-05 | automated validation test | Valid trailing `/*` accepted; other wildcard placements rejected. |
+| AC-REQ-009-06 | automated dependency test | Descendant, root, and sibling-prefix cases. |
+| AC-REQ-009-07 | automated dependency test | A later matching rule allows when earlier rules do not match. |
+| AC-REQ-009-08 | automated dependency/integration test | Non-match raises `19812` before endpoint handler execution. |
+| AC-REQ-009-09 | automated dependency test | Route template is used instead of concrete URL; query string does not affect matching. |
+| AC-REQ-009-10 | automated backend and frontend validation tests | Invalid types, fields, methods, paths, wildcards, duplicates, and over-limit payloads are rejected clearly. |
+| AC-REQ-009-11 | automated service/API test | Syntactically valid unregistered paths persist successfully. |
+| AC-REQ-009-12 | frontend unit/build/manual | Structured editor renders conditional fields and supports add/remove operations. |
+| AC-REQ-009-13 | automated API test + manual | List returns count only; detail returns normalized rules for editing. |
+
 ## Non-Functional Requirements
 - `NFR-001`: Token secrets SHALL never be stored or logged as raw plaintext.
 - `NFR-002`: Redis limiter failures SHALL fail closed for opt-in developer-token-authenticated requests.
@@ -236,6 +276,7 @@ As a `security auditor`, I want sensitive developer token actions to be auditabl
 - `NFR-004`: Developer token authentication SHALL not change behavior of endpoints that do not opt in.
 - `NFR-005`: Platform UI SHALL not introduce new UI libraries, state libraries, or direct axios imports.
 - `NFR-006`: Backend code SHALL preserve DDD layering and avoid endpoint-to-ORM direct imports.
+- `NFR-007`: Route matching SHALL be bounded to at most 200 in-memory rules per token and SHALL not use dialect-specific JSON queries.
 
 ## Clarifications
 
@@ -251,6 +292,13 @@ As a `security auditor`, I want sensitive developer token actions to be auditabl
 - Q: Should clicking "View secret" keep the frontend confirmation prompt before showing plaintext token? -> A: No. The button should directly request the secret and open the plaintext token dialog; backend permission checks and audit logging remain unchanged.
 - Q: Should all Developer Token text inputs include placeholder text? -> A: Yes. Add localized placeholders for every text input, including search, token name, global/token rate limit, IP whitelist, and existing user picker placeholders.
 
+### Session 2026-07-15
+- Q: Which route matching modes are required? -> A: Support all three modes per rule: exact `METHOD_PATH`, exact `PATH` for any method, and `PREFIX`; any matching rule allows the request.
+- Q: What does an empty route allowlist mean? -> A: Allow all endpoints that already opt in to developer-token authentication, preserving existing token behavior.
+- Q: How are routes configured? -> A: Administrators manually enter structured rules; the backend validates syntax but does not require the route to be currently registered.
+- Q: How does `PREFIX` wildcard matching work? -> A: Only a single trailing `/*` is allowed. It matches descendant paths but not the prefix root itself or sibling paths with the same textual prefix.
+- Q: What is the delivery scope? -> A: Update the existing SDD artifacts, then implement backend, migration, Platform UI, tests, and verification after the SDD confirmation gate.
+
 ## Assumptions
 - Global super admin detection will use existing project semantics (`user.role == admin` in Platform and backend global-super checks), but implementation must verify the exact backend helper before coding.
 - Tenant admin authorization will use existing `UserPayload.has_tenant_admin(tenant_id)` or the project-approved equivalent; implementation must not infer tenant admin from frontend state alone.
@@ -264,6 +312,9 @@ As a `security auditor`, I want sensitive developer token actions to be auditabl
 - Authentication requires safe manipulation and reset of tenant ContextVars; implementation must avoid leaking token tenant context into unrelated request handling.
 - DM8 validation is not available on macOS according to project instructions; full dual-DB validation depends on CI/Linux.
 - Department-context-based tenant resolution must be backend-authoritative. Trusting a frontend `tenant_id` or user label would permit incorrect or unauthorized token binding.
+- Empty route rules intentionally preserve allow-all behavior; newly created tokens remain broad until an administrator configures at least one route rule.
+- A `PREFIX` rule also covers future descendant endpoints, so broad prefixes can expand effective access when new APIs are introduced.
+- Manual route entry can contain a syntactically valid typo or future route. Such a rule remains stored but grants no access until an incoming route matches it.
 
 ## Requirements Quality Gate
 - [x] Every requirement has a stable `REQ-*` ID.

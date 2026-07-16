@@ -2,11 +2,11 @@
 
 ## Metadata
 - Feature ID: `044-developer-token`
-- Status: `draft`
+- Status: `implemented-pending-manual-verification`
 - Related requirements: `specs/044-developer-token/requirements.md`
 - Related design: `specs/044-developer-token/design.md`
 - Created: `2026-06-10`
-- Updated: `2026-06-10`
+- Updated: `2026-07-15`
 
 ## Task Format
 
@@ -51,7 +51,7 @@ Every implementation task includes:
   - _Boundary: `src/backend/bisheng/developer_token/domain/models/developer_token.py` only._
 
 - [x] T005 Define schemas and error codes
-  - Done when: request/response/query schemas exist and `common/errcode/developer_token.py` defines `19801` through `19809` developer token errors with stable names and messages.
+  - Done when: request/response/query schemas exist and `common/errcode/developer_token.py` defines the original `19801` through `19810` developer token errors with stable names and messages.
   - _Requirements: REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006_
   - _Acceptance: AC-REQ-001-03, AC-REQ-003-07, AC-REQ-004-01, AC-REQ-004-02, AC-REQ-004-03, AC-REQ-005-03, AC-REQ-005-04, AC-REQ-005-05, AC-REQ-006-05_
   - _Verification: Code review; backend import/unit tests once service/API tests are added._
@@ -181,9 +181,9 @@ Every implementation task includes:
   - _Boundary: Verification only; no new behavior implementation._
 
 - [ ] T020 Run Platform manual verification checklist
-  - Done when: manual evidence covers tab visibility, global config visibility/editing, tenant admin restrictions, token create/edit/delete/list, secret view, invalid whitelist error, integer-only rate-limit input, and disabled token authentication rejection.
-  - _Requirements: REQ-007_
-  - _Acceptance: AC-REQ-007-01, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07, AC-REQ-007-10_
+  - Done when: manual evidence covers tab visibility, global config visibility/editing, tenant admin restrictions, token create/edit/delete/list, secret view, invalid whitelist error, integer-only rate-limit input, structured route-rule add/remove/edit behavior, all-routes/count display, and disabled or route-forbidden token authentication rejection.
+  - _Requirements: REQ-007, REQ-009_
+  - _Acceptance: AC-REQ-007-01, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07, AC-REQ-007-10, AC-REQ-009-08, AC-REQ-009-12, AC-REQ-009-13_
   - _Verification: Manual notes/screenshots or `verification.md` entries after implementation._
   - _Depends: T018, T019_
   - _Boundary: Manual verification only; no new behavior implementation._
@@ -361,6 +361,71 @@ Every implementation task includes:
   - _Depends: T040_
   - _Boundary: Verification artifact only._
 
+## Phase 12: Token Route Allowlist
+
+- [x] T042 Update SDD artifacts for token route allowlist
+  - Done when: requirements, design, tasks, and verification planning record the three route-rule types, empty allow-all compatibility, trailing `/*` semantics, manual structured entry, migration strategy, security risks, and acceptance traceability.
+  - _Requirements: REQ-006, REQ-007, REQ-009_
+  - _Acceptance: AC-REQ-006-01, AC-REQ-006-02, AC-REQ-009-01, AC-REQ-009-02, AC-REQ-009-03, AC-REQ-009-04, AC-REQ-009-05, AC-REQ-009-06, AC-REQ-009-07, AC-REQ-009-08, AC-REQ-009-09, AC-REQ-009-10, AC-REQ-009-11, AC-REQ-009-12, AC-REQ-009-13_
+  - _Verification: Review `requirements.md`, `design.md`, `tasks.md`, and planned entries in `verification.md` for complete traceability._
+  - _Boundary: `specs/044-developer-token/` only; production code remains unchanged until the SDD confirmation gate is approved._
+
+- [x] T043 Add backend route-allowlist regression tests
+  - Done when: service/dependency/API tests cover null/empty allow-all, 0/1/multiple/200/201 rules, all match types, method mismatch, route-template matching, OR semantics, prefix descendant/root/sibling boundaries, invalid/duplicate rules, unregistered valid paths, route-forbidden rejection, and list/detail projections.
+  - _Requirements: REQ-006, REQ-009_
+  - _Acceptance: AC-REQ-006-01, AC-REQ-006-02, AC-REQ-009-01, AC-REQ-009-02, AC-REQ-009-03, AC-REQ-009-04, AC-REQ-009-05, AC-REQ-009-06, AC-REQ-009-07, AC-REQ-009-08, AC-REQ-009-09, AC-REQ-009-10, AC-REQ-009-11, AC-REQ-009-13_
+  - _Verification: Run targeted tests and observe expected failures before implementation; final command `cd src/backend && uv run pytest test/developer_token/`._
+  - _Depends: T042 and the explicit post-spec user confirmation._
+  - _Boundary: `src/backend/test/developer_token/` only._
+
+- [x] T044 Add route-allowlist persistence and backend contracts
+  - Done when: a new follow-up Alembic migration adds nullable `route_whitelist` with project `JsonType`, downgrade drops it with documented permission-broadening risk, the ORM and schemas expose normalized route rules/count, and errors `19811`/`19812` are defined.
+  - _Requirements: REQ-006, REQ-009_
+  - _Acceptance: AC-REQ-006-01, AC-REQ-006-02, AC-REQ-006-05, AC-REQ-009-01, AC-REQ-009-02, AC-REQ-009-10, AC-REQ-009-13_
+  - _Verification: Migration/code review; model/schema import tests; `cd src/backend && uv run alembic heads`; DM8 validation remains CI/Linux-only._
+  - _Depends: T043_
+  - _Boundary: New route-allowlist migration, developer-token model/schema, and developer-token error-code file only; do not edit the deployed F044 migration or apply migrations to a shared database._
+
+- [x] T045 Implement route-rule validation and authentication enforcement
+  - Done when: service normalizes and validates bounded rules, persists them on create/update, matches `METHOD_PATH`, `PATH`, and descendant-only `PREFIX`, and the dependency passes request method and FastAPI route template separately. A non-empty miss raises `19812` after IP validation and before endpoint rate limiting/business execution.
+  - _Requirements: REQ-004, REQ-005, REQ-008, REQ-009_
+  - _Acceptance: AC-REQ-004-09, AC-REQ-009-01, AC-REQ-009-02, AC-REQ-009-03, AC-REQ-009-04, AC-REQ-009-05, AC-REQ-009-06, AC-REQ-009-07, AC-REQ-009-08, AC-REQ-009-09, AC-REQ-009-10, AC-REQ-009-11_
+  - _Verification: T043 tests pass; code review confirms route rules and raw tokens are not logged and non-opt-in routes remain unchanged._
+  - _Depends: T044_
+  - _Boundary: `developer_token_service.py`, `api/dependencies.py`, and directly related backend tests only; no business endpoint retrofit._
+
+- [x] T046 Complete admin API projection and audit-safe summaries
+  - Done when: create/update accept route rules, list returns `route_rule_count` without the full array, detail returns normalized rules, and audit snapshots include only the rule count rather than a copied route map or token secret.
+  - _Requirements: REQ-002, REQ-008, REQ-009_
+  - _Acceptance: AC-REQ-002-02, AC-REQ-002-03, AC-REQ-008-01, AC-REQ-008-03, AC-REQ-009-01, AC-REQ-009-10, AC-REQ-009-11, AC-REQ-009-13_
+  - _Verification: `cd src/backend && uv run pytest test/developer_token/test_developer_token_service.py test/developer_token/test_developer_token_api.py`._
+  - _Depends: T045_
+  - _Boundary: Developer-token schemas/service serialization and backend service/API tests; endpoint/router paths remain unchanged._
+
+- [x] T047 Implement frontend route-rule types, validation, and extracted editor
+  - Done when: Platform API types model the three rule kinds, pure helpers validate/normalize syntax and duplicates, frontend tests cover valid/invalid rules, and an extracted repeatable editor supports add/remove plus conditional HTTP method input using existing Platform components.
+  - _Requirements: REQ-007, REQ-009_
+  - _Acceptance: AC-REQ-009-01, AC-REQ-009-05, AC-REQ-009-10, AC-REQ-009-12_
+  - _Verification: `cd src/frontend/platform && npm run test -- developerTokenRouteValidation.test.ts` and TypeScript build._
+  - _Depends: T042 and the explicit post-spec user confirmation._
+  - _Boundary: `controllers/API/developerToken.ts`, new route validation/editor files, and the new frontend unit test only._
+
+- [x] T048 Integrate route editor, list status, and localized guidance
+  - Done when: Developer Token create/edit loads and submits full rules, the list displays all-routes or rule count, validation blocks invalid saves, zh-Hans/en-US/ja text explains empty and prefix behavior, and `DeveloperToken.tsx` remains at or below 600 lines through component extraction.
+  - _Requirements: REQ-007, REQ-009_
+  - _Acceptance: AC-REQ-009-01, AC-REQ-009-02, AC-REQ-009-05, AC-REQ-009-06, AC-REQ-009-10, AC-REQ-009-12, AC-REQ-009-13_
+  - _Verification: Frontend unit test, `cd src/frontend/platform && npm run build`, locale JSON validation, line-count check, and T020 manual checklist when an authenticated environment is available._
+  - _Depends: T046, T047_
+  - _Boundary: `DeveloperToken.tsx`, the extracted editor, and three Platform locale files only._
+
+- [x] T049 Verify and record the route-allowlist implementation
+  - Done when: backend tests, Ruff, Alembic head inspection, frontend tests/build, locale validation, architecture guard, diff hygiene, and security review are recorded in `verification.md`; every REQ-009 acceptance criterion has PASS, MANUAL_REQUIRED, FAIL, or NOT_RUN evidence.
+  - _Requirements: REQ-004, REQ-006, REQ-007, REQ-008, REQ-009_
+  - _Acceptance: AC-REQ-004-09, AC-REQ-006-01, AC-REQ-006-02, AC-REQ-006-05, AC-REQ-007-05, AC-REQ-008-03, AC-REQ-009-01, AC-REQ-009-02, AC-REQ-009-03, AC-REQ-009-04, AC-REQ-009-05, AC-REQ-009-06, AC-REQ-009-07, AC-REQ-009-08, AC-REQ-009-09, AC-REQ-009-10, AC-REQ-009-11, AC-REQ-009-12, AC-REQ-009-13_
+  - _Verification: Fresh command output and acceptance evidence in `specs/044-developer-token/verification.md`; do not claim DM8 or authenticated UI verification without actual evidence._
+  - _Depends: T043, T044, T045, T046, T047, T048_
+  - _Boundary: Verification commands and SDD verification/retrospective artifacts only; fixes discovered during verification must remain within T043-T048 scope or trigger a spec update._
+
 ## Coverage Matrix
 | Requirement | Acceptance Criteria | Tasks | Verification |
 |---|---|---|---|
@@ -372,6 +437,7 @@ Every implementation task includes:
 | REQ-006 | AC-REQ-006-01..06 | T001, T002, T003, T004, T005, T006, T007, T014, T015, T019, T022, T023, T027, T029 | Migration/code review, backend tests, arch review |
 | REQ-007 | AC-REQ-007-01..11 | T016, T017, T018, T020, T021, T023, T024, T025, T026, T028, T029, T030, T031, T032, T033, T034, T035, T036, T037, T038, T039, T040, T041 | Platform manual checklist, frontend unit/static verification |
 | REQ-008 | AC-REQ-008-01..04 | T008, T010, T014, T015, T019, T022, T023, T037, T038 | Backend API/service tests, audit/log review |
+| REQ-009 | AC-REQ-009-01..13 | T020, T042, T043, T044, T045, T046, T047, T048, T049 | Migration review, backend service/dependency/API tests, frontend unit/build/manual checks, security review |
 
 ## Task Quality Gate
 - [x] Every task references at least one requirement ID.
@@ -383,7 +449,8 @@ Every implementation task includes:
 - [x] No task implements work outside requirements or design.
 
 ## Implementation Notes
-- This spec intentionally does not implement production code.
+- The implementation is complete except for authenticated Platform manual verification T020, DM8/CI validation, and applying the migration to a prepared environment.
+- The user confirmed the Phase 12 specification gate; T043-T049 were implemented and verified on 2026-07-15.
 - Before implementation, re-read `requirements.md`, `design.md`, this `tasks.md`, and directly related backend/frontend files.
 - If implementation changes scope, update `requirements.md` and `design.md` before continuing.
 - If the project later requires `features/v2.6.0/044-developer-token/` artifacts in addition to this `/sdd-spec` layout, create a separate sync/update task rather than silently duplicating sources of truth.

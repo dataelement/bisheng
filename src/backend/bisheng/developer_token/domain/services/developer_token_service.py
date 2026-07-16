@@ -17,10 +17,12 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenInvalidError,
     DeveloperTokenInvalidIpRuleError,
     DeveloperTokenInvalidRateLimitError,
+    DeveloperTokenInvalidRouteRuleError,
     DeveloperTokenIpForbiddenError,
     DeveloperTokenLimiterUnavailableError,
     DeveloperTokenMissingError,
     DeveloperTokenRateLimitedError,
+    DeveloperTokenRouteForbiddenError,
 )
 from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import PageData
@@ -65,6 +67,9 @@ class DeveloperTokenService:
     RATE_ENDPOINT_FALLBACK = "UNKNOWN"
     TOKEN_PREFIX = "bst_"
     TOKEN_PREFIX_DISPLAY_LENGTH = 12
+    MAX_ROUTE_RULES = 200
+    ROUTE_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"})
+    ROUTE_MATCH_TYPES = frozenset({"METHOD_PATH", "PATH", "PREFIX"})
 
     repository = DeveloperTokenRepository
 
@@ -104,6 +109,7 @@ class DeveloperTokenService:
         await cls._assert_admin_scope(operator, tenant_id)
         cls._validate_ip_whitelist(payload.ip_whitelist)
         cls._validate_rate_limit(payload.rate_limit_per_minute)
+        route_whitelist = cls._normalize_route_whitelist(payload.route_whitelist)
 
         plaintext = cls._generate_plaintext_token()
         token = DeveloperToken(
@@ -118,6 +124,7 @@ class DeveloperTokenService:
             ip_whitelist=payload.ip_whitelist or "",
             override_rate_limit=payload.override_rate_limit,
             rate_limit_per_minute=cls._normalize_rate_limit(payload.rate_limit_per_minute),
+            route_whitelist=route_whitelist,
             created_by=operator.user_id,
             updated_by=operator.user_id,
         )
@@ -168,6 +175,8 @@ class DeveloperTokenService:
         if "rate_limit_per_minute" in update_data:
             cls._validate_rate_limit(update_data.get("rate_limit_per_minute"))
             update_data["rate_limit_per_minute"] = cls._normalize_rate_limit(update_data.get("rate_limit_per_minute"))
+        if "route_whitelist" in update_data:
+            update_data["route_whitelist"] = cls._normalize_route_whitelist(update_data.get("route_whitelist"))
         if "name" in update_data and update_data["name"] is not None:
             update_data["name"] = update_data["name"].strip()
         update_data["updated_by"] = operator.user_id
@@ -293,6 +302,8 @@ class DeveloperTokenService:
         request_ip: str | None = None,
         user_agent: str | None = None,
         endpoint_key: str | None = None,
+        request_method: str | None = None,
+        route_path: str | None = None,
     ) -> UserPayload:
         if not raw_token:
             raise DeveloperTokenMissingError()
@@ -317,6 +328,7 @@ class DeveloperTokenService:
         effective_ip_whitelist, effective_rate_limit = await cls._effective_controls(token)
         if not cls._ip_allowed(request_ip, effective_ip_whitelist):
             raise DeveloperTokenIpForbiddenError()
+        cls._check_route_access(token.route_whitelist, request_method, route_path)
         await cls._check_rate_limit(token.id, effective_rate_limit, endpoint_key=endpoint_key)
 
         tenant_context_token = set_current_tenant_id(token.tenant_id)
@@ -557,6 +569,92 @@ class DeveloperTokenService:
         return [part.strip() for part in re.split(r"[\s,;]+", value) if part.strip()]
 
     @classmethod
+    def _normalize_route_whitelist(cls, rules: list | None) -> list[dict]:
+        if not rules:
+            return []
+        if len(rules) > cls.MAX_ROUTE_RULES:
+            raise DeveloperTokenInvalidRouteRuleError()
+
+        normalized: list[dict] = []
+        seen: set[tuple[str, str | None, str]] = set()
+        for rule in rules:
+            if hasattr(rule, "model_dump"):
+                data = rule.model_dump()
+            elif isinstance(rule, dict):
+                data = rule
+            else:
+                raise DeveloperTokenInvalidRouteRuleError()
+
+            match_type = str(data.get("match_type") or "").strip().upper()
+            path = str(data.get("path") or "").strip()
+            raw_method = data.get("method")
+            method = str(raw_method).strip().upper() if raw_method is not None else None
+            method = method or None
+
+            if match_type not in cls.ROUTE_MATCH_TYPES or not cls._valid_route_path(path):
+                raise DeveloperTokenInvalidRouteRuleError()
+            if match_type == "METHOD_PATH":
+                if method not in cls.ROUTE_METHODS or "*" in path:
+                    raise DeveloperTokenInvalidRouteRuleError()
+            elif method is not None:
+                raise DeveloperTokenInvalidRouteRuleError()
+            elif match_type == "PATH" and "*" in path:
+                raise DeveloperTokenInvalidRouteRuleError()
+            elif match_type == "PREFIX" and (not path.endswith("/*") or path.count("*") != 1):
+                raise DeveloperTokenInvalidRouteRuleError()
+
+            key = (match_type, method, path)
+            if key in seen:
+                raise DeveloperTokenInvalidRouteRuleError()
+            seen.add(key)
+            normalized.append({"match_type": match_type, "method": method, "path": path})
+        return normalized
+
+    @staticmethod
+    def _valid_route_path(path: str) -> bool:
+        return bool(
+            path.startswith("/") and "?" not in path and "#" not in path and not any(char.isspace() for char in path)
+        )
+
+    @classmethod
+    def _route_allowed(
+        cls,
+        rules: list[dict] | None,
+        request_method: str | None,
+        route_path: str | None,
+    ) -> bool:
+        if not rules:
+            return True
+        if not request_method or not route_path:
+            return False
+
+        method = request_method.upper()
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            match_type = rule.get("match_type")
+            rule_path = rule.get("path")
+            if match_type == "METHOD_PATH" and rule.get("method") == method and rule_path == route_path:
+                return True
+            if match_type == "PATH" and rule_path == route_path:
+                return True
+            if match_type == "PREFIX" and isinstance(rule_path, str):
+                prefix = rule_path[:-1]
+                if rule_path.endswith("/*") and route_path.startswith(prefix):
+                    return True
+        return False
+
+    @classmethod
+    def _check_route_access(
+        cls,
+        rules: list[dict] | None,
+        request_method: str | None,
+        route_path: str | None,
+    ) -> None:
+        if not cls._route_allowed(rules, request_method, route_path):
+            raise DeveloperTokenRouteForbiddenError()
+
+    @classmethod
     async def _to_read(cls, token: DeveloperToken) -> DeveloperTokenRead:
         tenant_name = None
         user_name = None
@@ -582,6 +680,7 @@ class DeveloperTokenService:
             override_ip_whitelist=bool(token.override_ip_whitelist),
             override_rate_limit=bool(token.override_rate_limit),
             rate_limit_per_minute=token.rate_limit_per_minute,
+            route_rule_count=len(token.route_whitelist or []),
             last_used_time=token.last_used_time,
             last_used_ip=token.last_used_ip,
             created_by=token.created_by,
@@ -594,6 +693,7 @@ class DeveloperTokenService:
     async def _to_detail(cls, token: DeveloperToken) -> DeveloperTokenDetail:
         data = (await cls._to_read(token)).model_dump()
         data["ip_whitelist"] = token.ip_whitelist
+        data["route_whitelist"] = token.route_whitelist or []
         return DeveloperTokenDetail(**data)
 
     @staticmethod
@@ -609,6 +709,7 @@ class DeveloperTokenService:
             "ip_whitelist_rule_count": len(DeveloperTokenService._split_ip_rules(token.ip_whitelist)),
             "override_rate_limit": bool(token.override_rate_limit),
             "rate_limit_per_minute": token.rate_limit_per_minute,
+            "route_rule_count": len(token.route_whitelist or []),
             "logic_delete": token.logic_delete,
         }
 
