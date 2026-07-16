@@ -145,7 +145,7 @@ function renderLayout(userOverrides: Record<string, unknown> = {}) {
   );
 }
 
-describe("MainLayout system / tenant nav for Child Admin (PRD §3.3)", () => {
+describe("MainLayout admin nav for Child Admin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(window, "localStorage", {
@@ -158,24 +158,23 @@ describe("MainLayout system / tenant nav for Child Admin (PRD §3.3)", () => {
     });
   });
 
-  it("Child Admin sees the system menu entry", () => {
+  it("Child Admin sees every admin menu except tenant management", () => {
     renderLayout({ is_child_admin: true });
-    expect(screen.getByText("menu.system")).toBeInTheDocument();
-  });
-
-  it("Child Admin sees the build entry for workstation config", () => {
-    renderLayout({ is_child_admin: true });
-    expect(screen.getByText("menu.skills")).toBeInTheDocument();
-  });
-
-  it("Child Admin does NOT see the tenant management entry (super-only until backend is opened up)", () => {
-    renderLayout({ is_child_admin: true });
+    for (const label of [
+      "menu.dashboard",
+      "menu.skills",
+      "menu.knowledge",
+      "menu.dataset",
+      "menu.models",
+      "menu.evaluation",
+      "menu.annotation",
+      "menu.log",
+      "menu.approval",
+      "menu.system",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
     expect(screen.queryByText("tenant.management")).toBeNull();
-  });
-
-  it("Child Admin does NOT see the dataset entry (super / dept admin only)", () => {
-    renderLayout({ is_child_admin: true });
-    expect(screen.queryByText("menu.dataset")).toBeNull();
   });
 
   it("plain user without any admin flag sees neither system nor tenant management", () => {

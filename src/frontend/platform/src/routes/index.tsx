@@ -173,13 +173,25 @@ function hasRoutePermission(permissions: string[], key: string) {
 }
 
 /**
- * 把后端下发的 web_menu 转成路由层用的 permissions 数组。
+ * Convert the backend web_menu value into route permissions.
  *
- * - 部门管理员补 `create_app`（后端来不及下发时的兜底，原有行为）。
- * - 子租户管理员（Child Admin）补 `sys` / `model`：后端 web_menu 不下发 sys/system_config 给非
- *   超管/非部门管理员，且默认不下发 `model` / `workstation` 资源。子租户管理员需要在自己
- *   租户内管理模型和工作台配置，路由层放行后由后端各自的 tenant admin 校验实际权限。
+ * - Department admins receive a create_app fallback when the backend omits it.
+ * - Child tenant admins receive every admin route except tenant management. Their backend web_menu
+ *   still comes from a regular role, while business APIs retain tenant and resource authorization.
  */
+const CHILD_ADMIN_ROUTE_PERMISSIONS = [
+  "board",
+  "build",
+  "create_app",
+  "knowledge",
+  "model",
+  "evaluation",
+  "mark_task",
+  "log",
+  "sys",
+  "workstation",
+] as const
+
 export function resolveRoutePermissions(user: {
   web_menu?: string[]
   is_department_admin?: boolean | null
@@ -189,14 +201,9 @@ export function resolveRoutePermissions(user: {
   if (user.is_department_admin && !perms.includes("create_app")) {
     perms = [...perms, "create_app"]
   }
-  if (user.is_child_admin && !perms.includes("sys")) {
-    perms = [...perms, "sys"]
-  }
-  if (user.is_child_admin && !perms.includes("model")) {
-    perms = [...perms, "model"]
-  }
-  if (user.is_child_admin && !perms.includes("workstation")) {
-    perms = [...perms, "workstation"]
+  if (user.is_child_admin) {
+    const missing = CHILD_ADMIN_ROUTE_PERMISSIONS.filter((permission) => !perms.includes(permission))
+    if (missing.length) perms = [...perms, ...missing]
   }
   return perms
 }
