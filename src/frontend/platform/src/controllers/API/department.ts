@@ -142,6 +142,7 @@ export async function getDepartmentMembersApi(
 export interface GlobalMemberSearchRow {
   user_id: number
   user_name: string
+  external_id?: string | null
   primary_department_dept_id: string
   primary_department_path: string
   /** false = 账号未启用（User.delete=1），与部门成员列表一致 */
@@ -152,13 +153,16 @@ export async function searchGlobalMembersApi(params: {
   keyword: string
   page?: number
   limit?: number
-}): Promise<{ data: GlobalMemberSearchRow[]; total: number }> {
+  rootDeptId?: number
+}, config?: { signal?: AbortSignal }): Promise<{ data: GlobalMemberSearchRow[]; total: number }> {
   return await axios.get(`/api/v1/departments/search/global-members`, {
     params: {
       keyword: params.keyword,
       page: params.page ?? 1,
       limit: params.limit ?? 20,
+      root_dept_id: params.rootDeptId,
     },
+    signal: config?.signal,
   })
 }
 

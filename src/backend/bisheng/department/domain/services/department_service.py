@@ -1451,6 +1451,7 @@ class DepartmentService:
         page: int,
         limit: int,
         login_user,
+        root_dept_id: int | None = None,
     ) -> dict:
         """Search members by username across visible org tree (primary department only).
 
@@ -1463,6 +1464,8 @@ class DepartmentService:
           耗时极高，是该接口的主瓶颈）。
         - 非超管：仅取管理员部门 / 租户挂载点的 ``path`` 前缀（通常 <10 个），在 SQL 里以
           ``or_(Department.path LIKE p%)`` 裁剪子树，语义与 :meth:`aget_tree` 完全一致。
+        - ``root_dept_id``：在调用者可见范围内进一步收窄到指定部门子树，供租户挂载等
+          必须从目标子树选择用户的场景使用。
         """
         kw = (keyword or "").strip()
         if not kw:
@@ -1485,6 +1488,15 @@ class DepartmentService:
                     admin_paths.add(tenant_root_path)
             if not admin_paths:
                 return {"data": [], "total": 0}
+
+        requested_root_path: str | None = None
+        if root_dept_id is not None:
+            requested_root = await DepartmentDao.aget_by_id(int(root_dept_id))
+            if requested_root is None or requested_root.status != "active" or not requested_root.path:
+                return {"data": [], "total": 0}
+            if admin_paths is not None and not any(requested_root.path.startswith(path) for path in admin_paths):
+                raise DepartmentPermissionDeniedError()
+            requested_root_path = requested_root.path
 
         async with get_async_db_session() as session:
             from bisheng.user.domain.models.user import User
@@ -1544,7 +1556,11 @@ class DepartmentService:
                 # 非超管：把可见子树裁剪下推为 ``path`` 前缀谓词。Department 已 JOIN，无需子查询；
                 # ``path LIKE p%`` 等价于 aget_tree 的 ``path.startswith(p)``（path 以本部门 id 收尾，
                 # 故同时覆盖管理员部门自身与其后代）。admin_paths 通常 <10 个，绑定参数极少。
-                if admin_paths is not None:
+                if requested_root_path is not None:
+                    stmt = stmt.where(
+                        Department.path.like(f"{requested_root_path}%"),
+                    )
+                elif admin_paths is not None:
                     stmt = stmt.where(or_(*[Department.path.like(f"{p}%") for p in admin_paths]))
                 return stmt
 
@@ -1553,6 +1569,7 @@ class DepartmentService:
                     select(
                         User.user_id,
                         User.user_name,
+                        User.external_id,
                         col(Department.id).label("dept_int_id"),
                         col(User.delete).label("user_deleted"),
                         func.count().over().label("match_total"),
@@ -1587,6 +1604,7 @@ class DepartmentService:
                 {
                     "user_id": int(r.user_id),
                     "user_name": r.user_name,
+                    "external_id": r.external_id,
                     "primary_department_dept_id": d.dept_id,
                     "primary_department_path": _primary_dept_display_path(d),
                     "enabled": udel == 0,
