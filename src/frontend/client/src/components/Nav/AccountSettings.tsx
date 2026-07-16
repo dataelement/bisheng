@@ -9,7 +9,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import useAvatar from '~/hooks/Messages/useAvatar';
 import store from '~/store';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenPlatformAdminPanel } from '~/utils/platformAccess';
+import { canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import MyKnowledgeView from '../Chat/Input/Files/MyKnowledgeView';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../ui';
 import Settings from './Settings';
@@ -44,10 +44,11 @@ function AccountSettings() {
 
   const avatarSrc = useAvatar(user);
   const name = user?.avatar ?? user?.username ?? '';
-  const canOpenPlatform = canOpenPlatformAdminPanel({
+  const showAdminEntry = canShowPlatformAdminEntry({
     role: user?.role,
     plugins: user?.plugins,
     is_department_admin: user?.is_department_admin,
+    has_admin_console: user?.has_admin_console,
   });
 
   return (
@@ -97,7 +98,7 @@ function AccountSettings() {
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent className='w-60 rounded-2xl'>
-          {(canOpenPlatform || (user as { has_admin_console?: boolean })?.has_admin_console) && <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
+          {showAdminEntry && <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
             <DropdownMenuItem className='select-item text-sm font-normal'>
               <GanttChartIcon className="icon-md" />
               {localize('com_nav_admin_panel')}
