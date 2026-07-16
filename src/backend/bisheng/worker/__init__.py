@@ -13,6 +13,11 @@ from bisheng.worker.knowledge.file_worker import (
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
 )
+from bisheng.worker.knowledge.portal_hot_search import (
+    fanout_portal_hot_search_rebuild,
+    rebuild_portal_hot_search_snapshot_celery,
+    trigger_portal_hot_search_rebuild_celery,
+)
 from bisheng.worker.knowledge.portal_recommendation import (
     fanout_portal_recommendation_maintenance,
     invalidate_department_users_celery,

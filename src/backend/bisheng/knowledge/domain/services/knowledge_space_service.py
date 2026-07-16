@@ -3416,6 +3416,43 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await KnowledgeFileDao.async_count_files_by_domain_scopes(visible_scopes)
 
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> dict:
+        result = await self._get_shougang_portal_home_sections(req)
+        result["hot_searches"] = await self._list_shougang_portal_hot_searches()
+        return result
+
+    async def _list_shougang_portal_hot_searches(self) -> list:
+        """Best-effort hot-search read; never blocks the home page (F048)."""
+        from bisheng.common.services.config_service import settings
+        from bisheng.knowledge.domain.repositories.implementations.portal_hot_search_redis_repository_impl import (
+            PortalHotSearchRedisRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.portal_hot_search_repository_impl import (
+            PortalHotSearchRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.portal_hot_search_read_service import (
+            PortalHotSearchReadService,
+        )
+
+        config = settings.portal_hot_search
+        if not config.enabled:
+            return []
+        tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
+        try:
+            async with get_async_db_session() as session:
+                read_service = PortalHotSearchReadService(
+                    redis_repository=PortalHotSearchRedisRepositoryImpl(
+                        cache_ttl=config.redis_ttl,
+                        lock_ttl=config.lock_ttl,
+                    ),
+                    snapshot_repository=PortalHotSearchRepositoryImpl(session),
+                    top_k=config.top_k,
+                )
+                return await read_service.list_for_home(tenant_id)
+        except Exception:
+            logger.warning("portal hot-search home read failed tenant={}", tenant_id)
+            return []
+
+    async def _get_shougang_portal_home_sections(self, req: ShougangPortalHomeReq) -> dict:
         spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
         section_tags = list(dict.fromkeys(section.tag for section in req.sections if section.tag))
         empty_sections = {section.tag: [] for section in req.sections}
@@ -3839,9 +3876,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> dict:
         if not (req.q or "").strip():
             logger.warning("empty portal file search is deprecated; delegating to browse")
-            browse_req = ShougangPortalFileBrowseReq.model_validate(
-                req.model_dump(exclude={"q", "rerank_model_id"})
-            )
+            browse_req = ShougangPortalFileBrowseReq.model_validate(req.model_dump(exclude={"q", "rerank_model_id"}))
             return await self.browse_shougang_portal_files(browse_req)
 
         perf = PortalSearchPerfContext(started_at=time.monotonic())
@@ -4188,10 +4223,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             _set_portal_search_stage("personalized_recommendation")
             return await self._recommend_shougang_portal_files(req=req, spaces=spaces)
 
-        if (
-            self._is_shougang_portal_latest_selected_recommendation(req.recommendation)
-            and not self._is_shougang_portal_updated_at_sort(req.sort)
-        ):
+        if self._is_shougang_portal_latest_selected_recommendation(
+            req.recommendation
+        ) and not self._is_shougang_portal_updated_at_sort(req.sort):
             _set_portal_search_stage("list_hot_read_files")
             return await self._list_shougang_portal_hot_read_files(req=req, spaces=spaces)
 
@@ -4224,12 +4258,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             configured_count=configured_count,
             request_limit=req.limit,
         )
-        shuffle_gap = (
-            float(config.portal.recommendation.stable_shuffle_score_gap) if config is not None else 5.0
-        )
-        shuffle_days = (
-            int(config.portal.recommendation.stable_shuffle_cycle_days) if config is not None else 7
-        )
+        shuffle_gap = float(config.portal.recommendation.stable_shuffle_score_gap) if config is not None else 5.0
+        shuffle_days = int(config.portal.recommendation.stable_shuffle_cycle_days) if config is not None else 7
         cache_scope = self._personalized_recommendation_cache_scope(req)
         uses_top_n_cache = cache_scope is not None
 
@@ -4240,9 +4270,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_domains = None
         if user_domains is None:
             async with get_async_db_session() as session:
-                domain_service = DepartmentBusinessDomainService(
-                    PortalDepartmentRepositoryImpl(session)
-                )
+                domain_service = DepartmentBusinessDomainService(PortalDepartmentRepositoryImpl(session))
                 user_domains = await domain_service.get_user_business_domain_codes(
                     self.login_user.user_id,
                     config.portal.domains if config is not None else [],
@@ -4381,13 +4409,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         async with get_async_db_session() as session:
             projection_repository = PortalRecommendationRepositoryImpl(session)
             domain_records_by_code: dict[str, list] = {code: [] for code in user_domains}
-            reserved_count = len(
-                set(pool_signal_map) | set(interest_scores)
-            )
+            reserved_count = len(set(pool_signal_map) | set(interest_scores))
             cold_domain_codes = [
-                domain_code
-                for domain_code in user_domains
-                if not domain_pool_candidates.get(domain_code)
+                domain_code for domain_code in user_domains if not domain_pool_candidates.get(domain_code)
             ]
             domain_record_budget = max(
                 PortalRecommendationService.MAX_LIGHTWEIGHT_CANDIDATES - reserved_count,
@@ -4419,22 +4443,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         )
                     return candidates
 
-                cold_domain_candidates = (
-                    await PortalRecommendationService.load_unique_domain_pool_candidates(
-                        cold_domain_codes,
-                        load_page=load_cold_domain_page,
-                        reserved_keys=set(pool_signal_map) | set(interest_scores),
-                        accept_candidate=lambda candidate: (
-                            allowed_tag_file_ids is None
-                            or candidate.file_id in allowed_tag_file_ids
-                        ),
-                    )
+                cold_domain_candidates = await PortalRecommendationService.load_unique_domain_pool_candidates(
+                    cold_domain_codes,
+                    load_page=load_cold_domain_page,
+                    reserved_keys=set(pool_signal_map) | set(interest_scores),
+                    accept_candidate=lambda candidate: (
+                        allowed_tag_file_ids is None or candidate.file_id in allowed_tag_file_ids
+                    ),
                 )
                 for domain_code, candidates in cold_domain_candidates.items():
-                    domain_records_by_code[domain_code] = [
-                        cold_record_map[candidate.key]
-                        for candidate in candidates
-                    ]
+                    domain_records_by_code[domain_code] = [cold_record_map[candidate.key] for candidate in candidates]
             generic_records = []
             if not user_domains:
                 generic_records = await projection_repository.list_latest_recommendable(
@@ -4473,9 +4491,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 source_update_time = source_update_time.replace(tzinfo=timezone.utc)
             content_age_days = max((now - source_update_time).total_seconds(), 0) / 86400
             fresh_score = 100 * (2 ** (-content_age_days / 45))
-            interest_score = (
-                100 * interest_scores.get(key, 0.0) / max_interest_score if max_interest_score > 0 else 0.0
-            )
+            interest_score = 100 * interest_scores.get(key, 0.0) / max_interest_score if max_interest_score > 0 else 0.0
             return PortalRecommendationCandidate(
                 space_id=record.space_id,
                 file_id=record.file_id,
@@ -4506,11 +4522,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         interest_candidates = [candidate_for(key) for key in interest_scores]
         interest_candidates = [candidate for candidate in interest_candidates if candidate is not None]
         generic_candidates = PortalRecommendationService.merge_ordered_candidates(
-            [
-                candidate
-                for item in generic_pool_candidates
-                if (candidate := candidate_for(item.key)) is not None
-            ],
+            [candidate for item in generic_pool_candidates if (candidate := candidate_for(item.key)) is not None],
             [
                 candidate
                 for record in generic_records
@@ -4599,9 +4611,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         non_primary = non_primary_file_ids_by_space.get(candidate.space_id)
                         if non_primary is None:
                             non_primary = set(
-                                await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
-                                    [candidate.space_id]
-                                )
+                                await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([candidate.space_id])
                             )
                             non_primary_file_ids_by_space[candidate.space_id] = non_primary
                         if candidate.file_id in non_primary:
@@ -4703,11 +4713,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     ):
                         record_map[(record.space_id, record.file_id)] = record
                 generic_candidates = PortalRecommendationService.merge_ordered_candidates(
-                    [
-                        candidate
-                        for item in lazy_generic_pool
-                        if (candidate := candidate_for(item.key)) is not None
-                    ],
+                    [candidate for item in lazy_generic_pool if (candidate := candidate_for(item.key)) is not None],
                     [
                         candidate
                         for record in projection_fallback_records
@@ -4816,9 +4822,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         live_bindings: list[dict],
     ) -> bool:
         """Use public fast path only when current facts prove normal inherited ACL."""
-        return (
-            int(file.knowledge_id) in public_space_ids
-            and not PortalRecommendationProjectionService.has_custom_acl(file, live_bindings)
+        return int(file.knowledge_id) in public_space_ids and not PortalRecommendationProjectionService.has_custom_acl(
+            file, live_bindings
         )
 
     async def _check_portal_recommendation_item_permission(
@@ -4839,9 +4844,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ):
             public_permissions = public_permissions_by_space.get(space_id)
             if public_permissions is None:
-                public_permissions = await self._public_space_viewer_permission_ids(
-                    [("knowledge_space", space_id)]
-                )
+                public_permissions = await self._public_space_viewer_permission_ids([("knowledge_space", space_id)])
                 public_permissions_by_space[space_id] = public_permissions
             # The visible-space list is request-cached briefly. Re-check the
             # current public relation before using the fast path so a
@@ -6227,9 +6230,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         visible_space_ids = {int(space.id) for space in visible_spaces}
         ordered_visible = [space for space in ordered_spaces if int(space.id) in visible_space_ids]
-        visible_download_map = {
-            int(space.id): download_map.get(int(space.id), False) for space in ordered_visible
-        }
+        visible_download_map = {int(space.id): download_map.get(int(space.id), False) for space in ordered_visible}
         return ordered_visible, visible_download_map
 
     async def _resolve_shougang_portal_search_space_ids(
@@ -6349,9 +6350,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 visible_files.extend(items)
                 _increment_portal_search_perf("fast_path_public_space_count", len(items))
                 # 公共库:下载权限统一按公共 viewer 默认,每库算一次
-                public_perms = await self._public_space_viewer_permission_ids(
-                    [("knowledge_space", space_id)]
-                )
+                public_perms = await self._public_space_viewer_permission_ids([("knowledge_space", space_id)])
                 public_can_download = "download_file" in public_perms
                 for _pf in items:
                     self._portal_file_download_map[int(_pf.id)] = public_can_download
@@ -7213,10 +7212,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             visible_spaces = await self.get_public_spaces()
         else:
             visible_spaces = await self.get_spaces_by_level(level)
-        visible_space_ids = {
-            int(item.get("id") if isinstance(item, dict) else item.id)
-            for item in visible_spaces
-        }
+        visible_space_ids = {int(item.get("id") if isinstance(item, dict) else item.id) for item in visible_spaces}
         if space_id not in visible_space_ids:
             raise SpacePermissionDeniedError()
 
@@ -10221,9 +10217,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # in one, otherwise the space. The per-file 'rename_file' action was subject to
         # nearest-binding overrides that strip container-level grants from individual
         # files, so managers who could upload still couldn't edit encoding.
-        ancestor_folder_ids = [
-            int(part) for part in (file_record.file_level_path or "").split("/") if part
-        ]
+        ancestor_folder_ids = [int(part) for part in (file_record.file_level_path or "").split("/") if part]
         parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
         if parent_folder_id:
             await self._require_permission_id(

@@ -11,6 +11,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
 )
+from bisheng.knowledge.domain.schemas.portal_hot_search_schema import PortalHotSearchItem
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -333,7 +334,9 @@ class ShougangPortalTagSearchResp(BaseModel):
 
 class ShougangPortalDomainFileCountItem(BaseModel):
     code: str = Field(..., max_length=16, description="Business-domain code")
-    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Visible candidate knowledge space IDs")
+    space_ids: list[int] = Field(
+        default_factory=list, max_length=200, description="Visible candidate knowledge space IDs"
+    )
 
     @field_validator("code", mode="before")
     @classmethod
@@ -378,9 +381,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
         default=None, max_length=16, description="Business domain code from file_encoding segment 3"
     )
     recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
-    sort: str = Field(
-        default="updated_at_desc", description="Sort mode: updated_at / updated_at_desc / updated_at_asc"
-    )
+    sort: str = Field(default="updated_at_desc", description="Sort mode: updated_at / updated_at_desc / updated_at_asc")
     cursor: str | None = Field(default=None, description="Cursor returned by the previous request")
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -495,6 +496,7 @@ class ShougangPortalHomeReq(BaseModel):
 class ShougangPortalHomeResp(BaseModel):
     sections: dict[str, list[ShougangPortalFileItemResp]] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
+    hot_searches: list[PortalHotSearchItem] = Field(default_factory=list)
 
 
 class ShougangPortalTelemetryEventReq(BaseModel):

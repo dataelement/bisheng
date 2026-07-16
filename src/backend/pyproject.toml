@@ -156,6 +156,13 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["bisheng", "bisheng_langchain"]
 
+[tool.ruff.lint.per-file-ignores]
+# F048 portal hot-search: prompts, fallbacks and tests legitimately embed
+# full-width Chinese punctuation (？。，：（）) that would otherwise trip the
+# ambiguous-unicode checks. Scoped to these files only.
+"bisheng/knowledge/domain/services/portal_hot_search_*.py" = ["RUF001", "RUF002", "RUF003"]
+"test/knowledge/test_portal_hot_search_*.py" = ["RUF001", "RUF002", "RUF003"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

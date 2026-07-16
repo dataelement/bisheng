@@ -593,6 +593,91 @@ INDEX_PRFP_SPACE_RECOMMENDABLE = """\
 CREATE INDEX IF NOT EXISTS ix_prfp_space_recommendable
     ON portal_recommendation_file_projection (tenant_id, space_id, recommendable)"""
 
+# ---------------------------------------------------------------------------
+# F048: portal home hot-search snapshot / batch run / candidate diagnostics
+# ---------------------------------------------------------------------------
+
+TABLE_PORTAL_HOT_SEARCH_SNAPSHOT = """\
+CREATE TABLE IF NOT EXISTS portal_hot_search_snapshot (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    rank_no SMALLINT NOT NULL,
+    intent_key VARCHAR(64) NOT NULL,
+    display_query VARCHAR(100) NOT NULL,
+    canonical_query VARCHAR(100) NOT NULL,
+    heat_score INTEGER NOT NULL DEFAULT 0,
+    unique_users INTEGER NOT NULL DEFAULT 0,
+    search_count_7d INTEGER NOT NULL DEFAULT 0,
+    search_count_8_30d INTEGER NOT NULL DEFAULT 0,
+    batch_id VARCHAR(32) NOT NULL,
+    computed_at DATETIME NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+INDEX_PHSS_TENANT_BATCH = """\
+CREATE INDEX IF NOT EXISTS ix_phss_tenant_batch
+    ON portal_hot_search_snapshot (tenant_id, batch_id)"""
+
+INDEX_PHSS_TENANT_RANK = """\
+CREATE INDEX IF NOT EXISTS ix_phss_tenant_rank
+    ON portal_hot_search_snapshot (tenant_id, rank_no)"""
+
+TABLE_PORTAL_HOT_SEARCH_BATCH_RUN = """\
+CREATE TABLE IF NOT EXISTS portal_hot_search_batch_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    batch_id VARCHAR(32) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    window_start DATETIME NOT NULL,
+    window_end DATETIME NOT NULL,
+    scanned_count INTEGER NOT NULL DEFAULT 0,
+    distinct_query_count INTEGER NOT NULL DEFAULT 0,
+    candidate_count INTEGER NOT NULL DEFAULT 0,
+    dedup_record_count INTEGER NOT NULL DEFAULT 0,
+    qualified_count INTEGER NOT NULL DEFAULT 0,
+    llm_group_calls INTEGER NOT NULL DEFAULT 0,
+    llm_rewrite_calls INTEGER NOT NULL DEFAULT 0,
+    llm_degraded SMALLINT NOT NULL DEFAULT 0,
+    truncated SMALLINT NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    es_pages INTEGER NOT NULL DEFAULT 0,
+    error_message VARCHAR(500),
+    computed_at DATETIME NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+INDEX_PHSBR_TENANT_TIME = """\
+CREATE INDEX IF NOT EXISTS ix_phsbr_tenant_time
+    ON portal_hot_search_batch_run (tenant_id, computed_at)"""
+
+INDEX_PHSBR_TENANT_BATCH = """\
+CREATE INDEX IF NOT EXISTS ix_phsbr_tenant_batch
+    ON portal_hot_search_batch_run (tenant_id, batch_id)"""
+
+TABLE_PORTAL_HOT_SEARCH_CANDIDATE = """\
+CREATE TABLE IF NOT EXISTS portal_hot_search_candidate (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    batch_id VARCHAR(32) NOT NULL,
+    intent_key VARCHAR(64) NOT NULL,
+    canonical_query VARCHAR(100) NOT NULL,
+    display_query VARCHAR(100),
+    member_queries TEXT,
+    heat_score INTEGER NOT NULL DEFAULT 0,
+    unique_users INTEGER NOT NULL DEFAULT 0,
+    search_count_7d INTEGER NOT NULL DEFAULT 0,
+    search_count_8_30d INTEGER NOT NULL DEFAULT 0,
+    qualified SMALLINT NOT NULL DEFAULT 0,
+    final_rank SMALLINT,
+    rewrite_source VARCHAR(16),
+    llm_sample TEXT,
+    computed_at DATETIME NOT NULL
+)"""
+
+INDEX_PHSC_TENANT_BATCH = """\
+CREATE INDEX IF NOT EXISTS ix_phsc_tenant_batch
+    ON portal_hot_search_candidate (tenant_id, batch_id)"""
+
 
 # ---------------------------------------------------------------------------
 # Registry & helpers
@@ -633,6 +718,10 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "message_push_outbox": TABLE_MESSAGE_PUSH_OUTBOX,
     # F056: portal personalized recommendation.
     "portal_recommendation_file_projection": TABLE_PORTAL_RECOMMENDATION_FILE_PROJECTION,
+    # F048: portal home hot-search snapshot / batch run / candidate.
+    "portal_hot_search_snapshot": TABLE_PORTAL_HOT_SEARCH_SNAPSHOT,
+    "portal_hot_search_batch_run": TABLE_PORTAL_HOT_SEARCH_BATCH_RUN,
+    "portal_hot_search_candidate": TABLE_PORTAL_HOT_SEARCH_CANDIDATE,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.
@@ -650,6 +739,11 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_PRFP_DOMAIN_RECENCY,
     INDEX_PRFP_GENERIC_RECENCY,
     INDEX_PRFP_SPACE_RECOMMENDABLE,
+    INDEX_PHSS_TENANT_BATCH,
+    INDEX_PHSS_TENANT_RANK,
+    INDEX_PHSBR_TENANT_TIME,
+    INDEX_PHSBR_TENANT_BATCH,
+    INDEX_PHSC_TENANT_BATCH,
 ]
 
 
@@ -688,3 +782,11 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_PRFP_DOMAIN_RECENCY))
             conn.execute(text(INDEX_PRFP_GENERIC_RECENCY))
             conn.execute(text(INDEX_PRFP_SPACE_RECOMMENDABLE))
+        if "portal_hot_search_snapshot" in table_names:
+            conn.execute(text(INDEX_PHSS_TENANT_BATCH))
+            conn.execute(text(INDEX_PHSS_TENANT_RANK))
+        if "portal_hot_search_batch_run" in table_names:
+            conn.execute(text(INDEX_PHSBR_TENANT_TIME))
+            conn.execute(text(INDEX_PHSBR_TENANT_BATCH))
+        if "portal_hot_search_candidate" in table_names:
+            conn.execute(text(INDEX_PHSC_TENANT_BATCH))
