@@ -559,7 +559,7 @@ export function KnowledgeSpacePreviewDrawer({
                                         </div>
                                     ) : filesPreview.length === 0 ? (
                                         <div className="flex flex-1 flex-col items-center justify-center text-center">
-                                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                            <EmptyStateIllustration className="size-[120px] mb-4" />
                                             <p className="text-[14px] font-normal text-[#999999]">
                                                 {localize("com_knowledge.no_files")}
                                             </p>
@@ -603,14 +603,14 @@ export function KnowledgeSpacePreviewDrawer({
                                 </div>
                             ) : space?.visibility === VisibilityType.APPROVAL ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <NoPermissionIllustration className="size-[140px] mb-4" />
+                                    <NoPermissionIllustration className="size-[120px] mb-4" />
                                     <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <NoPermissionIllustration className="size-[140px] mb-4" />
+                                    <NoPermissionIllustration className="size-[120px] mb-4" />
                                     <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_join")}
                                     </div>

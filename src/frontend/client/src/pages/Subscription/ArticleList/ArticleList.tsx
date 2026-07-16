@@ -809,12 +809,12 @@ export function ArticleList({
                         <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
                             {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
                                 <>
-                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <EmptyStateIllustration className="size-[120px] mb-4" />
                                     <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_results")}</p>
                                 </>
                             ) : (
                                 <>
-                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <EmptyStateIllustration className="size-[120px] mb-4" />
                                     <p className="text-[14px] font-normal leading-6 text-[#999999]">
                                         {localize("com_subscription.no_related_content")}
                                     </p>

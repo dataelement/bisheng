@@ -437,7 +437,7 @@ const AiChatInput = memo(
 
                     <div className="flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
-                        <div ref={toolbarRef} className="input-bottom-left flex min-w-0 flex-1 items-center gap-1 touch-mobile:-ml-1 touch-mobile:gap-1 touch-mobile:pl-0 overflow-hidden">
+                        <div ref={toolbarRef} className="input-bottom-left flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}

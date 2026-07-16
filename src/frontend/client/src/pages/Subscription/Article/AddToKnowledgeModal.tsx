@@ -821,12 +821,12 @@ export function AddToKnowledgeModal({
                         </div>
                     ) : isEmpty ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
-                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
                             <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_selectable_knowledge_space")}</p>
                         </div>
                     ) : displayTree.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
-                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
                             <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_matching_knowledge_space")}</p>
                         </div>
                     ) : (

@@ -13,6 +13,7 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
 
+KNOWLEDGE_FILE_NAME_MAX_LENGTH = 500
 KNOWLEDGE_REMARK_MAX_LENGTH = 4096
 
 
@@ -77,7 +78,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     user_name: str | None = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     thumbnails: str | None = Field(default=None, description="File thumbnails in Stored object name")
-    file_name: str = Field(max_length=200, index=True)
+    file_name: str = Field(max_length=KNOWLEDGE_FILE_NAME_MAX_LENGTH, index=True)
     file_type: int = Field(default=FileType.FILE.value, description="File type. 0: dir; 1: file")
     file_source: str | None = Field(default=FileSource.UPLOAD.value, description="File source")
     level: int | None = Field(default=0)
