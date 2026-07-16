@@ -6579,7 +6579,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             summary=str(item.get("abstract") or ""),
             source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
             updated_at=self._serialize_datetime(item.get("update_time")),
-            tags=[tag["tag_name"] for tag in tag_infos],
             tag_infos=tag_infos,
             file_ext=self._get_file_ext(file_name),
             file_size=str(item.get("file_size") or ""),
