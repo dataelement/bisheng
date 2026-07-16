@@ -319,6 +319,10 @@ _SPACE_MEMBER_RELATION_LEVEL = {
 
 _logger = logging.getLogger(__name__)
 
+# Tag library auto-bound to newly created personal spaces, matched by name with a
+# fallback to the earliest builtin library.
+DEFAULT_TAG_LIBRARY_NAME = "默认标签库"
+
 _PERMISSION_LEVEL_TO_RELATION = {
     "owner": "owner",
     "can_manage": "manager",
@@ -2322,8 +2326,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_custom_tags: list[str] | None,
         user_id: int,
         tenant_id: int | None,
+        validate_libraries: bool = True,
     ) -> tuple[bool, int | None]:
-        """Resolve auto-tag state and sync knowledge↔library links."""
+        """Resolve auto-tag state and sync knowledge↔library links.
+
+        ``validate_libraries=False`` skips the non-empty-library check. Used for
+        system-managed spaces (e.g. the lazily created personal space), which bind the
+        default library up front — possibly before any tag has been added to it.
+        """
         library_update_requested = auto_tag_library_ids is not None or auto_tag_library_id is not None
         if not auto_tag_enabled:
             await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(knowledge.id)
@@ -2332,7 +2342,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     auto_tag_library_id,
                     auto_tag_library_ids,
                 )
-                if requested_ids:
+                if requested_ids and validate_libraries:
                     await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
                 await KnowledgeTagLibraryLinkDao.areplace_for_knowledge(
                     knowledge.id,
@@ -2371,7 +2381,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             return True, int(private.id)
 
-        await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
+        if validate_libraries:
+            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
         await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(knowledge.id)
         await KnowledgeTagLibraryLinkDao.areplace_for_knowledge(
             knowledge.id,
@@ -2461,8 +2472,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
         system_managed: bool = False,
+        validate_tag_libraries: bool = True,
     ) -> Knowledge:
-        """Create a new knowledge space (max 200 per user)."""
+        """Create a new knowledge space (max 200 per user).
+
+        ``validate_tag_libraries=False`` binds the requested libraries without the
+        non-empty check — for system-managed spaces that bind a default library which
+        may not have tags yet.
+        """
 
         perf_start = time.perf_counter()
         perf_last = perf_start
@@ -2558,6 +2575,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 auto_tag_custom_tags=auto_tag_custom_tags,
                 user_id=self.login_user.user_id,
                 tenant_id=self.login_user.tenant_id,
+                validate_libraries=validate_tag_libraries,
             )
             if resolved_enabled or resolved_library_id is not None:
                 knowledge_space.auto_tag_enabled = resolved_enabled
@@ -2801,6 +2819,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def personal_default_space_name(self) -> str:
         return f"{self.login_user.user_name}的知识库"
 
+    async def _resolve_default_tag_library_id(self) -> int | None:
+        """Resolve the tag library auto-bound to a newly created personal space.
+
+        Prefers the builtin library named ``DEFAULT_TAG_LIBRARY_NAME``; falls back to
+        the earliest builtin one (smallest id) so a rename never leaves new spaces
+        unbound. Returns None only when no builtin library exists — the space is then
+        created without one. An empty library still binds: the caller skips the
+        non-empty check for system-managed spaces.
+        """
+        libraries = await KnowledgeSpaceTagLibraryDao.alist_by_one()
+        if not libraries:
+            return None
+        ordered = sorted(libraries, key=lambda library: int(library.id))
+        chosen = next(
+            (library for library in ordered if (library.name or "").strip() == DEFAULT_TAG_LIBRARY_NAME),
+            ordered[0],
+        )
+        return int(chosen.id)
+
     async def _find_personal_default_space(self) -> Knowledge | None:
         return await KnowledgeDao.async_get_personal_space_by_owner_name(
             owner_id=self.login_user.user_id,
@@ -2812,6 +2849,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         existing = await self._find_personal_default_space()
         if existing:
             return existing
+        # Bind the default tag library at creation time; None means no builtin library
+        # exists and the space is created without one.
+        default_library_id = await self._resolve_default_tag_library_id()
         try:
             return await self.create_knowledge_space(
                 name=self.personal_default_space_name(),
@@ -2820,6 +2860,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_level=KnowledgeSpaceLevelEnum.PERSONAL,
                 skip_user_limit=True,
                 system_managed=True,
+                auto_tag_library_ids=[default_library_id] if default_library_id else None,
+                # System-managed space: bind the default library even when it has no
+                # tags yet, instead of failing the user's first portal visit.
+                validate_tag_libraries=False,
             )
         except Exception:
             again = await self._find_personal_default_space()
