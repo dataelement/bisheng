@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from bisheng.common.errcode.department import (
+    DepartmentArchivedReadonlyError,
     DepartmentCircularMoveError,
     DepartmentHasChildrenError,
     DepartmentHasMembersError,
@@ -26,13 +27,12 @@ from bisheng.common.errcode.department import (
     DepartmentMemberNotFoundError,
     DepartmentNameDuplicateError,
     DepartmentNotArchivedError,
-    DepartmentArchivedReadonlyError,
-    DepartmentParentArchivedError,
     DepartmentNotFoundError,
+    DepartmentParentArchivedError,
+    DepartmentPermissionDeniedError,
     DepartmentPersonIdDeletedAccountError,
     DepartmentPersonIdDuplicateError,
     DepartmentPersonIdRequiredError,
-    DepartmentPermissionDeniedError,
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
 )
@@ -59,6 +59,9 @@ from bisheng.department.domain.schemas.department_schema import (
 )
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
+)
+from bisheng.knowledge.domain.services.portal_recommendation_invalidation_service import (
+    invalidate_portal_recommendation_users_best_effort,
 )
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 
@@ -594,6 +597,7 @@ class DepartmentService:
 
         # Notify Gateway to clean up traffic control rules
         import json
+
         from bisheng.core.cache.redis_manager import get_redis_client_sync
         try:
             redis_client = get_redis_client_sync()
@@ -911,6 +915,7 @@ class DepartmentService:
     async def aremove_member(
         cls, dept_id: str, user_id: int, login_user,
     ) -> None:
+        removed_primary = False
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
             if dept.status == 'archived':
@@ -926,8 +931,13 @@ class DepartmentService:
             if not ud:
                 raise DepartmentMemberNotFoundError()
 
+            removed_primary = int(ud.is_primary or 0) == 1
+
             await session.delete(ud)
             await session.commit()
+
+        if removed_primary:
+            invalidate_portal_recommendation_users_best_effort([user_id])
 
         # Fire change handler：移除成员同时卸掉该部门的部门管理员（FGA）
         ops = (
@@ -1104,7 +1114,7 @@ class DepartmentService:
         if user_ids:
             async with get_async_db_session() as session:
                 # User groups
-                from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
+                from bisheng.database.models.group import LEGACY_HIDDEN_USER_GROUP_NAMES, Group
                 from bisheng.database.models.user_group import UserGroup
                 from bisheng.user_group.domain.services.user_group_service import (
                     _can_view_all_groups,
@@ -1363,9 +1373,9 @@ class DepartmentService:
         规则：角色若绑定作用域部门 S，则可在任意「当前成员所属/操作上下文部门 T」为 S 或 S 的下级时使用；
         实现为 Role.department_id 为空，或 Role.department_id 属于当前部门 T 的祖先链（含 T）。
         """
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.role import Role
-        from bisheng.core.context.tenant import bypass_tenant_filter
 
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -1437,9 +1447,9 @@ class DepartmentService:
         cls, depts: List[Department], login_user,
     ) -> dict:
         """Batch build assignable-role catalogs for multiple departments."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.role import Role
-        from bisheng.core.context.tenant import bypass_tenant_filter
 
         if not depts:
             return {}
@@ -1687,6 +1697,8 @@ class DepartmentService:
 
             await session.commit()
 
+        invalidate_portal_recommendation_users_best_effort([user_id])
+
         if old_dept_id_for_fga is not None:
             # 离开原部门后不再担任该部门的部门管理员（仅 FGA admin 关系）
             ops_rm = (
@@ -1782,9 +1794,9 @@ class DepartmentService:
     ) -> None:
         """删除本地人员账号：清部门关系、角色（保留超管）、用户组，软删用户。"""
         from bisheng.database.constants import AdminRole
+        from bisheng.database.models.user_group import UserGroup
         from bisheng.user.domain.models.user import User
         from bisheng.user.domain.models.user_role import UserRole
-        from bisheng.database.models.user_group import UserGroup
 
         await cls.acheck_local_member_delete(dept_id, user_id, login_user)
         counts = await cls._count_user_owned_data_assets(user_id)
@@ -1827,9 +1839,9 @@ class DepartmentService:
         """PRD 3.2.2：编辑人员弹窗数据（区分主属本地/第三方/兼职）。"""
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.group import GroupDao
+        from bisheng.database.models.user_group import UserGroupDao
         from bisheng.user.domain.models.user import UserDao
         from bisheng.user.domain.models.user_role import UserRoleDao
-        from bisheng.database.models.user_group import UserGroupDao
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)

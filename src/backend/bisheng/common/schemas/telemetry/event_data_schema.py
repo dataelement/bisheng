@@ -162,7 +162,7 @@ class PortalEventData(BaseEventData):
     source_app: str
     scene: str
     entry_point: str
-    resource_type: str
+    resource_type: str = "document"
     status: Literal["success"] = "success"
     space_id: int | str | None = None
     file_id: int | str | None = None
@@ -189,8 +189,19 @@ class PortalDocumentReadEventData(PortalEventData):
 
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ
 
+    recommendation_scene: Literal["personalized_v1", "latest_selected"] | None = None
+
 
 class PortalDocumentDownloadEventData(PortalEventData):
     """Data model for Shougang portal document download events."""
 
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD
+
+
+class PortalSearchEventData(PortalEventData):
+    """Explicit user search; identity, tenant and timestamp live on the base event."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_SEARCH
+
+    query: str
+    normalized_query: str

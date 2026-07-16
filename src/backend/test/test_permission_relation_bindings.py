@@ -313,6 +313,69 @@ class TestRelationModelBindings:
         assert revoke.include_children is False
 
     @pytest.mark.asyncio
+    async def test_delete_relation_model_refreshes_each_affected_knowledge_projection(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import delete_relation_model
+
+        bindings = [
+            {
+                'key': f'{resource_type}:{resource_id}:department:3:viewer:0',
+                'resource_type': resource_type,
+                'resource_id': str(resource_id),
+                'subject_type': 'department',
+                'subject_id': 3,
+                'relation': 'viewer',
+                'include_children': False,
+                'model_id': 'custom_viewer',
+            }
+            for resource_type, resource_id in (
+                ('knowledge_space', 9),
+                ('knowledge_file', 10),
+            )
+        ]
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 'custom_viewer',
+                'name': 'Custom Viewer',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'is_system': False,
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=bindings,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.domain.services.resource_permission_notification_service.'
+            'ResourcePermissionNotificationService.build_context',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission.'
+            '_enqueue_recommendation_projection_resource_refreshes',
+        ) as enqueue_refresh:
+            await delete_relation_model(
+                model_id='custom_viewer',
+                login_user=mock_admin_user,
+            )
+
+        enqueue_refresh.assert_called_once_with({
+            ('knowledge_space', 9),
+            ('knowledge_file', 10),
+        })
+
+    @pytest.mark.asyncio
     async def test_delete_relation_model_skips_invalid_owner_revoke(self, mock_admin_user):
         from bisheng.permission.api.endpoints.resource_permission import delete_relation_model
 

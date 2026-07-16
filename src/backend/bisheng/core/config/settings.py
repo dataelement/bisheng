@@ -282,6 +282,33 @@ class CeleryConf(BaseModel):
                 'schedule': 30.0,  # Every 30 seconds
             }
 
+        # F056: root Beat entries only fan out; every tenant child task carries
+        # an explicit tenant header and runs on the existing knowledge queue.
+        if 'portal_recommendation_pools_6h' not in self.beat_schedule:
+            self.beat_schedule['portal_recommendation_pools_6h'] = {
+                'task': 'bisheng.worker.knowledge.portal_recommendation.fanout_portal_recommendation_maintenance',
+                'schedule': crontab.from_string('15 */6 * * *'),
+                'args': ('pools',),
+            }
+        if 'portal_recommendation_incremental_daily' not in self.beat_schedule:
+            self.beat_schedule['portal_recommendation_incremental_daily'] = {
+                'task': 'bisheng.worker.knowledge.portal_recommendation.fanout_portal_recommendation_maintenance',
+                'schedule': crontab.from_string('20 2 * * *'),
+                'args': ('incremental',),
+            }
+        if 'portal_recommendation_search_purge_daily' not in self.beat_schedule:
+            self.beat_schedule['portal_recommendation_search_purge_daily'] = {
+                'task': 'bisheng.worker.knowledge.portal_recommendation.fanout_portal_recommendation_maintenance',
+                'schedule': crontab.from_string('50 2 * * *'),
+                'args': ('purge',),
+            }
+        if 'portal_recommendation_full_weekly' not in self.beat_schedule:
+            self.beat_schedule['portal_recommendation_full_weekly'] = {
+                'task': 'bisheng.worker.knowledge.portal_recommendation.fanout_portal_recommendation_maintenance',
+                'schedule': crontab.from_string('30 3 * * SUN'),
+                'args': ('full',),
+            }
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info['schedule'], str):

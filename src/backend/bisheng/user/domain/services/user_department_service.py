@@ -12,7 +12,6 @@ this service (AC-07) — the caller would use ``UserDepartmentDao.aadd_member``
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from sqlalchemy import update
@@ -25,12 +24,13 @@ from bisheng.database.models.department import (
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.knowledge.domain.services.portal_recommendation_invalidation_service import (
+    invalidate_portal_recommendation_users_best_effort,
+)
 from bisheng.tenant.domain.constants import UserTenantSyncTrigger
 from bisheng.tenant.domain.services.user_tenant_sync_service import (
     UserTenantSyncService,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class UserDepartmentService:
@@ -114,6 +114,8 @@ class UserDepartmentService:
                     .values(is_primary=1)
                 )
             await session.commit()
+
+        invalidate_portal_recommendation_users_best_effort([user_id])
 
         ops = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
         await DepartmentChangeHandler.execute_async(ops)

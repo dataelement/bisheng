@@ -9,7 +9,13 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.base import BaseService
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
-from bisheng.knowledge.domain.constants import BUSINESS_DOMAIN_CODE_KEY, normalize_business_domain_code
+from bisheng.knowledge.domain.constants import (
+    BUSINESS_DOMAIN_CODE_KEY,
+    get_business_domain_code_from_file,
+    get_business_domain_code_from_split_rule,
+    normalize_business_domain_code,
+    parse_shougang_file_encoding_codes,
+)
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import KnowledgeLLMConfig
@@ -84,15 +90,16 @@ class KnowledgeUtils(BaseService):
         return json.dumps(rule_data, ensure_ascii=False)
 
     @classmethod
-    def get_business_domain_code_from_split_rule(cls, split_rule) -> Optional[str]:
-        if isinstance(split_rule, str) and split_rule.strip():
-            try:
-                split_rule = json.loads(split_rule)
-            except Exception:
-                return None
-        if not isinstance(split_rule, dict):
-            return None
-        return cls.normalize_business_domain_code(split_rule.get(cls.business_domain_code_key))
+    def get_business_domain_code_from_split_rule(cls, split_rule) -> str | None:
+        return get_business_domain_code_from_split_rule(split_rule)
+
+    @classmethod
+    def parse_shougang_file_encoding_codes(cls, item) -> tuple[str, str]:
+        return parse_shougang_file_encoding_codes(item)
+
+    @classmethod
+    def get_business_domain_code_from_file(cls, item) -> str | None:
+        return get_business_domain_code_from_file(item)
 
     @classmethod
     def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:

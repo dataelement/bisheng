@@ -204,6 +204,7 @@ async def get_shougang_portal_home(
 async def record_shougang_portal_telemetry_event(
         req: ShougangPortalTelemetryEventReq,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
+        svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     event_type = BaseTelemetryTypeEnum(req.event_type)
     event_data = PortalTelemetryEventService.build_event_data(
@@ -215,6 +216,7 @@ async def record_shougang_portal_telemetry_event(
         event_type=event_type,
         event_data=event_data,
     )
+    await svc.record_shougang_portal_recommendation_behavior(req)
     return resp_200({'accepted': True})
 
 

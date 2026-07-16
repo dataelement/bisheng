@@ -52,6 +52,29 @@ from bisheng.permission.domain.tool_permission_template import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _enqueue_recommendation_projection_resource_refreshes(
+    resources: set[tuple[str, int]],
+) -> None:
+    if not resources:
+        return
+    try:
+        from bisheng.worker.knowledge.portal_recommendation import (
+            enqueue_portal_recommendation_resource_refresh,
+        )
+
+        for resource_type, resource_id in sorted(resources):
+            enqueue_portal_recommendation_resource_refresh(
+                resource_type=resource_type,
+                resource_id=resource_id,
+            )
+    except Exception as e:
+        logger.warning(
+            'recommendation projection resource refresh enqueue failed resources=%s error=%s',
+            sorted(resources),
+            e,
+        )
+
 # Grantable role relations mapped to their required minimum level
 _GRANT_RELATIONS = {'owner': 'owner', 'manager': 'can_manage', 'editor': 'can_edit', 'viewer': 'can_read'}
 _GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
@@ -1712,6 +1735,23 @@ async def authorize_resource(
             'model_id': grant.model_id,
         }
     await _save_bindings(list(bindings_map.values()))
+    if resource_type in {'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file'}:
+        try:
+            from bisheng.worker.knowledge.portal_recommendation import (
+                enqueue_portal_recommendation_resource_refresh,
+            )
+
+            enqueue_portal_recommendation_resource_refresh(
+                resource_type=resource_type,
+                resource_id=int(resource_id),
+            )
+        except Exception as e:
+            logger.warning(
+                'recommendation projection ACL refresh enqueue failed resource=%s:%s error=%s',
+                resource_type,
+                resource_id,
+                e,
+            )
     try:
         await _sync_knowledge_space_direct_user_memberships(
             resource_type=resource_type,
@@ -2197,6 +2237,15 @@ async def delete_relation_model(
     remain_bindings = [b for b in bindings if b.get('model_id') != model_id]
     await _save_relation_models(remain_models)
     await _save_bindings(remain_bindings)
+    affected_resources = {
+        (str(binding.get('resource_type')), int(binding.get('resource_id')))
+        for binding in to_remove
+        if binding.get('resource_type') in {
+            'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file',
+        }
+        and str(binding.get('resource_id', '')).isdigit()
+    }
+    _enqueue_recommendation_projection_resource_refreshes(affected_resources)
     for notify_context in notify_contexts:
         await ResourcePermissionNotificationService.dispatch_after_authorize(
             context=notify_context,
