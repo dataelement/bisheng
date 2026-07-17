@@ -68,7 +68,7 @@ export default function useChannelChat(articleDocId: string) {
                         (m) => m.messageId === responseMessageId
                     );
                     if (idx >= 0) {
-                        msgs[idx] = { ...msgs[idx], text: fullText };
+                        msgs[idx] = { ...msgs[idx], text: fullText, retrying: false };
                     }
                     return msgs;
                 });
@@ -80,10 +80,17 @@ export default function useChannelChat(articleDocId: string) {
                         (m) => m.messageId === responseMessageId
                     );
                     if (idx >= 0) {
-                        msgs[idx] = { ...msgs[idx], text: fullText };
+                        msgs[idx] = { ...msgs[idx], text: fullText, retrying: false };
                     }
                     return msgs;
                 });
+            },
+            onRetry: (progress) => {
+                setMessages((prev) => prev.map((message) =>
+                    message.messageId === responseMessageId
+                        ? { ...message, text: progress.message, error: false, retrying: true }
+                        : message
+                ));
             },
             onError: (error) => {
                 setMessages((prev) => {
@@ -94,8 +101,9 @@ export default function useChannelChat(articleDocId: string) {
                     if (idx >= 0) {
                         msgs[idx] = {
                             ...msgs[idx],
-                            text: error || "An error occurred, please try again",
+                            text: error.message,
                             error: true,
+                            retrying: false,
                         };
                     }
                     return msgs;
@@ -126,6 +134,11 @@ export default function useChannelChat(articleDocId: string) {
             };
 
             const responseMessageId = `${userMessageId}_`;
+            const requestPayload = {
+                article_doc_id: articleDocId,
+                text: text.trim(),
+                model_id: String(chatModel.id || ""),
+            };
             const initialResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -134,19 +147,14 @@ export default function useChannelChat(articleDocId: string) {
                 conversationId: "",
                 messageId: responseMessageId,
                 error: false,
+                requestPayload,
             };
 
             setMessages((prev) => [...prev, userMessage, initialResponse]);
 
-            const payload = {
-                article_doc_id: articleDocId,
-                text: text.trim(),
-                model_id: String(chatModel.id || ""),
-            };
-
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
-            setSseSubmission(buildSubmission(payload, responseMessageId));
+            setSseSubmission(buildSubmission(requestPayload, responseMessageId));
         },
         [articleDocId, isStreaming, buildSubmission, chatModel.id, chatModel.name]
     );
@@ -179,7 +187,15 @@ export default function useChannelChat(articleDocId: string) {
             );
             if (!parentMsg) return;
 
-            const newResponseId = v4();
+            const failedResponse = [...messagesRef.current].reverse().find(
+                (message) => message.parentMessageId === parentMessageId && message.error
+            );
+            const newResponseId = failedResponse?.messageId || v4();
+            const requestPayload = failedResponse?.requestPayload ?? {
+                article_doc_id: articleDocId,
+                text: parentMsg.text?.trim() || "",
+                model_id: String(chatModel.id || ""),
+            };
             const newResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -188,18 +204,16 @@ export default function useChannelChat(articleDocId: string) {
                 conversationId: "",
                 messageId: newResponseId,
                 error: false,
+                requestPayload,
             };
 
-            setMessages((prev) => [...prev, newResponse]);
-
-            const payload = {
-                article_doc_id: articleDocId,
-                text: parentMsg.text?.trim() || "",
-                model_id: String(chatModel.id || ""),
-            };
+            setMessages((prev) => failedResponse
+                ? prev.map((message) => message.messageId === newResponseId ? newResponse : message)
+                : [...prev, newResponse]
+            );
 
             setIsStreaming(true);
-            setSseSubmission(buildSubmission(payload, newResponseId));
+            setSseSubmission(buildSubmission(requestPayload, newResponseId));
         },
         [articleDocId, isStreaming, buildSubmission, chatModel.id, chatModel.name]
     );

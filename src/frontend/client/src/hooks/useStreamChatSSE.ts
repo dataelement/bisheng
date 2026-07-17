@@ -16,6 +16,12 @@
  */
 import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
+import {
+    formatStreamChatError,
+    parseStreamRetryEvent,
+    type StreamChatError,
+    type StreamRetryProgress,
+} from "../utils/streamChatErrors";
 
 export interface StreamChatSSESubmission {
     /** SSE endpoint URL (absolute) */
@@ -31,8 +37,10 @@ export interface StreamChatSSESubmission {
     onMessage: (text: string) => void;
     /** Called when the stream ends (type: "end") with final full text */
     onFinal: (text: string) => void;
-    /** Called on connection or parse errors */
-    onError: (error: string) => void;
+    /** Called when the server is retrying the same stream request. */
+    onRetry?: (progress: StreamRetryProgress) => void;
+    /** Called on connection or parse errors. */
+    onError: (error: StreamChatError) => void;
     /** Called when the SSE lifecycle is fully done */
     onEnd: () => void;
 }
@@ -49,7 +57,7 @@ export default function useStreamChatSSE(
     useEffect(() => {
         if (!submission) return;
 
-        const { sseUrl, payload, onStart, onMessage, onFinal, onError, onEnd } =
+        const { sseUrl, payload, onStart, onMessage, onFinal, onRetry, onError, onEnd } =
             submission;
 
         // Accumulators
@@ -105,24 +113,22 @@ export default function useStreamChatSSE(
         });
 
         sse.addEventListener("error", (e: MessageEvent) => {
-            console.error("[StreamChatSSE] SSE error event, raw data:", e?.data);
             try {
                 const data = JSON.parse(e.data);
-                // Try multiple fields to find the error message
-                const errorMsg =
-                    data?.data?.exception ||
-                    data?.message ||
-                    data?.detail ||
-                    data?.status_message ||
-                    data?.text ||
-                    data?.error ||
-                    (typeof data === "string" ? data : JSON.stringify(data));
-                onError(errorMsg);
+                onError(formatStreamChatError(data));
             } catch {
                 console.error("[StreamChatSSE] Could not parse error data");
-                onError(e?.data || "Connection error");
+                onError(formatStreamChatError(null));
             }
             onEnd();
+        });
+
+        sse.addEventListener("retry", (e: MessageEvent) => {
+            try {
+                onRetry?.(parseStreamRetryEvent(JSON.parse(e.data)));
+            } catch {
+                onRetry?.(parseStreamRetryEvent(null));
+            }
         });
 
         sse.addEventListener("cancel", () => {

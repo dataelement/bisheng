@@ -19,6 +19,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.schemas.telemetry.event_data_schema import PortalQaEventData
+from bisheng.common.stream_errors import StreamRetryEvent, StreamStageError, retry_async_stream
 from bisheng.common.telemetry.portal_event_service import (
     PORTAL_BFF_TELEMETRY_SOURCE_HEADER,
     PortalTelemetryEventService,
@@ -86,7 +87,7 @@ class KnowledgeSpaceChatService:
 
     async def chat_single_file(
         self, knowledge_id: int, file_id: int, query: str, model_id: int
-    ) -> AsyncIterator[ChatResponse]:
+    ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
         """Single file RAG query"""
         # Verify file exists and is a file
         file_record = await self._require_file_view_permission(knowledge_id, file_id)
@@ -124,7 +125,7 @@ class KnowledgeSpaceChatService:
         es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
         telemetry_logged = False
         async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
-            if not telemetry_logged:
+            if not telemetry_logged and not isinstance(one, StreamRetryEvent):
                 self._log_portal_document_qa_success(knowledge_id=knowledge_id, file_id=file_id)
                 telemetry_logged = True
             yield one
@@ -154,8 +155,11 @@ class KnowledgeSpaceChatService:
 
     async def space_rag(
         self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
-    ) -> AsyncIterator[ChatResponse]:
-        llm, space_conf = await self.get_space_llm_config(model_id=model_id)
+    ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
+        try:
+            llm, space_conf = await self.get_space_llm_config(model_id=model_id)
+        except Exception as error:
+            raise StreamStageError(error, stage="config") from error
 
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=vector_retriever,
@@ -163,7 +167,10 @@ class KnowledgeSpaceChatService:
             max_content=space_conf.max_chunk_size,
             sort_by_source_and_index=True,
         )
-        finally_docs: list[Document] = await retriever_tool.ainvoke(query)
+        try:
+            finally_docs: list[Document] = await retriever_tool.ainvoke(query)
+        except Exception as error:
+            raise StreamStageError(error, stage="retrieval") from error
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         file_content = ""
         for one in finally_docs:
@@ -203,18 +210,31 @@ class KnowledgeSpaceChatService:
             [{"role": m.type, "content": m.content} for m in inputs],
         )
 
-        async for one in llm.astream(inputs):
-            chunk_reasoning_content = extract_reasoning_content(one)
-            yield ChatResponse(
-                category=MessageCategory.STREAM,
-                message={
-                    "content": one.content,
-                    "reasoning_content": chunk_reasoning_content,
-                },
-                type="stream",
-            )
-            reasoning_content += chunk_reasoning_content
-            answer += one.content
+        def is_visible_model_chunk(chunk) -> bool:
+            return bool(getattr(chunk, "content", "") or extract_reasoning_content(chunk))
+
+        try:
+            async for one in retry_async_stream(
+                lambda: llm.astream(inputs),
+                stage="model",
+                is_output=is_visible_model_chunk,
+            ):
+                if isinstance(one, StreamRetryEvent):
+                    yield one
+                    continue
+                chunk_reasoning_content = extract_reasoning_content(one)
+                yield ChatResponse(
+                    category=MessageCategory.STREAM,
+                    message={
+                        "content": one.content,
+                        "reasoning_content": chunk_reasoning_content,
+                    },
+                    type="stream",
+                )
+                reasoning_content += chunk_reasoning_content
+                answer += one.content
+        except Exception as error:
+            raise StreamStageError(error, stage="model", had_output=bool(answer or reasoning_content)) from error
         messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
@@ -453,7 +473,7 @@ class KnowledgeSpaceChatService:
         query: str,
         model_id: int,
         tags: list[dict] | None = None,
-    ) -> AsyncIterator[ChatResponse]:
+    ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
         """Folder RAG query"""
         flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
         session = await MessageSessionDao.afilter_session(

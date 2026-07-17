@@ -585,10 +585,15 @@ function AssistantBubble({
             )}
 
             {/* Error state */}
-            {showWaiting ? null : message.error ? (
+            {showWaiting ? null : message.retrying ? (
+                <div className="flex items-center gap-2 rounded-[8px] bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                    <RefreshCwIcon className="size-4 animate-spin" />
+                    <span>{regularContent || "正在重试（1/2）"}</span>
+                </div>
+            ) : message.error ? (
                 <div
                     className={cn(
-                        "text-red-500 bg-red-50 px-3 py-2",
+                        "flex flex-col items-start gap-2 whitespace-pre-line text-red-500 bg-red-50 px-3 py-2",
                         portalDrawerLayout
                             ? "rounded-[8px] text-[15px] leading-[22px]"
                             : knowledgeChatLayout
@@ -596,7 +601,17 @@ function AssistantBubble({
                                 : "text-sm rounded-[10px]"
                     )}
                 >
-                    {regularContent || "发生错误，请重试"}
+                    <span>{regularContent || "问答服务异常\n问答服务暂时不可用，请稍后重试。"}</span>
+                    {onRegenerate ? (
+                        <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+                            onClick={onRegenerate}
+                        >
+                            <RefreshCwIcon className="size-3.5" />
+                            重试
+                        </button>
+                    ) : null}
                 </div>
             ) : (
                 /* Main content — uses existing Markdown with citation support */

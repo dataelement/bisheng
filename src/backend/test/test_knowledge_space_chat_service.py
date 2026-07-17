@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.common.stream_errors import StreamRetryEvent
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 
@@ -278,6 +279,56 @@ class TestKnowledgeSpaceChatPermissions:
         assert event_data.space_id == 1
         assert event_data.file_id == 11
 
+    @pytest.mark.asyncio
+    async def test_chat_single_file_does_not_count_retry_event_as_success(self, chat_service):
+        file_record = _make_file(file_id=11, knowledge_id=1)
+        space = _make_space(space_id=1)
+
+        async def _retry_then_chunk(*args, **kwargs):
+            yield StreamRetryEvent(attempt=1, max_attempts=2, retry_after_ms=500)
+            assert mock_log_event.call_count == 0
+            yield {"ok": True}
+
+        with (
+            patch.object(
+                chat_service,
+                "_require_file_view_permission",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.MessageSessionDao.afilter_session",
+                new_callable=AsyncMock,
+                return_value=[SimpleNamespace(chat_id="chat-1", flow_id="flow-1")],
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
+            ),
+            patch.object(chat_service, "space_rag", _retry_then_chunk),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
+            ) as mock_log_event,
+        ):
+            result = [item async for item in chat_service.chat_single_file(1, 11, "hi", 1001)]
+
+        assert result == [
+            StreamRetryEvent(attempt=1, max_attempts=2, retry_after_ms=500),
+            {"ok": True},
+        ]
+        mock_log_event.assert_called_once()
+
     def test_log_portal_document_qa_skips_portal_bff_proxy(self, chat_service):
         chat_service.request.headers.get.return_value = "shougang_portal_bff"
 
@@ -370,9 +421,17 @@ class TestKnowledgeSpaceChatPermissions:
             new_callable=AsyncMock,
             return_value=[],
         ), patch.object(
+            chat_service,
+            '_build_folder_search_kwargs',
+            new_callable=AsyncMock,
+            return_value=(None, None),
+        ), patch.object(
             chat_service, 'space_rag', _empty_space_rag,
         ):
-            result = [item async for item in chat_service.chat_folder(1, 22, 'chat-1', 'hello')]
+            result = [
+                item
+                async for item in chat_service.chat_folder(1, 22, 'chat-1', 'hello', 'model-1')
+            ]
 
         assert result == []
         mock_require_space.assert_awaited_once_with(1)
