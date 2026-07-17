@@ -105,3 +105,65 @@ async def test_login_access_guard_reuses_resolved_roles_and_department_flag():
         role_ids=[2],
         is_department_admin=False,
     )
+
+
+async def test_user_login_enters_tenant_bypass_before_multi_tenant_resolution():
+    db_user = SimpleNamespace(user_id=12, delete=0)
+    rejected_response = object()
+    login_request = SimpleNamespace(user_name="alice", password="encrypted")
+    captcha_setting = AsyncMock(return_value=False)
+
+    with (
+        patch.object(
+            user_service_module,
+            "settings",
+            SimpleNamespace(aget_from_db=captcha_setting),
+        ),
+        patch.object(
+            user_service_module.UserDao,
+            "aget_login_candidates_by_account",
+            new_callable=AsyncMock,
+            return_value=[db_user],
+        ),
+        patch.object(
+            user_service_module.UserService,
+            "decrypt_md5_password",
+            return_value="password",
+        ),
+        patch.object(
+            user_service_module.UserService,
+            "judge_user_password",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            user_service_module.UserService,
+            "clear_error_password_key",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            user_service_module.UserRoleDao,
+            "aget_user_roles",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            user_service_module.DepartmentDao,
+            "aget_user_admin_departments",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            user_service_module.UserService,
+            "_reject_login_if_user_has_no_usable_access",
+            new_callable=AsyncMock,
+            return_value=rejected_response,
+        ),
+    ):
+        result = await user_service_module.UserService.user_login(
+            SimpleNamespace(),
+            login_request,
+            auth_jwt=SimpleNamespace(),
+        )
+
+    assert result is rejected_response
+    captcha_setting.assert_awaited_once_with("use_captcha")
