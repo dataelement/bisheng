@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -88,3 +89,22 @@ class PortalHotSearchItem(BaseModel):
 
     rank: int = Field(ge=1, le=50)
     query: str = Field(min_length=1, max_length=100)
+
+
+class PortalHotSearchTriggerRebuildReq(BaseModel):
+    """Admin trigger for the hot-search rebuild pipeline (AC-34)."""
+
+    fanout: bool = Field(
+        default=False,
+        description="When true, dispatch fanout rebuild for all active tenants (global super admin only)",
+    )
+
+
+class PortalHotSearchTriggerRebuildResp(BaseModel):
+    """Acknowledgement that a rebuild Celery task was dispatched."""
+
+    scope: Literal["tenant", "all"]
+    tenant_id: int | None = None
+    task_id: str
+    task_name: str
+    message: str

@@ -250,3 +250,8 @@ class FreeSpaceMigrationEmbeddingMismatchError(BaseErrorCode):
 class FreeSpaceMigratingError(BaseErrorCode):
     Code: int = 18083
     Msg: str = "该知识库正在迁移中，请稍后再试"
+
+
+class PortalHotSearchDisabledError(BaseErrorCode):
+    Code: int = 18084
+    Msg: str = "门户热搜批处理已关闭"
