@@ -393,8 +393,10 @@ def run_migrations_online() -> None:
     """
 
     from bisheng.core.database.manager import sync_get_database_connection
+    from bisheng.core.database.model_discovery import import_all_sqlmodel_models
 
     database_conn_manager = sync_get_database_connection()
+    import_all_sqlmodel_models()
 
     with database_conn_manager.engine.connect() as connection:
         ensure_alembic_version_table(connection)
