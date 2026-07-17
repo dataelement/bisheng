@@ -107,3 +107,61 @@ Welcome to join our discussion group
 
 [![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)
 -->
+
+## ❓ FAQ
+
+### What is BISHENG?
+BISHENG is an open LLM application DevOps platform focusing on enterprise scenarios. Named after Bi Sheng (毕昇), the inventor of movable type printing, it provides strong support for widespread implementation of intelligent applications. Used by Fortune 500 companies and industry-leading organizations.
+
+### How does BISHENG compare to similar platforms?
+| Feature | BISHENG | LangFlow | Flowise | Dify |
+|---------|---------|----------|---------|------|
+| Workflow Type | Unified framework | Bot invocation + separate modules | Chatflow + Workflow | Chatflow + Workflow |
+| Human-in-the-loop | ✅ Full workflow | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
+| Enterprise Focus | ✅ Built for enterprise | ⚠️ Community-focused | ⚠️ Community-focused | ⚠️ Startup-focused |
+| Lingsight Agent | ✅ Expert-level taste | ❌ | ❌ | ❌ |
+| AGL Framework | ✅ Agent Guidance Language | ❌ | ❌ | ❌ |
+
+### What are the key features?
+1. **Lingsight Agent**: Expert-level understanding through AGL framework (Agent Guidance Language)
+2. **BISHENG Workflow**: Independent application orchestration framework, Human-in-the-loop
+3. **Enterprise Focus**: Built for enterprise scenarios with Fortune 500 adoption
+4. **Multi-language**: Chinese/English/Japanese documentation
+
+### What LLM providers are supported?
+BISHENG supports major LLM providers including:
+- OpenAI (GPT-4, GPT-3.5)
+- Anthropic (Claude)
+- DeepSeek
+- Alibaba (Qwen)
+- Local models (Ollama, vLLM)
+- Custom endpoints
+
+### How to get started?
+```bash
+# Docker quick start
+docker run -d --name bisheng -p 7860:7860 dataelement/bisheng:latest
+
+# Or clone and run
+git clone https://github.com/dataelement/bisheng.git
+cd bisheng
+docker-compose up -d
+```
+
+### What is AGL (Agent Guidance Language)?
+AGL is a framework for embedding domain experts' preferences, experience, and business logic into AI agents. It enables agents to exhibit "expert-level understanding" when handling tasks. Learn more at: https://github.com/dataelement/AgentGuidanceLanguage
+
+### What is the Lingsight feature?
+Lingsight is a general-purpose agent with expert-level taste. Through AGL, it embeds domain expert knowledge into AI, enabling expert-level understanding in task handling.
+
+### Is there enterprise support?
+Yes, BISHENG is used by Fortune 500 companies and industry-leading organizations. Contact DataElem for enterprise deployment and support.
+
+### What license does BISHENG use?
+BISHENG uses Apache-2.0 License. Free for commercial and personal use.
+
+### Where can I get help?
+- 📖 Wiki: https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde
+- 💬 Issues: https://github.com/dataelement/bisheng/issues
+- 🏢 Enterprise Support: Contact DataElem
+
