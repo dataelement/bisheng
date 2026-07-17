@@ -6,7 +6,7 @@ executes the migration environment at import time.
 """
 
 from alembic import op
-from sqlalchemy import inspect
+from sqlalchemy import MetaData, column, inspect, select, table
 from sqlalchemy.engine import Connection
 
 
@@ -38,6 +38,39 @@ def column_exists(table: str, column: str) -> bool:
     from bisheng.core.database.dialect_helpers import column_exists as _column_exists
 
     return _column_exists(op.get_bind(), table, column)
+
+
+def bootstrap_fresh_database_schema(connection: Connection, metadata: MetaData) -> bool:
+    """Create the current model schema only for a genuinely fresh database.
+
+    The repository's base revision alters tables that predate Alembic instead
+    of creating them. Fresh installs therefore need the SQLModel schema before
+    replaying revisions. Existing or partially initialized databases must stay
+    on the normal migration path so missing tables are reported rather than
+    silently recreated.
+
+    Returns:
+        ``True`` when the model schema was created, else ``False``.
+    """
+    model_table_names = {
+        model_table.name.casefold()
+        for model_table in metadata.tables.values()
+        if model_table.name.casefold() != "alembic_version"
+    }
+    if not model_table_names:
+        raise RuntimeError("Cannot bootstrap a fresh database from empty model metadata")
+
+    existing_table_names = {name.casefold() for name in inspect(connection).get_table_names()}
+    if existing_table_names & model_table_names:
+        return False
+
+    if "alembic_version" in existing_table_names:
+        version_table = table("alembic_version", column("version_num"))
+        if connection.execute(select(version_table.c.version_num)).first() is not None:
+            return False
+
+    metadata.create_all(connection)
+    return True
 
 
 def finalize_online_migration_connection(connection: Connection) -> bool:
