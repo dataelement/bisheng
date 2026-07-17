@@ -123,7 +123,7 @@ export default function useFolderChat(
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText, retrying: false };
                     return msgs;
                 });
             },
@@ -133,9 +133,16 @@ export default function useFolderChat(
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText, retrying: false };
                     return msgs;
                 });
+            },
+            onRetry: (progress) => {
+                setMessages((prev) => prev.map((message) =>
+                    message.messageId === responseMessageId
+                        ? { ...message, text: progress.message, error: false, retrying: true }
+                        : message
+                ));
             },
             onError: (error) => {
                 setMessages((prev) => {
@@ -146,8 +153,9 @@ export default function useFolderChat(
                     if (idx >= 0) {
                         msgs[idx] = {
                             ...msgs[idx],
-                            text: error || "An error occurred, please try again",
+                            text: error.message,
                             error: true,
+                            retrying: false,
                         };
                     }
                     return msgs;
@@ -273,6 +281,13 @@ export default function useFolderChat(
             };
 
             const responseMessageId = `${userMessageId}_`;
+            const requestPayload: Record<string, any> = {
+                folder_id: numericFolderId ?? 0,
+                chat_id: chatId,
+                query: text.trim(),
+                tags: tag ? [{ id: tag.id, name: tag.name }] : [],
+                model_id: String(chatModel.id || ""),
+            };
             const initialResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -281,22 +296,15 @@ export default function useFolderChat(
                 conversationId: chatId,
                 messageId: responseMessageId,
                 error: false,
+                requestPayload,
             };
 
             setMessages((prev) => [...prev, userMessage, initialResponse]);
 
             // Build payload per API spec
-            const payload: Record<string, any> = {
-                folder_id: numericFolderId ?? 0,
-                chat_id: chatId,
-                query: text.trim(),
-                tags: tag ? [{ id: tag.id, name: tag.name }] : [],
-                model_id: String(chatModel.id || ""),
-            };
-
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
-            setSseSubmission(buildSubmission(payload, responseMessageId));
+            setSseSubmission(buildSubmission(requestPayload, responseMessageId));
         },
         [
             isStreaming,
@@ -346,7 +354,17 @@ export default function useFolderChat(
             );
             if (!parentMsg) return;
 
-            const newResponseId = v4();
+            const failedResponse = [...messagesRef.current].reverse().find(
+                (message) => message.parentMessageId === parentMessageId && message.error
+            );
+            const newResponseId = failedResponse?.messageId || v4();
+            const requestPayload = failedResponse?.requestPayload ?? {
+                folder_id: numericFolderId ?? 0,
+                chat_id: activeChatId,
+                query: parentMsg.text?.trim() || "",
+                tags: [],
+                model_id: String(chatModel.id || ""),
+            };
             const newResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -355,19 +373,16 @@ export default function useFolderChat(
                 conversationId: activeChatId,
                 messageId: newResponseId,
                 error: false,
+                requestPayload,
             };
 
-            setMessages((prev) => [...prev, newResponse]);
+            setMessages((prev) => failedResponse
+                ? prev.map((message) => message.messageId === newResponseId ? newResponse : message)
+                : [...prev, newResponse]
+            );
 
-            const payload: Record<string, any> = {
-                folder_id: numericFolderId ?? 0,
-                chat_id: activeChatId,
-                query: parentMsg.text?.trim() || "",
-                tags: [],
-                model_id: String(chatModel.id || ""),
-            };
-
-            setSseSubmission(buildSubmission(payload, newResponseId));
+            setIsStreaming(true);
+            setSseSubmission(buildSubmission(requestPayload, newResponseId));
         },
         [isStreaming, enabled, activeChatId, numericFolderId, buildSubmission, chatModel.id, chatModel.name]
     );

@@ -17,7 +17,6 @@ from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
@@ -30,6 +29,12 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
     NewMessageSessionEventData,
 )
 from bisheng.common.services import telemetry_service
+from bisheng.common.stream_errors import (
+    StreamRetryEvent,
+    retry_async_stream,
+    stream_error_sse,
+    stream_retry_sse,
+)
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
@@ -1125,7 +1130,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
       - `message` column is JSON (not plain text)
       - `type` is 'over' (aligned with ChatResponse semantics in workflow)
       - `extra` is '{}' (no parentMessageId — new data is linear, no tree)
-      - `overrideParentMessageId` is ignored (regenerate UI removed)
+      - `overrideParentMessageId` reuses an existing user question for retry
     """
     ws_config = await WorkStationService.aget_config()
     model_info = next((m for m in ws_config.models if m.id == data.model), None)
@@ -1167,25 +1172,38 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
 
-    # Always insert a brand-new question row — Agent flow has no regenerate.
-    message = await ChatMessageDao.ainsert_one(
-        ChatMessage(
-            user_id=login_user.user_id,
-            chat_id=conversation_id,
-            flow_id='',
-            type='over',
-            is_bot=False,
-            sender='User',
-            files=json.dumps(data.files) if data.files else None,
-            extra='{}',
-            message=json.dumps(
-                {'query': data.text or '', 'files': data.files or []},
-                ensure_ascii=False,
-            ),
-            category='question',
-            source=0,
+    if data.overrideParentMessageId:
+        try:
+            existing_message_id = int(data.overrideParentMessageId)
+        except (TypeError, ValueError) as error:
+            raise ConversationNotFoundError() from error
+        message = await ChatMessageDao.aget_message_by_id(existing_message_id)
+        if (
+            message is None
+            or message.user_id != login_user.user_id
+            or message.chat_id != conversation_id
+            or message.is_bot
+        ):
+            raise ConversationNotFoundError()
+    else:
+        message = await ChatMessageDao.ainsert_one(
+            ChatMessage(
+                user_id=login_user.user_id,
+                chat_id=conversation_id,
+                flow_id='',
+                type='over',
+                is_bot=False,
+                sender='User',
+                files=json.dumps(data.files) if data.files else None,
+                extra='{}',
+                message=json.dumps(
+                    {'query': data.text or '', 'files': data.files or []},
+                    ensure_ascii=False,
+                ),
+                category='question',
+                source=0,
+            )
         )
-    )
 
     bisheng_llm = await LLMService.get_bisheng_llm(
         model_id=data.model,
@@ -1266,15 +1284,16 @@ async def _agent_stream_chat_completion(
             await _agent_initialize_chat(data, login_user)
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
-        error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
+        logger.exception('Agent chat setup rejected')
+        stage = 'system' if isinstance(exc, BaseErrorCode) else 'config'
         return StreamingResponse(
-            iter([error_response.to_sse_event_instance_str()]),
+            iter([stream_error_sse(exc, stage=stage)]),
             media_type='text/event-stream',
         )
     except Exception as exc:
         logger.exception(f'Error in agent chat completions setup: {exc}')
         return StreamingResponse(
-            iter([ServerError(exception=exc).to_sse_event_instance_str()]),
+            iter([stream_error_sse(exc)]),
             media_type='text/event-stream',
         )
 
@@ -1301,6 +1320,7 @@ async def _agent_stream_chat_completion(
         inflight_tool_idx: dict[str, int] = {}
         error_flag = False
         error_msg = ''
+        failure_stage = 'system'
         citation_collector = CitationRegistryCollector()
 
         def close_thinking() -> int | None:
@@ -1339,6 +1359,7 @@ async def _agent_stream_chat_completion(
 
         try:
             # ---- Step 1: resolve user-selected KBs ----
+            failure_stage = 'retrieval'
             knowledge_bases_info = await _resolve_user_kb_selection(data)
             file_ids_by_space = await _resolve_user_kb_file_filters(request, data, login_user)
 
@@ -1378,11 +1399,13 @@ async def _agent_stream_chat_completion(
                 yield _sse_resp('agent_tool_call', 'end', end_payload, conversation_id)
 
             # ---- Step 3: process uploaded files ----
+            failure_stage = 'document'
             file_context, image_bases64 = await _process_agent_files(
                 data, model_info, login_user, ws_config,
             )
 
             # ---- Step 4: 预检索用户选择的知识库，并组装用户消息 ----
+            failure_stage = 'retrieval'
             retrieved_knowledge_context = await _retrieve_selected_knowledge_context(
                 question=data.text or '',
                 knowledge_bases_info=knowledge_bases_info,
@@ -1499,6 +1522,7 @@ async def _agent_stream_chat_completion(
                     logger.warning(f'[agent_chat][dump] failed: {dump_exc}')
 
             # ---- Step 5: execute ----
+            failure_stage = 'model'
             if langchain_tools:
                 from langgraph.prebuilt import create_react_agent
                 from langchain_core.runnables import RunnableConfig
@@ -1512,11 +1536,33 @@ async def _agent_stream_chat_completion(
                 tool_meta_map = {t.name: _build_tool_meta(t) for t in langchain_tools}
                 max_iter = await _get_agent_max_iterations()
 
-                async for ev in agent.astream_events(
-                        {'messages': llm_messages},
-                        version='v2',
-                        config=RunnableConfig(recursion_limit=max_iter),
+                def is_visible_agent_event(ev: dict) -> bool:
+                    event_type = ev.get('event', '')
+                    if event_type == 'on_tool_start':
+                        return True
+                    if event_type != 'on_chat_model_stream':
+                        return False
+                    event_chunk = (ev.get('data') or {}).get('chunk')
+                    if event_chunk is None:
+                        return False
+                    event_text = getattr(event_chunk, 'content', '') or ''
+                    event_reasoning = (getattr(event_chunk, 'additional_kwargs', None) or {}).get(
+                        'reasoning_content', ''
+                    )
+                    return bool(event_text or event_reasoning)
+
+                async for ev in retry_async_stream(
+                        lambda: agent.astream_events(
+                            {'messages': llm_messages},
+                            version='v2',
+                            config=RunnableConfig(recursion_limit=max_iter),
+                        ),
+                        stage='model',
+                        is_output=is_visible_agent_event,
                 ):
+                    if isinstance(ev, StreamRetryEvent):
+                        yield stream_retry_sse(ev)
+                        continue
                     et = ev.get('event', '')
                     name = ev.get('name', '') or ''
 
@@ -1633,7 +1679,19 @@ async def _agent_stream_chat_completion(
                 # No tools → direct streaming still in new SSE format
                 if sys_prompt:
                     llm_messages.insert(0, SystemMessage(content=sys_prompt))
-                async for chunk in bisheng_llm.astream(llm_messages):
+                async for chunk in retry_async_stream(
+                        lambda: bisheng_llm.astream(llm_messages),
+                        stage='model',
+                        is_output=lambda item: bool(
+                            getattr(item, 'content', '')
+                            or (getattr(item, 'additional_kwargs', None) or {}).get(
+                                'reasoning_content', ''
+                            )
+                        ),
+                ):
+                    if isinstance(chunk, StreamRetryEvent):
+                        yield stream_retry_sse(chunk)
+                        continue
                     text = getattr(chunk, 'content', '') or ''
                     reasoning = (getattr(chunk, 'additional_kwargs', None) or {}).get(
                         'reasoning_content', ''
@@ -1672,14 +1730,36 @@ async def _agent_stream_chat_completion(
                         )
         except BaseErrorCode as exc:
             error_flag = True
-            error_msg = str(exc)
+            error_msg = 'business error'
             logger.exception('Agent chat BaseErrorCode')
-            yield exc.to_sse_event_instance_str()
+            had_visible_output = bool(final_msg) or any(
+                event.get('type') in {'thinking', 'text'} and bool(event.get('content'))
+                or event.get('type') == 'tool_call'
+                and not str(event.get('tool_call_id', '')).startswith('init_fail_')
+                for event in events
+            )
+            yield stream_error_sse(
+                exc,
+                stage=failure_stage,
+                had_output=had_visible_output,
+            )
+            return
         except Exception as exc:
             error_flag = True
-            error_msg = str(exc)
+            error_msg = 'stream execution error'
             logger.exception('Agent chat execution error')
-            yield ServerError(exception=exc).to_sse_event_instance_str()
+            had_visible_output = bool(final_msg) or any(
+                event.get('type') in {'thinking', 'text'} and bool(event.get('content'))
+                or event.get('type') == 'tool_call'
+                and not str(event.get('tool_call_id', '')).startswith('init_fail_')
+                for event in events
+            )
+            yield stream_error_sse(
+                exc,
+                stage=failure_stage,
+                had_output=had_visible_output,
+            )
+            return
 
         # Finalise any dangling thinking event (e.g. stream interrupted mid-reasoning).
         close_thinking()
@@ -1765,7 +1845,8 @@ async def _agent_stream_chat_completion(
                 flow_dept, login_user.user_id, flow_lim,
             )
             if not acquired:
-                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
+                error = DepartmentDailyChatConcurrentLimitError()
+                yield stream_error_sse(error, stage='rate_limit')
                 return
             dept_flow_slot = flow_dept
         try:

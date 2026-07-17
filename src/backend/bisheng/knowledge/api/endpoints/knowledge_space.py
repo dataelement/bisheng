@@ -7,8 +7,13 @@ from starlette.responses import StreamingResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200, resp_500
+from bisheng.common.stream_errors import (
+    StreamRetryEvent,
+    StreamStageError,
+    stream_error_sse,
+    stream_retry_sse,
+)
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
@@ -946,12 +951,19 @@ async def chat_single_file(
     async def event_stream():
         try:
             async for one in svc.chat_single_file(space_id, file_id, req.query, req.model_id):
-                yield SSEResponse(data=one).to_string()
+                if isinstance(one, StreamRetryEvent):
+                    yield stream_retry_sse(one)
+                else:
+                    yield SSEResponse(data=one).to_string()
+        except StreamStageError as e:
+            logger.exception("chat_file staged stream error")
+            yield stream_error_sse(e.error, stage=e.stage, had_output=e.had_output)
         except BaseErrorCode as e:
-            yield e.to_sse_event_instance_str()
+            logger.exception("chat_file business error")
+            yield stream_error_sse(e, stage="document")
         except Exception as e:
             logger.exception("chat_file error")
-            yield ServerError(exception=e).to_sse_event_instance_str()
+            yield stream_error_sse(e)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -1040,12 +1052,19 @@ async def chat_folder(
     async def event_stream():
         try:
             async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.model_id, req.tags):
-                yield SSEResponse(data=one).to_string()
+                if isinstance(one, StreamRetryEvent):
+                    yield stream_retry_sse(one)
+                else:
+                    yield SSEResponse(data=one).to_string()
+        except StreamStageError as e:
+            logger.exception("chat_folder staged stream error")
+            yield stream_error_sse(e.error, stage=e.stage, had_output=e.had_output)
         except BaseErrorCode as e:
-            yield e.to_sse_event_instance_str()
+            logger.exception("chat_folder business error")
+            yield stream_error_sse(e, stage="document")
         except Exception as e:
             logger.exception("chat_folder error")
-            yield ServerError(exception=e).to_sse_event_instance_str()
+            yield stream_error_sse(e)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
