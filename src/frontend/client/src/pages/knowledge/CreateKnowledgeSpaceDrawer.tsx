@@ -150,6 +150,7 @@ interface CreateKnowledgeSpaceDrawerProps {
     editingSpace?: KnowledgeSpace | null;
     initialSpaceLevel?: SpaceLevel;
     showApprovalReason?: boolean;
+    canEditDepartmentBinding?: boolean;
 }
 
 /**
@@ -199,6 +200,7 @@ export function CreateKnowledgeSpaceDrawer({
     editingSpace,
     initialSpaceLevel,
     showApprovalReason = false,
+    canEditDepartmentBinding = false,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -305,14 +307,28 @@ export function CreateKnowledgeSpaceDrawer({
     }, [levelOptions, mode, spaceLevel]);
     const shouldShowVisibilityControls = false;
     const shouldShowPublishOption = shouldShowVisibilityControls && needPublishOption;
-    const shouldShowDepartmentSelector = mode === "create"
-        && spaceLevel === SpaceLevel.DEPARTMENT
-        && selectedLevelCreateEnabled;
+    const shouldShowDepartmentSelector = spaceLevel === SpaceLevel.DEPARTMENT
+        && (
+            (mode === "create" && selectedLevelCreateEnabled)
+            || (mode === "edit" && canEditDepartmentBinding)
+        );
     const shouldShowApprovalReason = mode === "create"
         && showApprovalReason
         && spaceLevel === SpaceLevel.TEAM;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
+    const selectedDepartmentName = departmentSelection[0]?.name;
+    const currentLevelLabel = levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel;
+    const levelOwnerName = spaceLevel === SpaceLevel.DEPARTMENT
+        ? selectedDepartmentName || (!shouldShowDepartmentSelector
+            ? editingSpace?.ownerName || editingSpace?.departmentName
+            : undefined)
+        : !shouldShowDepartmentSelector
+            ? editingSpace?.ownerName || editingSpace?.departmentName
+            : undefined;
+    const levelDisplayLabel = levelOwnerName
+        ? `${currentLevelLabel} - ${levelOwnerName}`
+        : currentLevelLabel;
     const selectedLibrariesHaveTags = useMemo(
         () => selectedAutoTagLibrariesHaveTags(autoTagLibraryIds, tagLibraries, autoTagLibraryTags),
         [autoTagLibraryIds, tagLibraries, autoTagLibraryTags],
@@ -363,11 +379,11 @@ export function CreateKnowledgeSpaceDrawer({
         const res = await getCreateSpaceDepartmentsApi({
             page: 1,
             pageSize: 100,
-            approvalRequest: showApprovalReason,
+            approvalRequest: mode === "create" && showApprovalReason,
             signal: config?.signal,
         });
         return res.data;
-    }, [showApprovalReason]);
+    }, [mode, showApprovalReason]);
 
     // Pre-fill form in edit mode
     useEffect(() => {
@@ -393,6 +409,16 @@ export function CreateKnowledgeSpaceDrawer({
             );
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setSpaceLevel(editingSpace.spaceLevel || SpaceLevel.PERSONAL);
+            const departmentId = editingSpace.departmentId ?? editingSpace.ownerId;
+            if (editingSpace.spaceLevel === SpaceLevel.DEPARTMENT && departmentId) {
+                setDepartmentSelection([{
+                    type: "department",
+                    id: Number(departmentId),
+                    name: editingSpace.ownerName || editingSpace.departmentName || `#${departmentId}`,
+                }]);
+            } else {
+                setDepartmentSelection([]);
+            }
             setAutoTagEnabled(Boolean(editingSpace.autoTagEnabled));
             setAutoTagLibraryTags([]);
             setShowSuccess(false);
@@ -687,8 +713,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 </Label>
                                 {mode === "edit" ? (
                                     <div className="h-8 rounded-[6px] bg-[#F7F8FA] px-3 text-[14px] leading-8 text-[#4E5969]">
-                                        {levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel}
-                                        {editingSpace?.ownerName ? ` - ${editingSpace.ownerName}` : ""}
+                                        {levelDisplayLabel}
                                     </div>
                                 ) : (
                                     <RadioGroup.Root
@@ -707,7 +732,11 @@ export function CreateKnowledgeSpaceDrawer({
                                                 >
                                                     <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                                 </RadioGroup.Item>
-                                                <span>{option.label}</span>
+                                                <span>
+                                                    {option.value === SpaceLevel.DEPARTMENT && selectedDepartmentName
+                                                        ? `${option.label} - ${selectedDepartmentName}`
+                                                        : option.label}
+                                                </span>
                                             </label>
                                         ))}
                                     </RadioGroup.Root>

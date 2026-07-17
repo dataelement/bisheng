@@ -2402,9 +2402,11 @@ export default function PortalKnowledgeWorkbench() {
                     is_released: form.publishToSquare === "yes",
                     auto_tag_enabled: form.autoTagEnabled,
                     ...buildAutoTagLibraryPayload(form.autoTagLibraryIds, { syncExplicitly: true }),
+                    ...(form.departmentId ? { department_id: form.departmentId } : {}),
                 });
-                setActiveSpace((prev) => prev?.id === updated.id ? { ...updated, role: prev.role } : prev);
                 await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                setEditingSpace(updated);
+                setActiveSpace((prev) => prev?.id === updated.id ? { ...updated, role: prev.role } : prev);
                 showToast({ message: "知识库已更新", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
@@ -2707,6 +2709,7 @@ export default function PortalKnowledgeWorkbench() {
                 editingSpace={editingSpace}
                 pendingCreateLevel={pendingCreateLevel}
                 showSuccessManageMembers={(spaceLevel) => spaceLevel !== SpaceLevel.PERSONAL}
+                canEditDepartmentBinding={isSystemAdmin}
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}
                 onManageEditingSpaceMembers={() => {
                     setCreateDrawerOpen(false);

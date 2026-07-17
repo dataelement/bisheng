@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 import warnings
 from typing import Any, List, Optional, Tuple
 
@@ -9,6 +10,11 @@ from langchain_elasticsearch.vectorstores import BM25Strategy, AsyncBM25Strategy
 from langchain_milvus import Milvus as LangchainMilvus
 
 logger = logging.getLogger(__name__)
+
+# grpc.aio temporarily mutates the process-wide warnings filters while creating
+# a channel. Serialize Milvus initialization so concurrent worker threads cannot
+# leave those filters in a corrupted state.
+_MILVUS_INIT_LOCK = threading.Lock()
 
 
 def _ensure_current_thread_event_loop() -> None:
@@ -24,8 +30,9 @@ def _ensure_current_thread_event_loop() -> None:
 
 class Milvus(LangchainMilvus):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        _ensure_current_thread_event_loop()
-        super().__init__(*args, **kwargs)
+        with _MILVUS_INIT_LOCK:
+            _ensure_current_thread_event_loop()
+            super().__init__(*args, **kwargs)
 
     async def asimilarity_search_with_score_by_vector(
             self,

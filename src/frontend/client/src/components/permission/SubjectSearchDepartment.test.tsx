@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 
 import { getResourceGrantDepartments } from "~/api/permission";
 import type { SelectedSubject } from "~/api/permission";
@@ -13,6 +14,71 @@ jest.mock("~/api/permission", () => ({
 }));
 
 const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
+
+const threeLevelDepartments = [
+  {
+    id: 1,
+    dept_id: "dept-1",
+    name: "集团",
+    parent_id: null,
+    children: [
+      {
+        id: 2,
+        dept_id: "dept-2",
+        name: "A事业部",
+        parent_id: 1,
+        children: [
+          {
+            id: 3,
+            dept_id: "dept-3",
+            name: "A子部门",
+            parent_id: 2,
+            children: [],
+          },
+        ],
+      },
+      {
+        id: 4,
+        dept_id: "dept-4",
+        name: "B事业部",
+        parent_id: 1,
+        children: [
+          {
+            id: 5,
+            dept_id: "dept-5",
+            name: "B子部门",
+            parent_id: 4,
+            children: [],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+function ControlledSingleDepartmentTree({
+  onChange,
+  loadDepartments,
+}: {
+  onChange: (value: SelectedSubject[]) => void;
+  loadDepartments: () => Promise<typeof threeLevelDepartments>;
+}) {
+  const [value, setValue] = useState<SelectedSubject[]>([]);
+
+  return (
+    <SubjectSearchDepartment
+      value={value}
+      onChange={(nextValue) => {
+        setValue(nextValue);
+        onChange(nextValue);
+      }}
+      includeChildren
+      onIncludeChildrenChange={jest.fn()}
+      selectionMode="single"
+      loadDepartments={loadDepartments}
+    />
+  );
+}
 
 describe("SubjectSearchDepartment", () => {
   beforeEach(() => {
@@ -216,5 +282,93 @@ describe("SubjectSearchDepartment", () => {
       "wf-1",
       { signal: expect.any(AbortSignal) },
     );
+  });
+
+  it("shows every ancestor as indeterminate while keeping only the selected child", async () => {
+    const onChange = jest.fn();
+    const loadDepartments = jest.fn().mockResolvedValue(threeLevelDepartments);
+
+    render(
+      <ControlledSingleDepartmentTree
+        onChange={onChange}
+        loadDepartments={loadDepartments}
+      />,
+    );
+
+    const rootLabel = await screen.findByText("集团");
+    fireEvent.click(within(rootLabel.parentElement as HTMLElement).getByRole("button"));
+
+    const branchALabel = await screen.findByText("A事业部");
+    const branchBLabel = await screen.findByText("B事业部");
+    fireEvent.click(within(branchALabel.parentElement as HTMLElement).getByRole("button"));
+    fireEvent.click(within(branchBLabel.parentElement as HTMLElement).getByRole("button"));
+
+    const leafALabel = await screen.findByText("A子部门");
+    const leafBLabel = await screen.findByText("B子部门");
+    fireEvent.click(leafALabel);
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      {
+        type: "department",
+        id: 3,
+        name: "A子部门",
+        include_children: true,
+      },
+    ]);
+    expect(within(rootLabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "indeterminate");
+    expect(within(branchALabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "indeterminate");
+    expect(within(leafALabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "checked");
+    expect(within(branchBLabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "unchecked");
+
+    fireEvent.click(leafBLabel);
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      {
+        type: "department",
+        id: 5,
+        name: "B子部门",
+        include_children: true,
+      },
+    ]);
+    expect(within(branchALabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "unchecked");
+    expect(within(branchBLabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "indeterminate");
+
+    fireEvent.click(leafBLabel);
+
+    expect(onChange).toHaveBeenLastCalledWith([]);
+    expect(within(rootLabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "unchecked");
+    expect(within(branchBLabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "unchecked");
+  });
+
+  it("does not add ancestor indeterminate state in multiple selection mode", async () => {
+    render(
+      <SubjectSearchDepartment
+        value={[{ type: "department", id: 2, name: "子部门" }]}
+        onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        selectionMode="multiple"
+      />,
+    );
+
+    const rootLabel = await screen.findByText("全集团");
+    const rootRow = rootLabel.parentElement as HTMLElement;
+    expect(within(rootRow).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "unchecked");
+
+    fireEvent.click(within(rootRow).getByRole("button"));
+    const childLabel = await screen.findByText("子部门");
+    expect(within(childLabel.parentElement as HTMLElement).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "checked");
   });
 });

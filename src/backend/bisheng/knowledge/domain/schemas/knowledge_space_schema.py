@@ -392,7 +392,7 @@ class ShougangPortalDomainBindableSpacesResp(BaseModel):
 
 class ShougangPortalFileBrowseReq(BaseModel):
     tag: str | None = Field(default=None, description="Space tag name")
-    space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_ids: list[int] = Field(default_factory=list, max_length=1000, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     file_ext: str | None = Field(default=None, description="File extension filter")
     document_type: str | None = Field(default=None, description="Document type code from file_encoding segment 2")
@@ -604,6 +604,11 @@ class KnowledgeSpaceUpdateReq(BaseModel):
             "auto_tag_library_id. When provided, a private tag library is "
             "upserted server-side."
         ),
+    )
+    department_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="New owning department for a department knowledge space",
     )
 
 

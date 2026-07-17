@@ -22,6 +22,11 @@ class SpaceNameDuplicateError(BaseErrorCode):
     Msg: str = "知识空间名称已存在"
 
 
+class DepartmentKnowledgeSpaceAmbiguousError(BaseErrorCode):
+    Code: int = 18004
+    Msg: str = "部门存在多个可选知识库，请先明确目标知识库"
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = "Folder does not exist"

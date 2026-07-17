@@ -72,6 +72,7 @@
     "jsencrypt": "^3.5.4",
     "lodash": "^4.17.21",
     "lucide-react": "^0.544.0",
+    "jszip": "^3.10.1",
     "mammoth": "^1.10.0",
     "match-sorter": "^6.3.4",
     "msedge-tts": "^1.3.4",

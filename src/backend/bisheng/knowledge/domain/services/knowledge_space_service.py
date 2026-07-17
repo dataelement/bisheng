@@ -9,7 +9,7 @@ import re
 import secrets
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -33,6 +33,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceAmbiguousError,
     FavoriteSpaceProtectedError,
     FreeSpaceMigratingError,
     FreeSpaceMigrationEmbeddingMismatchError,
@@ -97,6 +98,7 @@ from bisheng.database.models.review_tags import ReviewTag, ReviewTagDao
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao, TagResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.constants import (
     normalize_business_domain_code,
     parse_shougang_file_encoding_codes,
@@ -279,6 +281,10 @@ from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
+    from bisheng.knowledge.domain.repositories.interfaces.department_space_binding_repository import (
+        DepartmentSpaceRebindPlan,
+        DepartmentSpaceBindingRepository,
+    )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
         KnowledgeDocumentRepository,
     )
@@ -466,6 +472,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
         self.similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository | None = None
+        self.department_space_binding_repo: DepartmentSpaceBindingRepository | None = None
         self._created_space_scope_by_id: dict[
             int,
             tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int],
@@ -6820,6 +6827,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if decision.action == "block":
                     raise {
                         "target_not_found": FreeSpaceMigrationTargetNotFoundError,
+                        "ambiguous_target": DepartmentKnowledgeSpaceAmbiguousError,
                         "embedding_mismatch": FreeSpaceMigrationEmbeddingMismatchError,
                         "migrating": FreeSpaceMigratingError,
                     }.get(decision.reason, FreeSpaceMigrationTargetNotFoundError)()
@@ -6905,6 +6913,75 @@ class KnowledgeSpaceService(KnowledgeUtils):
         KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
         return
 
+    @staticmethod
+    def _department_rebind_permission_items(
+        plan: "DepartmentSpaceRebindPlan",
+        *,
+        reverse: bool = False,
+    ) -> tuple[list[AuthorizeGrantItem], list[AuthorizeRevokeItem]]:
+        grant_department_id = plan.old_department_id if reverse else plan.new_department_id
+        revoke_department_id = plan.new_department_id if reverse else plan.old_department_id
+        grant_manager_ids = plan.manager_revoke_user_ids if reverse else plan.manager_grant_user_ids
+        revoke_manager_ids = plan.manager_grant_user_ids if reverse else plan.manager_revoke_user_ids
+        grants = [
+            *(
+                [AuthorizeGrantItem(
+                    subject_type="department",
+                    subject_id=grant_department_id,
+                    relation="viewer",
+                    include_children=True,
+                )]
+                if not reverse or plan.revoke_old_department_viewer
+                else []
+            ),
+            *[
+                AuthorizeGrantItem(
+                    subject_type="user",
+                    subject_id=user_id,
+                    relation="manager",
+                    include_children=False,
+                )
+                for user_id in grant_manager_ids
+            ],
+        ]
+        revokes = [
+            *(
+                [AuthorizeRevokeItem(
+                    subject_type="department",
+                    subject_id=revoke_department_id,
+                    relation="viewer",
+                    include_children=True,
+                )]
+                if reverse or plan.revoke_old_department_viewer
+                else []
+            ),
+            *[
+                AuthorizeRevokeItem(
+                    subject_type="user",
+                    subject_id=user_id,
+                    relation="manager",
+                    include_children=False,
+                )
+                for user_id in revoke_manager_ids
+            ],
+        ]
+        return grants, revokes
+
+    async def _write_department_rebind_permissions(
+        self,
+        plan: "DepartmentSpaceRebindPlan",
+        *,
+        reverse: bool = False,
+    ) -> None:
+        grants, revokes = self._department_rebind_permission_items(plan, reverse=reverse)
+        await PermissionService.authorize(
+            object_type="knowledge_space",
+            object_id=str(plan.space_id),
+            grants=grants,
+            revokes=revokes,
+            enforce_fga_success=True,
+        )
+
     async def update_knowledge_space(
         self,
         space_id: int,
@@ -6917,6 +6994,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_id: int | None = None,
         auto_tag_library_ids: list[int] | None = None,
         auto_tag_custom_tags: list[str] | None = None,
+        department_id: int | None = None,
     ) -> Knowledge:
         """Modify an existing knowledge space."""
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -6925,6 +7003,37 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
 
+        rebind_scope = None
+        target_department = None
+        old_department = None
+        if department_id is not None:
+            if not self.login_user.is_admin():
+                raise UnAuthorizedError(msg="仅系统管理员可以修改部门知识库归属")
+            rebind_scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+            if (
+                rebind_scope is None
+                or rebind_scope.level != KnowledgeSpaceLevelEnum.DEPARTMENT
+                or rebind_scope.owner_type != KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
+            ):
+                raise SpaceInvalidScopeOwnerError(msg="仅部门知识库可以修改所属部门")
+            target_department = await DepartmentDao.aget_by_id(department_id)
+            if (
+                target_department is None
+                or getattr(target_department, "status", "active") != "active"
+                or int(getattr(target_department, "is_deleted", 0) or 0) == 1
+            ):
+                raise SpaceInvalidScopeOwnerError(msg="目标部门不存在或已归档")
+            old_department_id = int(rebind_scope.owner_id)
+            old_department = (
+                target_department
+                if old_department_id == int(department_id)
+                else await DepartmentDao.aget_by_id(old_department_id)
+            )
+            if old_department is None:
+                raise SpaceInvalidScopeOwnerError(msg="原所属部门不存在或已归档")
+            if self.department_space_binding_repo is None:
+                raise RuntimeError("DepartmentSpaceBindingRepository is not configured")
+
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         old_auth_type = space.auth_type
@@ -6932,14 +7041,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         name_changed = normalized_name is not None and normalized_name != space.name
 
         if name_changed:
-            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+            scope = rebind_scope or await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
             if scope is None:
                 raise SpaceInvalidScopeOwnerError(msg="Knowledge space scope does not exist")
             await self._ensure_space_name_unique_in_scope(
                 name=normalized_name,
                 level=scope.level,
                 owner_type=scope.owner_type,
-                owner_id=int(scope.owner_id),
+                owner_id=department_id if department_id is not None else int(scope.owner_id),
                 exclude_id=space_id,
                 tenant_id=int(scope.tenant_id or space.tenant_id or self.login_user.tenant_id),
             )
@@ -6987,6 +7096,87 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.auto_tag_library_id = resolved_library_id
 
         space = await KnowledgeDao.async_update_space(space)
+        if department_id is not None:
+            old_admin_rows = await DepartmentService.aget_admins(old_department.dept_id, self.login_user)
+            new_admin_rows = (
+                old_admin_rows
+                if int(old_department.id) == int(target_department.id)
+                else await DepartmentService.aget_admins(target_department.dept_id, self.login_user)
+            )
+            has_manual_old_department_viewer = False
+            if int(old_department.id) != int(target_department.id):
+                has_manual_old_department_viewer = (
+                    await FineGrainedPermissionService.has_explicit_relation_binding(
+                        object_type="knowledge_space",
+                        object_id=space_id,
+                        subject_type="department",
+                        subject_id=int(old_department.id),
+                        relation="viewer",
+                        include_children=True,
+                    )
+                )
+            plan = await self.department_space_binding_repo.prepare_rebind_department(
+                space_id=space_id,
+                department_id=department_id,
+                operator_id=self.login_user.user_id,
+                creator_user_id=int(space.user_id),
+                old_admin_user_ids={int(row["user_id"]) for row in old_admin_rows},
+                new_admin_user_ids={int(row["user_id"]) for row in new_admin_rows},
+                revoke_old_department_viewer=not has_manual_old_department_viewer,
+            )
+            if not plan.is_noop:
+                protected_manager_ids = {
+                    user_id
+                    for user_id in plan.manager_revoke_user_ids
+                    if await FineGrainedPermissionService.has_explicit_relation_binding(
+                        object_type="knowledge_space",
+                        object_id=space_id,
+                        subject_type="user",
+                        subject_id=user_id,
+                        relation="manager",
+                        include_children=False,
+                    )
+                }
+                if protected_manager_ids:
+                    plan = replace(
+                        plan,
+                        manager_revoke_user_ids=tuple(
+                            user_id
+                            for user_id in plan.manager_revoke_user_ids
+                            if user_id not in protected_manager_ids
+                        ),
+                    )
+                try:
+                    await self._write_department_rebind_permissions(plan)
+                except Exception:
+                    await self.department_space_binding_repo.rollback_prepared_rebind()
+                    try:
+                        await self._write_department_rebind_permissions(plan, reverse=True)
+                    except Exception:
+                        _logger.exception(
+                            "Department rebind permission rollback failed: space_id=%s "
+                            "old_department_id=%s new_department_id=%s",
+                            space_id,
+                            plan.old_department_id,
+                            plan.new_department_id,
+                        )
+                    raise
+            try:
+                await self.department_space_binding_repo.commit_prepared_rebind()
+            except Exception:
+                if not plan.is_noop:
+                    try:
+                        await self._write_department_rebind_permissions(plan, reverse=True)
+                    except Exception:
+                        _logger.exception(
+                            "Department rebind compensation failed: space_id=%s old_department_id=%s "
+                            "new_department_id=%s",
+                            space_id,
+                            plan.old_department_id,
+                            plan.new_department_id,
+                        )
+                        raise
+                raise
         if name_changed:
             await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         new_auth_type = space.auth_type

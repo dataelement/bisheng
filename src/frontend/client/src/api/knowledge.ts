@@ -1536,6 +1536,7 @@ export async function updateSpaceApi(
         auto_tag_enabled?: boolean;
         auto_tag_library_id?: number | null;
         auto_tag_library_ids?: number[];
+        department_id?: number;
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");

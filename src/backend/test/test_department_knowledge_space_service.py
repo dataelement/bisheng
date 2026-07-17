@@ -11,7 +11,6 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMember,
     UserRoleEnum,
 )
-from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceExistsError
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     Knowledge,
@@ -175,6 +174,24 @@ def _install_service_stubs() -> None:
         sys.modules['bisheng.worker.knowledge.file_worker'] = file_worker_module
         sys.modules['bisheng.worker.knowledge'].file_worker = file_worker_module
 
+    if 'bisheng.workstation.domain.services' not in sys.modules:
+        workstation_services_module = ModuleType('bisheng.workstation.domain.services')
+        workstation_services_module.__path__ = []
+
+        class _DummyWorkStationService:
+            pass
+
+        workstation_services_module.WorkStationService = _DummyWorkStationService
+        sys.modules['bisheng.workstation.domain.services'] = workstation_services_module
+
+        workstation_service_module = ModuleType(
+            'bisheng.workstation.domain.services.workstation_service'
+        )
+        workstation_service_module.WorkStationService = _DummyWorkStationService
+        sys.modules[
+            'bisheng.workstation.domain.services.workstation_service'
+        ] = workstation_service_module
+
 
 def _load_service_class():
     _install_service_stubs()
@@ -266,30 +283,65 @@ async def test_batch_create_spaces_creates_binding_and_returns_infos():
 
 
 @pytest.mark.asyncio
-async def test_batch_create_spaces_rejects_duplicate_department_binding():
+async def test_batch_create_spaces_allows_multiple_spaces_for_same_department():
     DepartmentKnowledgeSpaceService = _load_service_class()
     req = DepartmentKnowledgeSpaceBatchCreateReq(
-        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)]
+        items=[
+            DepartmentKnowledgeSpaceBatchItem(department_id=10, name='部门空间A'),
+            DepartmentKnowledgeSpaceBatchItem(department_id=10, name='部门空间B'),
+        ]
     )
     login_user = _make_login_user()
     department = _make_department()
-    existing_binding = SimpleNamespace(department_id=10)
+    created_spaces = [SimpleNamespace(id=101), SimpleNamespace(id=102)]
+    created_infos = [
+        SimpleNamespace(id=101, department_id=10),
+        SimpleNamespace(id=102, department_id=10),
+    ]
 
     with patch(
         'bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentDao.aget_by_ids',
         new_callable=AsyncMock,
         return_value=[department],
     ), patch(
-        'bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_department_ids',
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.'
+        'KnowledgeSpaceService.create_knowledge_space',
         new_callable=AsyncMock,
-        return_value=[existing_binding],
+        side_effect=created_spaces,
+    ), patch(
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.'
+        'DepartmentKnowledgeSpaceDao.acreate',
+        new_callable=AsyncMock,
+    ) as create_binding, patch(
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.'
+        'DepartmentKnowledgeSpaceService._grant_department_members_viewer',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.'
+        'DepartmentService.aget_admins',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.'
+        'DepartmentKnowledgeSpaceService._grant_default_department_admins',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.'
+        'KnowledgeSpaceService.get_space_info',
+        new_callable=AsyncMock,
+        side_effect=created_infos,
     ):
-        with pytest.raises(DepartmentKnowledgeSpaceExistsError):
-            await DepartmentKnowledgeSpaceService.batch_create_spaces(
-                request=SimpleNamespace(),
-                login_user=login_user,
-                req=req,
-            )
+        result = await DepartmentKnowledgeSpaceService.batch_create_spaces(
+            request=SimpleNamespace(),
+            login_user=login_user,
+            req=req,
+        )
+
+    assert result == created_infos
+    assert [one.kwargs for one in create_binding.await_args_list] == [
+        {'tenant_id': 1, 'department_id': 10, 'space_id': 101, 'created_by': 1},
+        {'tenant_id': 1, 'department_id': 10, 'space_id': 102, 'created_by': 1},
+    ]
 
 
 @pytest.mark.asyncio
@@ -359,7 +411,10 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
         membership_source='department_admin',
         department_admin_promoted_from_role=UserRoleEnum.MEMBER.value,
     )
-    space_service = SimpleNamespace()
+    space_service = SimpleNamespace(
+        _user_can_manage_space=AsyncMock(return_value=True),
+        _send_space_event_notification=AsyncMock(),
+    )
 
     with patch(
         'bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_find_member',

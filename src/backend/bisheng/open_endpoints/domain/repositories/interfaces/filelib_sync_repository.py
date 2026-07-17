@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 from bisheng.database.models.department import Department, UserDepartment
-from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.user.domain.models.user import User
@@ -25,10 +24,6 @@ class FilelibSyncRepository(BaseRepository[KnowledgeFile, int], ABC):
 
     @abstractmethod
     async def find_department_by_name(self, name: str) -> Department | None:
-        pass
-
-    @abstractmethod
-    async def find_department_space(self, department_id: int) -> DepartmentKnowledgeSpace | None:
         pass
 
     @abstractmethod

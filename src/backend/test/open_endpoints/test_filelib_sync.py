@@ -10,9 +10,11 @@ from fastapi.testclient import TestClient
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.filelib_sync import (
+    FilelibSyncConflictError,
     FilelibSyncInvalidParamsError,
     FilelibSyncNotFoundError,
 )
+from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceAmbiguousError
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -182,13 +184,30 @@ async def test_main_department_name_without_id_must_match_caller_department():
 async def test_nearest_department_binding_is_selected():
     department = _department(3, "三级部门", "/1/2/3/")
     repository = SimpleNamespace(
-        find_department_space=AsyncMock(side_effect=[None, SimpleNamespace(space_id=22)]),
         find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=22, name="二级部门库", type=3)),
     )
-    space = await _service(repository)._find_nearest_department_space(department)
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service."
+        "DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=22),
+    ) as resolve:
+        space = await _service(repository)._find_nearest_department_space(department)
     assert space.id == 22
-    assert repository.find_department_space.await_args_list[0].args == (3,)
-    assert repository.find_department_space.await_args_list[1].args == (2,)
+    resolve.assert_awaited_once_with([3, 2, 1])
+
+
+async def test_ambiguous_department_binding_is_rejected_before_space_lookup():
+    department = _department(3, "三级部门", "/1/2/3/")
+    repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service."
+        "DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
+    ):
+        with pytest.raises(FilelibSyncConflictError, match="multiple target"):
+            await _service(repository)._find_nearest_department_space(department)
+
+    repository.find_knowledge_by_id.assert_not_awaited()
 
 
 def test_unbound_business_domain_is_rejected():

@@ -6,7 +6,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.database.models.department import Department, UserDepartment
-from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -58,14 +57,6 @@ class FilelibSyncRepositoryImpl(
                 Department.is_deleted == 0,
             )
             .order_by(Department.id.asc())
-        )
-        return result.first()
-
-    async def find_department_space(self, department_id: int) -> DepartmentKnowledgeSpace | None:
-        result = await self.session.exec(
-            select(DepartmentKnowledgeSpace).where(
-                DepartmentKnowledgeSpace.department_id == department_id,
-            )
         )
         return result.first()
 
