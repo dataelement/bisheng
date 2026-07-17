@@ -2020,28 +2020,75 @@ async def test_public_latest_selected_updated_time_sort_still_bypasses_permissio
 
 
 @pytest.mark.asyncio
-async def test_public_only_without_latest_selected_keeps_existing_permission_path(service):
+async def test_public_tag_browse_uses_authoritative_public_spaces_without_permissions(service):
+    public_space = _make_space(space_id=12, user_id=7, space_level=KnowledgeSpaceLevelEnum.PUBLIC)
+    public_space.name = "公共行业情报库"
+    public_file = _make_file(file_id=1580, knowledge_id=12, file_name="行业趋势分析.pdf")
+
     with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level",
+            new_callable=AsyncMock,
+            return_value=[12],
+        ) as mock_public_space_ids,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[public_space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor",
+            new_callable=AsyncMock,
+            return_value=[public_file],
+        ) as mock_files,
+        patch.object(
+            service,
+            "_get_shougang_portal_tag_file_ids",
+            new_callable=AsyncMock,
+            return_value=[1580],
+        ) as mock_tag_files,
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new_callable=AsyncMock,
+            side_effect=lambda input_files: [{**file.model_dump(), "tags": []} for file in input_files],
+        ),
+        patch.object(
+            service,
+            "_resolve_shougang_portal_source_paths",
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ),
         patch.object(
             service,
             "_get_shougang_portal_visible_search_spaces",
             new_callable=AsyncMock,
-            return_value=[],
+            side_effect=AssertionError("public tag browse must not resolve user-visible spaces"),
         ) as mock_visible_spaces,
         patch.object(
             service,
-            "_get_shougang_portal_public_search_spaces",
+            "_filter_shougang_portal_visible_files",
             new_callable=AsyncMock,
-            side_effect=AssertionError("public_only alone must not activate the permission bypass"),
-        ) as mock_public_spaces,
+            side_effect=AssertionError("public tag browse must not evaluate file permissions"),
+        ) as mock_file_visibility,
     ):
-        result = await service.search_shougang_portal_files(
-            ShougangPortalFileSearchReq(public_only=True, space_ids=[12])
+        result = await service.browse_shougang_portal_files(
+            ShougangPortalFileBrowseReq(
+                tag="行业情报",
+                space_ids=[12, 99],
+                public_only=True,
+                sort="updated_at_desc",
+                limit=6,
+            )
         )
 
-    mock_visible_spaces.assert_awaited_once_with([12], None)
-    mock_public_spaces.assert_not_awaited()
-    assert result == {"data": [], "has_more": False, "next_cursor": None}
+    mock_public_space_ids.assert_awaited_once_with(KnowledgeSpaceLevelEnum.PUBLIC)
+    mock_visible_spaces.assert_not_awaited()
+    mock_file_visibility.assert_not_awaited()
+    mock_tag_files.assert_awaited_once_with([12], "行业情报")
+    assert mock_files.await_args.kwargs["knowledge_ids"] == [12]
+    assert mock_files.await_args.kwargs["file_ids"] == [1580]
+    assert [item["id"] for item in result["data"]] == [1580]
 
 
 @pytest.mark.asyncio
