@@ -4,7 +4,7 @@ from importlib import metadata
 
 try:
     # SetujuciGo to automatic modification
-    __version__ = '2.4.0'
+    __version__ = '2.6.0'
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ''
