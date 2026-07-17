@@ -6386,10 +6386,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if callable(is_admin):
             is_global_admin = bool(is_admin())
 
+        public_space_ids = await self._get_shougang_portal_public_space_ids(
+            space_ids,
+            spaces=ordered_spaces,
+        )
+        public_can_download = "download_file" in default_permission_ids_for_relation("viewer")
         visible_spaces: list[Knowledge] = []
-        # space_id -> can_download, derived from the same per-space effective
-        # 'download_file' permission the download endpoint enforces, so it never
-        # drifts from actual download enforcement (and matches file preview).
+        # space_id -> can_download. Public spaces use canonical viewer defaults;
+        # other spaces use the same effective permission enforced by downloads.
         download_map: dict[int, bool] = {}
         permission_checks = []
         permission_spaces: list[Knowledge] = []
@@ -6400,11 +6404,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 visible_spaces.append(space)
                 download_map[space_id] = True
                 continue
-            # Every other space (including square-preview ones) needs its real
-            # effective-permission set: square-preview spaces stay visible regardless
-            # of the result, but the download flag must reflect the actual grant — a
-            # viewer-role user, for instance, may see a space without being allowed to
-            # download its files.
+            if space_id in public_space_ids:
+                # Public spaces are visible by business definition. Reuse the
+                # canonical public viewer permissions instead of fanning out one
+                # user-specific OpenFGA lookup per space.
+                visible_spaces.append(space)
+                download_map[space_id] = public_can_download
+                continue
+            # Non-public spaces (including square-preview ones) need their real
+            # effective-permission set. Square-preview spaces stay visible regardless
+            # of the result, while the permission result still controls download.
             permission_spaces.append(space)
             permission_checks.append(self._get_effective_permission_ids("knowledge_space", space_id))
 
