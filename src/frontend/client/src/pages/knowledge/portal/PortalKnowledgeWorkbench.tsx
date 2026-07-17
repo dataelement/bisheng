@@ -1614,9 +1614,15 @@ export default function PortalKnowledgeWorkbench() {
                     ...res,
                     original_url: resolvePreviewUrl(res.original_url),
                     preview_url: resolvePreviewUrl(res.preview_url),
+                    pdf_preview_url: resolvePreviewUrl(res.pdf_preview_url),
                     html_preview_url: resolvePreviewUrl(res.html_preview_url),
                 };
-                const nextUrl = res.preview_url || res.html_preview_url || res.original_url;
+                // Prefer the PDF rendition of a Word file: LibreOffice lays the page out
+                // like Word does, while converting the .docx to HTML in the browser drops
+                // e-seals and shape positioning. Empty when conversion failed or the file
+                // predates it, so we fall back to the .docx preview. The viewer is picked
+                // from the URL's extension, so pointing at the .pdf routes it by itself.
+                const nextUrl = res.pdf_preview_url || res.preview_url || res.html_preview_url || res.original_url;
                 if (!nextUrl) {
                     setPreview({
                         loading: false,

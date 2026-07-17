@@ -53,6 +53,10 @@ class BaseBishengLoader(BaseLoader):
         # original file -> preview file path; will be uploaded to minio by
         # ExtraFileTransformer
         self.preview_file_path: str | None = None
+        # Optional PDF rendition of the preview file, uploaded alongside it by
+        # ExtraFileTransformer. Word previews prefer it because LibreOffice lays the
+        # page out like Word does; None means callers fall back to preview_file_path.
+        self.pdf_preview_file_path: str | None = None
         # bbox_list
         self.bbox_list: list[TextBbox] = []
 

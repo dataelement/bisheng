@@ -33,7 +33,7 @@ def get_libreoffice_path():
     return None
 
 
-def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None):
+def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None, timeout=180):
     if not os.path.isabs(input_path):
         input_path = os.path.abspath(input_path)
     if not os.path.exists(input_path):
@@ -78,8 +78,8 @@ def _convert_file_extension(input_path, convert_extension, output_dir=None, exce
             ]
             logger.debug(f"Executing command: {' '.join(command)}")
             process = subprocess.run(
-                command, check=True, capture_output=True, text=True, timeout=180
-            )  # 120 seconds timeout
+                command, check=True, capture_output=True, text=True, timeout=timeout
+            )
         logger.debug(f"LibreOffice STDOUT: {process.stdout}")
         if process.stderr:  # LibreOffice sometimes logger.debugs info to stderr even on success
             logger.debug(f"LibreOffice STDERR: {process.stderr}")
@@ -158,6 +158,26 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
         return False
 
     return _convert_file_extension(input_path, "pdf", output_dir, except_file_ext="pdf")
+
+
+def convert_docx_to_pdf(input_path, output_dir=None, timeout=180):
+    """
+    Converts .doc or .docx to PDF using LibreOffice soffice command.
+
+    Used to render Word previews: LibreOffice lays the page out the way Word does,
+    unlike the HTML converted from .docx in the browser.
+
+    Args:
+        input_path (str): Path to the .doc or .docx file.
+        output_dir (str, optional): Directory to save the PDF.
+                                    Defaults to the same directory as the input file.
+        timeout (int): Subprocess timeout in seconds.
+    """
+    if not input_path.lower().endswith((".doc", ".docx")):
+        logger.debug(f"Error: {input_path} is not a .doc or .docx file.")
+        return False
+
+    return _convert_file_extension(input_path, "pdf", output_dir, except_file_ext="pdf", timeout=timeout)
 
 
 def convert_ppt_to_pptx(input_path, output_dir=None):
