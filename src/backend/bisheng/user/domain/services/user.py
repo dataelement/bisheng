@@ -387,8 +387,6 @@ class UserService:
         # qualifies for login. Without bypass, every DAO below trips
         # NoTenantContextError because do_orm_execute can't infer a tenant for
         # tenant-aware tables (userrole/department/usergroup/roleaccess).
-        from bisheng.core.context.tenant import bypass_tenant_filter
-
         with bypass_tenant_filter():
             if role_ids is None:
                 roles = await UserRoleDao.aget_user_roles(db_user.user_id)
@@ -479,7 +477,10 @@ class UserService:
                 NoTenantsAvailableError,
                 TenantDisabledError,
             )
-            from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+            from bisheng.database.models.department import (
+                UserDepartmentDao,
+            )
+            from bisheng.database.models.tenant import TenantDao, UserTenantDao
 
             # Reject login when the user's primary department mounts to a
             # disabled child tenant. TenantResolver intentionally walks past
@@ -488,11 +489,6 @@ class UserService:
             # treats it as a member-level freeze. Without this guard a member
             # of a disabled tenant would get fallback-routed to Root and log
             # in normally, which contradicts the operator's intent.
-            from bisheng.database.models.department import (
-                UserDepartmentDao,
-            )
-            from bisheng.database.models.tenant import TenantDao, UserTenantDao
-
             with bypass_tenant_filter():
                 primary_dept = await UserDepartmentDao.aget_user_primary_department(
                     db_user.user_id,
@@ -571,7 +567,6 @@ class UserService:
         # DB.status is authoritative; Redis blacklist is a defensive cross-check.
         if settings.multi_tenant.enabled and tenant_id and tenant_id > 0:
             from bisheng.common.errcode.tenant import TenantDisabledError
-            from bisheng.core.context.tenant import bypass_tenant_filter
             from bisheng.database.models.tenant import TenantDao
 
             with bypass_tenant_filter():
@@ -656,7 +651,6 @@ class UserService:
             extra_fields["tenant_id"] = tenant_id
             tenant_info = next((t for t in (tenants_list or []) if t.get("tenant_id") == tenant_id), None)
             if not tenant_info and settings.multi_tenant.enabled:
-                from bisheng.core.context.tenant import bypass_tenant_filter
                 from bisheng.database.models.tenant import TenantDao
 
                 with bypass_tenant_filter():
