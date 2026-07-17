@@ -4370,11 +4370,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _browse_shougang_portal_files_impl(self, req: ShougangPortalFileBrowseReq) -> dict:
         _set_portal_search_stage("resolve_spaces")
-        is_public_latest_selected = bool(req.public_only) and self._is_shougang_portal_latest_selected_recommendation(
-            req.recommendation
-        )
-        if is_public_latest_selected:
-            spaces = await self._get_shougang_portal_public_search_spaces()
+        trusted_public_scope = bool(req.public_only)
+        if trusted_public_scope:
+            requested_public_space_ids = (
+                None
+                if self._is_shougang_portal_latest_selected_recommendation(req.recommendation)
+                else req.space_ids
+            )
+            spaces = await self._get_shougang_portal_public_search_spaces(requested_public_space_ids)
         else:
             spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
         perf = _get_portal_search_perf()
@@ -4394,7 +4397,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return await self._list_shougang_portal_hot_read_files(
                 req=req,
                 spaces=spaces,
-                trusted_public_scope=is_public_latest_selected,
+                trusted_public_scope=trusted_public_scope,
             )
 
         _set_portal_search_stage("resolve_tag")
@@ -4408,7 +4411,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             req=req,
             spaces=spaces,
             tag_file_ids=tag_file_ids,
-            trusted_public_scope=is_public_latest_selected,
+            trusted_public_scope=trusted_public_scope,
         )
 
     async def _recommend_shougang_portal_files(
@@ -6286,10 +6289,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def _is_shougang_portal_latest_selected_recommendation(recommendation: str | None) -> bool:
         return str(recommendation or "").strip() == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
 
-    async def _get_shougang_portal_public_search_spaces(self) -> list[Knowledge]:
+    async def _get_shougang_portal_public_search_spaces(
+        self,
+        requested_space_ids: list[int] | None = None,
+    ) -> list[Knowledge]:
         """Resolve the current tenant's public spaces without user permission checks."""
         public_space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
         unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in public_space_ids if int(space_id) > 0))
+        requested_ids = {
+            int(space_id)
+            for space_id in (requested_space_ids or [])
+            if int(space_id) > 0
+        }
+        if requested_ids:
+            unique_space_ids = [space_id for space_id in unique_space_ids if space_id in requested_ids]
         if not unique_space_ids:
             return []
 
