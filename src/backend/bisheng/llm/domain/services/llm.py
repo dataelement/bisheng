@@ -14,7 +14,13 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
-from bisheng.common.errcode.llm import ModelNameRepeatError, ServerAddAllError, ServerAddError, ServerExistError
+from bisheng.common.errcode.llm import (
+    ModelNameRepeatError,
+    ServerAddAllError,
+    ServerAddError,
+    ServerExistError,
+    WorkbenchEmbeddingError,
+)
 from bisheng.common.errcode.llm_tenant import (
     LLMModelNotAccessibleError,
     LLMSystemConfigForbiddenError,
@@ -1339,6 +1345,12 @@ class LLMService:
             ``None`` falls back to the admin-scope ContextVar then Root.
         :return:
         """
+        if config_obj.embedding_model is not None:
+            embedding_model_id = _coerce_model_id(config_obj.embedding_model.id)
+            if embedding_model_id is None:
+                raise WorkbenchEmbeddingError()
+            config_obj.embedding_model.id = str(embedding_model_id)
+
         # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 

@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
 from bisheng.llm.domain.services.llm import LLMService
 
@@ -73,3 +74,22 @@ async def test_provided_models_replace_normally():
     incoming = WorkbenchModelConfig(models=[WSModel(id="840", name="qwen3.7-max")], embedding_model=None)
     persisted = await _run_and_capture(incoming)
     assert [m["id"] for m in persisted["models"]] == ["840"]
+
+
+@pytest.mark.parametrize("invalid_model_id", ["", "null", "undefined", "0", "-1"])
+@pytest.mark.asyncio
+async def test_invalid_embedding_model_id_returns_business_error(invalid_model_id: str):
+    config = WorkbenchModelConfig(
+        models=[WSModel(id="840", name="qwen3.7-max")],
+        embedding_model=WSModel(id=invalid_model_id),
+    )
+
+    with patch(
+        "bisheng.llm.domain.services.llm.avalidate_system_model_refs",
+        new=AsyncMock(),
+    ) as mock_validate:
+        with pytest.raises(WorkbenchEmbeddingError) as exc_info:
+            await LLMService.update_workbench_llm(1, config, MagicMock(), tenant_id=1)
+
+    assert exc_info.value.code == 10810
+    mock_validate.assert_not_awaited()
