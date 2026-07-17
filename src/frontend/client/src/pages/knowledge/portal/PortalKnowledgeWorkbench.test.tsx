@@ -1405,7 +1405,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
-    test("部门重绑失败时保留设置抽屉并展示后端错误", async () => {
+    test("部门重绑遇到其他后端错误时保留设置抽屉并展示错误", async () => {
         const departmentSpace = makeSpace("department-1", "部门空间01", {
             spaceLevel: SpaceLevel.DEPARTMENT,
             departmentId: 9,
@@ -1422,7 +1422,7 @@ describe("PortalKnowledgeWorkbench", () => {
             personalSpaces: [],
         } as any);
         jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
-        jest.mocked(updateSpaceApi).mockRejectedValue(new Error("该部门已有知识库"));
+        jest.mocked(updateSpaceApi).mockRejectedValue(new Error("知识空间更新失败"));
 
         renderWorkbench("/knowledge-portal", { role: "admin" });
 
@@ -1434,7 +1434,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => expect(mockCreateSpaceConfirmResult).toBe(false));
         expect(screen.getByTestId("create-space-drawer")).toBeInTheDocument();
         expect(mockShowToast).toHaveBeenCalledWith({
-            message: "该部门已有知识库",
+            message: "知识空间更新失败",
             severity: NotificationSeverity.ERROR,
         });
     });

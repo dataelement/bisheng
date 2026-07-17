@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as mammoth from "mammoth";
+import { sanitizeDocxForPreview } from "@/utils/docxSanitizer";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 declare const __APP_ENV__: any;
@@ -41,7 +42,8 @@ const DocxPreview = ({ filePath }) => {
                 const arrayBuffer = await response.arrayBuffer();
 
                 // 3. 使用 Mammoth 转换为 HTML
-                const result = await mammoth.convertToHtml({ arrayBuffer });
+                const sanitized = await sanitizeDocxForPreview(arrayBuffer);
+                const result = await mammoth.convertToHtml({ arrayBuffer: sanitized.arrayBuffer });
 
                 // 4. 设置生成的 HTML
                 setHtmlContent(result.value);

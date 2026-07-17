@@ -2154,9 +2154,17 @@ class KnowledgeService(KnowledgeUtils):
         html_snapshot_object_name = metadata.get("html_snapshot_object_name")
         if html_snapshot_object_name:
             html_preview_url = cls.get_file_share_url_with_empty(html_snapshot_object_name)
+        # PDF rendition of a Word preview. Empty when the conversion failed or the file
+        # was parsed before this existed, which is the frontend's cue to fall back to
+        # preview_url (the .docx).
+        pdf_preview_url = ""
+        pdf_preview_object_name = metadata.get("pdf_preview_object_name")
+        if pdf_preview_object_name:
+            pdf_preview_url = cls.get_file_share_url_with_empty(pdf_preview_object_name)
         return {
             "original_url": original_url,
             "preview_url": preview_url,
+            "pdf_preview_url": pdf_preview_url,
             "file_source": file.file_source or "",
             "source_url": metadata.get("source_url") or "",
             "final_url": metadata.get("final_url") or "",

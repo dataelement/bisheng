@@ -62,6 +62,27 @@ function collectExplicitDepartmentSelections(
   return out;
 }
 
+function collectSelectedAncestorIds(
+  nodes: DepartmentNode[],
+  selectedIds: Set<number>
+): Set<number> {
+  const ancestorIds = new Set<number>();
+
+  const walk = (items: DepartmentNode[], ancestorPath: number[]) => {
+    for (const node of items) {
+      if (selectedIds.has(node.id)) {
+        ancestorPath.forEach((id) => ancestorIds.add(id));
+      }
+      if (node.children?.length) {
+        walk(node.children, [...ancestorPath, node.id]);
+      }
+    }
+  };
+
+  walk(nodes, []);
+  return ancestorIds;
+}
+
 export function SubjectSearchDepartment({
   value,
   onChange,
@@ -103,7 +124,7 @@ export function SubjectSearchDepartment({
     return () => controller.abort();
   }, [grantDepartmentsApi, loadDepartments, resourceId, resourceType]);
 
-  const selectedIds = new Set(value.map((s) => s.id));
+  const selectedIds = useMemo(() => new Set(value.map((s) => s.id)), [value]);
   const selectedDepartmentsById = useMemo(
     () =>
       new Map(
@@ -112,6 +133,12 @@ export function SubjectSearchDepartment({
           .map((subject) => [subject.id, subject] as const)
       ),
     [value]
+  );
+  const indeterminateIds = useMemo(
+    () => selectionMode === "single"
+      ? collectSelectedAncestorIds(tree, selectedIds)
+      : new Set<number>(),
+    [selectedIds, selectionMode, tree]
   );
 
   useEffect(() => {
@@ -213,6 +240,7 @@ export function SubjectSearchDepartment({
               depth={0}
               expanded={expanded}
               selectedIds={selectedIds}
+              indeterminateIds={indeterminateIds}
               selectedDepartmentsById={selectedDepartmentsById}
               ancestorIncluded={false}
               disabledIds={disabledIdSet}
@@ -229,12 +257,13 @@ export function SubjectSearchDepartment({
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode,
+  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode,
 }: {
   node: DepartmentNode;
   depth: number;
   expanded: Set<number>;
   selectedIds: Set<number>;
+  indeterminateIds: Set<number>;
   selectedDepartmentsById: Map<number, SelectedSubject>;
   ancestorIncluded: boolean;
   disabledIds: Set<number>;
@@ -253,6 +282,7 @@ function TreeNode({
   const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected;
   const isDisabled = disabledIds.has(node.id);
   const isChecked = isExplicitlySelected || isImplicitlySelected;
+  const isIndeterminate = !isChecked && indeterminateIds.has(node.id);
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
 
   return (
@@ -282,7 +312,7 @@ function TreeNode({
           <span className="w-5" />
         )}
         <Checkbox
-          checked={isChecked}
+          checked={isIndeterminate ? "indeterminate" : isChecked}
           disabled={isDisabled}
           onClick={(e) => e.stopPropagation()}
           onCheckedChange={() => {
@@ -312,6 +342,7 @@ function TreeNode({
           depth={depth + 1}
           expanded={expanded}
           selectedIds={selectedIds}
+          indeterminateIds={indeterminateIds}
           selectedDepartmentsById={selectedDepartmentsById}
           ancestorIncluded={nextAncestorIncluded}
           disabledIds={disabledIds}

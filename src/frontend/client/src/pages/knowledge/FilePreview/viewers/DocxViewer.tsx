@@ -1,6 +1,7 @@
 import * as mammoth from "mammoth";
 import { useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { sanitizeDocxForPreview } from "~/utils/docxSanitizer";
 
 interface DocxViewerProps {
     fileUrl: string;
@@ -21,7 +22,8 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
                 const response = await fetch(fileUrl);
                 if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const arrayBuffer = await response.arrayBuffer();
-                const result = await mammoth.convertToHtml({ arrayBuffer });
+                const sanitized = await sanitizeDocxForPreview(arrayBuffer);
+                const result = await mammoth.convertToHtml({ arrayBuffer: sanitized.arrayBuffer });
                 setHtmlContent(result.value);
                 setError(null);
             } catch (err: any) {

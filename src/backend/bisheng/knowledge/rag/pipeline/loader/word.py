@@ -1,9 +1,13 @@
 import os
 
 from langchain_core.documents import Document
+from loguru import logger
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
-from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_doc_to_docx
+from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
+    convert_doc_to_docx,
+    convert_docx_to_pdf,
+)
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_docx import handler as docx_handler
 from bisheng.knowledge.rag.pipeline.loader.utils.md_post_processing import post_processing
 
@@ -49,4 +53,37 @@ class BishengWordLoader(BaseBishengLoader):
             content = f.read()
         content = self.rewrite_local_image_refs(content)
 
+        self._build_pdf_preview()
+
         return [Document(page_content=content, metadata=self.file_metadata.copy())]
+
+    def _build_pdf_preview(self) -> None:
+        """Render the preview .docx to PDF for the frontend to display.
+
+        The browser converts .docx to HTML, which loses e-seals and shape positioning;
+        LibreOffice lays the page out the way Word does. Best-effort: the .docx preview
+        remains as the fallback, so a conversion failure must not fail the parse of a
+        file whose text extracted fine.
+        """
+        if not self.preview_file_path or not os.path.exists(self.preview_file_path):
+            return
+        try:
+            pdf_path = convert_docx_to_pdf(
+                input_path=self.preview_file_path,
+                # Well under the parse pipeline's own budget: a preview is not worth
+                # holding a worker thread for minutes.
+                timeout=60,
+            )
+        except Exception:
+            logger.exception(
+                "failed to render pdf preview for %s; falling back to the docx preview",
+                self.preview_file_path,
+            )
+            return
+        if pdf_path and os.path.exists(pdf_path):
+            self.pdf_preview_file_path = pdf_path
+        else:
+            logger.warning(
+                "pdf preview conversion produced no file for %s; falling back to the docx preview",
+                self.preview_file_path,
+            )

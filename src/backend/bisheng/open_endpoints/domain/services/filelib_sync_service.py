@@ -17,12 +17,18 @@ from bisheng.common.errcode.filelib_sync import (
     FilelibSyncNotFoundError,
     FilelibSyncPermissionDeniedError,
 )
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceAmbiguousError,
+    SpacePermissionDeniedError,
+)
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.department import Department
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetResolver,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
@@ -332,21 +338,18 @@ class FilelibSyncService:
         department = await self.repository.find_department_by_name(str(rule.fixed_department_name))
         if department is None:
             raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在部门{rule.fixed_department_name}")
-        binding = await self.repository.find_department_space(int(department.id))
-        if binding is None:
-            raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{rule.fixed_department_name}")
-        space = await self.repository.find_knowledge_by_id(int(binding.space_id))
-        if space is None:
-            raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{rule.fixed_department_name}")
-        return space
+        return await self._find_nearest_department_space(department)
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:
         chain = self._department_chain(department)
-        for department_id in chain:
-            binding = await self.repository.find_department_space(department_id)
-            if binding is None:
-                continue
-            space = await self.repository.find_knowledge_by_id(int(binding.space_id))
+        try:
+            space_id = await DepartmentSpaceTargetResolver.resolve(chain)
+        except DepartmentKnowledgeSpaceAmbiguousError as exc:
+            raise FilelibSyncConflictError(
+                msg="multiple target knowledge spaces are bound to the department",
+            ) from exc
+        if space_id is not None:
+            space = await self.repository.find_knowledge_by_id(space_id)
             if space is not None:
                 return space
         raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")

@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from bisheng.knowledge.domain.services.free_space_migration_service import (
     FreeSpaceMigrationService,
@@ -35,8 +36,9 @@ async def test_primary_department_bound_hits_directly():
         "bisheng.knowledge.domain.services.free_space_migration_service.DepartmentDao.aget_by_id",
         new=AsyncMock(return_value=_Dept(3, "/1/2/3/")),
     ), patch(
-        "bisheng.knowledge.domain.services.free_space_migration_service.DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id",
-        new=AsyncMock(side_effect=lambda d: 500 if d == 3 else None),
+        "bisheng.knowledge.domain.services.free_space_migration_service."
+        "DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=500),
     ):
         assert await FreeSpaceMigrationService.resolve_target_department_space(7) == 500
 
@@ -51,8 +53,9 @@ async def test_walks_up_to_nearest_ancestor_binding():
         "bisheng.knowledge.domain.services.free_space_migration_service.DepartmentDao.aget_by_id",
         new=AsyncMock(return_value=_Dept(3, "/1/2/3/")),
     ), patch(
-        "bisheng.knowledge.domain.services.free_space_migration_service.DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id",
-        new=AsyncMock(side_effect=lambda d: 900 if d == 1 else None),
+        "bisheng.knowledge.domain.services.free_space_migration_service."
+        "DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=900),
     ):
         assert await FreeSpaceMigrationService.resolve_target_department_space(7) == 900
 
@@ -66,7 +69,8 @@ async def test_no_binding_anywhere_returns_none():
         "bisheng.knowledge.domain.services.free_space_migration_service.DepartmentDao.aget_by_id",
         new=AsyncMock(return_value=_Dept(3, "/1/2/3/")),
     ), patch(
-        "bisheng.knowledge.domain.services.free_space_migration_service.DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id",
+        "bisheng.knowledge.domain.services.free_space_migration_service."
+        "DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(return_value=None),
     ):
         assert await FreeSpaceMigrationService.resolve_target_department_space(7) is None

@@ -294,6 +294,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(onConfirm).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: "选择炼铁部" }));
+        expect(screen.getByText("部门知识库 - 炼铁部")).toBeInTheDocument();
         await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
@@ -483,7 +484,9 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
 
         expect(await screen.findByTestId("department-selector")).toHaveTextContent("炼铁部");
+        expect(screen.getByText("部门知识库 - 炼铁部")).toBeInTheDocument();
         fireEvent.click(await screen.findByRole("button", { name: "选择炼钢部" }));
+        expect(screen.getByText("部门知识库 - 炼钢部")).toBeInTheDocument();
         await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "保存" }));
 

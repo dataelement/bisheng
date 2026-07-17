@@ -411,7 +411,7 @@ async def test_repository_creates_missing_binding_in_same_commit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_repository_rejects_department_bound_to_another_space() -> None:
+async def test_repository_allows_department_bound_to_another_space() -> None:
     scope = KnowledgeSpaceScope(
         id=1,
         tenant_id=1,
@@ -428,22 +428,21 @@ async def test_repository_rejects_department_bound_to_another_space() -> None:
         space_id=99,
         created_by=8,
     )
-    session = _make_repository_session(scope, conflicting_binding)
+    session = _make_repository_session(scope, [conflicting_binding], None)
     repository = DepartmentSpaceBindingRepositoryImpl(session)
 
-    with patch(
-        "bisheng.knowledge.domain.repositories.implementations.department_space_binding_repository_impl.DepartmentKnowledgeSpaceExistsError",
-        _BusinessRuleTestError,
-    ):
-        with pytest.raises(_BusinessRuleTestError, match="该部门已有知识库"):
-            await repository.rebind_department(
-                space_id=11,
-                department_id=2,
-                operator_id=7,
-            )
+    binding = await repository.rebind_department(
+        space_id=11,
+        department_id=2,
+        operator_id=7,
+    )
 
-    session.commit.assert_not_awaited()
-    session.rollback.assert_awaited_once()
+    assert binding.department_id == 2
+    assert binding.space_id == 11
+    assert conflicting_binding.department_id == 2
+    assert conflicting_binding.space_id == 99
+    session.commit.assert_awaited_once()
+    session.rollback.assert_not_awaited()
 
 
 @pytest.mark.asyncio
