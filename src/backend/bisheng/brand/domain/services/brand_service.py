@@ -105,7 +105,7 @@ class BrandService:
                 saved = BrandConfig.model_validate(json.loads(raw_value))
                 config = self._merge_with_defaults(saved)
             except (json.JSONDecodeError, ValueError) as exc:
-                logger.warning("Invalid brand_config in DB, using defaults: %s", exc)
+                logger.warning("Invalid brand_config in DB, using defaults: {}", exc)
         await self._hydrate_asset_urls(config)
         return config
 
@@ -211,18 +211,7 @@ class BrandService:
         )
 
     async def get_runtime_config(self) -> dict[str, Any]:
-        raw_value = await self.repository.get_value(BRAND_CONFIG_KEY)
-        if not raw_value:
-            return {}
-
-        try:
-            saved = BrandConfig.model_validate(json.loads(raw_value))
-            config = self._merge_with_defaults(saved)
-        except (json.JSONDecodeError, ValueError) as exc:
-            logger.warning("Invalid brand_config in DB, using static defaults for runtime: %s", exc)
-            return {}
-
-        await self._hydrate_asset_urls(config)
+        config = await self.get_config()
         payload_data = config.model_dump(mode="json")
         payload_data.pop("linsightAgentName", None)
         return payload_data
