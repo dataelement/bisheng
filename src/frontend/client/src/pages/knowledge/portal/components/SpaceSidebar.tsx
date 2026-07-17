@@ -94,6 +94,35 @@ interface SpaceSidebarProps {
 /** Where a dragged space would land relative to the row under the pointer. */
 type DropPosition = "before" | "after";
 
+/**
+ * Resolve the neighbours a dragged space lands between — the pair the backend needs to
+ * compute its new sort weight.
+ *
+ * Anchors only to rows sharing the dragged row's pin state. Pinning floats spaces to the
+ * top per user while the sort weight is global, so the two orders are unrelated: taking a
+ * pinned row as the neighbour of a non-pinned one would have the backend average two
+ * unrelated weights, which typically lands the row right back where it started.
+ */
+export function resolveReorderNeighbours(
+    spaces: KnowledgeSpace[],
+    draggedId: string,
+    targetId: string,
+    position: DropPosition,
+): { prevSpaceId: string | null; nextSpaceId: string | null } | null {
+    const dragged = spaces.find((item) => item.id === draggedId);
+    if (!dragged || draggedId === targetId) return null;
+
+    const remaining = spaces.filter((item) => item.id !== draggedId);
+    const targetIndex = remaining.findIndex((item) => item.id === targetId);
+    if (targetIndex < 0) return null;
+
+    const insertAt = position === "before" ? targetIndex : targetIndex + 1;
+    const samePinGroup = (item: KnowledgeSpace) => Boolean(item.isPinned) === Boolean(dragged.isPinned);
+    const prevSpace = remaining.slice(0, insertAt).filter(samePinGroup).pop() ?? null;
+    const nextSpace = remaining.slice(insertAt).find(samePinGroup) ?? null;
+    return { prevSpaceId: prevSpace?.id ?? null, nextSpaceId: nextSpace?.id ?? null };
+}
+
 interface SpaceDragState {
     groupKey: SpaceGroupKey;
     spaceId: string;
@@ -310,6 +339,11 @@ export function SpaceSidebar({
     ) => {
         // Only a drag started in this same group can be dropped here.
         if (!spaceDrag || spaceDrag.groupKey !== group.key || spaceDrag.spaceId === space.id) return;
+        // Pinning floats spaces to the top per user, so a row can only be reordered
+        // against rows sharing its pin state — dropping across the boundary can't move
+        // it there anyway.
+        const dragged = group.spaces.find((item) => item.id === spaceDrag.spaceId);
+        if (!dragged || Boolean(dragged.isPinned) !== Boolean(space.isPinned)) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
         const bounds = event.currentTarget.getBoundingClientRect();
@@ -334,15 +368,9 @@ export function SpaceSidebar({
         handleSpaceDragEnd();
         if (!dragged || dragged.id === target.id || !onReorderSpace) return;
 
-        // Resolve the neighbours the row lands between, ignoring the dragged row itself
-        // — that pair is exactly what the backend needs to place it.
-        const remaining = group.spaces.filter((item) => item.id !== dragged.id);
-        const targetIndex = remaining.findIndex((item) => item.id === target.id);
-        if (targetIndex < 0) return;
-        const insertAt = dropPosition === "before" ? targetIndex : targetIndex + 1;
-        const prevSpace = remaining[insertAt - 1] ?? null;
-        const nextSpace = remaining[insertAt] ?? null;
-        onReorderSpace(dragged, prevSpace?.id ?? null, nextSpace?.id ?? null, group);
+        const neighbours = resolveReorderNeighbours(group.spaces, dragged.id, target.id, dropPosition);
+        if (!neighbours) return;
+        onReorderSpace(dragged, neighbours.prevSpaceId, neighbours.nextSpaceId, group);
     }, [handleSpaceDragEnd, onReorderSpace, spaceDrag, spaceDropTarget]);
 
     return (
