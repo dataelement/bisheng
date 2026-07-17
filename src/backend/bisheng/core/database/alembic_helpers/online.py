@@ -6,7 +6,7 @@ executes the migration environment at import time.
 """
 
 from alembic import op
-from sqlalchemy import MetaData, column, inspect, select, table
+from sqlalchemy import MetaData, inspect
 from sqlalchemy.engine import Connection
 
 
@@ -40,37 +40,47 @@ def column_exists(table: str, column: str) -> bool:
     return _column_exists(op.get_bind(), table, column)
 
 
-def bootstrap_fresh_database_schema(connection: Connection, metadata: MetaData) -> bool:
-    """Create the current model schema only for a genuinely fresh database.
+def create_missing_model_tables(connection: Connection, metadata: MetaData) -> tuple[str, ...]:
+    """Create every model table that is absent without altering existing tables.
 
-    The repository's base revision alters tables that predate Alembic instead
-    of creating them. Fresh installs therefore need the SQLModel schema before
-    replaying revisions. Existing or partially initialized databases must stay
-    on the normal migration path so missing tables are reported rather than
-    silently recreated.
+    BiSheng intentionally uses a dual schema-management contract:
+
+    * SQLModel metadata owns creation of whole tables at their current shape.
+    * Alembic owns changes to tables that already exist.
+
+    Running this before every online Alembic upgrade also makes a failed first
+    deployment resumable: a database whose revision advanced before all model
+    tables were created is completed before the remaining revisions run.
 
     Returns:
-        ``True`` when the model schema was created, else ``False``.
+        Case-preserving names of tables that were missing before ``create_all``.
     """
-    model_table_names = {
-        model_table.name.casefold()
+    model_tables = {
+        model_table.name.casefold(): model_table
         for model_table in metadata.tables.values()
         if model_table.name.casefold() != "alembic_version"
     }
-    if not model_table_names:
-        raise RuntimeError("Cannot bootstrap a fresh database from empty model metadata")
+    if not model_tables:
+        raise RuntimeError("Cannot create model tables from empty model metadata")
 
     existing_table_names = {name.casefold() for name in inspect(connection).get_table_names()}
-    if existing_table_names & model_table_names:
-        return False
+    missing_names = sorted(model_tables.keys() - existing_table_names)
+    missing_table_names = tuple(model_tables[name].name for name in missing_names)
+    if not missing_table_names:
+        return ()
 
-    if "alembic_version" in existing_table_names:
-        version_table = table("alembic_version", column("version_num"))
-        if connection.execute(select(version_table.c.version_num)).first() is not None:
-            return False
+    metadata.create_all(
+        connection,
+        tables=[model_tables[name] for name in missing_names],
+        checkfirst=True,
+    )
+    return missing_table_names
 
-    metadata.create_all(connection)
-    return True
+
+def should_create_model_tables(migration_context) -> bool:
+    """Limit model-table creation to online upgrade operations."""
+    migration_fn = migration_context.opts.get("fn")
+    return not migration_context.as_sql and getattr(migration_fn, "__name__", None) == "upgrade"
 
 
 def finalize_online_migration_connection(connection: Connection) -> bool:

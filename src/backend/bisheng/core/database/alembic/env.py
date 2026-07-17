@@ -6,9 +6,12 @@ from alembic.ddl.impl import DefaultImpl
 from sqlalchemy import inspect, text
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.alembic_helpers import mysql_impl as _mysql_impl  # noqa: F401
+from bisheng.core.database.alembic_helpers.indexes import find_equivalent_index
 from bisheng.core.database.alembic_helpers.online import (
-    bootstrap_fresh_database_schema,
+    create_missing_model_tables,
     finalize_online_migration_connection,
+    should_create_model_tables,
 )
 
 logger = logging.getLogger("alembic.dm")
@@ -193,44 +196,15 @@ class DaMengImpl(DefaultImpl):
           same selectivity — so behaviour is preserved.
         """
         try:
-            cols = [str(c.name) for c in index.expressions if hasattr(c, "name")]
-            table_name = index.table.name if index.table is not None else None
-            index_name = (index.name or "").lower()
-            if cols and table_name:
-                bind = self.connection
-                if bind is not None:
-                    insp = inspect(bind)
-                    existing_indexes = insp.get_indexes(table_name)
-                    for existing_idx in existing_indexes:
-                        same_name = (existing_idx.get("name") or "").lower() == index_name
-                        same_cols = list(existing_idx.get("column_names") or []) == cols
-                        if same_name or same_cols:
-                            logger.warning(
-                                "[dm] Skip create_index %s on %s(%s): already present as index %s",
-                                index.name,
-                                table_name,
-                                ",".join(cols),
-                                existing_idx.get("name"),
-                            )
-                            return
-                    # A unique INDEX (create_index unique=True) collides with an
-                    # existing UNIQUE CONSTRAINT of the same name or same column
-                    # set, even though they live in different reflection lists.
-                    if index.unique:
-                        existing_uqs = insp.get_unique_constraints(table_name)
-                        for ex in existing_uqs:
-                            same_name = (ex.get("name") or "").lower() == index_name
-                            same_cols = list(ex.get("column_names") or []) == cols
-                            if same_name or same_cols:
-                                logger.warning(
-                                    "[dm] Skip create_index UNIQUE %s on %s(%s): "
-                                    "equivalent UNIQUE constraint %s already present",
-                                    index.name,
-                                    table_name,
-                                    ",".join(cols),
-                                    ex.get("name"),
-                                )
-                                return
+            equivalent, existing_name = find_equivalent_index(self.connection, index)
+            if equivalent:
+                logger.warning(
+                    "[dm] Skip create_index %s on %s: equivalent index %s already exists",
+                    index.name,
+                    index.table.name if index.table is not None else "<unknown>",
+                    existing_name or "<unnamed>",
+                )
+                return None
         except Exception:
             logger.exception("[dm] create_index pre-check failed; falling back to default")
         return super().create_index(index, **kw)
@@ -398,11 +372,20 @@ def run_migrations_online() -> None:
     database_conn_manager = sync_get_database_connection()
     import_all_sqlmodel_models()
 
+    is_online_upgrade = False
     with database_conn_manager.engine.connect() as connection:
         ensure_alembic_version_table(connection)
-        if bootstrap_fresh_database_schema(connection, target_metadata):
-            logger.info("Fresh database detected; created the current model schema before replaying Alembic revisions")
         context.configure(connection=connection, target_metadata=target_metadata)
+        migration_context = context.get_context()
+        is_online_upgrade = should_create_model_tables(migration_context)
+        if is_online_upgrade:
+            created_tables = create_missing_model_tables(connection, target_metadata)
+            if created_tables:
+                logger.info(
+                    "Created %d missing model tables before replaying Alembic revisions: %s",
+                    len(created_tables),
+                    ", ".join(created_tables),
+                )
 
         with context.begin_transaction():
             context.run_migrations()
@@ -411,6 +394,9 @@ def run_migrations_online() -> None:
         # MySQL even when Alembic treats DDL as non-transactional. Commit
         # it explicitly so backfills and alembic_version updates persist.
         finalize_online_migration_connection(connection)
+
+    if is_online_upgrade:
+        database_conn_manager.ensure_dialect_schema_objects()
 
 
 run_migrations_online()

@@ -281,13 +281,18 @@ class DatabaseConnectionManager:
                 logger.error(f"Error creating tables: {exc}")
                 raise RuntimeError("Error creating tables") from exc
 
-        # DaMeng: ensure triggers exist for columns that MySQL handles natively
-        # but DaMeng requires explicit triggers for.
-        if self.async_engine.dialect.name == "dm":
-            self._ensure_dm_triggers()
-            self._ensure_dm_computed_triggers()
+        self.ensure_dialect_schema_objects(self.async_engine.dialect.name)
 
         logger.info("Database and tables created successfully")
+
+    def ensure_dialect_schema_objects(self, dialect_name: str | None = None) -> bool:
+        """Create dialect-specific schema objects not emitted by create_all."""
+        if (dialect_name or self.engine.dialect.name) != "dm":
+            return False
+
+        self._ensure_dm_triggers()
+        self._ensure_dm_computed_triggers()
+        return True
 
     @staticmethod
     def _dm_quote_table(actual_name: str) -> str:

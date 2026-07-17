@@ -543,3 +543,27 @@ class TestConnectionManagerUrlConversion:
         result = make_url(DatabaseConnectionManager._normalize_dm_url(url))
         assert result.query.get("login_timeout") == "10"
         assert result.query.get("connection_timeout") == "30"
+
+
+class TestConnectionManagerDialectSchemaObjects:
+    def test_runs_dm_schema_hooks(self):
+        from bisheng.core.database.connection import DatabaseConnectionManager
+
+        mgr = DatabaseConnectionManager("sqlite://")
+        mgr._ensure_dm_triggers = MagicMock()
+        mgr._ensure_dm_computed_triggers = MagicMock()
+
+        assert mgr.ensure_dialect_schema_objects("dm") is True
+        mgr._ensure_dm_triggers.assert_called_once_with()
+        mgr._ensure_dm_computed_triggers.assert_called_once_with()
+
+    def test_skips_schema_hooks_for_non_dm(self):
+        from bisheng.core.database.connection import DatabaseConnectionManager
+
+        mgr = DatabaseConnectionManager("sqlite://")
+        mgr._ensure_dm_triggers = MagicMock()
+        mgr._ensure_dm_computed_triggers = MagicMock()
+
+        assert mgr.ensure_dialect_schema_objects("mysql") is False
+        mgr._ensure_dm_triggers.assert_not_called()
+        mgr._ensure_dm_computed_triggers.assert_not_called()

@@ -118,10 +118,12 @@ un-dry-runnable, and it silently mutates business data. Many existing revisions 
 `f011`'s dedup, `f035`, `f024`, `f013`, `f029*`, `f043`, …) predate this rule and are
 grandfathered: do **not** edit released migrations, but never add new ones like them.
 
-- **Idempotent / dual-path.** A fresh install runs `SQLModel.metadata.create_all()`
-  *before* alembic, so tables/columns may already exist; an upgrade runs the DDL
-  for the first time. Guard with the shared helpers — do not re-inline these
-  checks:
+- **Idempotent / dual ownership.** Every online upgrade imports all model modules
+  and creates missing whole tables at their current SQLModel shape before replaying
+  revisions. `create_all()` never alters an existing table; Alembic exclusively owns
+  changes to existing tables. Revisions must therefore tolerate columns/indexes that
+  already exist on model-created tables. Guard with the shared helpers — do not
+  re-inline these checks:
 
   ```python
   from bisheng.core.database.alembic_helpers.online import (
@@ -135,8 +137,9 @@ grandfathered: do **not** edit released migrations, but never add new ones like 
   registers `DaMengImpl` and patches several incompatibilities; before relying on
   exotic DDL, check it there. Practical rules:
   - `--autogenerate` reflects **MySQL only** — review DM8 behaviour by hand.
-  - DM8 rejects duplicate indexes/constraints on the same column set; `DaMengImpl`
-    already skips equivalent `create_index`/`add_constraint`, but keep names stable.
+  - MySQL and DM8 skip equivalent indexes when ordered columns and uniqueness match,
+    even if model and migration names differ. DM8 also skips equivalent unique
+    constraints. Keep names stable so schema inspection remains understandable.
   - Identifiers come back **uppercase** from DM8 reflection — compare
     case-insensitively (the `*_exists` helpers already do).
 - **Reusable DDL guards** go in `alembic_helpers/online.py` (`table_exists`,
