@@ -88,52 +88,51 @@ Scope:
 
 ### `move_knowledge_space_files.py`
 
-将指定知识空间中的已解析文档复制到同租户、同向量模型的目标知识空间，完成数据库、
-MinIO、Milvus、Elasticsearch、标签和 OpenFGA 权限校验后，再删除来源文件。默认 dry-run；
-只有显式传入 `--apply` 才会逐文件执行迁移。每次运行都会在
+扫描一个或多个来源知识空间的全部 `SUCCESS` 文档，读取门户一级、二级文件分类，按分类
+`label` 自动匹配公共知识空间和其根目录直属文件夹。完成数据库、MinIO、Milvus、
+Elasticsearch、标签、版本关系和 OpenFGA 权限校验后，再删除来源文件。默认 dry-run；
+只有显式传入 `--apply` 才执行迁移。每次运行都会在
 `migration_reports/knowledge_file_move/` 下生成 JSON 报告。
 
 Usage:
 
 ```bash
-# 来源库全部 SUCCESS 文档；仅预检，不写数据
+# 扫描一个来源知识空间；仅预检，不写业务数据
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
-  --source-space-id 10 \
-  --target-space-id 20 \
-  --target-owner-id 30
+  --source-space-id 10
 
-# 递归选择来源文件夹，并同时匹配一级、二级分类；移动到目标文件夹
+# 一次扫描多个来源空间；同一参数可重复传入
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
   --source-space-id 10 \
-  --source-folder-id 11 \
-  --source-category-code STD \
-  --source-subcategory-code STD-A \
-  --target-space-id 20 \
-  --target-folder-id 21 \
-  --target-owner-id 30 \
-  --apply
+  --source-space-id 11
 
-# 指定多个文件 ID；同一参数可重复传入
+# 审核 dry-run JSON 报告后执行真实移动
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
   --source-space-id 10 \
-  --source-file-id 101 \
-  --source-file-id 102 \
-  --target-space-id 20 \
-  --target-owner-id 30 \
+  --source-space-id 11 \
   --apply
 ```
 
-Selection and safety:
+Routing and safety:
 
-- `--source-folder-id` 递归命中文件夹全部后代；不传时覆盖来源库全目录。
-- `--source-file-id`、`--source-category-code`、`--source-subcategory-code` 均可重复。
-  同一维度内按 OR 匹配，不同维度之间按 AND 匹配。
-- 一级分类来自 `file_encoding`，二级分类来自 `file_subcategory_code`；同时指定时会校验父子关系。
-- 仅移动 `file_type = FILE` 且 `status = SUCCESS` 的普通文档；版本链文件直接跳过。
-- 所有来源文件都会平铺到目标文件夹；不传 `--target-folder-id` 时平铺到目标库根目录。
-- 目标文件夹存在同名文件，或目标库任意位置存在相同 MD5 时，跳过该文件且保留来源。
+- `--source-space-id` 必填且可重复；脚本扫描每个来源空间的全部目录层级，不再支持旧的
+  `--source-folder-id`、`--source-file-id`、分类过滤和显式目标参数。
+- 仅处理 `file_type = FILE` 且 `status = SUCCESS` 的文档。
+- 一级分类 code 从 `file_encoding` 解析，二级分类 code 来自 `file_subcategory_code`；两级都必须
+  能在门户配置中解析出 `label`，否则跳过。
+- 一级分类 `label` 必须唯一精确匹配 `level = public` 的知识空间名称；二级分类 `label` 必须
+  唯一精确匹配该空间根目录下的直属文件夹名称。匹配前会去除普通首尾空白、`U+200B`
+  零宽空格和 `U+FEFF` BOM；脚本不会递归匹配、模糊匹配或自动创建目标。
+- 移动后文件所有者改为目标公共空间所有者；OpenFGA 只重建目标 owner/parent 必要关系，
+  不复制来源访问权限。
+- 已通过和待审核标签以复制前保存的来源快照为唯一依据，精确替换到新目标文件；若校验仍不一致，
+  报错会列出来源和目标双方的标签 ID，并在删除来源前清理目标残留。
+- 目标文件夹存在同名文件、目标空间任意位置存在相同 MD5，或来源/目标向量模型不一致时，
+  跳过文件且保留来源。多个来源文件互相冲突时按来源空间 ID、文件 ID 稳定选择第一个。
+- 版本链作为整体迁移：所有版本必须位于本次来源范围、均为 `SUCCESS`、分类完整、目标一致、
+  模型兼容且无目标冲突；否则整条链跳过。成功后使用新文件 ID 重建版本号、主版本和逻辑文档关系。
 - 每个文件按“复制 → 校验 → 删除来源”执行。失败时保留或恢复来源，并尽力清理目标残留；
-  任一文件失败时进程返回非零退出码，跳过不计为失败。
+  版本链按整链 Saga 执行。任一迁移单元失败时进程返回非零退出码，业务跳过不计为失败。
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
 
