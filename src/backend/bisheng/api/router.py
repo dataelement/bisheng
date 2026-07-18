@@ -35,6 +35,7 @@ from bisheng.permission.api.router import router as permission_router
 from bisheng.role.api.router import router as role_router
 from bisheng.share_link.api.router import router as share_link_router
 from bisheng.shougang_portal_config.api.router import router as shougang_portal_config_router
+from bisheng.shougang_portal_course.api.router import router as shougang_portal_course_router
 from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
 from bisheng.sso_sync.api.router import router as sso_sync_router
@@ -75,6 +76,7 @@ router.include_router(invite_code_router)
 router.include_router(session_router)
 router.include_router(share_link_router)
 router.include_router(shougang_portal_config_router)
+router.include_router(shougang_portal_course_router)
 router.include_router(telemetry_search_router)
 router.include_router(channel_router)
 router.include_router(message_router)

@@ -172,6 +172,7 @@ class CeleryConf(BaseModel):
                 # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
                 "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
                 "bisheng.worker.message.*": {"queue": "knowledge_celery"},  # WeChat message push tasks
+                "bisheng.worker.portal_course.*": {"queue": "knowledge_celery"},
             }
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
@@ -296,6 +297,12 @@ class CeleryConf(BaseModel):
             self.beat_schedule["scan_wechat_message_push_outbox"] = {
                 "task": "bisheng.worker.message.tasks.scan_wechat_message_push_outbox",
                 "schedule": 30.0,  # Every 30 seconds
+            }
+
+        if "scan_portal_course_media_cleanup" not in self.beat_schedule:
+            self.beat_schedule["scan_portal_course_media_cleanup"] = {
+                "task": "bisheng.worker.portal_course.tasks.scan_portal_course_media_cleanup",
+                "schedule": 60.0,
             }
 
         # F056: root Beat entries only fan out; every tenant child task carries

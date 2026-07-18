@@ -44,6 +44,10 @@ from bisheng.worker.org_sync.reconcile_tasks import (
 )
 from bisheng.worker.org_sync.tasks import check_org_sync_schedules, execute_org_sync
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
+from bisheng.worker.portal_course.tasks import (
+    process_portal_course_media_cleanup,
+    scan_portal_course_media_cleanup,
+)
 from bisheng.worker.telemetry.derived_mid_table import (
     sync_mid_active_user,
     sync_mid_doc_parse_dtl,
