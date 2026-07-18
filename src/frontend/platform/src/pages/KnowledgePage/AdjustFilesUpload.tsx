@@ -3,12 +3,13 @@ import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { rebUploadFile, retryKnowledgeFileApi } from "@/controllers/API";
+import { checkPermission } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
+import { DialogWithRepeatFiles } from "./components/DuplicateFileDialog";
 import FileUploadStep2 from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
@@ -26,19 +27,39 @@ export default function AdjustFilesUpload() {
   const location = useLocation();
   const { message } = useToast();
   const { fileId: knowledgeId } = useParams();
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [hasEditPermission, setHasEditPermission] = useState(false);
 
   // Get initial data for adjustment mode from route state (must pass file data)
-  const initFileData = location.state?.fileData;
+  const hasInitFileData = Boolean(location.state?.fileData);
+  const initFileData = location.state?.fileData || {};
+  useEffect(() => {
+    const guardByPermission = async () => {
+      if (!knowledgeId) {
+        setPermissionChecked(true);
+        setHasEditPermission(false);
+        return;
+      }
+      const result = await captureAndAlertRequestErrorHoc(
+        checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb')
+      );
+      const allowed = !!result?.allowed;
+      setPermissionChecked(true);
+      setHasEditPermission(allowed);
+      if (!allowed) {
+        message({ variant: 'warning', description: t('noOperationPermission') });
+        navigate(`/filelib/${knowledgeId}`, { replace: true });
+      }
+    };
+    guardByPermission();
+  }, [knowledgeId, message, navigate, t]);
+
   useEffect(() => {
     // If no initialization data, it means direct access, redirect to /filelib
-    if (!initFileData) {
+    if (!hasInitFileData) {
       navigate('/filelib', { replace: true });
     }
-  }, [initFileData, navigate]);
-  if (!initFileData) {
-    navigate(-1); // Roll back when no data
-    return null;
-  }
+  }, [hasInitFileData, navigate]);
   // Adjustment mode exclusive state
   const [currentStep, setCurrentStep] = useState(1);
   const getParsedSplitRule = (rawSplitRule) => {
@@ -46,14 +67,18 @@ export default function AdjustFilesUpload() {
     if (!rawSplitRule) {
       return {
         knowledge_id: "",
-        separator: ["\\n\\n", "\\n"],
-        separator_rule: ["after", "after"],
+        separator: ["\\n\\n", "\\n", "。", "\\."],
+        separator_rule: ["after", "after", "after", "after"],
         chunk_size: 1000,
         chunk_overlap: 100,
-        retain_images: false,
+        retain_images: true,
         force_ocr: true,
         enable_formula: true,
         filter_page_header_footer: false,
+        split_mode: "auto",
+        hierarchy_level: 3,
+        append_title: false,
+        max_chunk_size: 1000,
         excel_rule: {
           slice_length: 10,
           append_header: true,
@@ -65,29 +90,33 @@ export default function AdjustFilesUpload() {
 
     try {
       // Parse JSON string
-      const parsed = JSON.parse(rawSplitRule);
+      const parsed = typeof rawSplitRule === 'string' ? JSON.parse(rawSplitRule) : rawSplitRule;
       // Format adaptation: Unify field format to avoid child component processing
       return {
         knowledge_id: parsed.knowledge_id || "", // Knowledge base ID
-        // Separator: Ensure it's an array, default double newline + single newline
-        separator: Array.isArray(parsed.separator) ? parsed.separator : ["\\n\\n", "\\n"],
+        // Separator: Ensure it's an array, default double newline + single newline + Chinese/English period
+        separator: Array.isArray(parsed.separator) ? parsed.separator : ["\\n\\n", "\\n", "。", "\\."],
         // Separator rule: Ensure consistent length with separator, default after
         separator_rule: Array.isArray(parsed.separator_rule)
           ? parsed.separator_rule
-          : ["after", "after"],
+          : ["after", "after", "after", "after"],
         // Chunk size: Convert number to string (child component uses string format), default 1000
         chunk_size: parsed.chunk_size ?? 1000,
         // Overlap size: Default 100
         chunk_overlap: parsed.chunk_overlap ?? 100,
         // Boolean conversion: 0→false, 1→true, default false
-        retain_images: parsed.retain_images === 1,
-        force_ocr: parsed.force_ocr === 1,
-        enable_formula: parsed.enable_formula === 1,
+        retain_images: parsed.retain_images !== 0,
+        force_ocr: parsed.force_ocr !== 0,
+        enable_formula: parsed.enable_formula !== 0,
         filter_page_header_footer: parsed.filter_page_header_footer === 1,
+        split_mode: parsed.split_mode || "auto",
+        hierarchy_level: parsed.hierarchy_level ?? 3,
+        append_title: parsed.append_title === 1 || parsed.append_title === true,
+        max_chunk_size: parsed.max_chunk_size ?? 1000,
         // Table rules: Default value fallback
         excel_rule: {
           slice_length: parsed.excel_rule?.slice_length || 10,
-          append_header: parsed.excel_rule?.append_header === 1,
+          append_header: parsed.excel_rule?.append_header !== 0,
           header_start_row: parsed.excel_rule?.header_start_row || 1,
           header_end_row: parsed.excel_rule?.header_end_row || 1
         }
@@ -97,14 +126,18 @@ export default function AdjustFilesUpload() {
       console.error("split_rule parse failed:", error);
       return {
         knowledge_id: "",
-        separator: ["\\n\\n", "\\n"],
-        separator_rule: ["after", "after"],
+        separator: ["\\n\\n", "\\n", "。", "\\."],
+        separator_rule: ["after", "after", "after", "after"],
         chunk_size: 1000,
         chunk_overlap: 100,
-        retain_images: false,
+        retain_images: true,
         force_ocr: true,
         enable_formula: true,
         filter_page_header_footer: false,
+        split_mode: "auto",
+        hierarchy_level: 3,
+        append_title: false,
+        max_chunk_size: 1000,
         excel_rule: {
           slice_length: 10,
           append_header: true,
@@ -116,7 +149,7 @@ export default function AdjustFilesUpload() {
   };
   const fileName = initFileData.name || initFileData.file_name || '';
   const fileSuffix = fileName.split('.').pop()?.toLowerCase() || 'txt';
-  const fileType = ['xlsx', 'xls', 'csv'].includes(fileSuffix) ? 'table' : 'file';
+  const fileType = ['xlsx', 'xls', 'csv', 'et'].includes(fileSuffix) ? 'table' : 'file';
 
   const [resultFiles, setResultFiles] = useState([
     {
@@ -210,15 +243,19 @@ export default function AdjustFilesUpload() {
       knowledge_id: Number(_config.rules.knowledgeId || initFileData.knowledgeId || knowledgeId),
       separator: normalizeSeparators(_config.rules.separator),
       separator_rule: _config.rules.separatorRule,
-      chunk_size: _config.rules.chunkSize,
-      chunk_overlap: _config.rules.chunkOverlap,
+      chunk_size: Number(_config.rules.chunkSize),
+      chunk_overlap: Number(_config.rules.chunkOverlap),
       excel_rule: _config.cellGeneralConfig,
       kb_file_id: _config.rules.fileList[0].id,
       retain_images: _config.rules.retainImages,
       enable_formula: _config.rules.enableFormula,
       force_ocr: _config.rules.forceOcr,
-      fileter_page_header_footer: _config.rules.pageHeaderFooter,
-      file_path: _config.rules.fileList[0].filePath
+      filter_page_header_footer: _config.rules.pageHeaderFooter ? 1 : 0,
+      file_path: _config.rules.fileList[0].filePath,
+      split_mode: _config.rules.splitMode,
+      hierarchy_level: Number(_config.rules.hierarchyLevel),
+      append_title: _config.rules.appendTitle,
+      max_chunk_size: Number(_config.rules.maxChunkSize)
     };
 
     captureAndAlertRequestErrorHoc(
@@ -290,28 +327,45 @@ export default function AdjustFilesUpload() {
     repeatCallBackRef.current();
   }
 
+  if (!hasInitFileData) {
+    return null;
+  }
+
+  if (!permissionChecked || !hasEditPermission) {
+    return (
+      <div className="relative h-full flex items-center justify-center">
+        <LoadingIcon />
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full flex flex-col">
       {/* Top return bar */}
-      <div className="pt-4 px-4">
-        <div className="flex items-center mb-4">
-          <Button
-            variant="outline"
-            size="icon"
-            className="bg-[#fff] size-8"
-            onClick={() => navigate(-1)}
-          >
-            <ChevronLeft />
-          </Button>
-          <span className="text-foreground text-sm font-black pl-4">{t('backToKnowledgeDetail')}</span>
+      <div className="relative px-4 pt-4">
+        <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
+          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
+              onClick={() => navigate(-1)}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledgeDetail')}</span>
+          </div>
         </div>
-
-        {/* Adjustment mode step progress */}
-        <StepProgress
-          align="center"
-          currentStep={currentStep}
-          labels={getAdjustStepLabels(t)}
-        />
+        <div className="mx-auto max-w-[1180px]">
+          <div className="min-w-0 overflow-hidden">
+            <StepProgress
+              align="center"
+              currentStep={currentStep}
+              labels={getAdjustStepLabels(t)}
+              className="my-0 min-w-0 px-0"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Step content area */}
@@ -378,7 +432,6 @@ export default function AdjustFilesUpload() {
       {/* Duplicate file reminder dialog */}
       <DialogWithRepeatFiles
         repeatFiles={repeatFiles}
-        setRepeatFiles={setRepeatFiles}
         unRetry={handleUnRetry}
         onRetry={handleRetry}
         retryLoad={retryLoad}

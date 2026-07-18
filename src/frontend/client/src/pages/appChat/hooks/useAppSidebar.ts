@@ -5,14 +5,15 @@ import { NotificationSeverity } from '~/common';
 import type { AppConversation, AppItem, ConversationGroup } from '~/@types/app';
 import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from '~/api/apps';
 import { groupConversationsByTime, getAppShareUrl } from '~/pages/apps/appUtils';
-import { copyText } from '~/utils';
+import { copyText, generateUUID } from '~/utils';
 import { useToastContext } from '~/Providers';
 import {
   appConversationsState,
   currentAppInfoState,
   sidebarVisibleState,
 } from '~/pages/appChat/store/appSidebarAtoms';
-import { generateUUID } from '~/utils';
+import { currentChatState } from '~/pages/appChat/store/atoms';
+import { copyAppChatOrigin, copyAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import { useLocalize } from '~/hooks';
 
 // flow_type 5 === assistant; anything else (1 = skill, 10 = workflow) goes through getFlowApi.
@@ -32,6 +33,7 @@ export function useAppSidebar() {
   showToastRef.current = showToast;
 
   const currentApp = useRecoilValue(currentAppInfoState);
+  const chatState = useRecoilValue(currentChatState);
   const setCurrentApp = useSetRecoilState(currentAppInfoState);
   const [conversations, setConversations] = useRecoilState(appConversationsState);
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
@@ -82,6 +84,8 @@ export function useAppSidebar() {
   const createNewChat = useCallback(() => {
     if (!flowId || !flowType) return;
     const chatId = generateUUID(32);
+    if (conversationId) copyAppChatOrigin(conversationId, chatId);
+    if (conversationId) copyAppChatReturnTo(conversationId, chatId);
     // Prepend a "New Chat" placeholder so the sidebar shows it immediately
     // and the auto-select guard won't redirect away from it.
     setConversations((prev) => [{
@@ -92,23 +96,17 @@ export function useAppSidebar() {
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     }, ...prev]);
-    const from = new URLSearchParams(location.search).get('from');
-    const nextPath = from
-      ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
-      : `/app/${chatId}/${flowId}/${flowType}`;
-    navigate(nextPath);
-  }, [flowId, flowType, location.search, navigate, setConversations]);
+    const nextPath = `/app/${chatId}/${flowId}/${flowType}`;
+    navigate(nextPath, { state: location.state });
+  }, [flowId, flowType, conversationId, location.state, navigate, setConversations, localize]);
 
   /** Switch to a specific conversation */
   const switchConversation = useCallback(
     (conv: AppConversation) => {
-      const from = new URLSearchParams(location.search).get('from');
-      const nextPath = from
-        ? `/app/${conv.id}/${conv.flowId}/${conv.flowType}?from=${from}`
-        : `/app/${conv.id}/${conv.flowId}/${conv.flowType}`;
-      navigate(nextPath);
+      const nextPath = `/app/${conv.id}/${conv.flowId}/${conv.flowType}`;
+      navigate(nextPath, { state: location.state });
     },
-    [location.search, navigate],
+    [location.state, navigate],
   );
 
   /** Toggle sidebar visibility */
@@ -119,6 +117,11 @@ export function useAppSidebar() {
   /** Share the current app */
   const shareApp = useCallback(async () => {
     if (!flowId) return;
+    const fromChat =
+      chatState?.flow && String(chatState.flow.id) === String(flowId) ? chatState.flow.can_share : undefined;
+    const fromSidebar =
+      currentApp && String(currentApp.id) === String(flowId) ? currentApp.can_share : undefined;
+    if (fromChat !== true && fromSidebar !== true) return;
     const url = getAppShareUrl(flowId, flowType || '');
     try {
       await copyText(url);
@@ -126,7 +129,7 @@ export function useAppSidebar() {
     } catch {
       showToast?.({ message: '复制失败', severity: NotificationSeverity.ERROR });
     }
-  }, [flowId, flowType, showToast]);
+  }, [flowId, flowType, showToast, chatState?.flow, currentApp]);
 
   // Guard: auto-select runs only once per flowId (on initial mount).
   // This prevents re-triggering when the user creates a new chat or switches conversations.
@@ -149,10 +152,11 @@ export function useAppSidebar() {
         setCurrentApp({
           id: data.id ?? flowId,
           name: data.name ?? '',
-          description: data.description ?? '',
+          description: data.description ?? data.desc ?? '',
           logo: data.logo ?? '',
           flow_type: Number(data.flow_type ?? numericType),
           user_id: data.user_id ?? '',
+          can_share: data.can_share === true,
         } as AppItem);
       } catch {
         // silent — sidebar falls back to placeholder text

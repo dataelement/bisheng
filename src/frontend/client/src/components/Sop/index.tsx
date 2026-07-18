@@ -1,18 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActivate } from 'react-activation';
-import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
+import { getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
-import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
+import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
+import { TaskModeChatInput } from '~/components/Linsight/Input/TaskModeChatInput';
+import Landing from '~/components/Chat/Landing';
+import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
+import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { LoadingIcon } from '../ui/icon/Loading';
-import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
-import { SOPEditor, SopStatus } from './SOPEditor';
-import { TaskFlow } from './TaskFlow';
-import { useLocalize } from '~/hooks';
-import { CheckIcon, MousePointerClick } from 'lucide-react';
-import { Button } from '../ui';
 
 export default function index({ id = '', vid = '', shareToken = '' }) {
     // 获取url参数
@@ -22,14 +20,16 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     // 兼容历史链接 case开头
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
-    const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData({ conversationId, sopId, vid, shareToken });
-    const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
+    const { loading, versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData({ conversationId, sopId, vid, shareToken });
+    const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
+    const { getLinsight } = useLinsightManager()
+    const artifactsPanel = useArtifactsPanel(versionId);
 
     return (
-        <div className='relative h-full bg-gradient-to-b from-[#F4F8FF] to-white'>
+        <div className='relative h-full bg-white'>
             {
                 loading && <div className='absolute z-10 size-full flex justify-center items-center bg-white/50'>
-                    <LoadingIcon />
+                    <LoadingIcon className="size-20" />
                 </div>
             }
             <Header
@@ -37,46 +37,47 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                 chatId={conversationId}
                 setVersionId={switchVersion}
                 versionId={versionId}
-                isSharePage={isSharePage || sid} // when case sharebutton is hide 
+                isSharePage={isSharePage || sid} // when case sharebutton is hide
                 versions={versions}
+                onOpenWorkspace={artifactsPanel.openWorkspace}
             />
 
-            {isLoading ? <LoadingBox /> : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
-                <div className='h-full flex gap-2'>
-                    <SOPEditor
-                        sopError={error}
-                        isSharePage={isSharePage}
+            {versionId === 'new' && !sopId ? (
+                /* F035 Track H: fresh-task landing — unified with the daily
+                   landing. Same slogan (Landing) + the daily AiChatInput in
+                   task mode (extra "添加技能" entry), no blue gradient. */
+                <div className='w-full h-[calc(100vh-68px)] overflow-y-auto'>
+                    <div className='flex flex-col min-h-full pt-[20vh] pb-12'>
+                        <div className='shrink-0'>
+                            <Landing isNew />
+                        </div>
+                        <div className='w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 py-3'>
+                            <TaskModeChatInput conversationId={conversationId || 'new'} />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                /* F035 Track H (P3): new conversational execution view — replaced
+                   the legacy SOPEditor/TaskFlow split panes (removed in P5). */
+                <div className='w-full h-[calc(100vh-68px)]'>
+                    <ExecutionFlow
                         versionId={versionId}
-                        onRun={checkQueueStatus}
-                    />
-
-                    <TaskFlow
-                        isSharePage={isSharePage}
-                        versionId={versionId}
-                        setVersions={setVersions}
-                        setVersionId={setVersionId}
+                        conversationId={conversationId}
+                        isSharePage={!!(isSharePage || sopId)}
+                        // Historical session opened from the home list keeps a real
+                        // conversationId (a fresh /linsight/new keeps 'new' via
+                        // replaceState), so this marks it read-only — hide the input.
+                        readOnly={!!conversationId && conversationId !== 'new'}
+                        artifactsPanel={artifactsPanel}
                     />
                 </div>
-            </div>}
+            )}
         </div>
     );
 }
 
-// 分享页做同款
-export const ShareSameSopControls = ({ name }) => {
-    const localize = useLocalize();
-
-    return <div className="px-4 pb-6">
-        <div className="flex gap-3 p-4 px-6 justify-between items-center bg-white rounded-3xl border border-gray-100 relative">
-            <div className="flex items-center gap-2">
-            </div>
-            <Button className="px-6" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/c/new?name=${encodeURIComponent(name)}&path=${encodeURIComponent(location.pathname)}`)} >
-                <MousePointerClick className="w-3.5 h-3.5" />
-                {localize('com_make_samestyle')}
-            </Button>
-        </div>
-    </div >
-}
+// "Make same style" (做同款) removed per product decision (F035): the SOP-based
+// injection it relied on no longer exists in the de-SOP pipeline.
 
 
 export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
@@ -91,9 +92,10 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
     // 状态管理
     const [versions, setVersions] = useState<{ id: string, name: string }[]>([]);
     const [versionId, setVersionId] = useState('new')
-    const { getLinsight, updateLinsight, switchAndUpdateLinsight } = useLinsightManager();
-    // 检查排队情况
-    const checkQueueStatus = useQueueStatus(versionId, updateLinsight)
+    const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
+    // Queue-status polling now lives inside ExecutionFlow via
+    // useLinsightQueuePolling (shared with the F035 daily-chat TaskTurnPanel),
+    // so the page-level hook is no longer needed here.
 
     const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
         setLoading(true);
@@ -125,7 +127,7 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
     };
 
     // KeepAlive restore: when navigating back to /linsight/new, reset stale state
-    // so useGenerateSop watches submissionState('new') instead of the old versionId.
+    // so useLinsightSubmit watches submissionState('new') instead of the old versionId.
     useActivate(() => {
         const path = window.location.pathname;
         if (path.endsWith('/linsight/new') || path.endsWith('/linsight')) {
@@ -177,39 +179,5 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
         setVersionId,
         switchVersion,
         setVersions,
-        checkQueueStatus
     };
 };
-
-
-const useQueueStatus = (vid, updateLinsight) => {
-    const timerRef = useRef<any>(null)
-
-    const checkQueueStatus = async (vid: string) => {
-        const res = await checkSopQueueStatus(vid);
-        const count = res.data.index
-        const params = { queueCount: count }
-        if (count > 0) {
-            params.status = SopStatus.Running
-        }
-        updateLinsight(vid, params);
-        if (count > 0) {
-            timerRef.current = setTimeout(() => {
-                checkQueueStatus(vid)
-            }, 60000)
-        } else {
-            clearTimeout(timerRef.current)
-        }
-    }
-
-    useEffect(() => {
-        if (vid === 'new') return;
-        checkQueueStatus(vid)
-
-        return () => {
-            clearTimeout(timerRef.current)
-        }
-    }, [vid])
-
-    return () => checkQueueStatus(vid)
-}

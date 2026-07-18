@@ -30,45 +30,54 @@ class TestMiniMaxLLMModuleChanges(unittest.TestCase):
         """ChatOpenAICompatible should be imported in llm.py."""
         self.assertIn('ChatOpenAICompatible', self.llm_source)
 
-    def test_get_minimax_params_removed(self):
-        """The legacy _get_minimax_params function should be removed."""
+    def test_get_minimax_params_handles_web_search(self):
+        """_get_minimax_params builds OpenAI-compatible params and threads the
+        enable_web_search flag through to ChatMinimax (no legacy MiniMaxChat
+        api_key / group_id, no /chat/completions URL appending)."""
+        found = False
         for node in ast.walk(self.llm_tree):
             if isinstance(node, ast.FunctionDef) and node.name == '_get_minimax_params':
-                self.fail('_get_minimax_params function still exists in llm.py')
+                src = ast.get_source_segment(self.llm_source, node)
+                self.assertIn('_get_openai_params', src)
+                self.assertIn('enable_web_search', src)
+                found = True
+        self.assertTrue(found, '_get_minimax_params function should exist in llm.py')
 
-    def test_minimax_entry_uses_openai_compatible(self):
-        """_llm_node_type['minimax'] should reference ChatOpenAICompatible."""
+    def test_minimax_entry_uses_chat_minimax(self):
+        """_llm_node_type['minimax'] should reference the dedicated ChatMinimax
+        client (web-search handling now lives inside that ChatModel, not in the
+        BishengLLM wrapper)."""
         found = False
         for line in self.llm_source.splitlines():
             if 'MINIMAX' in line and 'client' in line:
-                self.assertIn('ChatOpenAICompatible', line,
-                              f'MINIMAX client should be ChatOpenAICompatible, got: {line.strip()}')
+                self.assertIn('ChatMinimax', line,
+                              f'MINIMAX client should be ChatMinimax, got: {line.strip()}')
                 found = True
                 break
         self.assertTrue(found, 'Could not find MINIMAX entry in _llm_node_type')
 
-    def test_minimax_entry_uses_openai_params(self):
-        """_llm_node_type['minimax'] should use _get_openai_params handler."""
+    def test_minimax_entry_uses_minimax_params(self):
+        """_llm_node_type['minimax'] should use the _get_minimax_params handler."""
         for line in self.llm_source.splitlines():
             if 'MINIMAX' in line and 'params_handler' in line:
-                self.assertIn('_get_openai_params', line,
-                              f'MINIMAX params handler should be _get_openai_params, got: {line.strip()}')
+                self.assertIn('_get_minimax_params', line,
+                              f'MINIMAX params handler should be _get_minimax_params, got: {line.strip()}')
                 return
         self.fail('Could not find MINIMAX params_handler entry')
 
-    def test_web_search_support_preserved(self):
-        """Web search tool support for MiniMax should still be present."""
-        self.assertIn('web_search', self.llm_source)
-        in_parse_kwargs = False
-        found_minimax_web_search = False
-        for line in self.llm_source.splitlines():
-            if 'def parse_kwargs' in line:
-                in_parse_kwargs = True
-            if in_parse_kwargs and 'MINIMAX' in line:
-                found_minimax_web_search = True
-                break
-        self.assertTrue(found_minimax_web_search,
-                        'MiniMax web_search support not found in parse_kwargs')
+    def test_web_search_support_moved_to_chat_minimax(self):
+        """Web search support is now encapsulated in ChatMinimax and must no
+        longer live in the removed BishengLLM.parse_kwargs hook."""
+        self.assertNotIn('def parse_kwargs', self.llm_source,
+                         'parse_kwargs should be removed from BishengLLM')
+        chat_minimax_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'core', 'ai', 'llm', 'chat_minimax.py'
+        )
+        chat_minimax_path = os.path.normpath(chat_minimax_path)
+        with open(chat_minimax_path) as f:
+            chat_minimax_source = f.read()
+        self.assertIn('web_search', chat_minimax_source)
+        self.assertIn('enable_web_search', chat_minimax_source)
 
     def test_no_legacy_minimax_api_key_param(self):
         """No function should set minimax_api_key (legacy param)."""
@@ -90,7 +99,7 @@ class TestCoreAIModuleChanges(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.init_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'core', 'ai', '__init__.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'core', 'ai', '__init__.py'
         )
         cls.init_py_path = os.path.normpath(cls.init_py_path)
         with open(cls.init_py_path) as f:
@@ -139,7 +148,7 @@ class TestEmbeddingModuleConsistency(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.emb_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'embedding.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'llm', 'embedding.py'
         )
         cls.emb_py_path = os.path.normpath(cls.emb_py_path)
         with open(cls.emb_py_path) as f:
@@ -250,7 +259,7 @@ class TestMiniMaxLLMServerTypeEnum(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.const_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'const.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'const.py'
         )
         cls.const_path = os.path.normpath(cls.const_path)
         with open(cls.const_path) as f:
@@ -267,7 +276,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         llm_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
         )
         llm_py_path = os.path.normpath(llm_py_path)
         with open(llm_py_path) as f:

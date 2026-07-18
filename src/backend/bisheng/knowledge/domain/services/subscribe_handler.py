@@ -6,11 +6,11 @@ from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.message.domain.models.inbox_message import InboxMessage
 from bisheng.message.domain.schemas.message_schema import MessageContentItem, UserContentItem, BusinessContentItem
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.user.domain.models.user import UserDao, User
-
 
 class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
     def __init__(self, notify_sender: Callable[[int, List[int], Any], Awaitable[InboxMessage]]):
@@ -45,6 +45,12 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
 
         memory_info.status = MembershipStatusEnum.ACTIVE
         await SpaceChannelMemberDao.update(memory_info)
+        await KnowledgeSpaceService.sync_direct_space_user_permissions(
+            space_info.id,
+            memory_info.user_id,
+            memory_info.user_role,
+            is_active=True,
+        )
 
         await self.notify_sender(
             operator_user_id,

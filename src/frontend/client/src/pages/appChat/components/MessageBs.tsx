@@ -1,12 +1,18 @@
 import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { ChatMessageType } from "~/@types/chat";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import {
+    ExportSelectionButton,
+    MessageCheckbox,
+} from "~/components/Chat/MessageSelection";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
 import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
 import MessageButtons from "./MessageButtons";
-import MessageSource from "./MessageSource";
 import useLocalize from "~/hooks/useLocalize";
 
 
@@ -41,9 +47,24 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-
-export default function MessageBs({ logo, title, data, onUnlike = () => { },readOnly, onSource }:
-    { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+type MessageBsProps = {
+    logo: React.ReactNode;
+    title: string;
+    data: ChatMessageType;
+    isGuestMode?: boolean;
+    readOnly?: any;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+};
+export default function MessageBs({
+    logo,
+    title,
+    data,
+    readOnly,
+    isGuestMode = false,
+    onOpenCitationPanel,
+    activeCitationMessageId,
+}: MessageBsProps) {
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
@@ -60,13 +81,43 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
         }
         return [msg, '']
     }, [data.message])
+    const referenceWebContent = useMemo(() => {
+        const webMatch = message.match(/:::web([\s\S]*?):::/);
+        if (!webMatch) return [];
+        try {
+            const str = webMatch[1].trim();
+            return str ? JSON.parse(str) : [];
+        } catch {
+            return [];
+        }
+    }, [message]);
+    const referenceContent = useMemo(() => {
+        return message.replace(/:::web[\s\S]*?:::/, '').trim();
+    }, [message]);
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
         copyText(messageRef.current)
     }
 
-    return <div className="bisheng-message flex w-full py-2">
+    // F028: selection-mode integration. chatId lives in the URL
+    // (``/app/:cid/:fid/:type``). The download icon goes into the
+    // MessageButtons children slot; the round checkbox sits at the left
+    // margin of the bubble row.
+    const { conversationId: chatIdFromUrl } = useParams();
+    const chatId = chatIdFromUrl || "";
+    const messageId = String(data.id ?? "");
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox = !!chatId && isActiveForChat(chatId);
+
+    return <div className="bisheng-message flex w-full py-2 items-start gap-2">
+        {showCheckbox && messageId && (
+            <MessageCheckbox
+                chatId={chatId}
+                messageId={messageId}
+                className="mt-2 ml-2 shrink-0"
+            />
+        )}
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
@@ -83,7 +134,16 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
                             <p className="select-none font-semibold text-base mb-1">{title}</p>
                             {message || data.files.length ?
                                 <div ref={messageRef} className="">
-                                    {message && <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>}
+                                    {message && <div className="bs-mkdown text-base break-words [word-break:break-all]">
+                                        <Markdown
+                                            content={message}
+                                            isLatestMessage={false}
+                                            webContent={undefined}
+                                            citations={(data as any).citations}
+                                            messageId={String(data.id)}
+                                            onOpenCitationPanel={onOpenCitationPanel}
+                                        />
+                                    </div>}
                                     {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                     {/* @user */}
                                     {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
@@ -99,24 +159,26 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
             {/* 附加信息 */}
             {
                 data.end && <div className="flex justify-between">
-                    <MessageSource
-                        extra={data.extra || {}}
-                        end={data.end}
-                        source={data.source}
-                        className="pl-4"
-                        onSource={() => onSource?.({
-                            messageId: data.id,
-                            message,
-                        })}
+                    <CitationReferencesDrawer
+                        content={referenceContent}
+                        webContent={referenceWebContent}
+                        citations={(data as any).citations}
+                        messageId={String(data.id)}
+                        desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
+                        open={onOpenCitationPanel ? activeCitationMessageId === String(data.id) : undefined}
+                        onDesktopOpen={onOpenCitationPanel}
+                        buttonClassName="ml-4"
                     />
                     {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}
                         text={message}
-                        onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                     >
                         <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                        {chatId && messageId && (
+                            <ExportSelectionButton chatId={chatId} messageId={messageId} />
+                        )}
                     </MessageButtons>}
                 </div>
             }

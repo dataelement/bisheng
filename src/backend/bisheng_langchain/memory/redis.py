@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 import redis
-from langchain.memory.chat_memory import BaseChatMemory
+from langchain_classic.memory.chat_memory import BaseChatMemory
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, get_buffer_string,
                                      message_to_dict, messages_from_dict)
 from pydantic import Field, model_validator

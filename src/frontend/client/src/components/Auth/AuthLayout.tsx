@@ -70,7 +70,7 @@ function AuthLayout({
         </div>
       </BlinkAnimation>
       <DisplayError />
-      <div className="absolute bottom-0 left-0 md:m-4">
+      <div className="absolute bottom-0 left-0 touch-desktop:m-4">
         <ThemeSelector />
       </div>
 

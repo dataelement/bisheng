@@ -9,7 +9,7 @@ import {
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, Shield } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -19,7 +19,9 @@ export default function ToolItem({
     data,
     onEdit = (id) => { },
     onSelect,
-    onSetClick = null
+    onSetClick = null,
+    onPermission = null,
+    permissionBadge = null,
 }) {
     const { t } = useTranslation('tool');
     const sortData = useMemo(() => {
@@ -39,6 +41,13 @@ export default function ToolItem({
                         <span className="truncate">
                             {type ? data.name : t(`categories.${data.name}.name`)}
                         </span>
+                        {permissionBadge}
+                        {
+                            onPermission && <div
+                                className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1"
+                                onClick={(e) => { e.stopPropagation(); onPermission(data) }}
+                            ><Shield className="w-4 h-4" /></div>
+                        }
                         {
                             ['edit', 'mcp'].includes(type) && data.write && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"

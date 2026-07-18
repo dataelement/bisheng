@@ -1,6 +1,6 @@
 import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
     Channel,
@@ -13,6 +13,11 @@ import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import ChannelItem from "./ChannelItem";
 import { SectionHeader } from "./SectionHeader";
 import { useChannelActions } from "../hooks/useChannelActions";
+import { UserPopMenu } from "~/layouts/UserPopMenu";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
+import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
+import { cn } from "~/utils";
 
 interface ChannelSidebarProps {
     activeChannelId?: string;
@@ -25,6 +30,10 @@ interface ChannelSidebarProps {
     onCreatedCountChange?: (count: number) => void;
     /** When true, skip auto-selecting the first channel (e.g. share route is resolving) */
     suppressAutoSelect?: boolean;
+    /** H5：置于订阅页固定抽屉内，隐藏 PC 折叠把手，宽度随父容器 */
+    mobileDrawerMode?: boolean;
+    /** H5 抽屉：右上角关闭 */
+    onDrawerClose?: () => void;
 }
 
 export function ChannelSidebar({
@@ -36,8 +45,11 @@ export function ChannelSidebar({
     onChannelSettings,
     onCreatedCountChange,
     suppressAutoSelect,
+    mobileDrawerMode = false,
+    onDrawerClose,
 }: ChannelSidebarProps) {
     const localize = useLocalize();
+    const { data: bsConfig } = useGetBsConfig();
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [subscribedCollapsed, setSubscribedCollapsed] = useState(false);
@@ -93,6 +105,10 @@ export function ChannelSidebar({
         onCreatedCountChange?.(createdChannels.length);
     }, [createdChannels.length, onCreatedCountChange]);
 
+    useEffect(() => {
+        if (mobileDrawerMode) setCollapsed(false);
+    }, [mobileDrawerMode]);
+
     const getSortText = (sortType: SortType) => {
         switch (sortType) {
             case SortType.RECENT_UPDATE: return localize("com_subscription.recently_updated");
@@ -122,19 +138,50 @@ export function ChannelSidebar({
     };
 
     return (
-        <div className="relative flex-shrink-0">
+        <div className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}>
             <div
                 className={[
-                    "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden",
-                    collapsed ? "w-0" : "w-60",
-                ].join(" ")}
-                style={{
-                    transitionProperty: 'width',
-                    transitionDuration: '300ms',
-                    transitionTimingFunction: 'ease-in-out'
-                }}
+                    "h-full bg-white flex flex-col overflow-hidden",
+                    !mobileDrawerMode && "border-r border-[#e5e6eb]",
+                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
+                ].filter(Boolean).join(" ")}
+                style={
+                    mobileDrawerMode
+                        ? undefined
+                        : {
+                            transitionProperty: "width",
+                            transitionDuration: "300ms",
+                            transitionTimingFunction: "ease-in-out",
+                        }
+                }
             >
-                {/* 顶部操作区 */}
+                {mobileDrawerMode ? (
+                    <>
+                        <MobileSidebarHeaderTabs
+                            logoSrc={bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : undefined}
+                            onClose={onDrawerClose}
+                            onLinkClick={(link) => {
+                                if (link.closeDrawerOnNavigate) onDrawerClose?.();
+                            }}
+                        />
+                        <div className="shrink-0 px-3 pt-4 pb-6">
+                            <Button
+                                variant="secondary"
+                                type="button"
+                                onClick={() => {
+                                    onCreateChannel();
+                                    onDrawerClose?.();
+                                }}
+                                className="flex h-9 w-full items-center justify-center gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+                            >
+                                <Plus className="size-4" />
+                                {localize("com_subscription.create")}
+                            </Button>
+                        </div>
+                    </>
+                ) : null}
+                {/* 顶部操作区 — PC */}
+                {!mobileDrawerMode ? (
                 <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                     <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
                         {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
@@ -153,6 +200,7 @@ export function ChannelSidebar({
                         )}
                     </div>
                 </div>
+                ) : null}
 
                 {/* 列表区（折叠时隐藏内容，但保持容器以产生宽度过渡） */}
                 <div
@@ -167,7 +215,7 @@ export function ChannelSidebar({
                     }}
                 >
                     <div
-                        className="h-full overflow-y-auto scroll-on-scroll px-3 pb-5"
+                        className="h-full overflow-y-auto overscroll-y-contain scroll-on-scroll px-3 pb-5"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
@@ -234,15 +282,22 @@ export function ChannelSidebar({
                         </div>
                     </div>
                 </div>
+                {mobileDrawerMode ? (
+                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                        <UserPopMenu variant="drawer" />
+                    </div>
+                ) : null}
             </div>
-            <NavToggle
-                navVisible={!collapsed}
-                onToggle={() => setCollapsed((v) => !v)}
-                isHovering={isToggleHovering}
-                setIsHovering={setIsToggleHovering}
-                className="absolute top-1/2 left-0 z-[10]"
-                translateX={230}
-            />
+            {!mobileDrawerMode ? (
+                <NavToggle
+                    navVisible={!collapsed}
+                    onToggle={() => setCollapsed((v) => !v)}
+                    isHovering={isToggleHovering}
+                    setIsHovering={setIsToggleHovering}
+                    className="absolute top-1/2 left-0 z-[10]"
+                    translateX={240}
+                />
+            ) : null}
         </div>
     );
 };

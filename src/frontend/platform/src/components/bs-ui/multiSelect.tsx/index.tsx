@@ -524,12 +524,16 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
                 <PopoverPrimitive.Portal>
                     <PopoverPrimitive.Content
                         className={cname(
-                            "z-50 w-full min-w-[var(--radix-popover-trigger-width)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none",
+                            "z-50 w-full min-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none",
                             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                             contentClassName,
                         )}
                         align="start"
                         sideOffset={4}
+                        collisionPadding={8}
+                        style={{
+                            maxHeight: "var(--radix-popover-content-available-height)",
+                        }}
                     >
                         {searchable && (
                             <div className="border-b p-2">
@@ -546,7 +550,16 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
                             </div>
                         )}
 
-                        <div role="listbox" aria-multiselectable={multiple} className="max-h-60 overflow-auto p-1">
+                        <div
+                            role="listbox"
+                            aria-multiselectable={multiple}
+                            className="overflow-auto p-1"
+                            style={{
+                                maxHeight: searchable
+                                    ? "min(15rem, calc(var(--radix-popover-content-available-height, 18rem) - 3.25rem))"
+                                    : "min(15rem, var(--radix-popover-content-available-height, 15rem))",
+                            }}
+                        >
                             {filteredOptions.length === 0 ? (
                                 <div className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>
                             ) : (

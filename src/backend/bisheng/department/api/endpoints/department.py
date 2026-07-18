@@ -1,0 +1,258 @@
+"""Department CRUD + tree + move API endpoints.
+
+Part of F002-department-tree.
+"""
+
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import ORJSONResponse
+
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.schemas.api import resp_200
+from bisheng.department.domain.schemas.department_schema import (
+    DepartmentAdminSet,
+    DepartmentCreate,
+    DepartmentLocalMemberCreate,
+    DepartmentLocalMemberCreateWithDeptId,
+    DepartmentMoveRequest,
+    DepartmentUpdate,
+)
+from bisheng.department.domain.services.department_service import DepartmentService
+
+router = APIRouter()
+
+
+@router.post("/")
+async def create_department(
+    data: DepartmentCreate,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        dept = await DepartmentService.acreate_department(data, login_user)
+        return resp_200(dept.model_dump())
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+# F038/T012: the eager ``GET /tree`` endpoint was removed — the whole department
+# tree no longer loads at once. Clients use the lazy ``GET /children`` (one layer),
+# ``GET /search`` and ``GET /{id}/path-tree`` instead. ``DepartmentService.aget_tree``
+# is retained as the canonical visible-set reference that the lazy endpoints are
+# parity-checked against (see test_department_scope_parity).
+
+
+@router.get("/search/global-members")
+async def global_members_search(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    root_dept_id: int | None = Query(None, ge=1),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """全组织按用户名搜索成员（主属部门路径）；可见范围与 :meth:`DepartmentService.aget_tree` 一致。
+
+    含未启用账号（``User.delete=1``），与部门成员列表一致，便于管理员搜索定位。
+    使用 ``/search/...`` 前缀，避免与 ``GET /{dept_id}`` 单段路径冲突（否则 ``global-members`` 会被当成 dept_id）。
+    """
+    try:
+        data = await DepartmentService.aget_global_members_search(
+            keyword,
+            page,
+            limit,
+            login_user,
+            root_dept_id=root_dept_id,
+        )
+        return resp_200(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+def _orjson_ok(data):
+    """F038 decision 7: return the standard envelope via ORJSON, skipping the
+    ``UnifiedResponseModel`` → jsonable_encoder pass for the (possibly large)
+    tree payload. Mirrors ``resp_200``'s shape so the frontend is unaffected."""
+    return ORJSONResponse(content={"status_code": 200, "status_message": "SUCCESS", "data": data})
+
+
+# F038 lazy department tree. These literal GET routes MUST stay above ``GET
+# /{dept_id}`` (below) or that single-segment route would swallow them.
+@router.get("/children")
+async def get_children(
+    parent_id: int | None = Query(None, description="None → root layer; else direct children of this internal id"),
+    include_archived: bool = Query(False),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """One lazy layer of the department tree (AC-01/02/03)."""
+    try:
+        data = await DepartmentService.aget_children_layer(login_user, parent_id, include_archived)
+        return _orjson_ok(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/search")
+async def search_departments(
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    include_archived: bool = Query(False),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Server-side name search → pruned match tree (AC-06/07/08)."""
+    try:
+        data = await DepartmentService.asearch_tree(login_user, keyword, limit, include_archived)
+        return _orjson_ok(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/{dept_internal_id:int}/path-tree")
+async def get_path_tree(
+    dept_internal_id: int,
+    include_archived: bool = Query(False),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Locate/reveal: pruned tree from the root down to ``dept_internal_id`` (AC-10)."""
+    try:
+        data = await DepartmentService.aget_path_tree(login_user, dept_internal_id, include_archived)
+        return _orjson_ok(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post("/local-members")
+async def create_local_member_body(
+    data: DepartmentLocalMemberCreateWithDeptId,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """创建本地人员（dept_id 在 body）。必须放在 ``GET /{dept_id}`` 之前，否则 ``local-members`` 会被当成 dept_id 导致 POST→405。"""
+    try:
+        inner = DepartmentLocalMemberCreate(
+            user_name=data.user_name,
+            person_id=data.person_id,
+            password=data.password,
+            role_ids=data.role_ids,
+        )
+        out = await DepartmentService.acreate_local_member(data.dept_id, inner, login_user)
+        return resp_200(out)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/get_user_primary_department")
+async def get_user_primary_department(
+    user_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the user's primary department. Called by Gateway for traffic control."""
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+    ud = await UserDepartmentDao.aget_user_primary_department(user_id)
+    if not ud:
+        return resp_200([])
+    dept = await DepartmentDao.aget_by_id(ud.department_id)
+    if not dept:
+        return resp_200([])
+    return resp_200([{"id": dept.id, "dept_id": dept.dept_id, "name": dept.name}])
+
+
+@router.get("/{dept_id}")
+async def get_department(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        data = await DepartmentService.aget_department(dept_id, login_user)
+        return resp_200(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.put("/{dept_id}")
+async def update_department(
+    dept_id: str,
+    data: DepartmentUpdate,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        dept = await DepartmentService.aupdate_department(dept_id, data, login_user)
+        return resp_200(dept.model_dump())
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.delete("/{dept_id}")
+async def delete_department(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.adelete_department(dept_id, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.delete("/{dept_id}/purge")
+async def purge_department(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.apurge_department(dept_id, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post("/{dept_id}/restore")
+async def restore_department(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.arestore_department(dept_id, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post("/{dept_id}/move")
+async def move_department(
+    dept_id: str,
+    data: DepartmentMoveRequest,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        dept = await DepartmentService.amove_department(dept_id, data, login_user)
+        return resp_200(dept.model_dump())
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get("/{dept_id}/admins")
+async def get_department_admins(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        admins = await DepartmentService.aget_admins(dept_id, login_user)
+        return resp_200(admins)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.put("/{dept_id}/admins")
+async def set_department_admins(
+    dept_id: str,
+    data: DepartmentAdminSet,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        result = await DepartmentService.aset_admins(
+            dept_id,
+            data.user_ids,
+            login_user,
+        )
+        return resp_200(result)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()

@@ -24,7 +24,7 @@ export function ConversationList({ groups, activeId, onSelect, onNewChat, locali
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3">
+    <div className="flex-1 overflow-y-auto px-2">
       {groups.map((group) => (
         <div key={group.label} className="mb-2">
           <div className="px-2 mb-1 text-xs font-medium text-gray-400">
@@ -38,7 +38,7 @@ export function ConversationList({ groups, activeId, onSelect, onNewChat, locali
                 'group flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all',
                 conv.id === activeId
                   ? 'bg-[#eef4ff] text-blue-600'
-                  : 'hover:bg-gray-100 text-gray-700',
+                  : 'fine-pointer:hover:bg-gray-100 text-gray-700',
               )}
             >
               <MessageSquare

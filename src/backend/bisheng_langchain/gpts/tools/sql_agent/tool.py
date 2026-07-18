@@ -1,4 +1,3 @@
-from typing import Type, Optional
 
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
@@ -6,9 +5,9 @@ from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import BaseTool
-from langgraph.graph.graph import CompiledGraph
+from langgraph.graph.state import CompiledStateGraph as CompiledGraph
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 _agent_system_prompt = """You are an autonomous agent that answers user questions by querying an SQL database through the provided tools.
 
@@ -51,8 +50,8 @@ class SqlAgentAPIWrapper(BaseModel):
     llm: BaseLanguageModel = Field(description="llm to use for sql agent")
     sql_address: str = Field(description="sql database address for SQLDatabase uri")
 
-    db: Optional[SQLDatabase] = None
-    agent: Optional[CompiledGraph] = None
+    db: SQLDatabase | None = None
+    agent: CompiledGraph | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -84,13 +83,13 @@ class SqlAgentInput(BaseModel):
 class SqlAgentTool(BaseTool):
     name: str = "sql_agent"
     description: str = "回答与 SQL 数据库有关的问题。给定用户问题，将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
-    args_schema: Type[BaseModel] = SqlAgentInput
+    args_schema: type[BaseModel] = SqlAgentInput
     api_wrapper: SqlAgentAPIWrapper
 
     def _run(
             self,
             query: str,
-            run_manager: Optional[CallbackManagerForToolRun] = None,
+            run_manager: CallbackManagerForToolRun | None = None,
     ) -> str:
         """Use the tool."""
         try:

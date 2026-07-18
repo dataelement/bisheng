@@ -2,6 +2,7 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
 import { setTokenHeader } from '~/api/chat/headers-helpers';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import * as endpoints from '~/api/chat/api-endpoints';
 import type * as t from '~/types/chat/types';
 
@@ -32,6 +33,15 @@ async function _post(url: string, data?: any, config?: AxiosRequestConfig) {
     ...config
   });
   return response.data;
+}
+
+async function _postResponse<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  // Mirror of _getResponse: returns the full Axios response so callers can
+  // read headers (e.g. Content-Disposition for file downloads).
+  return await customAxios.post(url, config ? data : JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' },
+    ...config,
+  }) as unknown as T;
 }
 
 async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig) {
@@ -99,20 +109,90 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
+export const translateApiErrorMessage = (data: any) => {
+  const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
+  const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
+  const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
+
+  if (statusCodeKey && i18next.exists(statusCodeKey)) {
+    return i18next.t(statusCodeKey, data?.data);
+  }
+  if (statusMessageKey && i18next.exists(statusMessageKey)) {
+    return i18next.t(statusMessageKey, data?.data);
+  }
+  return statusMessage || (statusCodeKey ? i18next.t(statusCodeKey, data?.data) : "");
+};
+
+// License degradation (gateway returns 11001): throttle the toast so a burst of
+// failing business calls doesn't flood the user with duplicate notices.
+let lastLicenseExpiredToastAt = 0;
+function shouldToastLicenseExpired(): boolean {
+  const now = Date.now();
+  if (now - lastLicenseExpiredToastAt > 5000) {
+    lastLicenseExpiredToastAt = now;
+    return true;
+  }
+  return false;
+}
+
 customAxios.interceptors.response.use(
   (response) => {
-    if (response.data.status_code === 403) {
-      // Allow business code to handle 403 when skip403Redirect is set
-      if (!response.config.skip403Redirect) {
-        localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
-        location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+    // License expired (gateway degradation): always surface a clear toast and reject,
+    // regardless of per-call error flags, so end users learn it's an authorization
+    // issue rather than a transient glitch. See feature 037.
+    if (response.data?.status_code === 11001) {
+      const message = translateApiErrorMessage(response.data) || response.data.status_message || '';
+      if (message && shouldToastLicenseExpired()) {
+        window.showToast?.({ message, status: 'error' });
       }
+      const err: any = new Error(message || 'license expired (11001)');
+      err.status_code = 11001;
+      err.status_message = response.data.status_message;
+      err.response = response;
+      return Promise.reject(err);
+    }
+
+    // Backend service exception surfaced as HTTP 200 + business code 500:
+    // gateways often wrap upstream 5xx into a 200 envelope, so mirror the
+    // HTTP-500 branch below and raise the global maintenance overlay here too.
+    // Return early — the overlay covers the screen, no toast needed underneath.
+    if (response.data?.status_code === 500) {
+      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
+      return response;
+    }
+
+    // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
+    // explicitly opts out via skip403Redirect.
+    if (response.data.status_code === 403 && !response.config.skip403Redirect) {
+      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+      location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
       return response
+    }
+
+    // Unified business-error pipeline for callers that opted out of the 403
+    // redirect: translate the api_errors.<code> i18n key, toast it, and reject
+    // the promise so the caller's onError / .catch fires. Old call sites that
+    // rely on silent failure (no skip403Redirect) keep the previous behavior.
+    if (
+      response.config.skip403Redirect
+      && response.data
+      && response.data.status_code !== 200
+    ) {
+      const message = translateApiErrorMessage(response.data);
+      const display = message || response.data.status_message || "";
+      if (display) {
+        window.showToast?.({ message: display, status: 'error' });
+      }
+      const err: any = new Error(display || `request failed (${response.data.status_code})`);
+      err.status_code = response.data.status_code;
+      err.status_message = response.data.status_message;
+      err.response = response;
+      return Promise.reject(err);
     }
 
     if (response.config.showError && response.data && response.data.status_code !== 200) {
       console.log('业务错误:>> ', response.config.url, response.data);
-      window.showToast?.({ message: i18next.t(`api_errors.${response.data.status_code}`, response.data.data), status: 'error' });
+      window.showToast?.({ message: translateApiErrorMessage(response.data), status: 'error' });
     }
     return response;
   },
@@ -120,6 +200,12 @@ customAxios.interceptors.response.use(
     const originalRequest = error.config;
     if (!error.response) {
       return Promise.reject(error);
+    }
+
+    // Gateway/backend service exception → surface the global maintenance overlay.
+    // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
+    if (error.response.status === 500) {
+      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
     }
 
     if (originalRequest.url?.includes('/api/auth/2fa') === true) {
@@ -133,9 +219,29 @@ customAxios.interceptors.response.use(
       console.warn('401 error, refreshing token');
       originalRequest._retry = true;
 
+      // Standalone guest chat links (/chat/flow/:flowId, /chat/assistant/:flowId)
+      // are passwordless — never redirect to the login page from here.
+      // Auth variants (/chat/flow/auth/..., /chat/assistant/auth/...) are excluded.
+      const isGuestStandaloneChat =
+        /\/chat\/(flow|assistant)\/(?!auth\/)[^/]+\/?$/.test(location.pathname);
+      if (isGuestStandaloneChat) {
+        return Promise.reject(error);
+      }
+
+      // Drop the auth-state sentinel so the next /api/user/me success
+      // (after re-login or SSO bounce) is detected as a fresh session and
+      // wipes cached chat preferences.
+      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
+
+      const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+      if (thirdPartyLoginUrl) {
+        window.location.href = thirdPartyLoginUrl;
+        return Promise.reject(error);
+      }
+
       if (import.meta.env.MODE === 'production') {
         localStorage.setItem('LOGIN_PATHNAME', location.pathname)
-        location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`
+        location.href = getPlatformAdminPanelUrl()
       }
       // } else {
       //   if (location.pathname.indexOf('login') === -1) {
@@ -210,6 +316,7 @@ export default {
   get: _get,
   getResponse: _getResponse,
   post: _post,
+  postResponse: _postResponse,
   postMultiPart: _postMultiPart,
   postTTS: _postTTS,
   put: _put,

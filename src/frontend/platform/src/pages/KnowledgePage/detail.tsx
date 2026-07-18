@@ -1,5 +1,11 @@
 import { Tabs, TabsContent } from "@/components/bs-ui/tabs";
-import { useState } from "react";
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { checkPermission } from "@/controllers/API/permission";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 import Files from "./components/Files";
 import Header from "./components/Header";
 import Paragraphs from "./components/Paragraphs";
@@ -8,6 +14,43 @@ export default function FilesPage() {
     const [value, setValue] = useState('file')
     const [fileId, setFileId] = useState('')
     const [fileTitle, setFileTitle] = useState(true);
+    const [permissionChecked, setPermissionChecked] = useState(false);
+    const [canEditKb, setCanEditKb] = useState(false);
+    const [canDeleteKb, setCanDeleteKb] = useState(false);
+    const { id: knowledgeId } = useParams();
+    const navigate = useNavigate();
+    const { message } = useToast();
+    const { t } = useTranslation('knowledge');
+
+    useEffect(() => {
+        const guardByPermission = async () => {
+            if (!knowledgeId) {
+                setPermissionChecked(true);
+                navigate('/filelib');
+                return;
+            }
+            const [result, editResult, deleteResult] = await Promise.all([
+                captureAndAlertRequestErrorHoc(
+                    checkPermission('knowledge_library', String(knowledgeId), 'can_read', 'view_kb')
+                ),
+                captureAndAlertRequestErrorHoc(
+                    checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb')
+                ),
+                captureAndAlertRequestErrorHoc(
+                    checkPermission('knowledge_library', String(knowledgeId), 'can_delete', 'delete_kb')
+                ),
+            ]);
+            const allowed = !!result?.allowed;
+            setCanEditKb(!!editResult?.allowed);
+            setCanDeleteKb(!!deleteResult?.allowed);
+            setPermissionChecked(true);
+            if (!allowed) {
+                message({ variant: 'warning', description: t('noOperationPermission') });
+                navigate('/filelib');
+            }
+        };
+        guardByPermission();
+    }, [knowledgeId]);
 
     const onPreview = (id: string) => {
         setFileId(id)
@@ -22,6 +65,11 @@ export default function FilesPage() {
         }
     };
     return <div className="size-full px-2 relative bg-background-login">
+        {!permissionChecked && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
+                <LoadingIcon />
+            </div>
+        )}
         {/* tab */}
         <Tabs value={value} onValueChange={(v) => {
             setValue(v);
@@ -36,10 +84,19 @@ export default function FilesPage() {
                 <div className="flex justify-between w-1/2 pt-4">
                     <Header fileTitle={fileTitle} showBackButton={true} />
                 </div>
-                <Files onPreview={onPreview} />
+                <Files
+                    onPreview={onPreview}
+                    canEditKb={canEditKb}
+                    canDeleteKb={canDeleteKb}
+                />
             </TabsContent>
             <TabsContent value="chunk" className="mt-0">
-                <Paragraphs fileId={fileId} onBack={handleBackFromChunk} />
+                <Paragraphs
+                    fileId={fileId}
+                    onBack={handleBackFromChunk}
+                    canEditKb={canEditKb}
+                    canDeleteKb={canDeleteKb}
+                />
             </TabsContent>
         </Tabs>
     </div>

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, delete, text, update
+from sqlalchemy import Column, DateTime, Integer, delete, text, update
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -9,12 +9,19 @@ from bisheng.core.database import get_async_db_session
 
 
 # Available for trainingmodelVertical
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class SftModelBase(SQLModelSerializable):
     id: int = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class SftModel(SftModelBase, table=True):

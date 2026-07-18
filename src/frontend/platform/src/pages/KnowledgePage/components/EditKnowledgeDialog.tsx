@@ -4,15 +4,29 @@ import { Input, Textarea } from "@/components/bs-ui/input";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, onSave }) {
+export default function KnowledgeBaseSettingsDialog({
+    initialName,
+    initialDesc,
+    onSave,
+}: {
+    initialName: string;
+    initialDesc: string;
+    onSave: (data: { name: string; desc: string }) => void;
+}) {
     const { t } = useTranslation('knowledge');
 
     // State for form fields
-    const [formData, setFormData] = useState({ name: '', desc: '' });
-    const [errors, setErrors] = useState({});
+    const [formData, setFormData] = useState({
+        name: '',
+        desc: '',
+    });
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        setFormData({ name: initialName, desc: initialDesc });
+        setFormData({
+            name: initialName,
+            desc: initialDesc,
+        });
     }, [initialName, initialDesc]);
 
     // Handle field change

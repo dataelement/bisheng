@@ -1,12 +1,31 @@
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
-const DialogWithRepeatFiles = ({
-    repeatFiles, setRepeatFiles, retryLoad, t, unRetry, onRetry
-}) => {
+type RepeatFile = {
+    id: number | string;
+    remark?: string;
+    remarkExt?: string;
+};
+
+interface DuplicateFileDialogProps {
+    repeatFiles: RepeatFile[];
+    retryLoad: boolean;
+    t: (key: string) => string;
+    unRetry: () => void;
+    onRetry: (files: RepeatFile[]) => void;
+}
+
+export function DialogWithRepeatFiles({
+    repeatFiles, retryLoad, t, unRetry, onRetry
+}: DuplicateFileDialogProps) {
     return (
-        <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
-            <DialogContent className="sm:max-w-[425px]" close={false}>
+        <Dialog open={!!repeatFiles.length}>
+            <DialogContent
+                className="sm:max-w-[425px]"
+                close={false}
+                onInteractOutside={(event) => event.preventDefault()}
+                onEscapeKeyDown={(event) => event.preventDefault()}
+            >
                 <DialogHeader>
                     <DialogTitle>{t('modalTitle')}</DialogTitle>
                     <DialogDescription>{t('modalMessage')}</DialogDescription>
@@ -28,6 +47,4 @@ const DialogWithRepeatFiles = ({
             </DialogContent>
         </Dialog>
     );
-};
-
-export default DialogWithRepeatFiles;
+}

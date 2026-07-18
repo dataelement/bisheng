@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
 from sqlmodel import Field, select, delete, and_, func, text, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -10,9 +10,12 @@ from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class TagBusinessTypeEnum(str, Enum):
     KNOWLEDGE_SPACE = 'knowledge_space'
     APPLICATION = 'application'
+    KNOWLEDGE = 'knowledge'
 
 
 class TagBase(SQLModelSerializable):
@@ -20,14 +23,18 @@ class TagBase(SQLModelSerializable):
     Tag Form
     """
     name: Optional[str] = Field(default=None, index=True, description="Label Name")
-    business_type: TagBusinessTypeEnum = Field(default=TagBusinessTypeEnum.APPLICATION,
-                                               description="Business Type")
+    business_type: str = Field(default=TagBusinessTypeEnum.APPLICATION, description="Business Type")
     business_id: Optional[str] = Field(default=None, sa_column=Column(String(36)), description="Business ID")
     user_id: int = Field(default=0, description='Create UserID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class Tag(TagBase, table=True):
@@ -42,10 +49,15 @@ class TagLinkBase(SQLModelSerializable):
     resource_id: str = Field(description="Resource UniqueID")
     resource_type: int = Field(description="Resource Type")  # Usegroup_resource.ResourceTypeEnumEnumeration
     user_id: int = Field(default=0, description='Create UserID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class TagLink(TagLinkBase, table=True):
@@ -100,6 +112,14 @@ class TagDao(Tag):
             return data
 
     @classmethod
+    async def get_tag(cls, tag_id: int) -> Optional[Tag]:
+        """Find a tag by id asynchronously."""
+        statement = select(Tag).where(Tag.id == tag_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def update_tag(cls, data: Tag) -> Tag:
         """ Update a new label data """
         if data.id is None:
@@ -109,6 +129,24 @@ class TagDao(Tag):
             session.add(data)
             session.commit()
             session.refresh(data)
+            return data
+
+    @classmethod
+    async def aupdate_tag(cls, tag_id: int, **kwargs) -> Tag:
+        """Update a tag asynchronously."""
+        async with get_async_db_session() as session:
+            statement = select(Tag).where(Tag.id == tag_id)
+            result = await session.exec(statement)
+            data = result.first()
+            if data is None:
+                raise ValueError("Tag does not exist")
+
+            for key, value in kwargs.items():
+                setattr(data, key, value)
+
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
             return data
 
     @classmethod
@@ -155,6 +193,16 @@ class TagDao(Tag):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_tags_by_ids(cls, tag_ids: List[int]) -> List[Tag]:
+        """Find tags by ids asynchronously."""
+        if not tag_ids:
+            return []
+        statement = select(Tag).where(Tag.id.in_(tag_ids))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     async def get_tags_by_business(cls, business_type: TagBusinessTypeEnum, business_id: str, name: str = None) -> List[
         Tag]:
         statement = select(Tag).where(Tag.business_type == business_type, Tag.business_id == business_id)
@@ -163,6 +211,50 @@ class TagDao(Tag):
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
+
+    @classmethod
+    async def asearch_tags(
+        cls,
+        keyword: str = None,
+        page: int = 1,
+        limit: int = 10,
+        *,
+        business_type: TagBusinessTypeEnum,
+        business_id: str,
+    ) -> List[Tag]:
+        """Search tags by business scope asynchronously."""
+        statement = select(Tag).where(
+            Tag.business_type == business_type,
+            Tag.business_id == business_id,
+        )
+        if keyword:
+            statement = statement.where(Tag.name.like(f'%{keyword}%'))
+        statement = statement.order_by(Tag.id.desc())
+        if page > 0 and limit > 0:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def acount_tags(
+        cls,
+        keyword: str = None,
+        *,
+        business_type: TagBusinessTypeEnum,
+        business_id: str,
+    ) -> int:
+        """Count tags by business scope asynchronously."""
+        statement = select(func.count(Tag.id)).where(
+            Tag.business_type == business_type,
+            Tag.business_id == business_id,
+        )
+        if keyword:
+            statement = statement.where(Tag.name.like(f'%{keyword}%'))
+
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
 
     @classmethod
     def get_tags_by_resource(cls, resource_type: ResourceTypeEnum | None, resource_ids: list[str]) -> Dict[
@@ -221,6 +313,26 @@ class TagDao(Tag):
         statement = select(TagLink).where(TagLink.tag_id.in_(tag_ids), TagLink.resource_type == resource_type.value)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
+
+    @classmethod
+    async def aget_resource_tag_ids_batch(
+        cls, resource_ids: List[str], resource_type: ResourceTypeEnum
+    ) -> Dict[str, List[int]]:
+        """Query tag ids grouped by resource id asynchronously."""
+        if not resource_ids:
+            return {}
+
+        statement = select(TagLink.resource_id, TagLink.tag_id).where(
+            TagLink.resource_id.in_(resource_ids),
+            TagLink.resource_type == resource_type.value,
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+
+        result: Dict[str, List[int]] = {}
+        for resource_id, tag_id in rows:
+            result.setdefault(resource_id, []).append(tag_id)
+        return result
 
     @classmethod
     def get_resources_by_tags_batch(cls, tag_ids: List[int], resource_type: List[ResourceTypeEnum]) -> List[TagLink]:

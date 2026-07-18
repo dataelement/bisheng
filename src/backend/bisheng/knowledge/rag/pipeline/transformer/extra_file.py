@@ -1,6 +1,7 @@
 import json
 import os
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 
@@ -12,28 +13,40 @@ from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 
 class ExtraFileTransformer(BaseDocumentTransformer):
     """
-    Upload a preview file or images from the file to minio.
+    Upload the per-file preview artefact (docx/xlsx/pdf form) and the bbox
+    JSON to MinIO.
+
+    Image uploads moved to ``ImageUploadTransformer``.
     """
 
     def __init__(self, loader: BaseBishengLoader, document_id: str, knowledge_id: int | str,
-                 knowledge_file: KnowledgeFile = None, retain_images: bool = True) -> None:
+                 knowledge_file: KnowledgeFile = None,
+                 source_file_path: str | None = None) -> None:
         self.loader = loader
         self.document_id = document_id
         self.knoledge_id = knowledge_id
         self.knowledge_file = knowledge_file
-        self.retain_images = retain_images
+        self.source_file_path = source_file_path
 
     def transform_documents(
             self, documents: Sequence[Document], **kwargs: Any
     ) -> Sequence[Document]:
         minio_client = get_minio_storage_sync()
         # upload preview file
-        if self.knowledge_file and self.loader.preview_file_path and os.path.exists(self.loader.preview_file_path):
-            preview_file_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
-                file_id=self.document_id, file_ext=self.loader.file_extension)
-            if preview_file_object_name:
-                minio_client.put_object_sync(object_name=preview_file_object_name, file=self.loader.preview_file_path)
-                self.knowledge_file.preview_file_object_name = preview_file_object_name
+        if self.loader.preview_file_path and os.path.exists(self.loader.preview_file_path):
+            if self.knowledge_file:
+                preview_file_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
+                    file_id=self.document_id, file_ext=self.loader.file_extension)
+                if preview_file_object_name:
+                    minio_client.put_object_sync(object_name=preview_file_object_name, file=self.loader.preview_file_path)
+                    self.knowledge_file.preview_file_object_name = preview_file_object_name
+            elif self.source_file_path:
+                preview_file_object_name = KnowledgeUtils.get_tmp_preview_file_object_name(self.source_file_path)
+                if preview_file_object_name:
+                    minio_client.put_object_tmp_sync(
+                        object_name=preview_file_object_name,
+                        file=self.loader.preview_file_path,
+                    )
 
         # upload bbox
         if self.knowledge_file and self.loader.bbox_list:
@@ -46,22 +59,5 @@ class ExtraFileTransformer(BaseDocumentTransformer):
                                          file=json.dumps(file_bbox, ensure_ascii=False).encode("utf-8"),
                                          content_type="application/json")
             self.knowledge_file.bbox_object_name = file_bbox_object_name
-
-        # upload image in file
-        if self.retain_images and self.loader.local_image_dir and os.path.exists(self.loader.local_image_dir):
-            files = [f for f in os.listdir(self.loader.local_image_dir)]
-            local_image_object_dir = KnowledgeUtils.get_knowledge_file_image_dir(self.document_id, self.knoledge_id)
-            for file_name in files:
-                local_file_name = f"{self.loader.local_image_dir}/{file_name}"
-                object_name = f"{local_image_object_dir}/{file_name}"
-                minio_client.put_object_sync(
-                    object_name=object_name, file=local_file_name, bucket_name=minio_client.bucket
-                )
-
-            if len(files) > 0:
-                # convert local image path to minio path
-                for item in documents:
-                    item.page_content = item.page_content.replace(self.loader.local_image_dir,
-                                                                  f"/{minio_client.bucket}/{local_image_object_dir}")
 
         return documents

@@ -33,6 +33,33 @@ interface MetadataField {
   isDefault: boolean;
 }
 
+type KnowledgeSelectionType = "knowledge" | "space" | "tmp";
+
+interface KnowledgeSelectionItem {
+  id: string;
+  label: string;
+}
+
+interface KnowledgeSelection {
+  type: KnowledgeSelectionType;
+  items: KnowledgeSelectionItem[];
+}
+
+interface DefaultMetadataFieldDefinition {
+  name: string;
+  type: "String" | "Number" | "Time";
+  icon: "text" | "number" | "time";
+}
+
+const DEFAULT_METADATA_FIELDS: DefaultMetadataFieldDefinition[] = [
+  { name: "document_id", type: "Number", icon: "number" },
+  { name: "document_name", type: "String", icon: "text" },
+  { name: "upload_time", type: "Time", icon: "time" },
+  { name: "update_time", type: "Time", icon: "time" },
+  { name: "uploader", type: "String", icon: "text" },
+  { name: "updater", type: "String", icon: "text" },
+];
+
 interface MetadataFilterProps {
   data: any;
   onChange: (value: any) => void;
@@ -103,7 +130,19 @@ const MetadataFilter = ({
     };
   }, [conditions, availableMetadataState, isLoadingMetadata]);
 
-  const lastKnowledgeIdsRef = useRef<string>(JSON.stringify(selectedKnowledgeIds()));
+  const knowledgeParam = node?.group_params
+    ?.flatMap(group => group.params || [])
+    .find(param => param.type === "knowledge_select_multi");
+  const knowledgeValue = knowledgeParam?.value;
+  const knowledgeType: KnowledgeSelectionType = knowledgeValue?.type === "space"
+    ? "space"
+    : knowledgeValue?.type === "tmp"
+      ? "tmp"
+      : "knowledge";
+  const knowledgeItems: KnowledgeSelectionItem[] = Array.isArray(knowledgeValue?.value)
+    ? knowledgeValue.value.map(item => ({ id: String(item.key), label: item.label || "" }))
+    : selectedKnowledgeIds().map(id => ({ id: String(id), label: "" }));
+  const knowledgeSelectionKey = JSON.stringify({ type: knowledgeType, items: knowledgeItems });
 
   const operatorConfig = {
     String: ["equals", "not_equals", "contains", "not_contains", "is_empty", "is_not_empty", "starts_with", "ends_with"],
@@ -126,34 +165,38 @@ const MetadataFilter = ({
     less_than_or_equal: "≤",
   };
 
-  const fetchAndPrepareMetadata = useCallback(async () => {
-    setIsLoadingMetadata(true);
+  const fetchAndPrepareMetadata = useCallback(async (selection: KnowledgeSelection) => {
     let availableMetadata: MetadataField[] = [];
     try {
-      const knowledgeIds = selectedKnowledgeIds();
-      if (knowledgeIds.length > 0) {
-        const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+      let knowledgeDetails: any[] = [];
+      if (selection.type === "space") {
+        knowledgeDetails = selection.items.map(item => ({
+          id: item.id,
+          label: item.label,
+          metadata_fields: [],
+        }));
+      } else if (selection.type === "knowledge" && selection.items.length > 0) {
+        knowledgeDetails = await getKnowledgeDetailApi(selection.items.map(item => item.id));
+      }
+
+      if (knowledgeDetails.length > 0) {
         knowledgeDetails.forEach((detail: any) => {
           const kbLabel = detail.name || detail.label || t('unknownKnowledgeBase');
-          const defaultFields = [
-            { name: "document_id", type: "Number", icon: <Hash size={14} /> },
-            { name: "document_name", type: "String", icon: <Type size={14} /> },
-            { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
-            { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
-            { name: "uploader", type: "String", icon: <Type size={14} /> },
-            { name: "updater", type: "String", icon: <Type size={14} /> }
-          ];
-          const defaultMetadataFields = defaultFields.map(field => ({
+          const defaultMetadataFields = DEFAULT_METADATA_FIELDS.map(field => ({
             id: `${detail.id}-${field.name}`,
             name: field.name,
-            type: field.type as "String" | "Number" | "Time",
+            type: field.type,
             knowledgeBase: kbLabel,
             updatedAt: Date.now(),
-            icon: field.icon,
+            icon: field.icon === "number"
+              ? <Hash size={14} />
+              : field.icon === "time"
+                ? <Clock3 size={14} />
+                : <Type size={14} />,
             isDefault: true
           }));
           availableMetadata = [...availableMetadata, ...defaultMetadataFields];
-          if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
+          if (selection.type === "knowledge" && detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
             const customFields = detail.metadata_fields.map((field: any) => {
               let icon: React.ReactNode = <Type size={14} />;
               let type: "String" | "Number" | "Time" = "String";
@@ -180,29 +223,37 @@ const MetadataFilter = ({
       }
     } catch (error) {
       console.error("Error loading metadata:", error);
-    } finally {
-      availableMetadata.sort((a, b) => {
-        if (a.isDefault && !b.isDefault) return 1;
-        if (!a.isDefault && b.isDefault) return -1;
-        if (!a.isDefault && !b.isDefault) return a.updatedAt - b.updatedAt;
-        return a.name.localeCompare(b.name);
-      });
-      setAvailableMetadataState(availableMetadata);
-      setIsLoadingMetadata(false);
     }
-  }, [selectedKnowledgeIds]);
+
+    availableMetadata.sort((a, b) => {
+      if (a.isDefault && !b.isDefault) return 1;
+      if (!a.isDefault && b.isDefault) return -1;
+      if (!a.isDefault && !b.isDefault) return a.updatedAt - b.updatedAt;
+      return a.name.localeCompare(b.name);
+    });
+    return availableMetadata;
+  }, [t]);
 
   useEffect(() => {
-    const currentIds = JSON.stringify(selectedKnowledgeIds());
-    if (currentIds !== lastKnowledgeIdsRef.current) {
-      lastKnowledgeIdsRef.current = currentIds;
-      if (isEnabled) {
-        fetchAndPrepareMetadata();
-      }
-    } else if (isEnabled && availableMetadataState.length === 0) {
-      fetchAndPrepareMetadata();
+    let ignoreResult = false;
+
+    if (!isEnabled) {
+      setIsLoadingMetadata(false);
+      return;
     }
-  }, [selectedKnowledgeIds(), isEnabled, availableMetadataState.length, fetchAndPrepareMetadata]);
+
+    setIsLoadingMetadata(true);
+    const selection = JSON.parse(knowledgeSelectionKey) as KnowledgeSelection;
+    fetchAndPrepareMetadata(selection).then((availableMetadata) => {
+      if (ignoreResult) return;
+      setAvailableMetadataState(availableMetadata);
+      setIsLoadingMetadata(false);
+    });
+
+    return () => {
+      ignoreResult = true;
+    };
+  }, [isEnabled, knowledgeSelectionKey, fetchAndPrepareMetadata]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -333,25 +384,29 @@ const MetadataFilter = ({
     if (!isEnabled) return "";
 
     try {
-      const knowledgeIds = selectedKnowledgeIds();
-      if (knowledgeIds.length === 0) return "";
-
-      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
-
+      const selection = JSON.parse(knowledgeSelectionKey) as KnowledgeSelection;
+      if (selection.items.length === 0 || selection.type === "tmp") return "";
       const validFieldIds = new Set<string>();
-      knowledgeDetails.forEach((detail: any) => {
-
-        const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
-        defaultFields.forEach(field => {
-          validFieldIds.add(`${detail.id}-${field}`);
-        });
-
-        if (detail.metadata_fields) {
-          detail.metadata_fields.forEach((field: any) => {
-            validFieldIds.add(`${detail.id}-${field.field_name}`);
+      if (selection.type === "space") {
+        selection.items.forEach(item => {
+          DEFAULT_METADATA_FIELDS.forEach(field => {
+            validFieldIds.add(`${item.id}-${field.name}`);
           });
-        }
-      });
+        });
+      } else {
+        const knowledgeDetails = await getKnowledgeDetailApi(selection.items.map(item => item.id));
+        knowledgeDetails.forEach((detail: any) => {
+          DEFAULT_METADATA_FIELDS.forEach(field => {
+            validFieldIds.add(`${detail.id}-${field.name}`);
+          });
+
+          if (detail.metadata_fields) {
+            detail.metadata_fields.forEach((field: any) => {
+              validFieldIds.add(`${detail.id}-${field.field_name}`);
+            });
+          }
+        });
+      }
 
       const { conditions } = stateRef.current;
       for (const condition of conditions) {
@@ -370,7 +425,7 @@ const MetadataFilter = ({
       console.error("Error validating metadata fields:", error);
       return t('metadataFieldValidationError');
     }
-  }, [isEnabled, selectedKnowledgeIds, node]);
+  }, [isEnabled, knowledgeSelectionKey, node?.name, t]);
 
   useEffect(() => {
     if (onVarEvent) {

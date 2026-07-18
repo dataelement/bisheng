@@ -14,21 +14,26 @@ const defaultToolParams = {
         base_url: 'https://api.bing.microsoft.com/v7.0/search'
     },
     bocha: {
-        api_key: ''
+        api_key: '',
+        base_url: ''
     },
     jina: {
-        api_key: ''
+        api_key: '',
+        base_url: ''
     },
     serp: {
         api_key: '',
-        engine: 'baidu'
+        engine: 'baidu',
+        base_url: ''
     },
     tavily: {
-        api_key: ''
+        api_key: '',
+        base_url: ''
     },
     cloudsway: {
         api_key: '',
-        endpoint: ''
+        endpoint: '',
+        base_url: ''
     },
     searXNG: {
         server_url: ''
@@ -177,8 +182,8 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             jina: (allToolsConfig as any).jina || defaultToolParams.jina,
             serp: (allToolsConfig as any).serp || defaultToolParams.serp,
             tavily: (allToolsConfig as any).tavily || defaultToolParams.tavily,
-            cloudsway: (allToolsConfig as any).cloudsway,
-            searXNG: (allToolsConfig as any).searXNG,
+            cloudsway: (allToolsConfig as any).cloudsway || defaultToolParams.cloudsway,
+            searXNG: (allToolsConfig as any).searXNG || defaultToolParams.searXNG,
         };
 
         const newConfig = {
@@ -218,6 +223,17 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
         if (!currentTool) return null;
 
+        const baseUrlField = (
+            <InputField
+                label="Base URL"
+                name="base_url"
+                value={currentToolMap['base_url'] || ''}
+                onChange={handleParamChange}
+                error={(formErrors as any).base_url}
+                id={`${selectedTool}-base-url`}
+            />
+        );
+
         switch (selectedTool) {
             case 'bing':
                 return (
@@ -245,29 +261,35 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                 );
             case 'bocha':
                 return (
-                    <InputField
-                        required
-                        label="API Key"
-                        type="password"
-                        name="api_key"
-                        value={currentToolMap['api_key'] || ''}
-                        onChange={handleParamChange}
-                        error={(formErrors as any).api_key}
-                        id="bocha-api-key"
-                    />
+                    <>
+                        <InputField
+                            required
+                            label="API Key"
+                            type="password"
+                            name="api_key"
+                            value={currentToolMap['api_key'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as any).api_key}
+                            id="bocha-api-key"
+                        />
+                        {baseUrlField}
+                    </>
                 );
             case 'jina':
                 return (
-                    <InputField
-                        required
-                        label="API Key"
-                        type="password"
-                        name="api_key"
-                        value={currentToolMap['api_key'] || ''}
-                        onChange={handleParamChange}
-                        error={(formErrors as any).api_key}
-                        id="jina-api-key"
-                    />
+                    <>
+                        <InputField
+                            required
+                            label="API Key"
+                            type="password"
+                            name="api_key"
+                            value={currentToolMap['api_key'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as any).api_key}
+                            id="jina-api-key"
+                        />
+                        {baseUrlField}
+                    </>
                 );
             case 'serp':
                 return (
@@ -291,20 +313,24 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                             error={(formErrors as any).engine}
                             id="serp-engine"
                         />
+                        {baseUrlField}
                     </>
                 );
             case 'tavily':
                 return (
-                    <InputField
-                        required
-                        label="API Key"
-                        type="password"
-                        name="api_key"
-                        value={currentToolMap['api_key'] || ''}
-                        onChange={handleParamChange}
-                        error={(formErrors as any).api_key}
-                        id="tavily-api-key"
-                    />
+                    <>
+                        <InputField
+                            required
+                            label="API Key"
+                            type="password"
+                            name="api_key"
+                            value={currentToolMap['api_key'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as any).api_key}
+                            id="tavily-api-key"
+                        />
+                        {baseUrlField}
+                    </>
                 );
             case 'cloudsway':
                 return (
@@ -328,6 +354,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                             error={(formErrors as any).endpoint}
                             id="cloudsway-endpoint"
                         />
+                        {baseUrlField}
                     </>
                 );
             case 'searXNG':

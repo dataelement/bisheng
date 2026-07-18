@@ -1,12 +1,23 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
+from sqlalchemy import Integer, String
+from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, json_array_contains
 from bisheng.utils import generate_uuid
+
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return 'mysql'
 
 
 # System Module Enumeration
@@ -60,6 +71,11 @@ class EventType(Enum):
     CREATE_KNOWLEDGE_SPACE = "create_knowledge_space"  # Create Knowledge Space
     DELETE_KNOWLEDGE_SPACE = "delete_knowledge_space"  # Delete Knowledge Space
 
+    LINK_FILE_VERSION = "link_file_version"
+    SET_PRIMARY_VERSION = "set_primary_version"
+    DELETE_FILE_VERSION = "delete_file_version"
+    DISMISS_SIMILAR_FILE = "dismiss_similar_file"
+
 
 # Action object type enumeration
 class ObjectType(Enum):
@@ -84,7 +100,7 @@ class AuditLogBase(SQLModelSerializable):
     """
     operator_id: int = Field(index=True, description="Operating User'sID")
     operator_name: Optional[str] = Field(description="Username")
-    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JSON),
+    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JsonType),
                                                  description="Belongs to a user groupIDVertical")
     system_id: Optional[str] = Field(index=True, description="Module Item")
     event_type: Optional[str] = Field(index=True, description="Operation behaviors")
@@ -94,33 +110,168 @@ class AuditLogBase(SQLModelSerializable):
     note: Optional[str] = Field(sa_column=Column(Text), description="Action notes")
     ip_address: Optional[str] = Field(index=True,
                                       description="Client's at time of operationIP<g id='Bold'>Address:</g>")
+    # v2.5.1 F011: structured audit fields.
+    # Coexist with legacy system_id/event_type/object_* columns — old callers
+    # keep writing legacy fields (new columns NULL); new callers use the
+    # structured fields below. See spec §5.4 "字段填值规则".
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True, index=True,
+            comment='v2.5.1: leaf tenant of the resource being acted on',
+        ),
+    )
+    operator_tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True,
+            comment='v2.5.1: operator leaf (may differ from tenant_id for super-admin cross-child ops)',
+        ),
+    )
+    action: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(64), nullable=True, index=True,
+            comment='v2.5.1: structured action name; see spec §5.4.2 allowlist',
+        ),
+    )
+    target_type: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(32), nullable=True,
+            comment='v2.5.1: tenant/department/resource/user/llm_server/llm_model/...',
+        ),
+    )
+    target_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
+    # SQL column name stays `metadata`; Python attribute is `audit_metadata`
+    # to avoid clashing with SQLModel's declarative `metadata` attribute.
+    audit_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(
+            'metadata', JsonType, nullable=True,
+            comment='v2.5.1: extended fields (from/to values, affected ids, etc.)',
+        ),
+    )
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class AuditLog(AuditLogBase, table=True):
-    # id = 2 Represents the default user group
     id: str = Field(default_factory=generate_uuid, primary_key=True, index=True, description="primary keyuuidFormat")
+
+
+# v2.5.1 product decision (2026-05-06): the legacy "系统操作" page surfaces
+# only a curated subset of structured actions to operators. Other v2 actions
+# (admin.scope_switch, resource.*, user.*, dept.*, llm.server.toggle_share,
+# llm.model.*) keep writing for compliance/forensics but stay hidden from
+# the UI list and filter dropdowns. Update this tuple in lockstep with the
+# frontend `getActionsApi` / `getActionsByModuleApi` whitelist.
+_UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
+    'tenant.mount',
+    'tenant.unmount',
+    'tenant.disable',
+    'llm.server.create',
+    'llm.server.update',
+    'llm.server.delete',
+    'approval.request.submit',
+    'approval.task.approve',
+    'approval.task.reject',
+    'approval.request.withdraw',
+    'approval.route.pass',
+    'approval.handler.success',
+    'approval.handler.failed',
+    'approval.exception.retry',
+    'approval.exception.assign_approver',
+    'approval.exception.cancel',
+    'approval.flow.update',
+    'approval.scenario.toggle',
+    # Extras kept for compliance/forensics (not in PRD §9.1 surface list but
+    # already in use by admin flows).
+    'approval.scenario.create',
+    'approval.exception.skip_node',
+    'approval.menu_access.revoke_grant',
+)
+
+# Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
+# emits these synthetic module values for v2 namespaces (legacy modules like
+# `chat`, `build`, ... still match the literal `system_id` column).
+_V2_NAMESPACE_TO_ACTION_PREFIX: Dict[str, str] = {
+    'tenant': 'tenant.',
+    'llm': 'llm.server.',
+    'approval': 'approval.',
+}
 
 
 class AuditLogDao(AuditLogBase):
 
     @classmethod
+    def _ui_visible_predicate(cls):
+        """Whitelist for the legacy audit page: keep all legacy rows
+        (``system_id`` filled by ``insert_audit_logs`` paths) plus the six
+        v2 actions explicitly surfaced to operators.
+        """
+        return or_(
+            AuditLog.system_id.is_not(None),
+            col(AuditLog.action).in_(_UI_VISIBLE_V2_ACTIONS),
+        )
+
+    @classmethod
+    def _visible_for_tenant(cls, tenant_id: int):
+        """Audit visibility predicate (spec §5.4): rows attributable to a
+        tenant, either as the resource side (``tenant_id``) or the operator
+        side (``operator_tenant_id`` — catches super-admin cross-child ops).
+        """
+        return or_(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.operator_tenant_id == tenant_id,
+        )
+
+    @classmethod
     async def get_audit_logs(cls, group_ids: List[int], operator_ids: List[int] = 0,
                              start_time: datetime = None,
                              end_time: datetime = None, system_id: str = None, event_type: str = None,
-                             page: int = 0, limit: int = 0) -> (List[AuditLog], int):
+                             page: int = 0, limit: int = 0,
+                             tenant_scope: Optional[int] = None) -> (List[AuditLog], int):
         """
-        Filter logs by user group
+        Filter logs by user group.
+
+        ``tenant_scope`` (v2.5.0 audit isolation):
+        - ``None``  → cross-tenant view (global super admin without F019
+          admin-scope) — must see every tenant's rows.
+        - ``X``     → tenant-scoped view (Child Admin / dept admin / log-menu
+          role / super with admin-scope=X) — only rows visible to X per
+          ``_visible_for_tenant``.
+
+        Always wraps the session in ``bypass_tenant_filter()``: the DAO is
+        the sole source of tenant scoping here. Without bypass, the F013
+        auto-listener would inject ``WHERE tenant_id = current_tenant_id``
+        which (a) hides every child tenant's row from a global super whose
+        leaf is Root (the original screenshot bug), and (b) double-filters
+        on top of the explicit ``_visible_for_tenant`` OR predicate when a
+        scope is set.
         """
         statement = select(AuditLog)
         count_statement = select(func.count(AuditLog.id))
+
+        # UI whitelist — legacy rows + 6 surfaced v2 actions. Applied first
+        # so pagination math reflects what the operator can actually see.
+        ui_predicate = cls._ui_visible_predicate()
+        statement = statement.where(ui_predicate)
+        count_statement = count_statement.where(ui_predicate)
+
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
 
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
@@ -134,14 +285,31 @@ class AuditLogDao(AuditLogBase):
             statement = statement.where(AuditLog.create_time <= end_time)
             count_statement = count_statement.where(AuditLog.create_time <= end_time)
         if system_id:
-            statement = statement.where(AuditLog.system_id == system_id)
-            count_statement = count_statement.where(AuditLog.system_id == system_id)
+            # Synthetic v2 namespace from the frontend dropdown maps to an
+            # ``action`` prefix; legacy module values match ``system_id``.
+            prefix = _V2_NAMESPACE_TO_ACTION_PREFIX.get(system_id)
+            if prefix:
+                module_predicate = col(AuditLog.action).like(f'{prefix}%')
+            else:
+                module_predicate = AuditLog.system_id == system_id
+            statement = statement.where(module_predicate)
+            count_statement = count_statement.where(module_predicate)
         if event_type:
-            statement = statement.where(AuditLog.event_type == event_type)
-            count_statement = count_statement.where(AuditLog.event_type == event_type)
+            # v2 action strings always contain a dot (``tenant.mount`` etc.);
+            # legacy event_type values are plain snake_case (``create_chat``).
+            if '.' in event_type:
+                action_predicate = AuditLog.action == event_type
+            else:
+                action_predicate = AuditLog.event_type == event_type
+            statement = statement.where(action_predicate)
+            count_statement = count_statement.where(action_predicate)
+        if tenant_scope is not None:
+            tenant_predicate = cls._visible_for_tenant(tenant_scope)
+            statement = statement.where(tenant_predicate)
+            count_statement = count_statement.where(tenant_predicate)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit).order_by(AuditLog.create_time.desc())
-        with get_sync_db_session() as session:
+        with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
@@ -157,13 +325,175 @@ class AuditLogDao(AuditLogBase):
             await session.commit()
 
     @classmethod
-    def get_all_operators(cls, group_ids: List[int]):
+    def get_all_operators(cls, group_ids: List[int], tenant_scope: Optional[int] = None):
+        """List distinct operators across audit log rows.
+
+        ``tenant_scope`` (v2.5.0 audit isolation):
+        - ``None``  → global super admin (no F019 scope) — return operators
+          from every tenant.
+        - ``X``     → only operators from rows visible to tenant X per
+          ``_visible_for_tenant``. Without this the dropdown leaks Root
+          operator names into Child Admin views.
+
+        Always wraps in ``bypass_tenant_filter()`` for the same reason as
+        ``get_audit_logs``: the DAO owns tenant scoping; the auto-listener
+        would otherwise pin results to ``current_tenant_id`` and hide
+        cross-tenant operators from a global super.
+        """
         statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
+        # Mirror the list endpoint's UI whitelist so the operator dropdown
+        # does not advertise users who only ever produced hidden v2 rows.
+        statement = statement.where(cls._ui_visible_predicate())
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
             statement = statement.where(or_(*group_filters))
+        if tenant_scope is not None:
+            statement = statement.where(cls._visible_for_tenant(tenant_scope))
 
-        with get_sync_db_session() as session:
+        with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F011: structured audit_log API.
+    # Callers: F011 mount/unmount/migrate, F012 relocate, F016 quota,
+    # F017 share, F018 transfer, F019 scope_switch, F020 llm.* — all
+    # structured actions listed in spec §5.4.2.
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def ainsert_v2(
+        cls,
+        tenant_id: Optional[int],
+        operator_id: int,
+        operator_tenant_id: Optional[int],
+        action: str,
+        target_type: Optional[str] = None,
+        target_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        operator_name: Optional[str] = None,
+        object_name: Optional[str] = None,
+    ) -> AuditLog:
+        """Structured audit_log insert (v2.5.1 schema).
+
+        Callers must supply ``operator_tenant_id`` per spec §5.4 rules:
+          - ordinary user / Child Admin → operator.leaf_tenant_id
+          - global super (no F019 scope)   → ROOT_TENANT_ID (=1)
+          - global super (F019 scope=X)    → X (current management view)
+          - system trigger (operator_id=0) → ROOT_TENANT_ID
+
+        ``operator_name`` is auto-resolved when not supplied: ``'system'``
+        for ``operator_id == 0`` (system trigger), otherwise looked up via
+        ``UserDao.aget_user``. Without this fallback every v2 row's
+        ``operator_name`` would be NULL — the legacy "系统操作" page reads
+        that column for the user-name cell, so callers used to leave it
+        blank in the UI. The lookup is best-effort: a miss leaves the
+        column NULL and logs a warning rather than failing the insert.
+        """
+        if operator_name is None:
+            if operator_id == 0:
+                operator_name = 'system'
+            else:
+                # Lazy import: UserDao lives in a higher-level package and a
+                # top-level import would cycle through user → role → audit.
+                from bisheng.user.domain.models.user import UserDao  # noqa: PLC0415
+                try:
+                    user = await UserDao.aget_user(operator_id)
+                    if user is not None:
+                        operator_name = user.user_name
+                except Exception as e:  # noqa: BLE001 — never block the insert
+                    from loguru import logger  # noqa: PLC0415
+                    logger.warning(
+                        'audit_log operator_name lookup failed for operator_id=%s action=%s: %s',
+                        operator_id, action, e,
+                    )
+
+        entry = AuditLog(
+            tenant_id=tenant_id,
+            operator_id=operator_id,
+            operator_name=operator_name,
+            operator_tenant_id=operator_tenant_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            reason=reason,
+            audit_metadata=metadata,
+            ip_address=ip_address,
+            object_name=object_name,
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                session.add(entry)
+                await session.commit()
+                await session.refresh(entry)
+                return entry
+
+    @classmethod
+    async def aget_by_action(
+        cls,
+        action: str,
+        tenant_id: Optional[int] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Tuple[List[AuditLog], int]:
+        """Paginated lookup by structured ``action`` (v2.5.1 schema).
+
+        Uses ``bypass_tenant_filter()`` to prevent the auto-injected
+        ``auditlog.tenant_id = <ctx>`` WHERE clause from clashing with
+        the explicit tenant_id filter here. See spec §5.4.
+        """
+        offset = max(0, (page - 1) * limit)
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(AuditLog).where(AuditLog.action == action)
+                count_stmt = (
+                    select(func.count())
+                    .select_from(AuditLog)
+                    .where(AuditLog.action == action)
+                )
+                if tenant_id is not None:
+                    stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+                    count_stmt = count_stmt.where(AuditLog.tenant_id == tenant_id)
+                total = (await session.exec(count_stmt)).one()
+                stmt = (
+                    stmt.order_by(AuditLog.create_time.desc())
+                    .offset(offset).limit(limit)
+                )
+                rows = (await session.exec(stmt)).all()
+                return list(rows), total
+
+    @classmethod
+    async def aget_visible_for_child_admin(
+        cls,
+        tenant_id: int,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Tuple[List[AuditLog], int]:
+        """Child Admin visibility (spec §5.4 "可见性规则").
+
+        A Child Admin sees rows where:
+          - ``tenant_id`` equals their tenant (operations ON their resources), OR
+          - ``operator_tenant_id`` equals their tenant (operations BY ops inside
+            their tenant — catches global super ops that targeted this child).
+        """
+        offset = max(0, (page - 1) * limit)
+        with bypass_tenant_filter():
+            # Build predicate inside the bypass block so the static guard
+            # (test_tenant_bypass_filter_guard) can see the tenant_id token —
+            # the predicate already filters by tenant_id / operator_tenant_id.
+            predicate = cls._visible_for_tenant(tenant_id)
+            async with get_async_db_session() as session:
+                stmt = select(AuditLog).where(predicate)
+                count_stmt = (
+                    select(func.count()).select_from(AuditLog).where(predicate)
+                )
+                total = (await session.exec(count_stmt)).one()
+                stmt = (
+                    stmt.order_by(AuditLog.create_time.desc())
+                    .offset(offset).limit(limit)
+                )
+                rows = (await session.exec(stmt)).all()
+                return list(rows), total

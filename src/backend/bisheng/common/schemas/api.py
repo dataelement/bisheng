@@ -1,5 +1,5 @@
 import json
-from typing import Generic, TypeVar, Union, Any, List
+from typing import Generic, TypeVar, Union, Any, List, Optional
 
 from pydantic import BaseModel
 
@@ -37,6 +37,20 @@ class PageList(BaseModel, Generic[DataT]):
 class PageData(BaseModel, Generic[DataT]):
     data: List[DataT]
     total: int
+
+
+# Cursor-based infinite-scroll envelope for ReBAC list APIs (F027).
+# Use this instead of PageData[T] when you want to skip the `total` count
+# (and the associated ReBAC scan to compute it) — e.g. high-traffic lists
+# where the user only ever scrolls forward.
+#
+# Frontend usage: pass `next_cursor` from the last page as the next request's
+# `cursor` query param; stop loading when `has_more` is False.
+class PageInfiniteCursorData(BaseModel, Generic[DataT]):
+    data: List[DataT]
+    page_size: int
+    has_more: bool
+    next_cursor: Optional[str] = None
 
 
 class SSEResponse(BaseModel):

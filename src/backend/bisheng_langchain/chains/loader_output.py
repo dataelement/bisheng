@@ -4,12 +4,12 @@ import logging
 import json
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from langchain.callbacks.manager import (
+from langchain_classic.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
-from langchain.chains.base import Chain
-from langchain.docstore.document import Document
+from langchain_classic.chains.base import Chain
+from langchain_classic.docstore.document import Document
 
 logger = logging.getLogger(__name__)
 

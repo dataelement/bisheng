@@ -5,9 +5,9 @@ from enum import Enum
 from typing import Dict, List
 from urllib.parse import unquote, urlparse
 
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain.schema.document import Document
+from langchain_classic.chains import LLMChain
+from langchain_classic.prompts import PromptTemplate
+from langchain_classic.schema.document import Document
 from loguru import logger
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session

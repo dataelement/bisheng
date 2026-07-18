@@ -23,7 +23,11 @@ export const getAssistantsApi = async (page, limit, name, tag_id): Promise<Assis
 };
 
 // 创建助手
-export const createAssistantsApi = async (name, prompt, url) => {
+export const createAssistantsApi = async (
+    name: string,
+    prompt: string,
+    url: string,
+) => {
     if (url) {
         // logo保存相对路径
         url = url.replace('/bisheng', '')
@@ -60,12 +64,21 @@ export const deleteAssistantApi = async (id) => {
 
 
 // 获取会话选择列表
-export const getChatOnlineApi = async (page, keyword, tag_id) => {
+export const getChatOnlineApi = async (
+    page,
+    keyword,
+    tag_id,
+    flow_type?: number,
+    options?: { sortBy?: 'update_time'; searchDescription?: boolean }
+) => {
     return await axios.get(`/api/v1/chat/online`, {
         params: {
             page, keyword,
             limit: 40,
-            tag_id: tag_id === -1 ? null : tag_id
+            tag_id: tag_id === -1 ? null : tag_id,
+            flow_type,
+            sort_by: options?.sortBy,
+            search_description: options?.searchDescription ? true : undefined,
         }
     })
 }
@@ -82,4 +95,9 @@ export const refreshMcpApi = async (): Promise<any> => {
 // 获取自动优化任务taskid
 export const getAssistantOptimizeTaskApi = async (assistant_id, prompt) => {
     return await axios.post(`/api/v1/assistant/auto/task`, { assistant_id, prompt })
+}
+
+// Get recommended apps configured by admin
+export const getRecommendedAppsApi = async () => {
+    return await axios.get('/api/v1/workstation/app/recommended')
 }

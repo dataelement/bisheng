@@ -7,9 +7,14 @@ from typing import AsyncIterator, Iterator, Dict, List
 
 from langchain_core.documents import Document
 from loguru import logger
-
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    collect_rag_citation_registry_items,
+    select_registry_items_for_persistence,
+    save_message_citations_sync,
+)
 from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
@@ -35,6 +40,11 @@ from bisheng.workflow.common.workflow import WorkflowStatus
 class RedisCallback(BaseCallback):
 
     def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int, **kwargs):
+        # F022 INV-T18: Owner tenant of the Flow (set by the celery task entry
+        # via tasks.py from FlowDao.get_flow_by_id) — used by sync helpers
+        # such as generate_session_title that resolve workbench config in a
+        # worker context with no admin-scope ContextVar.
+        self.tenant_id = kwargs.pop('tenant_id', None)
         super(RedisCallback, self).__init__()
         # Unique for asynchronous tasksID
         self.unique_id = unique_id
@@ -413,11 +423,28 @@ class RedisCallback(BaseCallback):
         if self.workflow and self.get_workflow_stop():
             self.workflow.stop()
 
-    def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | str | None:
+    def save_chat_message(
+            self,
+            chat_response: ChatResponse,
+            source_documents=None,
+            citation_registry_items: List[CitationRegistryItemSchema] | None = None,
+    ) -> int | str | None:
         """  save chat message to database
         return message id
         """
         if not self.chat_id:
+            answer_text = self._extract_message_text(chat_response.message)
+            items = self._resolve_citation_items(
+                answer_text=answer_text,
+                source_documents=source_documents,
+                citation_registry_items=citation_registry_items,
+            )
+            save_message_citations_sync(
+                message_id=None,
+                items=items,
+                chat_id=self.chat_id,
+                flow_id=self.workflow_id,
+            )
             # Generate a fake messageidPrevent duplicate front-end message rendering
             return uuid.uuid4().hex
 
@@ -445,6 +472,19 @@ class RedisCallback(BaseCallback):
             category=chat_response.category,
             files=json.dumps(chat_response.files, ensure_ascii=False)
         ))
+
+        answer_text = self._extract_message_text(chat_response.message)
+        items = self._resolve_citation_items(
+            answer_text=answer_text,
+            source_documents=source_documents,
+            citation_registry_items=citation_registry_items,
+        )
+        save_message_citations_sync(
+            message_id=message.id,
+            items=items,
+            chat_id=self.chat_id,
+            flow_id=self.workflow_id,
+        )
 
         # If the document is traceable, handle the recallchunk
         if chat_response.source not in [0, 4]:
@@ -484,6 +524,31 @@ class RedisCallback(BaseCallback):
 
         return message.id
 
+    @staticmethod
+    def _resolve_citation_items(
+            answer_text: str,
+            source_documents=None,
+            citation_registry_items: List[CitationRegistryItemSchema] | None = None,
+    ) -> List[CitationRegistryItemSchema]:
+        items = list(citation_registry_items or [])
+        if not items and source_documents:
+            documents = source_documents if isinstance(source_documents, list) else [source_documents]
+            items = collect_rag_citation_registry_items(documents)
+        return select_registry_items_for_persistence(items, answer_text)
+
+    @staticmethod
+    def _extract_message_text(message: str | dict | list | None) -> str:
+        if isinstance(message, str):
+            return message
+        if isinstance(message, dict):
+            msg = message.get('msg')
+            if isinstance(msg, str):
+                return msg
+            return json.dumps(message, ensure_ascii=False)
+        if message is None:
+            return ''
+        return json.dumps(message, ensure_ascii=False)
+
     def generate_session_title(self, answer: str):
         if not self.new_session:
             return
@@ -496,7 +561,7 @@ class RedisCallback(BaseCallback):
         if input_message:
             question = input_message[0].message
 
-        llm_conf = LLMService.get_workbench_llm_sync()
+        llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id)
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             return
         llm = LLMService.get_bisheng_llm_sync(
@@ -565,14 +630,20 @@ class RedisCallback(BaseCallback):
 
     def on_output_msg(self, data: OutputMsgData):
         logger.debug(f'output msg: {data}')
-        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents', 'citation_registry_items'}),
                                      category=WorkflowEventType.OutputMsg.value,
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
-                                     files=data.files)
-        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
+                                     files=data.files,
+                                     citations=data.citation_registry_items,
+                                     citation_registry_items=data.citation_registry_items)
+        msg_id = self.save_chat_message(
+            chat_response,
+            source_documents=data.source_documents,
+            citation_registry_items=data.citation_registry_items,
+        )
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
@@ -592,41 +663,59 @@ class RedisCallback(BaseCallback):
         # Replaceminioright of privacysharePrefix bynginxShare  ugly solve
         minio_share = settings.get_minio_conf().sharepoint
         data.msg = data.msg.replace(f"http://{minio_share}", "")
-        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents', 'citation_registry_items'}),
                                      category=WorkflowEventType.StreamMsg.value,
                                      extra='',
                                      type='end',
                                      flow_id=self.workflow_id,
-                                     chat_id=self.chat_id)
-        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
+                                     chat_id=self.chat_id,
+                                     citations=data.citation_registry_items,
+                                     citation_registry_items=data.citation_registry_items)
+        msg_id = self.save_chat_message(
+            chat_response,
+            source_documents=data.source_documents,
+            citation_registry_items=data.citation_registry_items,
+        )
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
 
     def on_output_choose(self, data: OutputMsgChooseData):
         logger.debug(f'output choose: {data}')
-        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents', 'citation_registry_items'}),
                                      category=WorkflowEventType.OutputWithChoose.value,
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
-                                     files=data.files)
-        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
+                                     files=data.files,
+                                     citations=data.citation_registry_items,
+                                     citation_registry_items=data.citation_registry_items)
+        msg_id = self.save_chat_message(
+            chat_response,
+            source_documents=data.source_documents,
+            citation_registry_items=data.citation_registry_items,
+        )
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
 
     def on_output_input(self, data: OutputMsgInputData):
         logger.debug(f'output input: {data}')
-        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents', 'citation_registry_items'}),
                                      category=WorkflowEventType.OutputWithInput.value,
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
-                                     files=data.files)
-        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
+                                     files=data.files,
+                                     citations=data.citation_registry_items,
+                                     citation_registry_items=data.citation_registry_items)
+        msg_id = self.save_chat_message(
+            chat_response,
+            source_documents=data.source_documents,
+            citation_registry_items=data.citation_registry_items,
+        )
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)

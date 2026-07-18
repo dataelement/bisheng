@@ -1,5 +1,6 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import {
+    ArrowLeft,
     ArrowUp,
     Copy,
     Download,
@@ -11,11 +12,13 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Article } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
-import { AddSpaceIcon, AiChatIcon, FullScreenIcon, OriginalWebIcon, ShareOutlineIcon } from "~/components/icons";
+import { AiChatIcon } from "~/components/icons";
+import { Outlined } from "bisheng-icons";
 import { useToastContext } from "~/Providers";
 import { formatTime } from "~/utils";
 import { useArticleShare } from "../hooks/useArticleShare";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
+import { ArticleAiDock } from "../AiChat/ArticleAiDock";
 import { useAuthContext } from "~/hooks/AuthContext";
 
 interface ArticleDetailProps {
@@ -27,10 +30,13 @@ interface ArticleDetailProps {
     onFullScreen?: () => void;
     onExitAiAssistant?: () => void;
     onAiAssistant?: () => void;
+    onBack?: () => void;
 }
 
-export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
+export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant, onBack }: ArticleDetailProps) {
     const localize = useLocalize();
+    /** 小屏文章详情已是全幅叠层，不提供「全屏」入口；对话与正文分屏仅在大屏 */
+    const isNarrowShell = usePrefersMobileLayout();
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [scale, setScale] = useState(1);
     const [showBackTop, setShowBackTop] = useState(false);
@@ -40,15 +46,18 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     const { showToast } = useToastContext();
 
     // 使用文章的真实 HTML 内容
-    const articleHtml = article.content_html || article.content || '';
+    const articleHtml = article.content_html || '';
 
     const processedHtml = `
     <html>
       <head>
         <style>
           html{scrollbar-width: none; background: #fff !important;}
-          body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px; scroll-behavior: smooth; background: #fff !important; }
+          body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px 0 0; scroll-behavior: smooth; background: #fff !important; }
+          /* Source HTML (e.g. WeChat) wraps content with its own padding; zero it so only the body's 20px remains. */
+          #js_content, .rich_media_area_primary, .rich_media_content { padding: 0 !important; }
           img { max-width: 100%; cursor: zoom-in; }
+          ${screenFull ? '/* Fullscreen: drop the source content wrapper\'s card shadow. */\n          body > * { box-shadow: none !important; }' : ''}
         </style>
       </head>
       <body>
@@ -201,44 +210,56 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
         ? ((user as any).plugins as string[]).includes('knowledge_space')
         : true;
     return (
-        <div className={`flex px-4 py-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>
+        <div className="flex px-4 pt-5 flex-col h-full">
             {/* Top Toolbar */}
             <div className="border-b border-black pb-4">
-                <div className="flex items-start justify-between">
-                    <h2 className={`font-semibold leading-relaxed flex-1 ${aiAssistantOpen ? 'pl-10' : ''}`}
-                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}>
-                        {article.title}
-                    </h2>
-                </div>
+                {/* Mobile-only back button; the article title is intentionally hidden here
+                    (it already appears inside the article content). */}
+                {isNarrowShell && onBack ? (
+                    <div className="flex items-start">
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            aria-label={localize("com_ui_go_back")}
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        >
+                            <ArrowLeft className="size-4" />
+                        </button>
+                    </div>
+                ) : null}
 
-                <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center justify-between">
                     <div className="w-full h-6 flex items-center gap-4">
                         <button
                             onClick={() => window.open(article.url)}
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                         >
-                            <OriginalWebIcon className="size-3.5" />{localize("com_subscription.original_webpage")}</button>
+                            <Outlined.ViewOnNewTab className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.original_webpage")}</button>
 
                         <button
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                             onClick={() => handleShare(article)}
                         >
-                            <ShareOutlineIcon className="size-3.5 text-[#94BFFF]" />{localize("com_subscription.share")}</button>
+                            <Outlined.Share className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.share")}</button>
 
                         {hasKnowledge && <button
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                             onClick={() => setShowKnowledgeModal(true)}
                         >
-                            <AddSpaceIcon className="size-3.5" />{localize("com_subscription.add_to_knowledge_space")}</button>}
+                            <Outlined.AddToKnowledgeBase className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
 
-                        {(!screenFull || (showFullScreenBtn && aiAssistantOpen)) && <button
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
-                            onClick={() => {
-                                screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
-                                    onFullScreen?.();
-                            }}
-                        >
-                            <FullScreenIcon className="size-3.5" />{localize("com_subscription.fullscreen")}</button>}
+                        {!isNarrowShell && (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
+                            <button
+                                type="button"
+                                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
+                                onClick={() => {
+                                    screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
+                                        onFullScreen?.();
+                                }}
+                            >
+                                <Outlined.FullScreen className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.fullscreen")}
+                            </button>
+                        ) : null}
 
                         <div className="ml-auto flex gap-3 items-center">
                             {screenFull && <div className="flex items-center text-[12px]">
@@ -247,12 +268,14 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 <span className="text-[#e5e6eb] mx-2">|</span>
                                 <span className="text-[#999]">{formatTime(article.publishedAt || '', true)}</span>
                             </div>}
-                            {!aiAssistantOpen && <button
+                            {/* Mobile keeps the toolbar AI button (opens the full-screen overlay);
+                                PC uses the bottom AI dock instead. */}
+                            {isNarrowShell && !aiAssistantOpen && <button
                                 className="ai-btn-border-draw flex items-center gap-1 text-xs transition-colors px-1.5 h-6 rounded-[6px]"
                                 onClick={() => onAiAssistant?.()}
                             >
                                 <span className="ai-btn-shimmer-overlay" />
-                                <AiChatIcon className="size-3.5 text-[#94BFFF]" stroke="#94BFFF" />
+                                <AiChatIcon className="size-3.5 text-blue-200" />
                                 <span className="text-[#000D4D]">{localize("com_subscription.ai_assistant")}</span>
                             </button>}
                         </div>
@@ -278,11 +301,15 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                 {showBackTop && (
                     <button
                         onClick={handleBackToTop}
-                        className="absolute bottom-8 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-primary transition-all animate-in fade-in slide-in-from-bottom-4"
+                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
                     >
                         <ArrowUp className="size-5" />
                     </button>
                 )}
+
+                {/* PC-only AI dock (self-contained component): collapsed input bar that slides
+                    up into the chat panel. Mobile keeps the toolbar button + full-screen overlay. */}
+                {!isNarrowShell && <ArticleAiDock articleDocId={article.id} />}
             </div>
 
             {/* 3. Image Preview Overlay */}

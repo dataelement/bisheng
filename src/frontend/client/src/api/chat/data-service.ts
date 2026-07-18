@@ -2,6 +2,8 @@ import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
 import request from '~/api/request';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
+import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
 import * as r from '~/types/chat/roles';
 import * as s from '~/types/chat/schemas';
 import type * as t from '~/types/chat/types';
@@ -124,17 +126,46 @@ export function getSearchEnabled(): Promise<boolean> {
 
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
-    const { user_id, user_name, create_time, update_time, role, web_menu, avatar } = res.data;
-    if (role !== 'admin' && !web_menu.includes('frontend')) {
-      if (!web_menu.includes('backend')) {
-        // No frontend or backend permission — logout to avoid infinite redirect loop
-        // between the two systems.
+    const {
+      user_id,
+      user_name,
+      create_time,
+      update_time,
+      role,
+      web_menu,
+      avatar,
+      menu_approval_mode,
+      menu_approval_mode_workbench,
+      menu_approval_mode_admin,
+      is_department_admin,
+      has_workbench: hbApi,
+      has_admin_console: haApi,
+    } = res.data;
+    const wm = Array.isArray(web_menu) ? web_menu : [];
+    const canWorkspace =
+      hbApi
+      ?? canOpenWorkbench({
+        role,
+        plugins: wm,
+        is_department_admin: Boolean(is_department_admin),
+      });
+    const canManagement =
+      haApi
+      ?? canOpenPlatformAdminPanel({
+        role,
+        plugins: wm,
+        is_department_admin: Boolean(is_department_admin),
+      });
+    if (role !== 'admin' && !canWorkspace) {
+      if (!canManagement) {
+        // 无工作台也无管理端菜单 — 退出并回管理端登录
         logout().catch(() => { });
-        location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`;
+        location.href = getPlatformAdminPanelUrl();
         return Promise.reject(new Error('no_permission'));
       }
-      location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}?error=90002`  // workspace useErrorPrompt
+      location.href = getPlatformAdminPanelUrl('error=90002');
     }
+    // 仅管理后台：由 WorkbenchAccessGuard 提示并 history.back / fallback
     return {
       "_id": user_id,
       "name": user_name,
@@ -150,7 +181,15 @@ export function getUser(): Promise<t.TUser> {
         : "",
       "provider": "local",
       "role": role,
-      "plugins": web_menu,
+      "plugins": wm,
+      "is_department_admin": Boolean(is_department_admin),
+      // Legacy union flag (kept for back-compat) + per-area scopes. Scoped keys
+      // fall back to the legacy flag for roles saved before the split.
+      "menu_approval_mode": Boolean(menu_approval_mode),
+      "menu_approval_mode_workbench": Boolean(menu_approval_mode_workbench ?? menu_approval_mode),
+      "menu_approval_mode_admin": Boolean(menu_approval_mode_admin ?? menu_approval_mode),
+      has_workbench: canWorkspace,
+      has_admin_console: canManagement,
       "termsAccepted": false,
       "backupCodes": [],
       "refreshToken": [],
@@ -803,8 +842,8 @@ export function archiveConversation(
   return request.post(endpoints.updateConversation(), { arg: payload });
 }
 
-export function genTitle(payload: m.TGenTitleRequest): Promise<m.TGenTitleResponse> {
-  return request.post(endpoints.genTitle(), payload).then(res => res.data);
+export function genTitle(payload: m.TGenTitleRequest, version: 'v1' | 'v2' = 'v1'): Promise<m.TGenTitleResponse> {
+  return request.post(endpoints.genTitle(version), payload).then(res => res.data);
 }
 
 export function getPrompt(id: string): Promise<{ prompt: t.TPrompt }> {

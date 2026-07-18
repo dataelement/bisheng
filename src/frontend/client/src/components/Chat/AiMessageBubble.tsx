@@ -3,26 +3,130 @@
  */
 import {
     BotIcon,
-    CheckIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    CopyIcon,
+    Loader2,
     RefreshCwIcon
 } from "lucide-react";
-import { memo, useCallback, useMemo, useState, useRef } from "react";
-import Thinking from "~/components/Artifacts/Thinking";
+import { Outlined } from "bisheng-icons";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
+import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
+import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
+import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
+import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
+import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
+import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
+import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import { useAuthContext } from "~/hooks";
-import MessageSource from "~/pages/appChat/components/MessageSource";
-import ResouceModal from "~/pages/appChat/components/ResouceModal";
+import { useAuthContext, useLocalize } from "~/hooks";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
+import {
+    ExportSelectionButton,
+    MessageCheckbox,
+} from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
-import type { ChatMessage } from "~/api/chatApi";
-import Image from "~/components/Chat/Messages/Content/Image";
-import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import type { AgentEvent, ChatMessage } from "~/api/chatApi";
+import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+
+// Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
+// limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
+// (12045). These get the calm ServiceBusyNotice + Retry; every other error keeps the
+// red error bubble. Mirrors the classifier's RETRYABLE intent on the status-code side.
+const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
+
+// Map an uploaded file's extension to a bisheng outlined file-type icon.
+// Anything not listed falls back to the generic Outlined.File icon.
+const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
+    // FileExcel
+    xls: Outlined.FileExcel,
+    xlsx: Outlined.FileExcel,
+    csv: Outlined.FileExcel,
+    et: Outlined.FileExcel,
+    // FilePdf
+    pdf: Outlined.FilePdf,
+    ppt: Outlined.FilePdf,
+    dps: Outlined.FilePdf,
+    // FileTxt
+    txt: Outlined.FileTxt,
+    // FileWord
+    doc: Outlined.FileWord,
+    docx: Outlined.FileWord,
+    wps: Outlined.FileWord,
+    // FileImage
+    png: Outlined.FileImage,
+    jpg: Outlined.FileImage,
+    jpeg: Outlined.FileImage,
+    bmp: Outlined.FileImage,
+    // FileEditing
+    md: Outlined.FileEditing,
+    // File (generic)
+    html: Outlined.File,
+};
+
+/**
+ * Uploaded-file list for a user message: a type icon + filename per row, never a
+ * content preview. Stacks vertically and scrolls past 120px. A linear-gradient
+ * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
+ * is more content to scroll in that direction — same fade trick used elsewhere.
+ */
+function UploadedFileList({ files }: { files: any[] }) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [fade, setFade] = useState({ top: false, bottom: false });
+
+    const updateFade = useCallback(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const top = el.scrollTop > 0;
+        const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+        setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+    }, []);
+
+    useEffect(() => {
+        updateFade();
+    }, [files, updateFade]);
+
+    const maskStyle = useMemo(() => {
+        if (!fade.top && !fade.bottom) return undefined;
+        const topStop = fade.top ? "16px" : "0";
+        const bottomStop = fade.bottom ? "calc(100% - 16px)" : "100%";
+        const value = `linear-gradient(to bottom, transparent, #000 ${topStop}, #000 ${bottomStop}, transparent)`;
+        return { maskImage: value, WebkitMaskImage: value };
+    }, [fade]);
+
+    if (!files || files.length === 0) return null;
+
+    return (
+        <div
+            ref={scrollRef}
+            onScroll={updateFade}
+            style={maskStyle}
+            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
+        >
+            {files.map((file, i) => {
+                const fileName = file.name || file.file_name || "File";
+                const fileType = getFileTypebyFileName(fileName);
+                const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
+                return (
+                    <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
+                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                            <div className="truncate text-xs" title={fileName}>
+                                {fileName}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
 
 interface AiMessageBubbleProps {
     message: ChatMessage;
@@ -35,12 +139,26 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    /** Show the export-session entry under assistant messages. Only the full
+        homepage/task chat opts in; the lightweight knowledge/file/article docks
+        and the share view leave it off. */
+    allowExport?: boolean;
+    /** Show the 点赞/点踩 feedback buttons under assistant answers. Default true;
+        the read-only anonymous share view passes false. */
+    allowFeedback?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+    /** F035: preview a task-turn document in the inline workspace panel (ChatView
+        owns it) — a conversation doc link opens the file directly, no drawer. */
+    onPreviewFile?: (file: ArtifactFile) => void;
 }
 
 // --- Copy button with feedback ---
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
-    const handleCopy = useCallback(() => {
+    const handleCopy = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
         copyText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -50,10 +168,11 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
             title="复制"
+            aria-label="复制"
         >
-            {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
     );
 }
@@ -152,6 +271,64 @@ function parseMessageText(text: string) {
     };
 }
 
+/**
+ * Render the agent-native timeline: walk `events` as display blocks and emit
+ * a `DeepThinkingGroup` per non-text run + a lightweight `<Markdown>` per
+ * intermediate text block. The LAST text block (if events ends with text)
+ * is rendered separately by the bubble's main `<Markdown>` body so that
+ * citations / copy / voice still attach to the final answer.
+ */
+function AgentTimeline({
+    events,
+    isStreaming,
+    finalTextIdx,
+    messageId,
+}: {
+    events: AgentEvent[];
+    isStreaming: boolean;
+    /** Index in `blocks` of the trailing text block to skip (rendered by the
+     * main bubble Markdown). -1 if no such block. */
+    finalTextIdx: number;
+    /** Bubble's message id, used to namespace intermediate Markdown blocks. */
+    messageId: string;
+}) {
+    const blocks: DisplayBlock[] = groupEventsForDisplay(events);
+    const lastGroupIdx = (() => {
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            if (blocks[i].kind === "group") return i;
+        }
+        return -1;
+    })();
+
+    return (
+        <div className="flex w-full min-w-0 flex-col gap-3">
+            {blocks.map((block, i) => {
+                if (block.kind === "text") {
+                    if (i === finalTextIdx) return null;
+                    return (
+                        <Markdown
+                            key={`text-${i}`}
+                            content={block.content}
+                            webContent={[]}
+                            citations={undefined}
+                            messageId={`${messageId}-intermediate-${i}`}
+                            showCursor={false}
+                            isLatestMessage={false}
+                        />
+                    );
+                }
+                return (
+                    <DeepThinkingGroup
+                        key={`grp-${i}`}
+                        events={block.events}
+                        isStreaming={isStreaming && i === lastGroupIdx && finalTextIdx === -1}
+                    />
+                );
+            })}
+        </div>
+    );
+}
+
 const AiMessageBubble = memo(
     ({
         message,
@@ -162,6 +339,11 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        allowExport,
+        allowFeedback = true,
+        onOpenCitationPanel,
+        activeCitationMessageId,
+        onPreviewFile,
     }: AiMessageBubbleProps) => {
         const isUser = message.isCreatedByUser;
 
@@ -186,6 +368,11 @@ const AiMessageBubble = memo(
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                allowExport={allowExport}
+                allowFeedback={allowFeedback}
+                onOpenCitationPanel={onOpenCitationPanel}
+                activeCitationMessageId={activeCitationMessageId}
+                onPreviewFile={onPreviewFile}
             />
         );
     }
@@ -209,6 +396,14 @@ function UserBubble({
 }) {
     const { user } = useAuthContext();
 
+    // F028: render selection checkbox at the left margin when selection mode
+    // is active for this conversation. ``mr-auto`` keeps the user bubble
+    // right-aligned regardless of whether the checkbox is mounted.
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox =
+        !!message.conversationId &&
+        isActiveForChat(message.conversationId);
+
     // Pull out the optional `:::tag {...}:::` chip prefix
     const { tag, bodyText } = useMemo(
         () => parseUserMessageText(message.text || ""),
@@ -216,47 +411,24 @@ function UserBubble({
     );
 
     return (
-        <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
-            <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
-                {/* Render uploaded files if any */}
-                {message.files && message.files.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2 mt-1">
-                        {message.files.map((file, i) => {
-                            const fileName = file.name || file.file_name || "File";
-                            const fileType = getFileTypebyFileName(fileName);
-                            const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp"].includes(fileType);
-                            const fileUrl = file.filepath || file.file_url;
-
-                            if (isImage && fileUrl) {
-                                return (
-                                    <div key={i} className="flex border bg-white p-1 rounded-xl max-w-sm">
-                                        <Image
-                                            imagePath={fileUrl}
-                                            altText={fileName}
-                                            height={100}
-                                            width={100}
-                                        />
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer hover:bg-gray-50 max-w-sm" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
-                                    <FileIcon type={fileType} className="" />
-                                    <div className="overflow-hidden">
-                                        <div className="truncate text-sm font-bold" title={fileName}>
-                                            {fileName}
-                                        </div>
-                                        <div className="truncate text-xs text-text-secondary" title={fileName}>
-                                            {fileName && getFileTypebyFileName(fileName)}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-                <div className="flex gap-3">
+        <div className={cn("flex justify-end py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            {showCheckbox && message.conversationId && (
+                <MessageCheckbox
+                    chatId={message.conversationId}
+                    messageId={message.messageId}
+                    className="mr-auto mt-2 shrink-0"
+                />
+            )}
+            {/* Mobile: cap the bubble so its left edge keeps a 40px gap from the
+                content area (long URLs were overflowing off the left edge). */}
+            <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
+                {/* Uploaded files: icon + filename only (no preview), with soft fade
+                    edges while scrolling so the 120px-clipped list never hard-cuts. */}
+                <UploadedFileList files={message.files || []} />
+                {/* min-w-0: without it this flex row's `min-width: auto` floors at
+                    the URL's (unbreakable) min-content width, defeating the bubble's
+                    max-width and letting long content overflow off the left edge. */}
+                <div className="flex min-w-0 gap-3">
                     {/* Avatar (hidden by style only) */}
                     <div className="hidden shrink-0 flex justify-center">
                         <Avatar className="w-6 h-6 text-xs">
@@ -269,10 +441,17 @@ function UserBubble({
                         <div className="hidden rc-name select-none font-semibold text-base">{user?.username}</div>
                         <div
                             className={cn(
-                                "px-3 py-2 whitespace-pre-wrap break-words rounded-[8px]",
+                                // w-fit: the text bubble hugs its own content and stays
+                                // independent of the (possibly wider) file card above it.
+                                // overflow-wrap:anywhere (not break-words): break-word
+                                // doesn't shrink min-content, so w-fit/fit-content keeps
+                                // sizing the box to a long unbreakable URL and max-width
+                                // can't clamp it — `anywhere` reduces min-content so the
+                                // box shrinks and the URL wraps inside max-w-full.
+                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px]",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
-                                    : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"
+                                    : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
                             )}
                         >
                             {tag && (
@@ -283,7 +462,7 @@ function UserBubble({
                                             ? "text-[14px] font-normal leading-[22px]"
                                             : "h-5 text-xs font-medium leading-none align-middle"
                                     )}
-                                    style={{ backgroundColor: "#335CFF59" }}
+                                    style={{ backgroundColor: "rgb(var(--brand-500)/0.35)" }}
                                     title={`#${tag.name}`}
                                 >
                                     <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
@@ -317,6 +496,11 @@ function AssistantBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    allowExport,
+    allowFeedback = true,
+    onOpenCitationPanel,
+    activeCitationMessageId,
+    onPreviewFile,
 }: {
     message: ChatMessage;
     isLatest?: boolean;
@@ -326,14 +510,70 @@ function AssistantBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    allowExport?: boolean;
+    allowFeedback?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+    onPreviewFile?: (file: ArtifactFile) => void;
 }) {
-    // Parse :::thinking::: and :::web::: from the raw text
-    const { thinkingContent, webContent, regularContent } = useMemo(
-        () => parseMessageText(message.text || ""),
-        [message.text]
-    );
+    const localize = useLocalize();
+
+    // A transient/retryable failure (rate limit / busy) renders as the calm neutral
+    // notice + Retry instead of the red error bubble.
+    const isTransientError = !!message.error && message.errorCode !== undefined
+        && RETRYABLE_ERROR_CODES.has(message.errorCode);
+
+    // v2.5 Agent-native detection — when a message has structured fields set
+    // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
+    // loader), skip the legacy :::thinking:::/:::web::: regex parsing and let
+    // the dedicated components own those sections.
+    const isAgentNative = useMemo(() => {
+        if (message.category === "agent_answer") return true;
+        return Array.isArray(message.events) && message.events.length > 0;
+    }, [message.category, message.events]);
+
+    // Parse :::thinking::: and :::web::: from the raw text (legacy path only).
+    // Agent-native path still needs to strip the legacy envelope because the
+    // SSE hook keeps writing `:::thinking…:::\n> ⏳/✅` status lines into
+    // `text` for backward compat — rendering them here would duplicate the
+    // thinking header + tool call cards in the message body.
+    const { thinkingContent, webContent, regularContent, finalTextIdx } = useMemo(() => {
+        if (isAgentNative) {
+            const evs = message.events ?? [];
+            const blocks = groupEventsForDisplay(evs);
+
+            // New format: events array contains text items. The "final" body
+            // is rendered by the main <Markdown> outside the timeline ONLY
+            // when events end with a text block. Any non-trailing text block
+            // (mid-stream ReAct: text → tool → text) renders inline inside
+            // the timeline.
+            const last = blocks[blocks.length - 1];
+            if (last && last.kind === "text") {
+                return {
+                    thinkingContent: "",
+                    webContent: [],
+                    regularContent: last.content,
+                    finalTextIdx: blocks.length - 1,
+                };
+            }
+
+            // Legacy: events without text items. Strip the legacy envelope
+            // out of message.text and use that as the body (today's behaviour).
+            const raw = message.text || "";
+            const stripped = raw
+                .replace(/:::thinking[\s\S]*?:::/g, "")
+                .replace(/^>\s*[⏳✅⚠️][^\n]*\n?/gm, "")
+                .trimStart();
+            return {
+                thinkingContent: "",
+                webContent: [],
+                regularContent: stripped,
+                finalTextIdx: -1,
+            };
+        }
+        return { ...parseMessageText(message.text || ""), finalTextIdx: -1 };
+    }, [message.text, message.events, isAgentNative]);
     const { data: bsConfig } = useGetBsConfig()
-    const sourceRef = useRef<any>(null);
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
@@ -345,8 +585,58 @@ function AssistantBubble({
         !thinkingContent &&
         webContent.length === 0;
 
+    // Show a "等待模型响应…" pill while the request is in flight but no
+    // tokens / events have landed yet. Disappears as soon as anything
+    // streams in (events.length > 0 || regularContent).
+    const showWaiting =
+        !!isStreaming &&
+        !!isLatest &&
+        !message.error &&
+        !regularContent &&
+        !(Array.isArray(message.events) && message.events.length > 0);
+
+    // F028: per-message selection checkbox.
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox =
+        !!message.conversationId &&
+        isActiveForChat(message.conversationId);
+
+    // F035 Track J (TJ-7): task turn — render the embedded linsight execution
+    // panel by SV instead of the agent/legacy text rendering. The user question
+    // bubble is the preceding (daily) user row; this row owns the rich panel.
+    if (message.category === "task") {
+        return (
+            <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+                {showCheckbox && message.conversationId && (
+                    <MessageCheckbox
+                        chatId={message.conversationId}
+                        messageId={message.messageId}
+                        className="mt-2 shrink-0"
+                    />
+                )}
+                <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
+                    <TaskTurnPanel
+                        versionId={message.linsightSessionVersionId || ""}
+                        liked={message.liked}
+                        allowFeedback={allowFeedback}
+                        conversationId={message.conversationId}
+                        answer={message.text}
+                        onPreviewFile={onPreviewFile}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
+        <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            {showCheckbox && message.conversationId && (
+                <MessageCheckbox
+                    chatId={message.conversationId}
+                    messageId={message.messageId}
+                    className="mt-2 shrink-0"
+                />
+            )}
             <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
                 {/* Avatar + name kept but hidden via style only */}
                 <div className="hidden gap-3">
@@ -357,28 +647,62 @@ function AssistantBubble({
                     <div className="model-name select-none font-semibold text-base">{modelName}</div>
                 </div>
 
-                {/* Thinking block - reuse existing Thinking component */}
-                {thinkingContent && (
-                    <Thinking>{thinkingContent}</Thinking>
+                {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
+                {isAgentNative ? (
+                    <div className="mb-3 w-full min-w-0">
+                        <AgentTimeline
+                            events={message.events || []}
+                            isStreaming={Boolean(isStreaming && isLatest)}
+                            finalTextIdx={finalTextIdx}
+                            messageId={message.messageId}
+                        />
+                    </div>
+                ) : (
+                    <>
+                        {/* Legacy :::thinking::: — render with the same "思考内容" block as the
+                            agent-native timeline (Messages/ThinkingContent) so reasoning looks
+                            identical across the homepage chat and the knowledge/file/article docks. */}
+                        {thinkingContent && (
+                            <div className="mb-3 w-full min-w-0">
+                                <ThinkingContent reasoning={thinkingContent} />
+                            </div>
+                        )}
+                        {/* Legacy :::web::: → SearchWebUrls */}
+                        {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
+                    </>
                 )}
 
-                {/* Web search sources - reuse existing SearchWebUrls component */}
-                {webContent.length > 0 && (
-                    <SearchWebUrls webs={webContent} />
+                {/* Pre-stream "正在思考" indicator — pulsing black dot. Rendered AFTER the
+                    thinking block so that once "思考内容" appears it sits below that node
+                    (answer-pending), not above it. */}
+                {showWaiting && (
+                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
+                    </div>
                 )}
 
                 {/* Error state */}
-                {message.error ? (
-                    <div
-                        className={cn(
-                            "text-red-500 bg-red-50 px-3 py-2",
-                            knowledgeChatLayout
-                                ? "rounded-[2px] text-[14px] leading-[22px]"
-                                : "text-sm rounded-[10px]"
-                        )}
-                    >
-                        {regularContent || "发生错误，请重试"}
-                    </div>
+                {showWaiting ? null : message.error ? (
+                    isTransientError ? (
+                        // Transient upstream hiccup (rate limit / busy): calm neutral
+                        // notice + Retry (re-sends the last user message via regenerate),
+                        // never the red error bubble.
+                        <ServiceBusyNotice
+                            desc={regularContent || localize("api_errors.12046")}
+                            onRetry={onRegenerate}
+                        />
+                    ) : (
+                        <div
+                            className={cn(
+                                "text-red-500 bg-red-50 px-3 py-2",
+                                knowledgeChatLayout
+                                    ? "rounded-[2px] text-[14px] leading-[22px]"
+                                    : "text-sm rounded-[10px]"
+                            )}
+                        >
+                            {regularContent || "发生错误，请重试"}
+                        </div>
+                    )
                 ) : (
                     /* Main content — uses existing Markdown with citation support */
                     <div
@@ -389,6 +713,7 @@ function AssistantBubble({
                                 : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
                         )}
                     >
+
                         {isWaitingFirstToken ? (
                             <div className="flex items-center py-0.5" aria-label="AI 正在思考">
                                 <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
@@ -397,6 +722,9 @@ function AssistantBubble({
                             <Markdown
                                 content={regularContent}
                                 webContent={webContent}
+                                citations={message.citations}
+                                messageId={message.messageId}
+                                onOpenCitationPanel={onOpenCitationPanel}
                                 showCursor={showCursor}
                                 isLatestMessage={!!isLatest}
                             />
@@ -404,40 +732,61 @@ function AssistantBubble({
                     </div>
                 )}
 
-                {/* Action buttons (only show when not streaming) */}
-                {!isStreaming && regularContent && (
+                {/* Action buttons (only show when not streaming). Suppressed on the
+                    transient busy notice — copy/feedback on a "try again" status is
+                    meaningless; the notice carries its own Retry. */}
+                {!isStreaming && regularContent && !isTransientError && (
                     <div className="flex items-center gap-1 mt-1.5 text-gray-400">
-                        {/* Reference Sources */}
-                        {message.source !== 0 && (
-                            <div className="mr-2 pt-0.5">
-                                <MessageSource
-                                    extra={null}
-                                    end={true}
-                                    source={message.source}
-                                    onSource={() => {
-                                        sourceRef.current?.openModal({
-                                            messageId: message.messageId || "",
-                                            message: regularContent,
-                                            chatId: message.conversationId,
-                                        });
-                                    }}
-                                />
-                            </div>
-                        )}
-                        <CopyButton text={regularContent} />
-                        {onRegenerate && (
-                            <button
-                                type="button"
-                                onClick={onRegenerate}
-                                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                title="regenerate"
-                            >
-                                <RefreshCwIcon size={16} />
-                            </button>
-                        )}
-                        <TextToSpeechButton
-                            messageId={message.messageId || ""}
-                            text={regularContent}
+                        <CitationReferencesDrawer
+                            content={regularContent}
+                            webContent={webContent}
+                            citations={message.citations}
+                            messageId={message.messageId}
+                            desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
+                            open={onOpenCitationPanel ? activeCitationMessageId === message.messageId : undefined}
+                            onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
+                                if (!nextOpen && activeCitationMessageId === message.messageId) {
+                                    onOpenCitationPanel({
+                                        messageId: message.messageId,
+                                        content: regularContent,
+                                        webContent,
+                                        citations: message.citations,
+                                        referenceItems: [],
+                                    });
+                                }
+                            }) : undefined}
+                            onDesktopOpen={onOpenCitationPanel}
+                            actionButtons={
+                                <>
+                                    <CopyButton text={regularContent} />
+                                    {/* Export is only offered where the host opts in via allowExport
+                                        (the full homepage/task chat). The lightweight knowledge/file/
+                                        article docks and the share view leave it off. */}
+                                    {allowExport && message.conversationId && message.messageId && (
+                                        <ExportSelectionButton
+                                            chatId={message.conversationId}
+                                            messageId={message.messageId}
+                                        />
+                                    )}
+                                    <TextToSpeechButton
+                                        className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                        messageId={message.messageId || ""}
+                                        text={regularContent}
+                                    />
+                                    {/* 点赞/点踩 — the answer persists as a chatmessage row, so
+                                        reuse the existing /liked + /chat/comment endpoints keyed
+                                        by message_id. Hidden on the read-only share view. */}
+                                    {allowFeedback && message.messageId && (
+                                        <MessageFeedbackButtons
+                                            liked={message.liked}
+                                            onLike={(liked) => likeChatApi(message.messageId, liked)}
+                                            onDislikeComment={(comment) =>
+                                                disLikeCommentApi(message.messageId, comment)
+                                            }
+                                        />
+                                    )}
+                                </>
+                            }
                         />
                         {/* Sibling paging */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
@@ -445,7 +794,6 @@ function AssistantBubble({
                         )}
                     </div>
                 )}
-                <ResouceModal ref={sourceRef} />
             </div>
         </div>
     );

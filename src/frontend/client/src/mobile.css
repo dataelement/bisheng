@@ -1,3 +1,10 @@
+/* Disable the long-press callout menu in mobile WebView.
+   Text selection stays enabled (no user-select override) so users can
+   still select and copy text where needed. */
+html {
+  -webkit-touch-callout: none;
+}
+
 .hover-button.active {
   display: block;
   visibility: visible;
@@ -31,7 +38,7 @@
 
 @media (max-width: 767px) {
   .nav {
-    width: calc(100% - 10px)  ;
+    width: calc(100% - 10px);
     transition: all 0.15s;
   }
   .nav-mask {
@@ -42,7 +49,7 @@
     top: 0;
     bottom: 0;
     background-color: rgba(7, 7, 7, 0.4);
-    padding-left: 420px;
+    padding-left: min(44vw, 640px);
     padding-top: 12px;
     opacity: 0;
     transition: all 0.5s;
@@ -86,7 +93,10 @@
   .sibling-switch {
     display: none;
   }
+}
 
+/* Hover-only chat controls: always visible on touch / coarse pointer, not on narrow desktop windows. */
+@media not ((hover: hover) and (pointer: fine)) {
   .hover-button {
     display: block;
     visibility: visible;

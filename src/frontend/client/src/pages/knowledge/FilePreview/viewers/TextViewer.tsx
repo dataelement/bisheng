@@ -51,7 +51,7 @@ export function TextViewer({ fileUrl, zoomLevel }: TextViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="flex-1 overflow-auto bg-[#fbfbfb]">
+        <div className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="flex justify-center py-6 px-4">
                 <div
                     className="bg-white shadow-md max-w-[800px] w-full rounded-sm"

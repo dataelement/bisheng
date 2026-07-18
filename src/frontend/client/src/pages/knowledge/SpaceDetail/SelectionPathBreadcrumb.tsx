@@ -50,7 +50,7 @@ export function SelectionPathBreadcrumb({
                         <button
                             type="button"
                             onClick={() => handleNavigate(item.id || undefined)}
-                            className="hover:text-[#165dff] hover:underline cursor-pointer whitespace-nowrap"
+                            className="hover:text-blue-500 hover:underline cursor-pointer whitespace-nowrap"
                         >
                             {item.name}
                         </button>

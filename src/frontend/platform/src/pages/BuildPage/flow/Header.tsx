@@ -1,6 +1,8 @@
 import TipPng from "@/assets/tip.jpg";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { DelIcon, LoadIcon } from "@/components/bs-icons";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
@@ -19,7 +21,7 @@ import { FlowVersionItem } from "@/types/flow";
 import { flowVersionCompatible } from "@/util/flowCompatible";
 import { findParallelNodes, importFlow } from "@/util/flowUtils";
 import { cloneDeep, isEqual } from "lodash-es";
-import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
+import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, Shield, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker, useLocation, useNavigate } from "react-router-dom";
@@ -28,6 +30,15 @@ import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
 
+const APP_HEADER_PERMISSION_IDS = [
+    'edit_app',
+    'publish_app',
+    'unpublish_app',
+    'manage_app_owner',
+    'manage_app_manager',
+    'manage_app_viewer',
+]
+
 const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFlow }) => {
     const { message } = useToast()
     const { dark } = useContext(darkContext);
@@ -35,10 +46,22 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const updateAppModalRef = useRef(null)
     // const { uploadFlow } = useFlowStore()
     const { t, i18n } = useTranslation('flow')
+    const { t: tbs } = useTranslation('bs')
     const [modelVersionId, setModelVersionId] = useState(0)
     const navigate = useNavigate()
     const { state } = useLocation();
     const loca = state?.flow; // 获取传递的 flow 数据
+    const flowId = flow?.id ? String(flow.id) : '';
+    const { permissions: permIds } = usePermissionIds('workflow', flowId ? [flowId] : [], APP_HEADER_PERMISSION_IDS);
+    const canEdit = flowId ? hasPermissionId(permIds, flowId, 'edit_app') : false;
+    const canPublish = flowId ? hasPermissionId(permIds, flowId, 'publish_app') : false;
+    const canUnpublish = flowId ? hasPermissionId(permIds, flowId, 'unpublish_app') : false;
+    /** 与构建列表卡片「权限」盾牌一致：所有者 / 管理者可管理应用成员与权限 */
+    const canManage = flowId ? (
+        hasPermissionId(permIds, flowId, 'manage_app_owner') ||
+        hasPermissionId(permIds, flowId, 'manage_app_manager') ||
+        hasPermissionId(permIds, flowId, 'manage_app_viewer')
+    ) : false;
 
     // console.log('flow :>> ', flow);
 
@@ -244,6 +267,15 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
 
     const [tabType, setTabType] = useState('edit')
     const [open, setOpen] = useState(false)
+    // Save concurrency lock. A double-click used to launch two save pipelines,
+    // each running forceUpdateFlow → unmount/remount → refrenshVersions. The
+    // second refrenshVersions ran after window.flow_version was already
+    // consumed (deleted) by the first, so it fell back to is_current===1 and
+    // set the context version back to the online one while the flow store
+    // still held the non-online version's data. Blocking re-entry fixes it.
+    const savingRef = useRef(false)
+    const [saving, setSaving] = useState(false)
+    const [permDialogOpen, setPermDialogOpen] = useState(false)
 
     const {
         returnPage,
@@ -283,6 +315,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                                 size="icon"
                                 variant="ghost"
                                 className="size-6"
+                                disabled={!canEdit}
                                 onClick={() => updateAppModalRef.current?.edit(AppType.FLOW, flow)}>
                                 <PencilLineIcon className="size-4 text-gray-500"></PencilLineIcon>
                             </Button>
@@ -299,32 +332,44 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 >
                     {t('processOrchestration')}
                 </Button>
-                <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
+                {canEdit && <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => {
                         setTabType('api');
                         onTabChange('api');
                         testRef.current.close()
                     }}>
                     {t('externalRelease')}
-                </Button>
+                </Button>}
             </div>
             {/* Right Section with Options */}
-            <div className="flex items-center gap-3">
+            <div className="header-right flex items-center gap-3">
                 <Notification />
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8`} onClick={handleRunClick}>
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8`} disabled={!canEdit} onClick={handleRunClick}>
                     <Play className="size-3.5 mr-1" />
                     {t('run')}
                 </Button>
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={async () => {
-                    window.flow_version = Number(version.id)
-                    await handleSaveClick()
-                    forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} disabled={!canEdit || saving} onClick={async () => {
+                    if (savingRef.current) return
+                    savingRef.current = true
+                    setSaving(true)
+                    try {
+                        window.flow_version = Number(version.id)
+                        await handleSaveClick()
+                        forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
+                    } finally {
+                        // forceUpdateFlow unmounts this component, so these
+                        // writes may hit the outgoing instance — that's fine;
+                        // the remount initialises fresh ref/state.
+                        savingRef.current = false
+                        setSaving(false)
+                    }
                 }}>
                     {t('save')}
                 </Button>
                 {
                     version && <ActionButton
                         size="sm"
+                        disabled={!canEdit}
                         className={`px-6 flex gap-2 ${!dark && 'bg-[#fff]'}`}
                         iconClassName={`${!dark && 'bg-[#fff]'}`}
                         align="end"
@@ -380,14 +425,20 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         )}
                     >{t('skills.saveVersion', { ns: 'bs' })}</ActionButton>
                 }
-                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} onClick={handleOfflineClick}>
-                    {t('takeOffline')}
-                </Button> : <Button size="sm" className={`h-8 px-6`} onClick={handleOnlineClick}>
-                    {t('goOnline')}
-                </Button>}
-                <Popover open={open} onOpenChange={setOpen}>
+                {isOnlineVersion
+                    ? (canUnpublish ? (
+                        <Button size="sm" className="h-8 px-6" onClick={handleOfflineClick}>
+                            {t('takeOffline')}
+                        </Button>
+                    ) : null)
+                    : (canPublish ? (
+                        <Button size="sm" className="h-8 px-6" onClick={handleOnlineClick}>
+                            {t('goOnline')}
+                        </Button>
+                    ) : null)}
+                <Popover open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                     <PopoverTrigger asChild >
-                        <Button size="icon" variant="outline" className={`${!dark && 'bg-[#fff]'} size-8`}>
+                        <Button size="icon" variant="outline" disabled={!canEdit} className={`${!dark && 'bg-[#fff]'} size-8`}>
                             <EllipsisVertical size={16} />
                         </Button>
                     </PopoverTrigger>
@@ -398,6 +449,18 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         <div
                             className="rounded-sm py-1.5 pl-2 pr-8 text-sm hover:bg-[#EBF0FF] dark:text-gray-50 dark:hover:bg-gray-700"
                             onClick={handleExportClick}> {t('exportWorkflow')}</div>
+                        {canManage && (
+                            <div
+                                className="flex items-center gap-2 rounded-sm py-1.5 pl-2 pr-8 text-sm hover:bg-[#EBF0FF] dark:text-gray-50 dark:hover:bg-gray-700"
+                                onClick={() => {
+                                    setOpen(false)
+                                    setPermDialogOpen(true)
+                                }}
+                            >
+                                <Shield className="h-4 w-4 shrink-0" />
+                                {tbs('build.authorizationManagement')}
+                            </div>
+                        )}
                     </PopoverContent>
                 </Popover>
             </div>
@@ -465,6 +528,15 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {flowId && canManage ? (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="workflow"
+                    resourceId={flowId}
+                    resourceName={flow?.name || ""}
+                />
+            ) : null}
         </header >
     );
 };

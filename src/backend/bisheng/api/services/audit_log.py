@@ -1,64 +1,116 @@
 import asyncio
 from datetime import datetime
-from typing import Any, List, Dict, Union, Tuple
+from typing import Any, List, Dict, Optional, Union, Tuple
 
 from loguru import logger
 from sqlalchemy import func
 from sqlmodel import col, or_, and_, select
+
+from bisheng.core.database.dialect_helpers import json_array_contains
+
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return 'mysql'
 
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.core.context.tenant import (
+    get_admin_scope_tenant_id,
+    get_current_tenant_id,
+)
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+from bisheng.database.models.department import DepartmentDao
 from bisheng.user.domain.models.user import UserDao, User
+from bisheng.user.domain.services.auth import LoginUser
 
 
 # todo change to async or submit thread pool
 class AuditLogService:
 
     @classmethod
+    async def _user_has_log_web_menu(cls, user: UserPayload) -> bool:
+        """角色 / 部门管理员合并后的 web_menu 含 ``log``（审计页）时允许使用审计 API。"""
+        db_user = await UserDao.aget_user(user.user_id)
+        if not db_user:
+            return False
+        is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
+        _, web_menu = await LoginUser.get_roles_web_menu(
+            db_user, is_department_admin=is_department_admin
+        )
+        return 'log' in set(web_menu)
+
+    @classmethod
+    def _get_audit_tenant_scope(cls, user: UserPayload) -> Optional[int]:
+        """Tenant id to scope audit reads to, or None to skip scoping.
+
+        - Global super w/o F019 admin-scope     -> None  (sees all tenants)
+        - Global super WITH F019 admin-scope=X  -> X
+        - Tenant Admin / Dept admin / log-menu  -> their leaf tenant id
+
+        ``is_admin()`` is role-based and true for Child Tenant Admins too,
+        so we read the JWT-stamped ``is_global_super`` field (populated by
+        ``init_login_user`` from the same FGA check) instead.
+        ``get_current_tenant_id()`` already returns the F019 admin-scope
+        override when set, so it does the right thing for super-with-scope.
+        """
+        if user.is_global_super and get_admin_scope_tenant_id() is None:
+            return None
+        return get_current_tenant_id()
+
+    @classmethod
     async def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
                             system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
-            # Not an administrator of any user groups
-            if not groups:
-                return UnAuthorizedError.return_resp()
-            # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
-            if group_ids:
-                groups = list(set(groups) & set(group_ids))
+            if await cls._user_has_log_web_menu(login_user):
+                groups = group_ids
+            else:
+                groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+                # Not an administrator of any user groups
                 if not groups:
                     return UnAuthorizedError.return_resp()
+                # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
+                if group_ids:
+                    groups = list(set(groups) & set(group_ids))
+                    if not groups:
+                        return UnAuthorizedError.return_resp()
 
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
         data, total = await AuditLogDao.get_audit_logs(groups, operator_ids, start_time, end_time,
                                                        system_id,
                                                        event_type,
-                                                       page, limit)
+                                                       page, limit,
+                                                       tenant_scope=tenant_scope)
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
-    def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
-        groups = []
+    async def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
+        groups: List[int] = []
         if not login_user.is_admin():
-            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
-            # not any group admin
-            if not groups:
-                raise UnAuthorizedError()
+            if not await cls._user_has_log_web_menu(login_user):
+                groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+                if not groups:
+                    raise UnAuthorizedError()
 
-        data = AuditLogDao.get_all_operators(groups)
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        data = AuditLogDao.get_all_operators(groups, tenant_scope=tenant_scope)
         res = {}
         for one in data:
             if not one[1]:
@@ -69,9 +121,9 @@ class AuditLogService:
     @classmethod
     def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
                   object_id: str, object_name: str, resource_type: ResourceTypeEnum):
-        # Get the group to which the resource belongs
-        groups = GroupResourceDao.get_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -90,10 +142,10 @@ class AuditLogService:
                               object_type: ObjectType,
                               object_id: str, object_name: str, resource_type: ResourceTypeEnum,
                               group_ids: List[int] = None):
-        # Get the group to which the resource belongs
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
         if group_ids is None:
-            groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
-            group_ids = [one.group_id for one in groups]
+            user_groups = await UserGroupDao.aget_user_group(user.user_id)
+            group_ids = [one.group_id for one in user_groups]
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -154,9 +206,9 @@ class AuditLogService:
         """
         Build Module Audit Log
         """
-        # Get which user groups the resource belongs to
-        groups = GroupResourceDao.get_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
 
         # Insert Audit Log
         audit_log = AuditLog(
@@ -179,9 +231,9 @@ class AuditLogService:
         """
         Build Module Audit Log
         """
-        # Get which user groups the resource belongs to
-        groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = await UserGroupDao.aget_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
 
         # Insert Audit Log
         audit_log = AuditLog(
@@ -298,9 +350,9 @@ class AuditLogService:
         """
         Logs of Knowledge Base Modules
         """
-        # Get which user groups the resource belongs to
-        groups = GroupResourceDao.get_resource_group(resource_type, resource_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
 
         # Insert Audit Log
         audit_log = AuditLog(
@@ -317,14 +369,21 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_knowledge(cls, user: UserPayload, ip_address: str, knowledge_id: int):
+    def create_knowledge(cls, user: UserPayload, ip_address: str, knowledge):
         """
         New Knowledge Base Audit Log
+
+        :param knowledge: ``Knowledge`` ORM row (preferred — avoids a second DB read and
+            races where ``query_by_id`` might not yet see the new row in some setups).
         """
+        knowledge_id = knowledge.id if isinstance(knowledge, Knowledge) else int(knowledge)
+        object_name = knowledge.name if isinstance(knowledge, Knowledge) else None
+        if object_name is None:
+            knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
+            object_name = knowledge_info.name if knowledge_info else str(knowledge_id)
         logger.info(f"act=create_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge_id}")
-        knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
         cls._knowledge_log(user, ip_address, EventType.CREATE_KNOWLEDGE, ObjectType.KNOWLEDGE,
-                           str(knowledge_id), knowledge_info.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+                           str(knowledge_id), object_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
     def delete_knowledge(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
@@ -396,6 +455,38 @@ class AuditLogService:
                     f" knowledge={knowledge_id} file={file_name}")
         cls._knowledge_log(user, ip_address, EventType.DELETE_FILE, ObjectType.FILE,
                            str(knowledge_id), file_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def link_file_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: file linked into an existing logical document as a new version."""
+        logger.info(f"act=link_file_version user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.LINK_FILE_VERSION, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def set_primary_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: a historical version was promoted to primary."""
+        logger.info(f"act=set_primary_version user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.SET_PRIMARY_VERSION, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def delete_file_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: historical version deleted."""
+        logger.info(f"act=delete_file_version user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.DELETE_FILE_VERSION, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def dismiss_similar_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: user dismissed a similar-file recommendation."""
+        logger.info(f"act=dismiss_similar_file user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.DISMISS_SIMILAR_FILE, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
     def _system_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: EventType,
@@ -470,22 +561,25 @@ class AuditLogService:
     @classmethod
     def create_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=create_role user={user.user_name} ip={ip_address} role_id={role.id}")
-
-        cls._system_log(user, ip_address, [role.group_id], EventType.CREATE_ROLE,
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        cls._system_log(user, ip_address, group_ids, EventType.CREATE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
     def update_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=update_role user={user.user_name} ip={ip_address} role_id={role.id}")
-
-        cls._system_log(user, ip_address, [role.group_id], EventType.UPDATE_ROLE,
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
     def delete_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=delete_role user={user.user_name} ip={ip_address} role_id={role.id}")
-
-        cls._system_log(user, ip_address, [role.group_id], EventType.DELETE_ROLE,
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        cls._system_log(user, ip_address, group_ids, EventType.DELETE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
@@ -511,8 +605,13 @@ class AuditLogService:
     @classmethod
     def user_login(cls, user: UserPayload, ip_address: str):
         logger.info(f"act=user_login user={user.user_name} ip={ip_address} user_id={user.user_id}")
-        # Get the group to which the user belongs
-        user_group = UserGroupDao.get_user_group(user.user_id)
+        # bypass_tenant_filter: login-time audit captures the user's global
+        # group membership before tenant context is established. Without
+        # bypass, hotfix-3's tenant-aware user_group table trips
+        # NoTenantContextError on every login.
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        with bypass_tenant_filter():
+            user_group = UserGroupDao.get_user_group(user.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
                         ObjectType.NONE, '', '')
@@ -600,11 +699,12 @@ class AuditLogService:
         flow_ids = [one for one in flow_ids]
         group_admins = []
         if not user.is_admin():
-            user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
-            # Not a user group administrator, no permissions
-            if not user_groups:
-                raise UnAuthorizedError.http_exception()
-            group_admins = [one.group_id for one in user_groups]
+            if not await cls._user_has_log_web_menu(user):
+                user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
+                # Not a user group administrator, no permissions
+                if not user_groups:
+                    raise UnAuthorizedError.http_exception()
+                group_admins = [one.group_id for one in user_groups]
         # GroupingidDoing Intersections
         if group_ids:
             if group_admins:
@@ -645,11 +745,11 @@ class AuditLogService:
                                feedback: str, sensitive_status: int, page: int, page_size: int) -> Tuple[
         List[AppChatList], int]:
 
-        if user.is_admin():
-            # Administrator: The frontend sends out what it needs to retrieve; if nothing is sent, it retrieves all (an empty list usually means there are no restrictions or the decision is made by the business logic in subsequent logic).
+        if user.is_admin() or await cls._user_has_log_web_menu(user):
+            # Administrator, or 角色中开启「审计」菜单：与超管同级的会话列表范围（可筛选用户组，不传则不过滤组）
             search_group_ids = group_ids or []
         else:
-            # Regular users: Administrative privileges must be verified
+            # Regular users: 用户组管理员，仅能看所管组内会话
             user_managed_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
             if not user_managed_groups:
                 raise UnAuthorizedError.http_exception()
@@ -666,7 +766,15 @@ class AuditLogService:
                 # Default: All managed groups
                 search_group_ids = list(managed_group_ids)
 
+        tenant_scope = cls._get_audit_tenant_scope(user)
+
         conditions = []
+
+        # v2.5.0 audit isolation: Tenant Admin (and anyone scoped) sees only
+        # sessions whose creator's leaf tenant matches their tenant. Without
+        # this the F012 IN-list lets Child users read Root sessions too.
+        if tenant_scope is not None:
+            conditions.append(MessageSession.tenant_id == tenant_scope)
 
         # Basic equality/range filtering
         if sensitive_status:
@@ -701,8 +809,9 @@ class AuditLogService:
 
         # Group membership filtering
         if search_group_ids:
+            dialect = _db_dialect()
             group_filters = [
-                func.json_contains(MessageSession.group_ids, str(gid))
+                json_array_contains(MessageSession.group_ids, str(gid), dialect)
                 for gid in search_group_ids
             ]
             conditions.append(or_(*group_filters))

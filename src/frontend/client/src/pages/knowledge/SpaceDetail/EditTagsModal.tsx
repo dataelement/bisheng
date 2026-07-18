@@ -1,6 +1,6 @@
 import { useState, KeyboardEvent, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -14,6 +14,7 @@ import {
     SpaceTag,
     getSpaceTagsApi,
     addSpaceTagApi,
+    deleteSpaceTagApi,
     updateFileTagsApi,
     batchUpdateTagsApi,
 } from "~/api/knowledge";
@@ -49,6 +50,7 @@ export function EditTagsModal({
     const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
     const [inputValue, setInputValue] = useState("");
     const [loading, setLoading] = useState(false);
+    const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
@@ -83,21 +85,25 @@ export function EditTagsModal({
         });
     };
 
-    // Enter key: create a new space tag, then select it
-    const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key !== "Enter") return;
-        e.preventDefault();
+    // Commit the current input as a tag (creating it in the space if new, or
+    // selecting the existing one). Shared by the Enter key and by Save, so that
+    // clicking 确认 with un-entered text still captures it.
+    //
+    // Returns whether it's safe to proceed, plus the committed tag id — callers
+    // that immediately read tag ids need it because setSelectedTagIds is async
+    // and won't have re-rendered within the same handler.
+    const commitInput = async (): Promise<{ ok: boolean; tagId?: number }> => {
         const trimmed = inputValue.trim();
-        if (!trimmed) return;
+        if (!trimmed) return { ok: true };
 
         if (getFullWidthLength(trimmed) > 8) {
             showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
-            return;
+            return { ok: false };
         }
 
         if (selectedTagIds.size >= 10) {
             showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
-            return;
+            return { ok: false };
         }
 
         // Check if the tag already exists in the space
@@ -106,12 +112,12 @@ export function EditTagsModal({
             // Just select it
             setSelectedTagIds((prev) => new Set(prev).add(existing.id));
             setInputValue("");
-            return;
+            return { ok: true, tagId: existing.id };
         }
 
         if (spaceTags.length >= 50) {
             showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
-            return;
+            return { ok: false };
         }
 
         // Create a new tag in the space
@@ -119,26 +125,41 @@ export function EditTagsModal({
             const newTag = await addSpaceTagApi(spaceId, trimmed);
             if (!newTag || newTag.id === undefined || newTag.id === null) {
                 showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "error" });
-                return;
+                return { ok: false };
             }
             setSpaceTags((prev) => [...prev, newTag]);
             setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
             setInputValue("");
             // Invalidate shared cache so search dropdown updates
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
+            return { ok: true, tagId: newTag.id };
         } catch {
             showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
+            return { ok: false };
         }
+    };
+
+    // Enter key: commit the typed text as a tag.
+    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        void commitInput();
     };
 
     // Save: update file tags via API
     const handleSave = async () => {
-        const pendingText = inputValue.trim();
+        // First turn any un-entered input into a tag so 确认 captures it.
+        const committed = await commitInput();
+        if (!committed.ok) return; // validation/creation failed — let the user fix it
 
         setLoading(true);
 
         try {
             const tagIds = Array.from(selectedTagIds);
+            // selectedTagIds hasn't re-rendered yet, so add the just-committed id.
+            if (committed.tagId != null && !tagIds.includes(committed.tagId)) {
+                tagIds.push(committed.tagId);
+            }
             if (isBatchMode && fileIds) {
                 // Batch append mode
                 await batchUpdateTagsApi(spaceId, {
@@ -149,7 +170,7 @@ export function EditTagsModal({
             } else if (fileId) {
                 // Single file overwrite mode
                 await updateFileTagsApi(spaceId, fileId, tagIds);
-                !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
+                showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
             // Invalidate shared spaceTags cache so search dropdown picks up new tags
@@ -159,6 +180,26 @@ export function EditTagsModal({
             showToast({ message: localize("com_knowledge.tag_save_failed"), status: "error" });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteSpaceTag = async (tag: SpaceTag) => {
+        if (deletingTagId !== null) return;
+        setDeletingTagId(tag.id);
+        try {
+            await deleteSpaceTagApi(spaceId, tag.id);
+            setSpaceTags((prev) => prev.filter((item) => item.id !== tag.id));
+            setSelectedTagIds((prev) => {
+                const next = new Set(prev);
+                next.delete(tag.id);
+                return next;
+            });
+            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
+            showToast({ message: localize("com_knowledge.delete_tag_success"), status: "success" });
+        } catch {
+            showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "error" });
+        } finally {
+            setDeletingTagId(null);
         }
     };
 
@@ -175,17 +216,29 @@ export function EditTagsModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="gap-0 sm:max-w-[600px] w-[600px] p-0 bg-white border-none shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] rounded-xl outline-none flex flex-col items-stretch [&>button]:hidden">
-                <DialogHeader className="px-6 py-3 h-12 border-none space-y-0 text-left shrink-0">
-                    <DialogTitle className="text-[16px] font-medium text-[#212121] leading-[24px]">
+            <DialogContent
+                onPointerDownOutside={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
+                className="flex w-[600px] max-w-[600px] flex-col items-stretch gap-0 border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] [outline:none] rounded-none sm:rounded-none md:rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 [&>button]:hidden"
+            >
+                <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-5 py-3 text-left max-md:h-auto max-md:px-4 max-md:pt-6 max-md:pb-4">
+                    <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
+                    <button
+                        type="button"
+                        onClick={handleClose}
+                        className="absolute right-4 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#F2F3F5]"
+                        aria-label={localize("com_knowledge.close") || "Close"}
+                    >
+                        <X className="size-4" />
+                    </button>
                 </DialogHeader>
 
-                <div className="flex flex-col flex-1 gap-3 px-6 py-6 pb-2">
+                <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
                     {/* Tags Input Box */}
                     <div
-                        className="relative flex items-center flex-wrap gap-1 border border-[#ebecf0] rounded-lg px-3 py-1.5 min-h-[22px] focus-within:border-primary transition-colors bg-white pr-[40px] cursor-text"
+                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
                         onClick={() => document.getElementById("tag-input")?.focus()}
                     >
                         {selectedTags.map((tag) => (
@@ -208,6 +261,7 @@ export function EditTagsModal({
                         <input
                             id="tag-input"
                             type="text"
+                            autoComplete="off"
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -216,10 +270,10 @@ export function EditTagsModal({
                                     ? localize("com_knowledge.input_tags_placeholder")
                                     : ""
                             }
-                            className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#86909c] min-h-[22px]"
+                            className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#999] min-h-[22px]"
                         // maxLength={8}
                         />
-                        <span className="text-[14px] leading-[22px] text-[#999] absolute right-3 h-full flex items-center top-0">
+                        <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-[#999]">
                             {selectedTagIds.size}/10
                         </span>
                     </div>
@@ -227,11 +281,11 @@ export function EditTagsModal({
                     {/* <div className="w-full h-px bg-[#ebecf0] my-[-1px]" /> */}
 
                     {/* Existing Space Tags */}
-                    <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[14px] leading-[20px] font-[500] text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
+                    <div className="flex flex-col gap-3">
+                        <div className="text-[14px] leading-[22px] font-medium text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
-                                <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
+                                <span className="text-[14px] text-[#999]">{localize("com_knowledge.no_tags")}</span>
                             )}
                             {spaceTags.map((tag) => {
                                 const isSelected = selectedTagIds.has(tag.id);
@@ -239,12 +293,25 @@ export function EditTagsModal({
                                     <span
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
-                                        className={`px-2 h-7 flex items-center justify-center text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
-                                            ? "text-[#165dff] cursor-default bg-primary/10"
+                                        className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-[4px] transition-colors ${isSelected
+                                            ? "text-blue-500 cursor-default bg-primary/10"
                                             : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
                                             }`}
                                     >
                                         {tag.name}
+                                        {/* Trash reveals on hover so resting pills stay clean per design. */}
+                                        <button
+                                            type="button"
+                                            className="hidden group-hover:flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleDeleteSpaceTag(tag);
+                                            }}
+                                            disabled={deletingTagId === tag.id}
+                                            title={localize("com_knowledge.delete")}
+                                        >
+                                            <Trash2 className="size-3" />
+                                        </button>
                                     </span>
                                 );
                             })}
@@ -252,12 +319,16 @@ export function EditTagsModal({
                     </div>
                 </div>
 
-                <DialogFooter className="flex justify-end gap-3 px-6 py-3 border-none mt-2 sm:space-x-0 h-16 items-center shrink-0">
-                    <Button variant="outline" className="h-8 px-4" onClick={handleClose}>
+                <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3 sm:space-x-0">
+                    <Button
+                        variant="outline"
+                        className="h-8 min-w-[60px] rounded-[6px] border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 max-md:flex-1"
+                        onClick={handleClose}
+                    >
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 px-4"
+                        className="h-8 min-w-[60px] rounded-[6px] px-4 font-normal max-md:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >

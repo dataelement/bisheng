@@ -111,11 +111,11 @@ const MessageRender = memo(
 
     if (isCard ?? false) {
       layoutClasses =
-        'relative w-full gap-1 rounded-lg border border-border-medium bg-surface-primary-alt p-2 md:w-1/2 md:gap-3 md:p-4';
+        'relative w-full gap-1 rounded-lg border border-border-medium bg-surface-primary-alt p-2 touch-desktop:w-1/2 touch-desktop:gap-3 touch-desktop:p-4';
     } else if (maximizeChatSpace) {
-      layoutClasses = 'md:max-w-full md:px-5';
+      layoutClasses = 'touch-desktop:max-w-full touch-desktop:px-5';
     } else {
-      layoutClasses = 'md:max-w-3xl md:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5';
+      layoutClasses = 'touch-desktop:max-w-3xl touch-desktop:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5';
     }
 
     const latestCardClasses = isLatestCard ? 'bg-surface-secondary' : '';
@@ -163,7 +163,7 @@ const MessageRender = memo(
         >
           {/* name */}
           <h2 className={cn('rc-name select-none font-semibold', fontSize)}>{messageLabel}</h2>
-          <div className="flex-col gap-1 md:gap-3">
+          <div className="flex-col gap-1 touch-desktop:gap-3">
             <div className="flex max-w-full flex-grow flex-col gap-0">
               <MessageContext.Provider
                 value={{

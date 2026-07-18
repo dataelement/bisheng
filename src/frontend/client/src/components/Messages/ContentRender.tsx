@@ -108,11 +108,11 @@ const ContentRender = memo(
       'final-completion group mx-auto flex flex-1 gap-3 transition-all duration-300 transform-gpu';
 
     const cardClasses =
-      'relative w-full gap-1 rounded-lg border border-border-medium bg-surface-primary-alt p-2 md:w-1/2 md:gap-3 md:p-4';
+      'relative w-full gap-1 rounded-lg border border-border-medium bg-surface-primary-alt p-2 touch-desktop:w-1/2 touch-desktop:gap-3 touch-desktop:p-4';
 
     const chatSpaceClasses = maximizeChatSpace
-      ? 'w-full max-w-full md:px-5 lg:px-1 xl:px-5'
-      : 'md:max-w-3xl md:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5';
+      ? 'w-full max-w-full touch-desktop:px-5 lg:px-1 xl:px-5'
+      : 'touch-desktop:max-w-3xl touch-desktop:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5';
 
     const conditionalClasses = {
       latestCard: isLatestCard ? 'bg-surface-secondary' : '',
@@ -160,7 +160,7 @@ const ContentRender = memo(
           )}
         >
           <h2 className={cn('select-none font-semibold', fontSize)}>{messageLabel}</h2>
-          <div className="flex-col gap-1 md:gap-3">
+          <div className="flex-col gap-1 touch-desktop:gap-3">
             <div className="flex max-w-full flex-grow flex-col gap-0">
               <ContentParts
                 edit={edit}

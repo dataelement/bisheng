@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import copy from 'copy-to-clipboard';
 import { ContentTypes } from '~/types/chat';
 import type { TMessage } from '~/types/chat';
+import { stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';
 
 export default function useCopyToClipboard({
   text,
@@ -32,6 +33,7 @@ export default function useCopyToClipboard({
           return acc;
         }, '');
       }
+      messageText = stripCitationMarkers(messageText);
       copy(messageText, { format: 'text/plain' });
 
       copyTimeoutRef.current = setTimeout(() => {

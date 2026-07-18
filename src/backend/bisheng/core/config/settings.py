@@ -2,14 +2,22 @@ import ast
 import json
 import os
 import re
-from typing import Dict, List, Optional, Union
+import ssl
+from typing import Union
 
 from celery.schedules import crontab
 from cryptography.fernet import Fernet
 from loguru import logger
-from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
+from bisheng.core.config.llm import LLMConf
+from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.openfga import OpenFGAConf
+from bisheng.core.config.reconcile import ReconcileConf
+from bisheng.core.config.sso_sync import SSOSyncConf
+from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
+
+secret_key = "TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E="
 
 
 def encrypt_token(token: str):
@@ -22,58 +30,66 @@ def decrypt_token(token: str):
 
 class LoggerConf(BaseModel):
     """Looger Config"""
-    level: str = 'DEBUG'
-    format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
-    handlers: List[Dict] = Field(default_factory=list, description='Log Processor')
+
+    level: str = "DEBUG"
+    format: str = "<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>"
+    handlers: list[dict] = Field(default_factory=list, description="Log Processor")
 
     @classmethod
     def parse_logger_sink(cls, sink: str) -> str:
-        match = re.search(r'\{(.+?)\}', sink)
+        match = re.search(r"\{(.+?)\}", sink)
         if not match:
             return sink
         env_keys = {}
         for one in match.groups():
-            env_keys[one] = os.getenv(one, '')
+            env_keys[one] = os.getenv(one, "")
         return sink.format(**env_keys)
 
-    @field_validator('handlers')
+    @field_validator("handlers")
     @classmethod
     def set_handlers(cls, value):
         if value is None:
             value = []
         for one in value:
-            one['sink'] = cls.parse_logger_sink(one['sink'])
-            if one.get('filter'):
-                one['filter'] = eval(one['filter'])
+            one["sink"] = cls.parse_logger_sink(one["sink"])
+            if one.get("filter"):
+                one["filter"] = eval(one["filter"])
         return value
 
 
 class PasswordConf(BaseModel):
-    """ Password Config """
-    password_valid_period: Optional[int] = Field(default=0,
-                                                 description='Password overXDays must be modified, Login prompt to change password again')
-    login_error_time_window: Optional[int] = Field(default=0, description='Login error time window,minutes unit')
-    max_error_times: Optional[int] = Field(default=0,
-                                           description='Maximum number of errors, after which the user will be banned')
+    """Password Config"""
+
+    password_valid_period: int | None = Field(
+        default=0, description="Password overXDays must be modified, Login prompt to change password again"
+    )
+    login_error_time_window: int | None = Field(default=0, description="Login error time window,minutes unit")
+    max_error_times: int | None = Field(
+        default=0, description="Maximum number of errors, after which the user will be banned"
+    )
 
 
 class SystemLoginMethod(BaseModel):
-    """ System Login Method Config """
-    bisheng_pro: bool = Field(default=False, description='Whether it is a commercial version')
-    dashboard_pro: bool = Field(default=False, description='Whether dashboard is a commercial version')
-    admin_username: Optional[str] = Field(default=None, description='Admin username registered via web')
-    allow_multi_login: bool = Field(default=True, description='Whether to allow multi-sign-on')
+    """System Login Method Config"""
+
+    bisheng_pro: bool = Field(default=False, description="Whether it is a commercial version")
+    dashboard_pro: bool = Field(default=False, description="Whether dashboard is a commercial version")
+    admin_username: str | None = Field(default=None, description="Admin username registered via web")
+    allow_multi_login: bool = Field(default=True, description="Whether to allow multi-sign-on")
 
 
 class MilvusConf(BaseModel):
-    """ milvus Configure """
-    connection_args: Optional[dict] = Field(default=None, description='milvus Configure')
-    is_partition: Optional[bool] = Field(default=True, description='Is itpartitionMode',
-                                         deprecated="Not in SupportpartitionMode")
-    partition_suffix: Optional[str] = Field(default='1', description='partitionSuffix',
-                                            deprecated="Not in SupportpartitionMode")
+    """milvus Configure"""
 
-    @field_validator('connection_args', mode='before')
+    connection_args: dict | None = Field(default=None, description="milvus Configure")
+    is_partition: bool | None = Field(
+        default=True, description="Is itpartitionMode", deprecated="Not in SupportpartitionMode"
+    )
+    partition_suffix: str | None = Field(
+        default="1", description="partitionSuffix", deprecated="Not in SupportpartitionMode"
+    )
+
+    @field_validator("connection_args", mode="before")
     @classmethod
     def convert_connection_args(cls, value):
         if isinstance(value, str):
@@ -82,13 +98,13 @@ class MilvusConf(BaseModel):
 
 
 class ElasticsearchConf(BaseModel):
-    """ elasticsearch Configure """
-    elasticsearch_url: Optional[str] = Field(default=None, alias='url',
-                                             description='elasticsearchAccesses address')
+    """elasticsearch Configure"""
 
-    ssl_verify: Optional[str | dict] = Field(default='{}', description='Additional Arguments')
+    elasticsearch_url: str | None = Field(default=None, alias="url", description="elasticsearchAccesses address")
 
-    @model_validator(mode='after')
+    ssl_verify: str | dict | None = Field(default="{}", description="Additional Arguments")
+
+    @model_validator(mode="after")
     def validate(self):
         if isinstance(self.ssl_verify, str):
             self.ssl_verify = ast.literal_eval(self.ssl_verify)
@@ -97,175 +113,586 @@ class ElasticsearchConf(BaseModel):
 
 
 class VectorStores(BaseModel):
-    """ Vector Storage Configuration """
-    milvus: MilvusConf = Field(default_factory=MilvusConf, description='milvus Configure')
-    elasticsearch: ElasticsearchConf = Field(default_factory=ElasticsearchConf, description='elasticsearch Configure')
+    """Vector Storage Configuration"""
+
+    milvus: MilvusConf = Field(default_factory=MilvusConf, description="milvus Configure")
+    elasticsearch: ElasticsearchConf = Field(default_factory=ElasticsearchConf, description="elasticsearch Configure")
 
 
 class MinioConf(BaseModel):
-    """ minio Configure """
-    secure: Optional[bool] = Field(default=False, description="Apakah ingin digunakan?https", alias="schema")
-    cert_check: Optional[bool] = Field(default=False, description="Whether to calibrate the certificate")
-    endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio Service address")
-    sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio Public access address")
-    share_schema: Optional[bool] = Field(default=False,
-                                         description="minio Whether the public access address is usedhttps")
-    share_cert_check: Optional[bool] = Field(default=False,
-                                             description="minio Whether the public access address verifies the certificate")
-    access_key: Optional[str] = Field(default="minioadmin", description="minio Username")
-    secret_key: Optional[str] = Field(default="minioadmin", description="minio Passwords")
-    public_bucket: Optional[str] = Field(default="bisheng",
-                                         description="Store permanent files by defaultbucket. Files can be permanently accessed by anonymous users")
-    tmp_bucket: Optional[str] = Field(default="tmp-dir",
-                                      description="Ad hocbucket, stored files will have an expiration date")
+    """minio Configure"""
+
+    secure: bool | None = Field(default=False, description="Apakah ingin digunakan?https", alias="schema")
+    cert_check: bool | None = Field(default=False, description="Whether to calibrate the certificate")
+    endpoint: str | None = Field(default="127.0.0.1:9000", description="minio Service address")
+    sharepoint: str | None = Field(default="127.0.0.1:9000", description="minio Public access address")
+    share_schema: bool | None = Field(default=False, description="minio Whether the public access address is usedhttps")
+    share_cert_check: bool | None = Field(
+        default=False, description="minio Whether the public access address verifies the certificate"
+    )
+    access_key: str | None = Field(default="minioadmin", description="minio Username")
+    secret_key: str | None = Field(default="minioadmin", description="minio Passwords")
+    public_bucket: str | None = Field(
+        default="bisheng",
+        description="Store permanent files by defaultbucket. Files can be permanently accessed by anonymous users",
+    )
+    tmp_bucket: str | None = Field(
+        default="tmp-dir", description="Ad hocbucket, stored files will have an expiration date"
+    )
 
 
 class ObjectStore(BaseModel):
-    """ Object Storage Configuration """
-    type: str = Field(default='minio', description="Object Storage Type")
-    minio: Optional[MinioConf] = Field(default_factory=MinioConf, description="minio Configure")
+    """Object Storage Configuration"""
+
+    type: str = Field(default="minio", description="Object Storage Type")
+    minio: MinioConf | None = Field(default_factory=MinioConf, description="minio Configure")
 
 
 class WorkflowConf(BaseModel):
-    """ Workflow Configuration """
+    """Workflow Configuration"""
+
     max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
-    timeout: int = Field(default=720, description="Node timeout (min）")
+    timeout: int = Field(default=720, description="Node timeout (min)")
 
 
 class CeleryConf(BaseModel):
-    """ Celery Configure """
-    task_routers: Optional[Dict] = Field(default_factory=dict, description='Task Routing Configuration')
-    beat_schedule: Optional[Dict] = Field(default_factory=dict, description='Timed Task Configuration')
+    """Celery Configure"""
 
-    @model_validator(mode='after')
+    task_routers: dict | None = Field(default_factory=dict, description="Task Routing Configuration")
+    beat_schedule: dict | None = Field(default_factory=dict, description="Timed Task Configuration")
+
+    @model_validator(mode="after")
     def validate(self):
         if not self.task_routers:
             self.task_routers = {
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
             }
-        if 'telemetry_mid_user_increment' not in self.beat_schedule:
-            self.beat_schedule['telemetry_mid_user_increment'] = {
-                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_increment',
-                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+        if "telemetry_mid_user_increment" not in self.beat_schedule:
+            self.beat_schedule["telemetry_mid_user_increment"] = {
+                "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_increment",
+                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
-        if 'telemetry_mid_knowledge_increment' not in self.beat_schedule:
-            self.beat_schedule['telemetry_mid_knowledge_increment'] = {
-                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment',
-                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+        if "telemetry_mid_knowledge_increment" not in self.beat_schedule:
+            self.beat_schedule["telemetry_mid_knowledge_increment"] = {
+                "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment",
+                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
-        if 'telemetry_sync_mid_app_increment' not in self.beat_schedule:
-            self.beat_schedule['telemetry_sync_mid_app_increment'] = {
-                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_app_increment',
-                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+        if "telemetry_sync_mid_app_increment" not in self.beat_schedule:
+            self.beat_schedule["telemetry_sync_mid_app_increment"] = {
+                "task": "bisheng.worker.telemetry.mid_table.sync_mid_app_increment",
+                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
-        if 'telemetry_sync_mid_user_interact_dtl' not in self.beat_schedule:
-            self.beat_schedule['telemetry_sync_mid_user_interact_dtl'] = {
-                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl',
-                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+        if "telemetry_sync_mid_user_interact_dtl" not in self.beat_schedule:
+            self.beat_schedule["telemetry_sync_mid_user_interact_dtl"] = {
+                "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl",
+                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
-        if 'sync_information_article' not in self.beat_schedule:
-            self.beat_schedule['sync_information_article'] = {
-                'task': 'bisheng.worker.information.article.sync_information_article',
-                'schedule': crontab.from_string('30 5 * * *'),  # 05:30 exec every day
+        if "sync_information_article" not in self.beat_schedule:
+            self.beat_schedule["sync_information_article"] = {
+                "task": "bisheng.worker.information.article.sync_information_article",
+                "schedule": crontab.from_string("30 5 * * *"),  # 05:30 exec every day
             }
-
-        if 'sync_information_article_hourly' not in self.beat_schedule:
-            self.beat_schedule['sync_information_article_hourly'] = {
-                'task': 'bisheng.worker.information.article.sync_information_article',
-                'schedule': crontab.from_string('*/30 * * * *'),  # exec Every half hour
+        # F031: daily reconcile of information-source subscriptions per tenant.
+        # Runs at 04:30, before the 05:30 article sync, so orphaned sources are
+        # unsubscribed and missing ones subscribed before articles are pulled.
+        if "reconcile_information_subscriptions" not in self.beat_schedule:
+            self.beat_schedule["reconcile_information_subscriptions"] = {
+                "task": "bisheng.worker.information.reconcile.reconcile_all_tenants",
+                "schedule": crontab.from_string("30 4 * * *"),  # 04:30 exec every day
+            }
+        if "retry_failed_tuples" not in self.beat_schedule:
+            self.beat_schedule["retry_failed_tuples"] = {
+                "task": "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
+                "schedule": 30.0,  # Every 30 seconds
+            }
+        # v2.5.1 F012: 6h user-leaf-tenant catch-up reconcile.
+        if "reconcile_user_tenant_assignments" not in self.beat_schedule:
+            self.beat_schedule["reconcile_user_tenant_assignments"] = {
+                "task": "bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments",
+                "schedule": crontab.from_string("0 */6 * * *"),  # every 6 hours
+            }
+        # v2.5.1 F019: 10min admin_scope Redis key sweep (AC-13).
+        if "admin_scope_cleanup" not in self.beat_schedule:
+            self.beat_schedule["admin_scope_cleanup"] = {
+                "task": "bisheng.worker.admin_scope.tasks.admin_scope_cleanup",
+                "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
+            }
+        if "sync_information_article_hourly" not in self.beat_schedule:
+            self.beat_schedule["sync_information_article_hourly"] = {
+                "task": "bisheng.worker.information.article.sync_information_article",
+                "schedule": crontab.from_string("*/30 * * * *"),  # exec Every half hour
+            }
+        if "file_scheduler_dispatch" not in self.beat_schedule:
+            self.beat_schedule["file_scheduler_dispatch"] = {
+                "task": "bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
+                "schedule": 30.0,
+            }
+        if "file_scheduler_reconcile" not in self.beat_schedule:
+            self.beat_schedule["file_scheduler_reconcile"] = {
+                "task": "bisheng.worker.knowledge.scheduler.reconcile_file_scheduler_task",
+                "schedule": 300.0,
             }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
-            if isinstance(task_info['schedule'], str):
-                self.beat_schedule[key]['schedule'] = crontab(task_info['schedule'])
+            if isinstance(task_info["schedule"], str):
+                self.beat_schedule[key]["schedule"] = crontab(task_info["schedule"])
+        return self
+
+
+class FairSchedulerConf(BaseModel):
+    """Fair scheduler runtime configuration.
+
+    Beat schedule intervals (dispatch every 30 s, reconcile every 300 s) are
+    configured via ``celery_task.beat_schedule.file_scheduler_dispatch`` and
+    ``celery_task.beat_schedule.file_scheduler_reconcile`` in config.yaml.
+    The defaults are set in ``CeleryConf.validate``; operators can override
+    them without touching this model.
+    """
+
+    dispatch_lock_ttl_seconds: int = Field(default=24, ge=1, le=300)
+    # Global per-queue concurrency cap = the only hard limit on simultaneous
+    # parses. Should mirror the sum of `--concurrency` across the workers that
+    # consume each queue (see scheduler design spec, decision D2).
+    queue_concurrency: dict[str, int] = Field(default_factory=lambda: {"knowledge_celery": 20, "ocr_celery": 5})
+    # Fairness weight, NOT an in-flight ceiling. A user's steady-state in-flight
+    # share is proportional to its weight; default 1 means equal shares.
+    per_user_pick_size: int = Field(default=1, ge=1)
+    user_overrides: dict[str, int] = Field(default_factory=dict)
+    # DEPRECATED / no longer read. Crash recovery used to wait out this timeout
+    # before reconcile re-enqueued a stuck PROCESSING file; that could not tell a
+    # long-but-healthy parse from a dead worker. Recovery is now driven by the
+    # per-file parse lock's liveness (see ``parse_lock_ttl_seconds``): lock alive
+    # → healthy parse, leave it; lock dead → worker crashed, recover immediately.
+    # Kept only so existing config.yaml files don't fail to load.
+    inflight_ttl_seconds: int = Field(default=7200, ge=60)
+    # Payload TTL is only a leak backstop: payload is deleted on confirm/purge in
+    # the normal lifecycle, so this just bounds how long an enqueued-but-never-
+    # dispatched-or-purged payload lingers. It MUST exceed any realistic queue
+    # residency — otherwise a file still waiting in the FIFO loses its dispatch
+    # context (the historical poison-pill / head-of-line-blocking bug). Default 7d.
+    payload_ttl_seconds: int = Field(default=604800, ge=3600)
+    # Per-file parse lock TTL. A parse task holds ``parse_lock:<file_id>`` for its
+    # whole duration so a file is never parsed by two workers at once (duplicates
+    # arrive via acks_late broker redelivery or reconcile re-enqueue). A heartbeat
+    # refreshes it every ~ttl/3, so on worker death the lock self-clears within
+    # this window and recovery can re-dispatch. Keep it well above one refresh
+    # interval but small enough that a dead worker frees the file promptly.
+    parse_lock_ttl_seconds: int = Field(default=600, ge=30)
+
+    @model_validator(mode="after")
+    def validate(self):
+        for user_id, weight in self.user_overrides.items():
+            if weight < 1:
+                raise ValueError(f"user_overrides[{user_id}] must be >= 1, got {weight}")
+        return self
+
+    def concurrency_for(self, queue: str) -> int:
+        # Unknown queues fall back to per_user_pick_size so backfill stays bounded.
+        return self.queue_concurrency.get(queue, self.per_user_pick_size)
+
+    def weight_for(self, user_id: str) -> int:
+        return self.user_overrides.get(str(user_id), self.per_user_pick_size)
+
+
+class KnowledgeFileWorkerConf(BaseModel):
+    """Knowledge file worker (parse pipeline) configuration."""
+
+    ocr_queue_enabled: bool = Field(default=False)
+    ocr_queue: str = Field(default="ocr_celery")
+    fair_scheduler_enabled: bool = Field(default=False)
+    fair_scheduler: FairSchedulerConf = Field(default_factory=FairSchedulerConf)
+
+
+class KnowledgeQAFilterConf(BaseModel):
+    """Knowledge space AI Q&A retrieval permission filter (F029).
+
+    Controls the two-layer view_file permission filter shared by chat_folder
+    (KnowledgeSpaceChatService), queryChunksFromDB (WorkStationService) and
+    citation source resolve (CitationResolveService). See
+    features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §4 (AD-02/03/08).
+    """
+
+    index_filter_threshold: int = Field(
+        default=5000,
+        ge=1,
+        description=(
+            "AD-02 threshold. When the user's visible-or-excluded file count for the "
+            "queried space is at or below this value, the index-layer filter switches "
+            "to an IN / NOT-IN clause; otherwise it falls back to post-filter only."
+        ),
+    )
+    retrieval_initial_multiplier: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "AD-03 first attempt. Initial recall fetches top_k * this multiplier so "
+            "result-layer view_file post-filter can still leave at least top_k chunks."
+        ),
+    )
+    retrieval_expansion_multiplier: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "AD-03 capped expansion. When the first attempt fails to fill top_k, a "
+            "single retry recalls top_k * this multiplier; no further expansion. "
+            "Kept moderate (6 -> k=600 at base_k=100) to bound retry search cost; "
+            "the Milvus wrapper raises ef to cover whatever k this produces."
+        ),
+    )
+    fine_grained_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description=(
+            "AD-08 concurrency. Semaphore limit when resolving view_file per file "
+            "via FineGrainedPermissionService; mirrors KnowledgeSpaceService's "
+            "_CHILD_PERMISSION_CHECK_CONCURRENCY default."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate(self):
+        if self.retrieval_expansion_multiplier < self.retrieval_initial_multiplier:
+            raise ValueError("retrieval_expansion_multiplier must be >= retrieval_initial_multiplier")
         return self
 
 
 class LinsightConf(BaseModel):
-    """ Inspiration Configuration """
-    debug: bool = Field(default=False, description='Whether to opendebugMode')
-    tool_buffer: int = Field(default=100000,
-                             description='Maximum Tool Execution Historytoken, you need to summarize your history after')
-    max_steps: int = Field(default=200, description='Maximum number of steps per task to prevent infinite loops')
-    retry_num: int = Field(default=3,
-                           description='Number of times the model call was retried during the execution of the Ideas task')
-    retry_sleep: int = Field(default=5,
-                             description='Interval between retries of model calls during execution of Invisible Tasks (seconds)')
-    max_file_num: int = Field(default=5,
-                              description='BuatSOPJampromptThe number of user-uploaded file information placed in the')
-    max_knowledge_num: int = Field(default=20,
-                                   description='BuatSOPJampromptThe amount of knowledge base information placed in the')
-    waiting_list_url: str = Field(default=None, description='waiting list Jump link')
-    default_temperature: float = Field(default=0, description='Default Temperature at Model Request')
-    retry_temperature: float = Field(default=1,
-                                     description='reactModejsonModel temperature when retrying after parsing failure')
-    file_content_length: int = Field(default=5000,
-                                     description='The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded')
-    max_file_content_num: int = Field(default=3,
-                                      description='Number of files to read when subtasking, in reverse order by modification time')
+    """Inspiration Configuration"""
+
+    debug: bool = Field(default=False, description="Whether to opendebugMode")
+    tool_buffer: int = Field(
+        default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
+    )
+    max_steps: int = Field(default=200, description="Maximum number of steps per task to prevent infinite loops")
+    tool_failure_soft_limit: int = Field(
+        default=3,
+        description="L3 tool-loop breaker: after this many consecutive same-tool failures, append a "
+        "stronger corrective hint to the error message so a recoverable model can self-correct.",
+    )
+    tool_failure_hard_limit: int = Field(
+        default=8,
+        description="L3 tool-loop breaker: after this many consecutive same-tool failures, abort the task "
+        "gracefully and salvage the intermediate result (instead of spinning to recursion_limit).",
+    )
+    truncation_retry_limit: int = Field(
+        default=2,
+        description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "
+        "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
+    )
+    retry_num: int = Field(
+        default=3, description="Number of times the model call was retried during the execution of the Ideas task"
+    )
+    retry_sleep: int = Field(
+        default=5, description="Interval between retries of model calls during execution of Invisible Tasks (seconds)"
+    )
+    max_degrade: int = Field(
+        default=3,
+        description="Max number of model-call steps that may be gracefully skipped (content-filter / "
+        "exhausted-transient) within a single task before it fails cleanly. Bounds runaway degradation.",
+    )
+    max_file_num: int = Field(
+        default=5, description="BuatSOPJampromptThe number of user-uploaded file information placed in the"
+    )
+    max_knowledge_num: int = Field(
+        default=20, description="BuatSOPJampromptThe amount of knowledge base information placed in the"
+    )
+    waiting_list_url: str = Field(default=None, description="waiting list Jump link")
+    default_temperature: float = Field(default=0, description="Default Temperature at Model Request")
+    retry_temperature: float = Field(
+        default=1, description="reactModejsonModel temperature when retrying after parsing failure"
+    )
+    file_content_length: int = Field(
+        default=5000,
+        description="The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded",
+    )
+    max_file_content_num: int = Field(
+        default=3, description="Number of files to read when subtasking, in reverse order by modification time"
+    )
+    skills_root: str = Field(
+        default="data/linsight_skills",
+        description="Root directory of Linsight skills on disk (F035). Layout: built-in/<name>/SKILL.md for "
+        "kernel built-in skills; data/skills/{tenant_id}/<name>/ for tenant custom skill bundles. "
+        "Multi-node deployments must mount this path on a shared volume (design §7.1).",
+    )
+
+
+class DailyChatConf(BaseModel):
+    """Daily-chat (日常模式) Agent runtime configuration.
+
+    Stored in DB config (written by POST /api/v1/config/save) under key `daily_chat`.
+    Read at request time via ConfigService.aget_daily_chat_conf().
+    """
+
+    agent_max_iterations: int = Field(
+        default=50,
+        description="Max LangGraph recursion_limit for the daily-chat ReAct agent loop. "
+        "Falls back to 50 on missing / non-int / <= 0 value.",
+    )
+    history_max_tokens: int = Field(
+        default=8000,
+        description="Upper bound (in tokens) on the combined length of chat history "
+        "injected into the LLM prompt. When the stored history exceeds "
+        "this budget, oldest turns are dropped one at a time until the "
+        "remainder fits. Falls back to 8000 on missing / non-int / <= 0.",
+    )
+
+    @field_validator("agent_max_iterations", mode="before")
+    @classmethod
+    def _coerce_agent_max_iterations(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 50
+        return n if n > 0 else 50
+
+    @field_validator("history_max_tokens", mode="before")
+    @classmethod
+    def _coerce_history_max_tokens(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 8000
+        return n if n > 0 else 8000
+
+
+class ShougangConf(BaseModel):
+    """Shougang (首钢) deployment-specific configuration.
+
+    Stored in DB config under key `shougang`. When the block exists and
+    `prefix` is set, the file-encoding feature is considered enabled.
+    """
+
+    prefix: str | None = Field(
+        default=None,
+        description='File-encoding prefix, e.g. "GF". Empty/None disables the feature.',
+    )
+    # The two below are reserved for other shougang sub-features and are not
+    # consumed by the file-encoding pipeline. Kept here so the model accepts them.
+    deployment_label: str | None = Field(default=None)
+    portal_admin_url: str | None = Field(default=None)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.prefix and self.prefix.strip())
 
 
 class CookieConf(BaseModel):
-    """ Cookie Configure """
-    max_age: Optional[int] = Field(default=None, description="Cookie Maximum survival time in seconds")
-    path: str = Field(default='/', description="Cookie Path Properties for")
-    domain: Optional[str] = Field(default=None, description="Cookie Domain Properties for")
+    """Cookie Configure"""
+
+    max_age: int | None = Field(default=None, description="Cookie Maximum survival time in seconds")
+    path: str = Field(default="/", description="Cookie Path Properties for")
+    domain: str | None = Field(default=None, description="Cookie Domain Properties for")
     secure: bool = Field(default=False, description="enabled secure Property")
     httponly: bool = Field(default=True, description="enabled HttpOnly Property")
     samesite: str = Field(default=None, description="SameSite property, optional value is 'lax', 'strict', 'none'")
 
     jwt_token_expire_time: int = Field(default=86400, description="JwtTokenExpiration time in seconds")
-    jwt_iss: str = Field(default='bisheng', description="JwtTokenIssuer of")
+    jwt_iss: str = Field(default="bisheng", description="JwtTokenIssuer of")
 
 
 class Etl4lmConf(BaseModel):
-    """ Etl4lm Configure """
-    url: str = Field(default='', description='etl4lmService Address')
-    timeout: int = Field(default=600, description='etl4lmService Request Timeout (sec)')
-    ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdkService Address')
+    """Etl4lm Configure"""
+
+    url: str = Field(default="", description="etl4lmService Address")
+    timeout: int = Field(default=600, description="etl4lmService Request Timeout (sec)")
+    ocr_sdk_url: str = Field(default="", description="etl4lm ocr sdkService Address")
 
 
 class MineruConf(BaseModel):
-    url: str = Field(default='', description='MineruService Address')
-    timeout: int = Field(default=60, description='MineruService Request Timeout (sec)')
-    headers: Dict = Field(default_factory=dict, description='MineruService Request Headers')
-    request_kwargs: Dict = Field(default_factory=dict, description='MineruService Request Arguments')
+    url: str = Field(default="", description="MineruService Address")
+    timeout: int = Field(default=60, description="MineruService Request Timeout (sec)")
+    headers: dict = Field(default_factory=dict, description="MineruService Request Headers")
+    request_kwargs: dict = Field(default_factory=dict, description="MineruService Request Arguments")
 
 
 class PaddleOcrConf(BaseModel):
-    """ PaddleOcr Configure """
-    url: str = Field(default='', description='PaddleOcrService Address')
-    timeout: int = Field(default=60, description='PaddleOcrService Request Timeout (sec)')
-    auth_token: str = Field(default='', description='PaddleOcrService Authentication Token')
-    headers: Dict = Field(default_factory=dict, description='PaddleOcrService Headers')
-    request_kwargs: Dict = Field(default_factory=dict, description='PaddleOcrService Request Arguments')
+    """PaddleOcr Configure"""
+
+    url: str = Field(default="", description="PaddleOcrService Address")
+    timeout: int = Field(default=60, description="PaddleOcrService Request Timeout (sec)")
+    auth_token: str = Field(default="", description="PaddleOcrService Authentication Token")
+    headers: dict = Field(default_factory=dict, description="PaddleOcrService Headers")
+    request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
+
+
+class VersionManagementConf(BaseModel):
+    """Version Management Configure"""
+
+    enabled: bool = Field(default=False, description="Enable knowledge-space file version management")
+    simhash_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold (1 - hamming/64) to flag a file as 'similar'. Range [0, 1].",
+    )
 
 
 class KnowledgeConf(BaseModel):
-    """ Knowledge Configure """
-    loader_provider: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
-    etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description='Etl4lm Configure')
-    mineru: MineruConf = Field(default_factory=MineruConf, description='Mineru Configure')
-    paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description='PaddleOcr Config')
+    """Knowledge Configure"""
+
+    loader_provider: str = Field(default="etl4lm", description="Knowledge Config Provide Settings")
+    etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description="Etl4lm Configure")
+    mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
+    paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
+    version_management: VersionManagementConf = Field(
+        default_factory=VersionManagementConf,
+        description="Version Management Configure",
+    )
+
+    @property
+    def image_parser_enabled(self) -> bool:
+        """Whether the active loader_provider can parse images (and richer PDFs).
+
+        Mirrors the loader-selection logic in `knowledge/rag/base_file_pipeline.py`:
+        an external OCR/ETL service is used only when `loader_provider` matches a
+        provider whose `url` is configured. Otherwise the pipeline falls back to
+        the local PDF loader, which does not support images.
+        """
+        provider = (self.loader_provider or "").strip()
+        if provider == "etl4lm":
+            return bool(self.etl4lm.url)
+        if provider == "mineru":
+            return bool(self.mineru.url)
+        if provider == "paddle_ocr":
+            return bool(self.paddle_ocr.url)
+        return False
 
 
 class IntelligenceCenterConf(BaseModel):
-    """ Intelligence Center Configure """
-    base_url: str = Field(default='', description='Intelligence Center Service Address')
-    api_key: str = Field(default='', description='Intelligence Center Service API Key')
-    kwargs: Dict = Field(default_factory=dict, description='Additional Arguments')
+    """Intelligence Center Configure"""
+
+    base_url: str = Field(default="", description="Intelligence Center Service Address")
+    api_key: str = Field(default="", description="Intelligence Center Service API Key")
+    kwargs: dict = Field(default_factory=dict, description="Additional Arguments")
 
 
 class McpConf(BaseModel):
-    """ MCP Configure """
-    enable_stdio: bool = Field(default=True, description='Whether to enable stdio')
+    """MCP Configure"""
+
+    enable_stdio: bool = Field(default=True, description="Whether to enable stdio")
+
+
+class CofcoForwardingConf(BaseModel):
+    """E+ in-app message forwarding config for 中粮 (cofco) deployment."""
+
+    enabled: bool = Field(default=False)
+    api_base: str = Field(default="", description="E.g. http://10.28.64.30:8070/qwmsg-ui")
+    app_id: str = Field(default="")
+    secret: str = Field(default="")
+    agentid: int | None = Field(default=None)
+    timeout_seconds: float = Field(default=5.0)
+    bisheng_inbox_url: str = Field(default="", description="BiSheng client base URL for textcard callback")
+    enable_duplicate_check: int = Field(default=0)
+    duplicate_check_interval: int = Field(default=1800)
+    user_sources: list[str] = Field(
+        default_factory=lambda: ["cofco_eplus", "wecom"],
+        description="Accepted User.source values whose external_id is the E+ employee ID",
+    )
+
+
+class InAppMessageForwardingConf(BaseModel):
+    """Top-level forwarding config; one sub-block per external system."""
+
+    cofco: CofcoForwardingConf = CofcoForwardingConf()
+    # Future: shougang / longhua etc. as parallel fields
+
+
+class DatabaseSSLConf(BaseModel):
+    """TLS settings for MySQL database connections.
+
+    ``aiomysql`` requires an ``ssl.SSLContext`` rather than the dictionary
+    accepted by PyMySQL's URL parser. The context is created here so the sync
+    and async SQLAlchemy engines receive the same TLS configuration.
+    """
+
+    enabled: bool = Field(default=False, description="Enable TLS for MySQL connections")
+    ca_file: str | None = Field(default=None, description="PEM file containing trusted CA certificates")
+    cert_file: str | None = Field(default=None, description="Client certificate PEM file for mutual TLS")
+    key_file: str | None = Field(default=None, description="Client private-key PEM file for mutual TLS")
+    verify_hostname: bool = Field(default=True, description="Verify the database hostname against its certificate")
+
+    @model_validator(mode="after")
+    def validate_client_certificate(self):
+        if bool(self.cert_file) != bool(self.key_file):
+            raise ValueError("database_pool.ssl.cert_file and key_file must be configured together")
+        return self
+
+    def create_ssl_context(self) -> ssl.SSLContext | None:
+        """Create a verified TLS context, or return ``None`` when disabled."""
+        if not self.enabled:
+            return None
+
+        context = ssl.create_default_context(cafile=self.ca_file)
+        context.check_hostname = self.verify_hostname
+        if self.cert_file:
+            context.load_cert_chain(certfile=self.cert_file, keyfile=self.key_file)
+        return context
+
+
+class DatabasePoolConf(BaseModel):
+    """SQLAlchemy connection-pool configuration for the database engine.
+
+    Defaults mirror the values previously hardcoded in
+    ``DatabaseConnectionManager._get_default_engine_config`` so omitting the
+    ``database_pool`` section in config.yaml changes nothing. Tune these per
+    deployment so that ``num_db_processes * (pool_size + max_overflow)`` stays
+    under the DB server's max-session cap.
+    """
+
+    pool_size: int = Field(default=100, description="Persistent connections kept per engine/process")
+    max_overflow: int = Field(default=20, description="Extra connections allowed beyond pool_size under load")
+    pool_timeout: int = Field(default=30, description="Seconds to wait for a free connection before timing out")
+    pool_recycle: int = Field(default=3600, description="Recycle a connection after this many seconds")
+    pool_pre_ping: bool = Field(default=True, description="Test connections with a ping before use")
+    ssl: DatabaseSSLConf = Field(default_factory=DatabaseSSLConf, exclude=True)
+
+    def as_engine_kwargs(self) -> dict:
+        """Return the kwargs consumed by SQLAlchemy ``create_engine``.
+
+        The TLS model itself is not an SQLAlchemy keyword. When enabled, pass
+        the concrete ``SSLContext`` through ``connect_args`` so aiomysql does
+        not receive an unsupported dictionary value.
+        """
+        engine_kwargs = self.model_dump()
+        if ssl_context := self.ssl.create_ssl_context():
+            engine_kwargs["connect_args"] = {"ssl": ssl_context}
+        return engine_kwargs
+
+
+class MetricLogConf(BaseModel):
+    """Structured metric-log emission switches + thresholds (F042).
+
+    Emits ``BS_METRIC domain=...`` log lines that the external monitoring layer
+    parses into metrics (DB query P95/QPS, object-storage success-rate/latency,
+    model TTFT, E+ notify events). See
+    ``features/v2.6.0/042-metric-log-observability/design.md`` §6.1 for the
+    contract. Emission is best-effort and never affects the business flow; it can
+    be disabled globally or per-domain. Defaults keep every domain ON so a fresh
+    deploy emits metrics unless explicitly turned off.
+    """
+
+    enabled: bool = Field(default=True, description="Global switch for all BS_METRIC emission")
+    db: bool = Field(default=True, description="Emit db_query / db_query_agg / db_pool")
+    obj_storage: bool = Field(default=True, description="Emit obj_storage put/get metrics")
+    model_invoke: bool = Field(default=True, description="Emit model_invoke TTFT/status metrics")
+    eplus: bool = Field(default=True, description="Emit eplus_notify call-event metrics")
+    db_slow_query_ms: int = Field(
+        default=200,
+        description="Emit a db_query detail line only for queries at/above this latency (ms)",
+    )
+    db_agg_window_s: int = Field(
+        default=10,
+        description="Window (seconds) for db_query_agg histogram flush + db_pool gauge sampling",
+    )
 
 
 class Settings(BaseModel):
-    """ Application Settings """
-    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
+    """Application Settings"""
+
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra="ignore")
 
     chains: dict = {}
     agents: dict = {}
@@ -284,21 +711,20 @@ class Settings(BaseModel):
     utilities: dict = {}
     input_output: dict = {}
     output_parsers: dict = {}
-    autogen_roles: dict = {}
     dev: bool = False
-    environment: Union[dict, str] = 'dev'
+    environment: Union[dict, str] = "dev"
     # ↑↑↑ before config for langchain flow, will be deprecated
     debug: bool = False
-    database_url: Optional[str] = None
-    redis_url: Optional[Union[str, Dict]] = None
-    celery_redis_url: Optional[Union[str, Dict]] = None
-    redis: Optional[dict] = None
+    database_url: str | None = None
+    redis_url: Union[str, dict] | None = None
+    celery_redis_url: Union[str, dict] | None = None
+    redis: dict | None = None
     admin: dict = {}
-    cache: str = 'InMemoryCache'
+    cache: str = "InMemoryCache"
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    jwt_secret: str = 'secret'
+    jwt_secret: str = "secret_cF2kD4lW9wY4zL7eX1zX9vS1fA7eW4lQ"
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}
@@ -310,82 +736,96 @@ class Settings(BaseModel):
     object_storage: ObjectStore = ObjectStore()
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
+    knowledge_file_worker: KnowledgeFileWorkerConf = KnowledgeFileWorkerConf()
+    knowledge_qa_filter: KnowledgeQAFilterConf = KnowledgeQAFilterConf()
     cookie_conf: CookieConf = CookieConf()
     telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
-    license_str: Optional[str] = None  # license Contents
+    license_str: str | None = None  # license Contents
 
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
+    multi_tenant: MultiTenantConf = MultiTenantConf()
+    openfga: OpenFGAConf = OpenFGAConf()
+    user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
+    sso_sync: SSOSyncConf = SSOSyncConf()
+    reconcile: ReconcileConf = ReconcileConf()
+    llm: LLMConf = LLMConf()
+    in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
+    database_pool: DatabasePoolConf = DatabasePoolConf()
+    metric_log: MetricLogConf = MetricLogConf()
 
-    @field_validator('database_url')
+    @field_validator("database_url")
     @classmethod
     def set_database_url(cls, value):
         if not value:
-            logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
-            if bisheng_database_url := os.getenv('bisheng_DATABASE_URL'):
+            logger.debug("No database_url provided, trying bisheng_DATABASE_URL env variable")
+            if bisheng_database_url := os.getenv("bisheng_DATABASE_URL"):
                 value = bisheng_database_url
             else:
-                logger.debug('No DATABASE_URL env variable, using sqlite database')
-                value = 'sqlite:///./bisheng.db'
+                logger.debug("No DATABASE_URL env variable, using sqlite database")
+                value = "sqlite:///./bisheng.db"
         else:
             # Encrypt password
             import re
-            pattern = r'(?<=:)[^:]+(?=@)'  # Match colon after to@Any character before the symbol
+
+            pattern = r"(?<=:)[^:]+(?=@)"  # Match colon after to@Any character before the symbol
             match = re.search(pattern, value)
             if match:
                 password = match.group(0)
                 new_password = decrypt_token(password)
-                new_mysql_url = re.sub(pattern, f'{new_password}', value)
+                new_mysql_url = re.sub(pattern, f"{new_password}", value)
                 value = new_mysql_url
 
         return value
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def set_redis_url(cls, values):
-        if 'redis_url' in values:
-            if isinstance(values['redis_url'], dict):
-                for k, v in values['redis_url'].items():
-                    if isinstance(v, str) and v.startswith('encrypt(') and v.endswith(')'):
+        if "redis_url" in values:
+            if isinstance(values["redis_url"], dict):
+                for k, v in values["redis_url"].items():
+                    if isinstance(v, str) and v.startswith("encrypt(") and v.endswith(")"):
                         v = v[8:-1]
-                        values['redis_url'][k] = decrypt_token(v)
+                        values["redis_url"][k] = decrypt_token(v)
             else:
                 import re
-                pattern = r'(?<=:)[^:]+(?=@)'  # Match colon after to@Any character before the symbol
-                match = re.search(pattern, values['redis_url'])
+
+                pattern = r"(?<=:)[^:]+(?=@)"  # Match colon after to@Any character before the symbol
+                match = re.search(pattern, values["redis_url"])
                 if match:
                     password = match.group(0)
                     new_password = decrypt_token(password)
-                    new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
-                    values['redis_url'] = new_redis_url
+                    new_redis_url = re.sub(pattern, f"{new_password}", values["redis_url"])
+                    values["redis_url"] = new_redis_url
         return values
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def set_celery_redis_url(cls, values):
-        if 'celery_redis_url' in values:
-            if isinstance(values['celery_redis_url'], dict):
-                for k, v in values['celery_redis_url'].items():
-                    if isinstance(v, str) and v.startswith('encrypt(') and v.endswith(')'):
+        if "celery_redis_url" in values:
+            if isinstance(values["celery_redis_url"], dict):
+                for k, v in values["celery_redis_url"].items():
+                    if isinstance(v, str) and v.startswith("encrypt(") and v.endswith(")"):
                         v = v[8:-1]
-                        values['celery_redis_url'][k] = decrypt_token(v)
+                        values["celery_redis_url"][k] = decrypt_token(v)
             else:
                 import re
-                pattern = r'(?<=:)[^:]+(?=@)'  # Match colon after to@Any character before the symbol
-                match = re.search(pattern, values['celery_redis_url'])
+
+                pattern = r"(?<=:)[^:]+(?=@)"  # Match colon after to@Any character before the symbol
+                match = re.search(pattern, values["celery_redis_url"])
                 if match:
                     password = match.group(0)
                     new_password = decrypt_token(password)
-                    new_redis_url = re.sub(pattern, f'{new_password}', values['celery_redis_url'])
-                    values['celery_redis_url'] = new_redis_url
+                    new_redis_url = re.sub(pattern, f"{new_password}", values["celery_redis_url"])
+                    values["celery_redis_url"] = new_redis_url
         return values
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
-            if key != 'dev' and not value:
+            if key != "dev" and not value:
                 values[key] = []
         return values
 

@@ -16,24 +16,28 @@ import store from "~/store";
 import { BsConfig } from "~/types/chat";
 import { cn } from "~/utils";
 
-// 工具
+/**
+ * @deprecated v2.5 — use `AgentToolSelector` instead.
+ * ChatToolDown only knows how to flip web-search on/off via the legacy
+ * `searchType` atom. It is still rendered by `AiChatInput` when `bsConfig.tools`
+ * is empty (pre-v2.5 admin configs); once the workstation config migration is
+ * complete everywhere this component + the `searchType` atom can be deleted.
+ */
 export const ChatToolDown = ({
   config,
   searchType,
   setSearchType,
   disabled,
+  compact = false,
 }: {
   config?: BsConfig;
   searchType: string;
   setSearchType: (type: string) => void;
   disabled: boolean;
+  /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
+  compact?: boolean;
 }) => {
   const localize = useLocalize();
-
-  // 每次重置工具
-  useEffect(() => {
-    setSearchType("");
-  }, []);
 
   if (!config?.webSearch.enabled) return null;
 
@@ -42,32 +46,37 @@ export const ChatToolDown = ({
       <SelectTrigger
         className={cn(
           "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
+          compact && "px-1.5",
           searchType === "netSearch" && "bg-blue-100"
         )}
       >
         <div
           className={cn(
-            "flex gap-2",
+            "flex items-center",
+            compact ? "gap-1" : "gap-2",
             searchType === "netSearch" && "text-blue-600"
           )}
         >
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal">
-            {localize("com_tools_title")}
-          </span>
+          {/* Compact: collapse to icon + chevron only to save horizontal space. */}
+          {!compact && (
+            <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
+              {localize("com_tools_title")}
+            </span>
+          )}
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl p-2 w-52">
+      <SelectContent className="bg-white rounded-[8px] w-52">
         {config?.webSearch.enabled && (
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center">
-              <GlobeIcon className="" size="16" />
-              <span className="text-xs font-normal">
+              <GlobeIcon className="text-[#999]" size="16" />
+              <span className="text-sm font-normal">
                 {localize("com_tools_web_search")}
               </span>
             </div>
             <Switch
-              className="data-[state=checked]:bg-blue-600"
+              variant="tool"
               disabled={disabled}
               checked={searchType === "netSearch"}
               onCheckedChange={(val) => {
@@ -122,10 +131,10 @@ export const LinsiTools = ({ tools, setTools }) => {
 
   return (
     <Select>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
-        <div className={cn("flex gap-2", active && "text-blue-600")}>
+      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 max-md:px-1.5">
+        <div className={cn("flex gap-2 max-md:gap-1", active && "text-blue-600")}>
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal">
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] max-md:max-w-[min(18vw,56px)]">
             {localize("com_tools_title")}
           </span>
         </div>

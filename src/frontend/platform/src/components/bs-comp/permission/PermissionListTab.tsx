@@ -1,0 +1,593 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/bs-ui/dropdownMenu"
+import { Portal, Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
+import {
+  authorizeResource,
+  getGrantableRelationModelsApi,
+  getResourcePermissions,
+  type RelationModel,
+} from "@/controllers/API/permission"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { cn } from "@/utils"
+import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { RelationModelOption } from "./RelationSelect"
+import { PermissionEntry, RelationLevel, ResourceType, RevokeItem } from "./types"
+
+// Tooltip that only shows when the wrapped element's text is truncated.
+function TruncatedTip({
+  content,
+  side = "top",
+  styleClasses,
+  className,
+  as: Tag = "span",
+  children,
+}: {
+  content: string
+  side?: "top" | "right" | "bottom" | "left"
+  styleClasses?: string
+  className?: string
+  as?: "span" | "p" | "div"
+  children: React.ReactNode
+}) {
+  const ref = useRef<HTMLElement | null>(null)
+  const [open, setOpen] = useState(false)
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setOpen(false)
+      return
+    }
+    const el = ref.current
+    if (el && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
+      setOpen(true)
+    }
+  }
+
+  return (
+    <Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={200}>
+      <TooltipTrigger asChild>
+        <Tag ref={ref as React.RefObject<HTMLElement>} className={className}>{children}</Tag>
+      </TooltipTrigger>
+      <Portal>
+        <TooltipContent className={cn(styleClasses, "text-sm shadow-md")} side={side}>
+          <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
+        </TooltipContent>
+      </Portal>
+    </Tooltip>
+  )
+}
+
+const SUBJECT_ICONS = {
+  user: User,
+  department: Building2,
+  user_group: Users,
+}
+
+interface PermissionListTabProps {
+  resourceType: ResourceType
+  resourceId: string
+  refreshKey: number
+  prefetchedGrantableModels?: RelationModel[]
+  prefetchedGrantableModelsLoaded?: boolean
+  prefetchedUseDefaultModels?: boolean
+  skipGrantableModelsRequest?: boolean
+  fixedSubjectType?: ListSubjectType
+}
+
+const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: 'owner', name: '所有者', relation: 'owner' },
+  { id: 'manager', name: '可管理', relation: 'manager' },
+  { id: 'editor', name: '可编辑', relation: 'editor' },
+  { id: 'viewer', name: '可查看', relation: 'viewer' },
+]
+
+const LIST_SUBJECT_TYPES = ['user', 'department', 'user_group'] as const
+type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number]
+
+export function PermissionListTab({
+  resourceType,
+  resourceId,
+  refreshKey,
+  prefetchedGrantableModels,
+  prefetchedGrantableModelsLoaded = false,
+  prefetchedUseDefaultModels = false,
+  skipGrantableModelsRequest = false,
+  fixedSubjectType,
+}: PermissionListTabProps) {
+  const { t } = useTranslation('permission')
+  const { message } = useToast()
+  const [entries, setEntries] = useState<PermissionEntry[]>([])
+  const [listTab, setListTab] = useState<ListSubjectType>(fixedSubjectType ?? 'user')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
+  const [grantableModels, setGrantableModels] = useState<RelationModel[]>(prefetchedGrantableModels || [])
+  const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels)
+  const [userSelectedTab, setUserSelectedTab] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isListScrolling, setIsListScrolling] = useState(false)
+  const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError(false)
+    const res = await captureAndAlertRequestErrorHoc(
+      getResourcePermissions(resourceType, resourceId),
+      () => { setError(true); return true },
+    )
+    if (res) {
+      setEntries(res)
+    }
+    setLoading(false)
+  }, [resourceType, resourceId])
+
+  useEffect(() => { loadData() }, [loadData, refreshKey])
+
+  const subjectEntries = useMemo(
+    () => entries.filter((entry) => entry.subject_type === listTab),
+    [entries, listTab],
+  )
+  const ownerEntryCount = useMemo(
+    () => entries.filter((entry) => entry.subject_type === 'user' && entry.relation === 'owner').length,
+    [entries],
+  )
+
+  useEffect(() => {
+    setListTab(fixedSubjectType ?? 'user')
+    setUserSelectedTab(false)
+    setSearchQuery('')
+  }, [resourceId, fixedSubjectType])
+
+  useEffect(() => {
+    if (fixedSubjectType || userSelectedTab || entries.length === 0 || subjectEntries.length > 0) return
+    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((subjectType) =>
+      entries.some((entry) => entry.subject_type === subjectType),
+    )
+    if (firstNonEmptyTab) setListTab(firstNonEmptyTab)
+  }, [entries, fixedSubjectType, subjectEntries.length, userSelectedTab])
+
+  useEffect(() => {
+    return () => {
+      if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (skipGrantableModelsRequest) {
+      if (!prefetchedGrantableModelsLoaded) return
+      setGrantableModels(prefetchedGrantableModels || [])
+      setUseDefaultModels(prefetchedUseDefaultModels)
+      return
+    }
+
+    captureAndAlertRequestErrorHoc(
+      getGrantableRelationModelsApi(resourceType, resourceId),
+      () => true,
+    ).then((res) => {
+      if (res === false) {
+        setUseDefaultModels(false)
+        setGrantableModels([])
+        return
+      }
+      if (!res) return
+      setUseDefaultModels(false)
+      setGrantableModels(res)
+    })
+  }, [
+    prefetchedGrantableModels,
+    prefetchedGrantableModelsLoaded,
+    prefetchedUseDefaultModels,
+    refreshKey,
+    resourceId,
+    resourceType,
+    skipGrantableModelsRequest,
+  ])
+
+  const grantableModelOptions = useMemo<RelationModelOption[]>(() => {
+    if (useDefaultModels) return DEFAULT_MODELS
+
+    return grantableModels.map((model) => ({
+      id: model.id,
+      name: model.is_system ? t(`level.${model.relation}`, { defaultValue: model.relation }) : model.name,
+      relation: model.relation as RelationLevel,
+    }))
+  }, [grantableModels, t, useDefaultModels])
+
+  const displayModels = useMemo<RelationModelOption[]>(() => {
+    const opts = [...grantableModelOptions]
+    const ids = new Set(opts.map((option) => option.id))
+    for (const entry of entries) {
+      if (!entry.model_id || ids.has(entry.model_id)) continue
+      ids.add(entry.model_id)
+      opts.push({
+        id: entry.model_id,
+        name: entry.model_name || entry.relation,
+        relation: entry.relation as RelationLevel,
+      })
+    }
+    return opts.length ? opts : DEFAULT_MODELS
+  }, [entries, grantableModelOptions])
+
+  // F038: the backend already resolves a department's full ancestor path into
+  // subject_name (父/子/孙), so no per-grant path-tree lookup is needed here.
+  function getEntryDisplayName(entry: PermissionEntry) {
+    return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`
+  }
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase()
+  const visibleEntries = useMemo(() => {
+    if (!normalizedSearchQuery) return subjectEntries
+
+    return subjectEntries.filter((entry) => {
+      const name = getEntryDisplayName(entry).toLowerCase()
+      const groupNames = entry.subject_group_names?.join(' ') ?? ''
+      const memberNames = entry.subject_member_names?.join(' ') ?? ''
+      const includeChildrenText =
+        entry.subject_type === 'department' && entry.include_children ? t('includeChildren') : ''
+      return `${name} ${groupNames} ${memberNames} ${includeChildrenText}`
+        .toLowerCase()
+        .includes(normalizedSearchQuery)
+    })
+  }, [normalizedSearchQuery, subjectEntries, t])
+
+  const handleModify = async (entry: PermissionEntry, modelId: string) => {
+    const model = grantableModelOptions.find((item) => item.id === modelId)
+    const newLevel = (model?.relation || 'viewer') as RelationLevel
+    if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return
+    const res = await captureAndAlertRequestErrorHoc(
+      authorizeResource(
+        resourceType, resourceId,
+        [{
+          subject_type: entry.subject_type,
+          subject_id: entry.subject_id,
+          relation: newLevel,
+          model_id: modelId,
+          ...(entry.subject_type === 'department'
+            ? { include_children: Boolean(entry.include_children) }
+            : {}),
+        }],
+        [{
+          subject_type: entry.subject_type,
+          subject_id: entry.subject_id,
+          relation: entry.relation,
+          ...(entry.subject_type === 'department'
+            ? { include_children: Boolean(entry.include_children) }
+            : {}),
+        }],
+      ),
+      () => {
+        if (entry.relation !== 'owner') return false
+        message({ title: t('error.lastOwner'), variant: 'error' })
+        return true
+      },
+    )
+    if (res !== false) {
+      message({ title: t('success.modify'), variant: 'success' })
+      loadData()
+    }
+  }
+
+  const getSubjectEntries = useCallback(
+    (entry: PermissionEntry) =>
+      entries.filter(
+        (candidate) =>
+          candidate.subject_type === entry.subject_type &&
+          candidate.subject_id === entry.subject_id,
+      ),
+    [entries],
+  )
+
+  const canManageEntry = useCallback(
+    (entry: PermissionEntry) => {
+      const currentModelId = entry.model_id || entry.relation
+      return grantableModelOptions.some((model) => model.id === currentModelId)
+    },
+    [grantableModelOptions],
+  )
+
+  const canDeleteSubject = useCallback(
+    (entry: PermissionEntry) => {
+      if (!canManageEntry(entry)) return false
+      const relatedEntries = getSubjectEntries(entry)
+      if (relatedEntries.some((candidate) => !canManageEntry(candidate))) return false
+      const subjectOwnerCount = relatedEntries.filter(
+        (candidate) => candidate.subject_type === 'user' && candidate.relation === 'owner',
+      ).length
+      return subjectOwnerCount === 0 || ownerEntryCount > subjectOwnerCount
+    },
+    [canManageEntry, getSubjectEntries, ownerEntryCount],
+  )
+
+  const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
+    const seen = new Set<string>()
+    return getSubjectEntries(entry).reduce<RevokeItem[]>((items, candidate) => {
+      const includeChildrenValues =
+        candidate.subject_type === 'department'
+          ? (candidate.include_children ? [true, false] : [false])
+          : [undefined]
+
+      for (const includeChildren of includeChildrenValues) {
+        const key = [
+          candidate.subject_type,
+          candidate.subject_id,
+          candidate.relation,
+          includeChildren === undefined ? '' : String(includeChildren),
+        ].join(':')
+        if (seen.has(key)) continue
+        seen.add(key)
+        items.push({
+          subject_type: candidate.subject_type,
+          subject_id: candidate.subject_id,
+          relation: candidate.relation,
+          ...(candidate.subject_type === 'department'
+            ? { include_children: includeChildren }
+            : {}),
+        })
+      }
+      return items
+    }, [])
+  }
+
+  const handleDeleteSubject = (entry: PermissionEntry) => {
+    bsConfirm({
+      desc: t('action.confirmRevoke'),
+      onOk(next) {
+        const revokes = buildRevokeItemsForSubject(entry)
+        if (revokes.length === 0) {
+          next()
+          return
+        }
+        captureAndAlertRequestErrorHoc(
+          authorizeResource(resourceType, resourceId, [], revokes),
+          () => {
+            if (entry.relation !== 'owner') return false
+            message({ title: t('error.lastOwner'), variant: 'error' })
+            return true
+          },
+        ).then((res) => {
+          if (res !== false) {
+            message({ title: t('success.revoke'), variant: 'success' })
+            loadData()
+          }
+        })
+        next()
+      },
+    })
+  }
+
+  const subjectLabel = (type: ListSubjectType) => {
+    const map: Record<ListSubjectType, string> = {
+      user: t('subject.user'),
+      department: t('subject.department'),
+      user_group: t('subject.userGroup'),
+    }
+    return map[type]
+  }
+
+  const getPermissionLabel = (entry: PermissionEntry) => {
+    const currentModelId = entry.model_id || entry.relation
+    return (
+      displayModels.find((item) => item.id === currentModelId)?.name ||
+      entry.model_name ||
+      t(`level.${entry.relation}`, { defaultValue: entry.relation })
+    )
+  }
+
+  const getSearchPlaceholder = (type: ListSubjectType) => {
+    const map: Record<ListSubjectType, string> = {
+      user: t('search.user'),
+      department: t('search.department'),
+      user_group: t('search.userGroup'),
+    }
+    return map[type]
+  }
+
+  const getEntryCaption = (entry: PermissionEntry) => {
+    if (entry.subject_type === 'user') {
+      return entry.subject_group_names?.join('、') ?? ''
+    }
+    if (entry.subject_type === 'department') {
+      return entry.include_children
+        ? `${t('subject.department')} · ${t('includeChildren')}`
+        : t('subject.department')
+    }
+    return entry.subject_member_names?.join('、') ?? t('subject.userGroup')
+  }
+
+  const getAvatarLabel = (name: string) => {
+    const trimmed = name.trim()
+    return (trimmed.charAt(0) || 'U').toUpperCase()
+  }
+
+  const handleListScroll = () => {
+    setIsListScrolling(true)
+    if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current)
+    listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-12">
+        <span className="text-sm text-muted-foreground">{t('error.permissionDenied')}</span>
+        <button
+          className="flex items-center gap-1 text-sm text-primary hover:underline"
+          onClick={loadData}
+        >
+          <RotateCcw className="h-3.5 w-3.5" /> {t('retry', { ns: 'bs' })}
+        </button>
+      </div>
+    )
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="py-12 text-center text-sm text-muted-foreground">
+        {t('empty.permissions')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {!fixedSubjectType && (
+        <div className="flex w-fit shrink-0 gap-1 rounded-md bg-muted p-1">
+          {LIST_SUBJECT_TYPES.map((subjectType) => (
+            <button
+              key={subjectType}
+              type="button"
+              className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                listTab === subjectType
+                  ? 'bg-background text-foreground shadow'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => {
+                setUserSelectedTab(true)
+                setListTab(subjectType)
+                setSearchQuery('')
+              }}
+            >
+              {subjectLabel(subjectType)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", !fixedSubjectType && "mt-4")}>
+        <div className="relative shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={getSearchPlaceholder(listTab)}
+            className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          />
+        </div>
+
+        <div
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          onScroll={handleListScroll}
+          data-scrolling={isListScrolling ? "true" : "false"}
+        >
+          {visibleEntries.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              {normalizedSearchQuery && listTab === 'user'
+                ? t('empty.searchResults')
+                : t('list.emptyForSubject')}
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {visibleEntries.map((entry, index) => {
+                const Icon = SUBJECT_ICONS[entry.subject_type] || User
+                const currentModelId = entry.model_id || entry.relation
+                const isOwner = entry.relation === 'owner'
+                const canManageOwnerEntry = isOwner && ownerEntryCount > 1
+                const canModifyEntry = canManageEntry(entry) && grantableModelOptions.length > 0
+                const canDeleteEntrySubject = canDeleteSubject(entry)
+                const displayName = getEntryDisplayName(entry)
+                const entryCaption = getEntryCaption(entry)
+
+                return (
+                  <div
+                    key={`${entry.subject_type}-${entry.subject_id}-${index}`}
+                    className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
+                  >
+                    <div className="flex w-[200px] shrink-0 items-center gap-2">
+                      {entry.subject_type === 'user' ? (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-[14px] font-bold leading-[14px] text-white">
+                          {getAvatarLabel(displayName)}
+                        </span>
+                      ) : (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#335CFF]">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                      )}
+                      <TruncatedTip content={displayName} styleClasses="z-[120]" className="truncate text-[14px] leading-[22px] text-[#212121]">
+                        {displayName}
+                      </TruncatedTip>
+                    </div>
+
+                    <TruncatedTip content={entryCaption} styleClasses="z-[120]" as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                      {entryCaption}
+                    </TruncatedTip>
+
+                    <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
+                      {(canModifyEntry && (!isOwner || canManageOwnerEntry)) || canDeleteEntrySubject ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-[6px] px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
+                            >
+                              <span className="truncate">{getPermissionLabel(entry)}</span>
+                              <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
+                          >
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && grantableModelOptions.map((model) => {
+                              const active = model.id === currentModelId
+                              return (
+                                <DropdownMenuItem
+                                  key={model.id}
+                                  className={cn(
+                                    "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
+                                    active
+                                      ? "bg-[#E6EDFC] text-[#335CFF] focus:bg-[#E6EDFC] focus:text-[#335CFF]"
+                                      : "text-[#212121] focus:bg-[#F7F7F7] focus:text-[#212121]",
+                                  )}
+                                  onSelect={() => {
+                                    void handleModify(entry, model.id)
+                                  }}
+                                >
+                                  {model.name}
+                                </DropdownMenuItem>
+                              )
+                            })}
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && canDeleteEntrySubject && (
+                              <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
+                            )}
+                            {canDeleteEntrySubject && (
+                              <DropdownMenuItem
+                                className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] focus:bg-[#FFF2F0] focus:text-[#F53F3F]"
+                                onSelect={() => handleDeleteSubject(entry)}
+                              >
+                                {t('action.remove')}
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
+                          {getPermissionLabel(entry)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -18,7 +18,7 @@ export default function FileTypeSelect({ data, onChange, i18nPrefix }: FileTypeS
     const { t } = useTranslation('flow')
     const [options] = useState([
         {
-            label: t('document') + '（pdf、txt、md、html、xls、xlsx、doc、docx、ppt、pptx）',
+            label: t('document') + '（pdf、ofd、txt、md、html、xls、xlsx、doc、docx、ppt、pptx）',
             value: 'file'
         },
         {

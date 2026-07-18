@@ -10,12 +10,12 @@ import jwt
 from pydantic import ConfigDict, model_validator, Field
 
 from bisheng_langchain.utils.requests import Requests
-from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain.chat_models.base import BaseChatModel
-from langchain.schema import ChatGeneration, ChatResult
-from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
+from langchain_classic.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+from langchain_classic.chat_models.base import BaseChatModel
+from langchain_classic.schema import ChatGeneration, ChatResult
+from langchain_classic.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
-from langchain.utils import get_from_dict_or_env
+from langchain_classic.utils import get_from_dict_or_env
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 

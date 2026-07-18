@@ -8,6 +8,8 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class DatasetBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True, description='Create Userid')
     name: str = Field(index=True, description='Dataset Name')
@@ -17,7 +19,7 @@ class DatasetBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class Dataset(DatasetBase, table=True):

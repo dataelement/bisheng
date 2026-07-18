@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
-import { Search, ArrowLeft } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
+import { Search } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
+import { Outlined } from "bisheng-icons";
 import { Input } from "~/components/ui/Input";
-import { Button } from "~/components/ui/Button";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
-import { useLocalize } from "~/hooks";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { useLocalize, useMediaQuery } from "~/hooks";
+import { cn } from "~/utils";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
@@ -39,10 +42,14 @@ interface ChannelSquareProps {
   subscribeApi?: (id: string) => Promise<any>;
   /** Bump to force a full reload of the square list (e.g. after subscribe in preview drawer). */
   refreshKey?: number;
+  /** H5: render the top bar (hamburger). The 频道/广场 toggle is a persistent
+   *  single instance rendered above both views (Subscription/index), not here. */
+  isH5?: boolean;
+  /** H5: open the mobile system menu (hamburger). */
+  onOpenMobileNav?: () => void;
 }
 
-export default function ChannelSquare({
-  onBack,
+function ChannelSquare({
   title,
   subtitle,
   searchPlaceholder,
@@ -52,16 +59,30 @@ export default function ChannelSquare({
   fetchApi,
   subscribeApi,
   refreshKey = 0,
+  isH5 = false,
+  onOpenMobileNav,
 }: ChannelSquareProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMorePage, setHasMorePage] = useState(true);
   const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Track only the very first page-1 fetch so the empty state never flashes
+  // before data arrives. Subsequent search/refresh reloads keep the existing
+  // list (search filters client-side), so we don't re-enter the loading view.
+  const [initialLoading, setInitialLoading] = useState(true);
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
+
+  // 卡片每行列数自适应，与应用广场保持一致：lg+ 3 列，md 2 列，窄屏 1 列
+  const isAtLeast768 = useMediaQuery("(min-width: 768px)");
+  const isAtLeast1024 = useMediaQuery("(min-width: 1024px)");
+  const squareCols = useMemo(() => {
+    if (isAtLeast1024) return 3;
+    if (isAtLeast768) return 2;
+    return 1;
+  }, [isAtLeast768, isAtLeast1024]);
 
   const tTitle = title || localize("com_subscription.explore_channel_plaza");
   const tSubtitle = subtitle || localize("com_subscription.explore_more_channel");
@@ -195,6 +216,8 @@ export default function ChannelSquare({
         setPage(nextPage);
       } catch {
         // 出错时不打断现有列表
+      } finally {
+        if (nextPage === 1) setInitialLoading(false);
       }
     },
     [searchQuery]
@@ -230,37 +253,55 @@ export default function ChannelSquare({
     [hasMorePage, loadingMore, load, page]
   );
 
-  // 将频道分成每行3个
-  const channelRows: typeof visibleChannels[] = [];
-  for (let i = 0; i < visibleChannels.length; i += 3) {
-    channelRows.push(visibleChannels.slice(i, i + 3));
-  }
-
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
+      {/* H5 顶部栏：侧栏按钮。频道/广场 切换器为跨视图常驻单实例（见 Subscription/index）。
+          底色与下方头部带一致（brand 5%）并跟随主题，让顶栏与广场头部连成一片（仅移动端·广场）。 */}
+      {isH5 ? (
+        <div className="shrink-0 bg-blue-500/[0.05] pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+          <div className="relative flex h-11 items-center px-4">
+            {onOpenMobileNav ? (
+              <button
+                type="button"
+                aria-label={localize("com_nav_open_sidebar")}
+                onClick={onOpenMobileNav}
+                className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+              >
+                <Outlined.SidebarMenu className="size-5" />
+              </button>
+            ) : (
+              <div className="size-5 shrink-0" aria-hidden />
+            )}
+            {/* 频道/广场 切换器为跨视图常驻单实例（见 Subscription/index），
+                屏幕居中悬浮在此行之上，这里不再各自渲染。 */}
+          </div>
+        </div>
+      ) : null}
       {/* 头部区域 */}
       <div
-        className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
-        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel.svg)` }}
+        className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
       >
-
-        {/* 返回按钮：固定在头部左上，不跟随居中容器偏移 */}
-        {onBack && (
-          <div className="absolute left-4 top-4 z-10">
-            <Button
-              variant="ghost"
-              onClick={onBack}
-              className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#165DFF]"
-            >
-              <ArrowLeft className="size-3.5" />
-            </Button>
-          </div>
-        )}
+        {/* Decorative scattered icons — kept from the original banner art, recolored
+            via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-blue-200"
+          style={{
+            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel-icons.svg)`,
+            maskImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel-icons.svg)`,
+            WebkitMaskSize: "cover",
+            maskSize: "cover",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+          }}
+        />
 
         {/* 主要内容 */}
         <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
 
-          <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">
+          <h1 className="mb-1 text-[26px] font-semibold text-blue-500">
             {tTitle}
           </h1>
           <p className="text-[13px] text-[#86909C]">
@@ -271,41 +312,44 @@ export default function ChannelSquare({
 
       {/* 频道列表区域 */}
       <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
+        className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
         onScroll={handleListScroll}
       >
-        <div className="relative mx-auto mb-6 mt-6 w-full max-w-[480px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-          <Input
-            type="text"
-            placeholder={tSearchPlaceholder}
-            value={searchQuery}
-            onChange={handleSearch}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                // 回车触发，当前为实时搜索，保留该交互语义
-              }
-            }}
-            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
-          />
+        <div className={cn("mx-auto mb-6 mt-6 w-full max-w-[480px]", isH5 && "px-4")}>
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
+            <Input
+              type="text"
+              placeholder={tSearchPlaceholder}
+              value={searchQuery}
+              onChange={handleSearch}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  // 回车触发，当前为实时搜索，保留该交互语义
+                }
+              }}
+              className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+            />
+          </div>
         </div>
-        <div className="max-w-[1032px] mx-auto px-4 pb-4 pt-0">
+        <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 
-          {channelRows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
-              <img
-                className="size-[120px] mb-3 object-contain opacity-90"
-                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                alt="empty"
-              />
-              <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
+          {initialLoading ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+              <LoadingIcon className="size-20 text-primary" />
+            </div>
+          ) : visibleChannels.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+              <EmptyStateIllustration className="size-[120px] mb-4" />
+              <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {channelRows.map((row, rowIndex) => (
-                <div key={rowIndex} className="flex gap-3">
-                  {row.map((channel) => (
+              <div
+                className="grid gap-3"
+                style={{ gridTemplateColumns: `repeat(${squareCols}, minmax(0, 1fr))` }}
+              >
+                {visibleChannels.map((channel) => (
                     <ChannelSquareCard
                       key={channel.id}
                       title={channel.title}
@@ -320,17 +364,8 @@ export default function ChannelSquare({
                       onPreview={() => onPreviewChannel?.(channel.id)}
                       onAction={() => handleJoinChannel(channel.id, channel.title)}
                     />
-                  ))}
-                  {/* 补充空白卡片以保持布局 */}
-                  {row.length < 3 && (
-                    <>
-                      {Array.from({ length: 3 - row.length }).map((_, i) => (
-                        <div key={`empty-${i}`} className="flex-1 min-w-0" />
-                      ))}
-                    </>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
               <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
                 {loadingMore
                   ? "加载中..."
@@ -345,3 +380,8 @@ export default function ChannelSquare({
     </div>
   );
 }
+
+// memo: skip re-render when parent (Subscription) re-renders due to navigate/
+// location changes. Combined with useCallback'd onPreviewChannel/onBack in the
+// parent, this stops the card list from repainting (flashing) on card click.
+export default memo(ChannelSquare);

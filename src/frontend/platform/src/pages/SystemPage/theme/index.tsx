@@ -7,6 +7,9 @@ import HSLitem from "./HSLitem";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { Label } from "@/components/bs-ui/label";
 import { useTranslation } from "react-i18next";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
+import BrandCustomization from "./BrandCustomization";
+import WorkbenchThemeSettings from "./WorkbenchThemeSettings";
 
 // Default theme configuration
 const defaultTheme = {
@@ -58,7 +61,7 @@ const themeKeys = {
     '--black-button': 'theme.blackButton',
 };
 
-export default function Theme() {
+function ThemeColorSettings() {
     const [theme, setTheme] = useState(Object.keys(window.ThemeStyle.comp).length ? window.ThemeStyle.comp : { ...defaultTheme });
     const [bg, setBg] = useState(window.ThemeStyle.bg || 'logo')
     const { t } = useTranslation()
@@ -132,3 +135,26 @@ export default function Theme() {
         </div>
     </div>
 };
+
+export default function Theme() {
+    const { t } = useTranslation();
+
+    return (
+        <Tabs defaultValue="brand" className="flex h-full min-h-0 flex-1 flex-col">
+            <TabsList className="mt-2 shrink-0 self-start">
+                <TabsTrigger value="brand">{t("theme.brandCustomization")}</TabsTrigger>
+                <TabsTrigger value="workbench">{t("theme.workbenchTheme")}</TabsTrigger>
+                <TabsTrigger value="themeColor">{t("theme.adminTheme")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="brand" className="min-h-0 flex-1 overflow-hidden">
+                <BrandCustomization />
+            </TabsContent>
+            <TabsContent value="workbench" className="min-h-0 flex-1 overflow-auto">
+                <WorkbenchThemeSettings />
+            </TabsContent>
+            <TabsContent value="themeColor" className="min-h-0 flex-1 overflow-auto">
+                <ThemeColorSettings />
+            </TabsContent>
+        </Tabs>
+    );
+}

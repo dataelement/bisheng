@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from langchain_core.documents import Document
 
@@ -14,18 +13,19 @@ class LocalPdfLoader(BaseBishengLoader):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
 
         md_file_name, local_image_dir, doc_id = pdf_handler(self.tmp_dir, self.file_path)
 
         if not os.path.exists(md_file_name):
-            raise Exception(f"failed to convert pdf to md, please check server log")
+            raise Exception("failed to convert pdf to md, please check server log")
 
         if self.retain_images and os.path.exists(local_image_dir):
             self.local_image_dir = local_image_dir
 
         post_processing(md_file_name, self.retain_images)
 
-        with open(md_file_name, "r", encoding="utf-8") as f:
+        with open(md_file_name, encoding="utf-8") as f:
             content = f.read()
+        content = self.rewrite_local_image_refs(content)
         return [Document(page_content=content, metadata=self.file_metadata.copy())]

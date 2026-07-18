@@ -6,9 +6,32 @@ from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.v1.schemas import AddChatMessages, ChatInput
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
+from bisheng.common.errcode.tenant_sharing import TenantContextMissingError
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, LikedType
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
+
+
+def _resolve_leaf_tenant_id(login_user: UserPayload) -> int:
+    """F017 §5.4: resolve the leaf tenant id for derived-data writes.
+
+    Priority (INV-T13):
+      1. ``get_current_tenant_id()`` — the ContextVar set by F012's HTTP /
+         WS / Celery middleware. This is the authoritative read-time
+         tenant (admin-scope override > JWT leaf).
+      2. ``login_user.tenant_id`` — fall back to the JWT payload so a unit
+         test or a synchronous call path without the middleware still
+         writes *some* tenant, but only when login_user was supplied.
+    Raises ``TenantContextMissingError`` (19504) when both are absent;
+    that refusal is spec AC-11's guard against NULL-tenant derived data.
+    """
+    tid = get_current_tenant_id()
+    if tid is not None:
+        return tid
+    if login_user is not None and getattr(login_user, 'tenant_id', None) is not None:
+        return login_user.tenant_id
+    raise TenantContextMissingError()
 
 
 class ChatMessageService:
@@ -19,6 +42,11 @@ class ChatMessageService:
         """Add a Q&A message pair. Creates session if needed.
 
         Returns the saved message list.
+
+        F017 §5.4: both messages carry ``tenant_id = user's leaf tenant``
+        (NOT the resource tenant). Child users talking to a Root-shared
+        assistant produce Child-owned messages, keeping Root's quota usage
+        free of Child traffic (INV-T13).
         """
         import json
 
@@ -27,6 +55,9 @@ class ChatMessageService:
         chat_id = data.chat_id
         if not chat_id or not flow_id:
             raise ServerError.http_exception()
+
+        # F017 AC-11: refuse to persist derived data with a NULL tenant.
+        leaf_tenant_id = _resolve_leaf_tenant_id(login_user)
 
         save_human_message = data.human_message
         flow_info = FlowDao.get_flow_by_id(flow_id)
@@ -47,6 +78,7 @@ class ChatMessageService:
             sensitive_status=SensitiveStatus.VIOLATIONS.value,
             type='human',
             category='question',
+            tenant_id=leaf_tenant_id,
         )
         bot_message = ChatMessage(
             flow_id=flow_id,
@@ -57,6 +89,7 @@ class ChatMessageService:
             sensitive_status=SensitiveStatus.PASS.value,
             type='bot',
             category='answer',
+            tenant_id=leaf_tenant_id,
         )
         message_dbs = ChatMessageDao.insert_batch([human_message, bot_message])
         MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
@@ -65,6 +98,40 @@ class ChatMessageService:
         ChatSessionService.get_or_create_session(chat_id, flow_id, login_user, request_ip)
 
         return message_dbs
+
+    @staticmethod
+    async def acreate(
+        user_id: int,
+        chat_id: str,
+        flow_id: str,
+        message: str,
+        *,
+        is_bot: bool = False,
+        category: str = 'question',
+        msg_type: str = 'human',
+        sensitive_status: int = SensitiveStatus.VIOLATIONS.value,
+        login_user: Optional[UserPayload] = None,
+    ) -> ChatMessage:
+        """F017 §5.4 derived-data writer (new async path).
+
+        Forces ``tenant_id = get_current_tenant_id()`` (user leaf, not
+        resource tenant). Raises ``TenantContextMissingError`` when
+        context is missing — callers must not paper over a None.
+        """
+        leaf_tenant_id = _resolve_leaf_tenant_id(login_user)
+        chat_message = ChatMessage(
+            flow_id=flow_id,
+            chat_id=chat_id,
+            user_id=user_id,
+            is_bot=is_bot,
+            message=message,
+            sensitive_status=sensitive_status,
+            type=msg_type,
+            category=category,
+            tenant_id=leaf_tenant_id,
+        )
+        # Reuse sync insert (DAO lacks async insert_one for ChatMessage).
+        return ChatMessageDao.insert_batch([chat_message])[0]
 
     @staticmethod
     def update_message(

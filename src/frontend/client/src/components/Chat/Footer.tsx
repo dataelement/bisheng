@@ -84,7 +84,7 @@ export default function Footer({ className }: { className?: string }) {
     <div
       className={
         className ??
-        'relative flex items-center justify-center gap-2 px-2 py-2 text-center text-xs text-text-primary md:px-[60px]'
+        'relative flex items-center justify-center gap-2 px-2 py-2 text-center text-xs text-text-primary touch-desktop:px-[60px]'
       }
       role="contentinfo"
     >

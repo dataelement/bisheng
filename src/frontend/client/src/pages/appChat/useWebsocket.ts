@@ -1,10 +1,10 @@
 "use client"
 import { useEffect, useRef } from "react"
-import { useRecoilState } from "recoil"
+import { useRecoilState, useRecoilValue } from "recoil"
 import { NotificationSeverity } from "~/common"
 import { useLocalize, useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
-import { submitDataState } from "./store/atoms"
+import { chatApiVersionState, submitDataState } from "./store/atoms"
 import { appConversationsState } from "./store/appSidebarAtoms"
 import { genTitle } from "~/api/chat/data-service"
 
@@ -59,6 +59,7 @@ export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
     const [, setAppConversations] = useRecoilState(appConversationsState)
+    const apiVersion = useRecoilValue(chatApiVersionState)
     const localize = useLocalize()
 
     const websocket = wsMap.get(helpers.chatId)
@@ -77,7 +78,7 @@ export const useWebSocket = (helpers) => {
         if (hasGeneratedTitleRef.current[chatId]) return
         hasGeneratedTitleRef.current[chatId] = true
 
-        genTitle({ conversationId: chatId })
+        genTitle({ conversationId: chatId }, apiVersion)
             .then((res: { title?: string }) => {
                 if (!res?.title) return
                 // Update the sidebar conversation list with the new title

@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2, Pause, Volume2 } from "lucide-react"
+import { Outlined } from "bisheng-icons"
 import { textToSpeech } from "~/api"
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider"
 import { useToastContext } from "~/Providers"
@@ -17,7 +17,7 @@ interface TextToSpeechButtonProps {
 }
 
 export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechButtonProps) => {
-    const { activeMessageId, isLoadingAudio, isPlaying, playAudio, setActiveMessageId, pauseAudio, resumeAudio, stopAudio, setIsLoadingAudio } = useAudioPlayer()
+    const { activeMessageId, isLoadingAudio, isPlaying, playAudio, pauseAudio, resumeAudio } = useAudioPlayer()
     const { showToast } = useToastContext()
 
     // Check current message playback state
@@ -46,12 +46,18 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
             return `${__APP_ENV__.BASE_URL}${audioPath}`
         } catch (error) {
             console.error("Failed to fetch audio URL:", error)
-            throw new Error("Audio generation failed")
+            // Re-throw as-is (not wrapped) so a backend business error (e.g. TTS
+            // synthesis failure, code 10026) keeps its status_code — the request
+            // interceptor already toasted the localized message for those; the
+            // caller only needs to fall back to a generic toast for other errors.
+            throw error
         }
     }
 
     // Handle play/pause action
-    const handlePlayPause = async () => {
+    const handlePlayPause = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+        event?.preventDefault()
+        event?.stopPropagation()
         try {
             // If this is the current message
             if (isCurrentMessage) {
@@ -63,18 +69,20 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
                 return
             }
 
-            setActiveMessageId(messageId)
-            setIsLoadingAudio(true)
-            // If this is a new message, fetch audio and play
-            const audioUrl = await fetchAudioUrl(text)
-            playAudio(messageId, audioUrl)
+            // New message: the store stops any currently-playing audio at once,
+            // fetches, then plays — discarding the result if the user starts
+            // another playback while this fetch is in flight (token guard).
+            await playAudio(messageId, () => fetchAudioUrl(text))
         } catch (error) {
             console.error("Failed to play audio:", error)
-            showToast({ message: "播放功能不可用，请联系管理员", status: "error" })
-
-            // Clean up state on error
-            if (isCurrentMessage) {
-                stopAudio()
+            // A backend business error (e.g. TTS synthesis failure, code 10026)
+            // already got its localized toast from the request interceptor
+            // (skip403Redirect path) — only show the generic fallback here for
+            // errors that never reached that path (network failure, malformed
+            // response, etc.), so the user doesn't see two toasts. State reset
+            // on error is handled inside the store.
+            if (!(error as any)?.status_code) {
+                showToast({ message: "播放功能不可用，请联系管理员", status: "error" })
             }
         }
     }
@@ -82,31 +90,29 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     // Render icon based on state
     const renderIcon = () => {
         if (isCurrentLoading) {
-            return <Loader2 size={20} strokeWidth={1.8} className="animate-spin text-gray-400" />
+            return <Outlined.Loading size={14} className="animate-spin text-[#818181]" />
         }
 
         if (isCurrentPlaying) {
             return (
-                <Pause
-                    size={20}
-                    strokeWidth={1.8}
-                    className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
+                <Outlined.PlayerPause
+                    size={14}
+                    className="text-[#818181]"
                 />
             )
         }
 
         return (
-            <Volume2
-                size={20}
-                strokeWidth={1.8}
-                className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
+            <Outlined.VolumeNotice
+                size={14}
+                className="text-[#818181]"
             />
         )
     }
 
     // Disabled when tts_model is not configured
     const { data: modelData } = useGetWorkbenchModelsQuery()
-    if (!modelData?.tts_model.id) return null
+    if (!modelData?.tts_model?.id) return null
 
     return (
         <button
@@ -119,6 +125,5 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
         </button>
     )
 }
-
 
 

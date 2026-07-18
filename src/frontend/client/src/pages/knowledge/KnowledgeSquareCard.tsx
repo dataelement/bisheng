@@ -14,6 +14,7 @@ interface KnowledgeSquareCardProps {
     onAction?: () => void;
     onPreview?: () => void;
     isHighlighted?: boolean;
+    isActing?: boolean;
 }
 
 export default function KnowledgeSquareCard({
@@ -22,23 +23,24 @@ export default function KnowledgeSquareCard({
     onAction,
     onPreview,
     isHighlighted = false,
+    isActing = false,
 }: KnowledgeSquareCardProps) {
     const localize = useLocalize();
 
     const getButtonConfig = () => {
         switch (status) {
             case "joined":
-                return { text: localize("subscribed") || localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
+                return { text: localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
             case "pending":
-                return { text: localize("pending") || localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
+                return { text: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
             case "rejected":
-                return { text: localize("rejected") || "已驳回", variant: "secondary" as const, disabled: true };
+                return { text: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: isActing };
             default: {
                 return {
                     // “订阅/申请”动作统一展示为“加入”
                     text: localize("com_knowledge.join"),
                     variant: "outline" as const,
-                    disabled: false,
+                    disabled: isActing,
                 };
             }
         }
@@ -52,11 +54,11 @@ export default function KnowledgeSquareCard({
     return (
         <Card
             className={cn(
-                "group relative flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-[8px] border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-none transition-all",
-                "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover:after:opacity-100",
+                "group relative flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-[8px] border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)] shadow-none transition-all",
+                "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)] fine-pointer:hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
                 isHighlighted &&
-                "border-[1px] border-solid border-[#335CFF] bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
+                "border-[1px] border-solid border-blue-500 bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
             )}
             onClick={onPreview}
         >
@@ -77,9 +79,9 @@ export default function KnowledgeSquareCard({
                         className={cn(
                             "h-[28px] min-h-[28px] px-2.5 text-[12px] font-normal rounded-md flex-shrink-0 ml-2 border",
                             buttonConfig.variant === "secondary" &&
-                            "bg-[#F7F8FA] hover:bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]",
+                            "bg-[#F7F8FA] text-[#86909C] border-[#E5E6EB] fine-pointer:hover:bg-[#F2F3F5]",
                             buttonConfig.variant === "outline" &&
-                            "text-[#4E5969] border-[#E5E6EB] hover:text-[#165DFF] hover:border-[#165DFF]"
+                            "text-[#4E5969] border-[#E5E6EB] fine-pointer:hover:text-blue-500 fine-pointer:hover:border-blue-500"
                         )}
                         onClick={(e) => {
                             e.stopPropagation();
@@ -97,8 +99,8 @@ export default function KnowledgeSquareCard({
                     {space.description || localize("com_knowledge.no_description")}
                 </p>
 
-                <div className="flex items-center gap-2.5 text-[14px] leading-[20px] text-[#86909C]">
-                    <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#86909C] touch-desktop:flex-nowrap touch-desktop:gap-2.5 touch-desktop:text-[14px] touch-desktop:leading-[20px]">
+                    <div className="flex shrink-0 items-center gap-1.5">
                         <Avatar className="border border-white h-5 w-5">
                             {creatorAvatar ? (
                                 <AvatarImage src={creatorAvatar} alt={space.creator} />
@@ -107,10 +109,10 @@ export default function KnowledgeSquareCard({
                         </Avatar>
                     </div>
 
-                    <span>
-                        {space.fileCount} {localize("com_subscription.articles") || localize("com_knowledge.articles_count")}
+                    <span className="whitespace-nowrap">
+                        {space.fileCount}{localize("com_subscription.articles") || localize("com_knowledge.articles_count")}
                     </span>
-                    <span>
+                    <span className="whitespace-nowrap">
                         {space.memberCount}
                         {localize("com_knowledge.users_count")}
                     </span>
@@ -119,4 +121,3 @@ export default function KnowledgeSquareCard({
         </Card>
     );
 }
-

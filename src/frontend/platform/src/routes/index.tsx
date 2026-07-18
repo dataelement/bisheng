@@ -5,6 +5,7 @@ import { LoginPage } from "../pages/LoginPage/login";
 import { ResetPwdPage } from "../pages/LoginPage/resetPwd";
 import Page403 from "../pages/Page403";
 import Page404 from "../pages/Page404";
+import MenuPermissionPlaceholder from "../pages/MenuPermissionPlaceholder";
 import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
 import EditorPage from "@/pages/Dashboard/editor";
@@ -43,8 +44,11 @@ const Finetune = lazy(() => import("@/pages/ModelPage/finetune").then(module => 
 const Management = lazy(() => import("@/pages/ModelPage/manage"));
 const Report = lazy(() => import("@/pages/Report"));
 const SystemPage = lazy(() => import("@/pages/SystemPage"));
+const ApprovalPage = lazy(() => import("@/pages/ApprovalPage"));
 const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const TenantPage = lazy(() => import("@/pages/TenantPage"));
+const TenantSelect = lazy(() => import("@/pages/LoginPage/TenantSelect"));
 
 const baseConfig = {
   //@ts-ignore
@@ -60,6 +64,15 @@ const RedirectToExternalLink = () => {
   return null;
 };
 
+// Redirect standalone chat routes to client app (separate SPA at /workspace)
+const RedirectToClient = () => {
+  useEffect(() => {
+    window.location.replace('/workspace' + window.location.pathname + window.location.search);
+  }, []);
+
+  return null;
+};
+
 const privateRouter = [
   { path: "/", element: <RedirectToExternalLink /> },
   {
@@ -67,6 +80,8 @@ const privateRouter = [
     element: <MainLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
+      // 开发环境登录后曾跳转 /admin，但业务路由无该 path，会落入 * → 404；统一进管理端后再由 userContext 纠偏
+      { path: "admin", element: <Navigate to="/label" replace /> },
       // { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
@@ -78,25 +93,29 @@ const privateRouter = [
       // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
-      { path: "build/client", element: <WorkBenchPage />, permission: 'build' },
+      { path: "build/client", element: <WorkBenchPage />, permission: 'workstation' },
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
-      { path: "build/temps/:type", element: <Templates />, permission: 'build', },
-      { path: "model/management", element: <Management /> },
-      { path: "model/finetune", element: <Finetune /> },
+      { path: "build/temps/:type", element: <Templates />, permission: 'create_app', },
+      { path: "model/management", element: <Management />, permission: 'model' },
+      { path: "model/finetune", element: <Finetune />, permission: 'model' },
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
-      { path: "log", element: <LogPage /> },
-      { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail /> },
-      { path: "log/chatlog/:cid", element: <DailyChatDetail /> },
+      { path: "approval", element: <ApprovalPage />, permission: 'sys' },
+      { path: "log", element: <LogPage />, permission: "log" },
+      { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail />, permission: "log" },
+      { path: "log/chatlog/:cid", element: <DailyChatDetail />, permission: "log" },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },
-      { path: "label", element: <LabelPage /> },
-      { path: "label/:id", element: <TaskApps /> },
-      { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
+      { path: "label", element: <LabelPage />, permission: 'mark_task' },
+      { path: "label/:id", element: <TaskApps />, permission: 'mark_task' },
+      { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats />, permission: 'mark_task' },
       { path: "dashboard", element: <Dashboard /> },
+      { path: "tenant", element: <TenantPage />, permission: 'sys' },
+      { path: "department", element: <Navigate to="/sys" replace /> },
+      { path: "menu-pending", element: <MenuPermissionPlaceholder /> },
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },
@@ -128,23 +147,71 @@ const privateRouter = [
     errorElement: <RouteErrorBoundary />,
     element: <ResoucePage />
   },
-  // 独立会话页
-  { path: "/chat/assistant/auth/:id/", element: <ChatPro type={AppNumType.ASSISTANT} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/flow/auth/:id/", element: <ChatPro type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  // { path: "/chat/skill/auth/:id/", element: <ChatPro />, errorElement: <RouteErrorBoundary /> },
+  // Standalone chat pages — redirect to client app (/workspace)
+  { path: "/chat/assistant/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/flow/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat", element: <SkillChatPage />, errorElement: <RouteErrorBoundary /> },
-  // { path: "/chat/:id/", element: <ChatShare />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/assistant/:id/", element: <ChatAssitantShare />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/report/:id/", element: <Report />, errorElement: <RouteErrorBoundary /> },
   { path: "/diff/:id/:vid/:cid", element: <DiffFlowPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
+  // Backdoor login: also exposed inside privateRouter so an authenticated user
+  // navigating here (e.g. to switch accounts) does not fall into the * -> /404 trap.
+  { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "/404", element: <Page404 /> },
   { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
-export const getPrivateRouter = (permissions) => {
+/** 与角色菜单 third_id 对齐：/sys 路由使用 permission `sys`，角色侧存为 system_config */
+function hasRoutePermission(permissions: string[], key: string) {
+  if (key === "sys") {
+    return permissions.includes("sys") || permissions.includes("system_config")
+  }
+  return permissions.includes(key)
+}
+
+/**
+ * Convert the backend web_menu value into route permissions.
+ *
+ * - Department admins receive a create_app fallback when the backend omits it.
+ * - Child tenant admins receive every admin route except tenant management. Their backend web_menu
+ *   still comes from a regular role, while business APIs retain tenant and resource authorization.
+ */
+const CHILD_ADMIN_ROUTE_PERMISSIONS = [
+  "board",
+  "build",
+  "create_app",
+  "knowledge",
+  "model",
+  "evaluation",
+  "mark_task",
+  "log",
+  "sys",
+  "workstation",
+] as const
+
+export function resolveRoutePermissions(user: {
+  web_menu?: string[]
+  is_department_admin?: boolean | null
+  is_child_admin?: boolean | null
+}): string[] {
+  let perms = user.web_menu ?? []
+  if (user.is_department_admin && !perms.includes("create_app")) {
+    perms = [...perms, "create_app"]
+  }
+  if (user.is_child_admin) {
+    const missing = CHILD_ADMIN_ROUTE_PERMISSIONS.filter((permission) => !perms.includes(permission))
+    if (missing.length) perms = [...perms, ...missing]
+  }
+  return perms
+}
+
+export const getPrivateRouter = (
+  permissions: string[],
+  opts?: { menuApprovalMode?: boolean },
+) => {
   const filterMenuItem = (_privateRouter) => {
     const result = _privateRouter.reduce((res, cur) => {
       // 递归
@@ -153,7 +220,10 @@ export const getPrivateRouter = (permissions) => {
       }
 
       const { permission, ...other } = cur
-      if (permission && !permissions.includes(permission)) {
+      if (permission && !hasRoutePermission(permissions, permission)) {
+        if (opts?.menuApprovalMode) {
+          res.push({ ...other, element: <MenuPermissionPlaceholder /> })
+        }
         return res
       }
 
@@ -175,11 +245,14 @@ export const getAdminRouter = () => {
 
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
+  // Backdoor entry: bypasses SSO auto-redirect when redirect_login_url is configured.
+  { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/:id/", element: <ChatShare />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/assistant/:id/", element: <ChatAssitantShare />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/tenant-select", element: <TenantSelect />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],

@@ -71,3 +71,9 @@ class WorkFlowTaskOtherError(BaseErrorCode):
 class AppWriteAuthError(BaseErrorCode):
     Code: int = 10599
     Msg: str = 'No Apply Write Permission'
+
+
+# F027: cursor-based pagination — cursor parsing/version/context/key-length failed
+class AppInvalidCursorError(BaseErrorCode):
+    Code: int = 10550
+    Msg: str = 'Invalid pagination cursor'

@@ -3,8 +3,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import httpx
 import yaml
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains.llm import LLMChain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.llm import LLMChain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.prompts import ChatPromptTemplate
@@ -67,7 +67,7 @@ class BishengRAGTool:
             llm_object = import_by_type(_type='llms', name=llm_params['type'])
             if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
                 llm_params.pop('type')
-                self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']),
+                self.llm = llm_object(http_client=httpx.Client(proxy=llm_params['openai_proxy']),
                                       **llm_params)
             else:
                 llm_params.pop('type')
@@ -87,7 +87,7 @@ class BishengRAGTool:
             if embedding_params['type'] == 'OpenAIEmbeddings' and embedding_params['openai_proxy']:
                 embedding_params.pop('type')
                 self.embeddings = embedding_object(
-                    http_client=httpx.Client(proxies=embedding_params['openai_proxy']),
+                    http_client=httpx.Client(proxy=embedding_params['openai_proxy']),
                     **embedding_params)
             else:
                 embedding_params.pop('type')
@@ -275,8 +275,8 @@ if __name__ == '__main__':
     # rag_tool = BishengRAGTool(collection_name='rag_finance_report_0_test')
     # rag_tool.file2knowledge(file_path='/home/public/rag_benchmark_finance_report/金融年报财报的来源文件/2021-04-23__金宇生物技术股份有限公司__600201__生物股份__2020年__年度报告.pdf')
 
-    from langchain.chat_models import ChatOpenAI
-    from langchain.embeddings import OpenAIEmbeddings
+    from langchain_classic.chat_models import ChatOpenAI
+    from langchain_classic.embeddings import OpenAIEmbeddings
 
     # embedding
     embeddings = OpenAIEmbeddings(model='text-embedding-ada-002')

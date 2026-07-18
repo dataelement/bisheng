@@ -1,48 +1,61 @@
 import json
 import time
-from typing import List, Any
+from typing import Any
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.documents import Document
-from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
-                                    SystemMessagePromptTemplate)
+from langchain_core.messages import SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    CITATION_PROMPT_RULES,
+    annotate_rag_documents_with_citations,
+    cache_citation_registry_items_sync,
+    collect_rag_citation_registry_items,
+    prompt_has_citation_rules,
+)
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.common.citation_keys import (
+    WORKFLOW_CITATION_REGISTRY_ITEMS_KEY,
+    WORKFLOW_SOURCE_DOCUMENTS_KEY,
+)
 from bisheng.workflow.common.knowledge import RagUtils
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 
 class RagNode(RagUtils):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # analyzingprompt
-        self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
+        self._system_prompt = PromptTemplateParser(template=self.node_params["system_prompt"])
         self._system_variables = self._system_prompt.extract()
-        self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
+        self._user_prompt = PromptTemplateParser(template=self.node_params["user_prompt"])
         self._user_variables = self._user_prompt.extract()
 
         self._qa_prompt = None
 
-        self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
-                                                    temperature=self.node_params.get('temperature', 0.3),
-                                                    app_id=self.workflow_id,
-                                                    app_name=self.workflow_name,
-                                                    app_type=ApplicationTypeEnum.WORKFLOW,
-                                                    user_id=self.user_id)
+        self._llm = LLMService.get_bisheng_llm_sync(
+            model_id=self.node_params["model_id"],
+            temperature=self.node_params.get("temperature", 1),
+            app_id=self.workflow_id,
+            app_name=self.workflow_name,
+            app_type=ApplicationTypeEnum.WORKFLOW,
+            user_id=self.user_id,
+        )
         self._minio_client = get_minio_storage_sync()
 
         # Whether to output the results to the user
-        self._output_user = self.node_params.get('output_user', False)
-        self._output_keys = [one.get("key") for one in self.node_params.get('output_user_input', [])]
+        self._output_user = self.node_params.get("output_user", False)
+        self._output_keys = [one.get("key") for one in self.node_params.get("output_user_input", [])]
 
         # Run Log Data
         self._log_source_documents = {}
@@ -67,7 +80,7 @@ class RagNode(RagUtils):
         for index, question in enumerate(self.user_questions):
             output_key = self._output_keys[index]
             if question is None:
-                question = ''
+                question = ""
             question_answer = self.rag_one_question(question, output_key, unique_id)
             ret[output_key] = question_answer
         return ret
@@ -78,50 +91,71 @@ class RagNode(RagUtils):
             self.init_rerank_model()
             source_documents = self.retrieve_question(question)
         except Exception as e:
-            logger.exception(f'RagNode retrieve_question error: ')
+            logger.exception("RagNode retrieve_question error: ")
             source_documents = [Document(page_content=str(e), metadata={})]
 
         qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
+        source_documents_with_citations = annotate_rag_documents_with_citations(source_documents)
+        citation_items = collect_rag_citation_registry_items(source_documents_with_citations)
+        cache_citation_registry_items_sync(citation_items)
+        self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, source_documents_with_citations)
+        self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+        # Feed the inner QA model the <chunk_id> chunk format (citation_key lives in
+        # <chunk_id>), consistent with the workstation/agent tool output and the citation
+        # rules in the node's system prompt. Keep source_documents_with_citations intact for
+        # the citation registry, source display and logs.
         inputs = {
-            "context": source_documents,
+            "context": [
+                Document(page_content=KnowledgeUtils.format_retrieved_chunk(doc), metadata=doc.metadata)
+                for doc in source_documents_with_citations
+            ],
         }
         if "question" in self._qa_prompt.input_variables:
             inputs["question"] = question
 
         # and one of the reasons thatragIt needs to be traced, so it can't be used universally.llm callbackto return the message. Need to getsource_documentReturn message content after
-        llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
-                                              unique_id=unique_id,
-                                              node_id=self.id,
-                                              node_name=self.name,
-                                              output=self._output_user,
-                                              output_key=output_key,
-                                              cancel_llm_end=True)
+        llm_callback = LLMNodeCallbackHandler(
+            callback=self.callback_manager,
+            unique_id=unique_id,
+            node_id=self.id,
+            node_name=self.name,
+            output=self._output_user,
+            output_key=output_key,
+            cancel_llm_end=True,
+        )
         result = qa_chain.invoke(inputs, config=RunnableConfig(callbacks=[llm_callback]))
 
         if self._output_user:
-            self.graph_state.save_context(content=result, msg_sender='AI')
+            self.graph_state.save_context(content=result, msg_sender="AI")
             if llm_callback.output_len == 0:
                 self.callback_manager.on_output_msg(
-                    OutputMsgData(node_id=self.id,
-                                  name=self.name,
-                                  msg=result,
-                                  unique_id=unique_id,
-                                  output_key=output_key,
-                                  source_documents=source_documents))
+                    OutputMsgData(
+                        node_id=self.id,
+                        name=self.name,
+                        msg=result,
+                        unique_id=unique_id,
+                        output_key=output_key,
+                        source_documents=source_documents_with_citations,
+                        citation_registry_items=citation_items,
+                    )
+                )
             else:
                 # If there is a streaming output, the streaming end event is triggered, Because of the need tosource_documentSo do a streaming end event here
-                self.callback_manager.on_stream_over(StreamMsgOverData(
-                    node_id=self.id,
-                    name=self.name,
-                    msg=result,
-                    reasoning_content=llm_callback.reasoning_content,
-                    unique_id=unique_id,
-                    source_documents=source_documents,
-                    output_key=output_key,
-                ))
+                self.callback_manager.on_stream_over(
+                    StreamMsgOverData(
+                        node_id=self.id,
+                        name=self.name,
+                        msg=result,
+                        reasoning_content=llm_callback.reasoning_content,
+                        unique_id=unique_id,
+                        source_documents=source_documents_with_citations,
+                        citation_registry_items=citation_items,
+                        output_key=output_key,
+                    )
+                )
 
         self._log_reasoning_content[output_key] = llm_callback.reasoning_content
-        self._log_source_documents[output_key] = source_documents
+        self._log_source_documents[output_key] = source_documents_with_citations
         return result
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
@@ -130,67 +164,76 @@ class RagNode(RagUtils):
         user_question_list = self.init_user_question()
         # Determine if the search results exceed a certain length, The reason iswsSending a message that exceeds a certain length will result in an error
         source_documents = [[d.page_content for d in one] for one in self._log_source_documents.values()]
-        tmp_retrieved_type = 'variable'
+        tmp_retrieved_type = "variable"
         tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
-        if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # Lebih dari50kbLog data storage file
-            tmp_retrieved_type = 'file'
-            tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
-            self._minio_client.put_object_tmp_sync(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
-            tmp_retrieved_result = self._minio_client.get_share_link_sync(tmp_object_name,
-                                                                          self._minio_client.tmp_bucket)
+        if len(tmp_retrieved_result.encode("utf-8")) >= 50 * 1024:  # Lebih dari50kbLog data storage file
+            tmp_retrieved_type = "file"
+            tmp_object_name = f"/workflow/source_document/{time.time()}.txt"
+            self._minio_client.put_object_tmp_sync(tmp_object_name, tmp_retrieved_result.encode("utf-8"))
+            tmp_retrieved_result = self._minio_client.get_share_link_sync(
+                tmp_object_name, self._minio_client.tmp_bucket
+            )
 
         for key, val in result.items():
-            if tmp_retrieved_type != 'file':
-                tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]],
-                                                  indent=2, ensure_ascii=False)
+            if tmp_retrieved_type != "file":
+                tmp_retrieved_result = json.dumps(
+                    [one.page_content for one in self._log_source_documents[key]], indent=2, ensure_ascii=False
+                )
             one_ret = [
-                {'key': f'{self.id}.user_question', 'value': user_question_list[index], "type": "variable"},
-                {'key': f'{self.id}.retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
-                {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
-                {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
+                {"key": f"{self.id}.user_question", "value": user_question_list[index], "type": "variable"},
+                {"key": f"{self.id}.retrieved_result", "value": tmp_retrieved_result, "type": tmp_retrieved_type},
+                {"key": "system_prompt", "value": self._log_system_prompt[0], "type": "params"},
+                {"key": "user_prompt", "value": self._log_user_prompt[0], "type": "params"},
             ]
             if self._log_reasoning_content[key]:
-                one_ret.append({'key': 'Thinking about content', 'value': self._log_reasoning_content[key], "type": "params"})
-            one_ret.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
+                one_ret.append(
+                    {"key": "Thinking about content", "value": self._log_reasoning_content[key], "type": "params"}
+                )
+            one_ret.append({"key": f"{self.id}.{key}", "value": val, "type": "variable"})
 
             index += 1
             ret.append(one_ret)
         return ret
 
-    def init_user_question(self) -> List[str]:
+    def init_user_question(self) -> list[str]:
         # Convert all user questions to strings by default
         ret = []
-        for one in self.node_params['user_question']:
+        for one in self.node_params["user_question"]:
             ret.append(f"{self.get_other_node_variable(one)}")
         return ret
 
     def init_qa_prompt(self):
         variable_map = {}
         for one in self._user_variables:
-            if one == f'{self.id}.user_question':
-                variable_map[one] = '$$question$$'
-            elif one == f'{self.id}.retrieved_result':
-                variable_map[one] = '$$context$$'
+            if one == f"{self.id}.user_question":
+                variable_map[one] = "$$question$$"
+            elif one == f"{self.id}.retrieved_result":
+                variable_map[one] = "$$context$$"
             else:
                 variable_map[one] = self.get_other_node_variable(one)
-        if variable_map.get(f'{self.id}.retrieved_result') is None:
-            raise IgnoreException('User prompts must contain retrieved_result Variables')
+        if variable_map.get(f"{self.id}.retrieved_result") is None:
+            raise IgnoreException("User prompts must contain retrieved_result Variables")
         user_prompt = self._user_prompt.format(variable_map)
-        log_user_prompt = user_prompt.replace('$$question$$', '{user_question}').replace('$$context$$',
-                                                                                         '{retrieved_result}')
-        user_prompt = (user_prompt.replace('{', '{{').replace('}', '}}')
-                       .replace('$$question$$', '{question}').replace('$$context$$', '{context}'))
+        log_user_prompt = user_prompt.replace("$$question$$", "{user_question}").replace(
+            "$$context$$", "{retrieved_result}"
+        )
+        user_prompt = (
+            user_prompt.replace("{", "{{")
+            .replace("}", "}}")
+            .replace("$$question$$", "{question}")
+            .replace("$$context$$", "{context}")
+        )
         self._log_user_prompt.append(log_user_prompt)
 
         variable_map = {}
         for one in self._system_variables:
             variable_map[one] = self.get_other_node_variable(one)
         system_prompt = self._system_prompt.format(variable_map)
-        system_prompt.replace('{', '{{').replace('}', '}}')
         self._log_system_prompt.append(system_prompt)
 
-        messages_general = [
-            SystemMessagePromptTemplate.from_template(system_prompt),
-            HumanMessagePromptTemplate.from_template(user_prompt),
-        ]
+        messages_general = [SystemMessage(content=system_prompt)]
+        # Citation-rule backstop: only inject when the node's own system prompt doesn't
+        # already carry the rules (the default template does), so existing nodes keep
+        # citations and updated prompts aren't duplicated.
+        messages_general.append(HumanMessagePromptTemplate.from_template(user_prompt))
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trash2, Check, XIcon } from "lucide-react";
-import { Dialog, DialogContent } from "~/components/ui/Dialog";
+import { Search, Trash2, Check, XIcon } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
@@ -10,20 +10,25 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import type { MessageItem, MessageTab } from "~/api/message";
 import {
-    approveMessageApi,
     deleteMessageApi,
     getMessageListApi,
     markAllMessageReadApi,
     markMessageReadApi,
 } from "~/api/message";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "~/utils";
 import useLocalize, { type TranslationKeys } from "~/hooks/useLocalize";
 
-interface NotificationsDialogProps {
+export interface NotificationsDialogProps {
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    /** Forward-compat: message id to focus when dialog opens (v2 will scroll + highlight). */
+    focusedMessageId?: number | null;
+    onOpenApprovalCenter?: (target: {
+        tab: "my_tasks" | "my_requests";
+        taskId?: number | null;
+        instanceId?: number | null;
+    }) => void;
 }
 
 const PAGE_SIZE = 20;
@@ -43,9 +48,62 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     rejected_knowledge_space: "com_notifications_action_rejected_knowledge_space",
     assigned_knowledge_space_admin: "com_notifications_action_assigned_knowledge_space_admin",
     assigned_channel_admin: "com_notifications_action_assigned_channel_admin",
+    request_department_knowledge_space_upload: "com_notifications_action_request_department_knowledge_space_upload",
+    approved_department_knowledge_space_upload: "com_notifications_action_approved_department_knowledge_space_upload",
+    rejected_department_knowledge_space_upload: "com_notifications_action_rejected_department_knowledge_space_upload",
+    sensitive_rejected_department_knowledge_space_upload: "com_notifications_action_sensitive_rejected_department_knowledge_space_upload",
+    // approval center notifications
+    request_menu_access: "com_notifications_action_request_menu_access",
+    approval_task_pending: "com_notifications_action_approval_task_pending",
+    approval_task_rejected: "com_notifications_action_approval_task_rejected",
+    approval_instance_approved: "com_notifications_action_approval_instance_approved",
+    approval_instance_withdrawn: "com_notifications_action_approval_instance_withdrawn",
+    approval_exception_cancelled: "com_notifications_action_approval_exception_cancelled",
+    approval_exception_route_missing: "com_notifications_action_approval_exception_route_missing",
+    approval_exception_approver_empty: "com_notifications_action_approval_exception_approver_empty",
+    approval_execute_failed: "com_notifications_action_approval_execute_failed",
+    menu_grant_revoked: "com_notifications_action_menu_grant_revoked",
+    revoked_channel_admin: "com_notifications_action_revoked_channel_admin",
+    revoked_knowledge_space_admin: "com_notifications_action_revoked_knowledge_space_admin",
+    removed_channel_member: "com_notifications_action_removed_channel_member",
+    removed_knowledge_space_member: "com_notifications_action_removed_knowledge_space_member",
+    channel_made_private: "com_notifications_action_channel_made_private",
+    knowledge_space_made_private: "com_notifications_action_knowledge_space_made_private",
+    channel_dismissed: "com_notifications_action_channel_dismissed",
+    knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
 };
 
-export function NotificationsDialog({ open = false, onOpenChange }: NotificationsDialogProps) {
+const APPROVAL_CENTER_ACTION_CODES = new Set([
+    "request_menu_access",
+    "approval_task_pending",
+    "approval_task_rejected",
+    "approval_instance_approved",
+    "approval_instance_withdrawn",
+    "approval_exception_cancelled",
+    "approval_exception_route_missing",
+    "approval_exception_approver_empty",
+    "approval_execute_failed",
+    "menu_grant_revoked",
+]);
+
+const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
+    "approval_exception_route_missing",
+    "approval_exception_approver_empty",
+    "approval_execute_failed",
+]);
+
+const APPROVAL_TASK_SCENARIO_TEXT_KEYS: Record<string, string> = {
+    menu_access_request: "com_notifications_action_request_menu_access",
+    channel_subscribe_request: "com_notifications_action_request_channel",
+    knowledge_space_subscribe_request: "com_notifications_action_request_knowledge_space",
+};
+
+export function NotificationsDialog({
+    open = false,
+    onOpenChange,
+    focusedMessageId,
+    onOpenApprovalCenter,
+}: NotificationsDialogProps) {
     const localize = useLocalize();
     const { i18n } = useTranslation();
     const formatMessageTime = (createdAt: string) =>
@@ -67,24 +125,46 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [isNarrowMobileLayout, setIsNarrowMobileLayout] = useState(false);
+    const [canHover, setCanHover] = useState(false);
+    const [hasTouchInput, setHasTouchInput] = useState(false);
+    const isTouchMobile = isNarrowMobileLayout && (hasTouchInput || !canHover);
     const { showToast } = useToastContext();
-    const navigate = useNavigate();
+    // Forward-compat: stores focusedMessageId for v2 scroll-into-view + highlight hookup
+    const focusedMessageIdRef = useRef<number | null>(focusedMessageId ?? null);
+    useEffect(() => {
+        focusedMessageIdRef.current = focusedMessageId ?? null;
+    }, [focusedMessageId]);
+    // v2: wire scroll-into-view + highlight against focusedMessageIdRef
     const requestHoverTimersRef = useRef<Record<string, number>>({});
     const autoReadTimersRef = useRef<Record<string, number>>({});
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
     const notifyAutoReadTimersRef = useRef<Record<string, number>>({});
     const [isScrolling, setIsScrolling] = useState(false);
     const scrollHideTimerRef = useRef<number | null>(null);
-
     const isVisuallyUnread = (n: MessageItem) => !n.is_read;
     const isKnowledgeSpaceApprovalActionCode = (actionCode?: string) =>
         actionCode === "request_knowledge_space" ||
         actionCode === "approved_knowledge_space" ||
         actionCode === "rejected_knowledge_space";
     const isApprovalMessageType = (messageType?: string, actionCode?: string) =>
-        messageType === "request" || messageType === "approve" || isKnowledgeSpaceApprovalActionCode(actionCode);
+        messageType === "request" ||
+        messageType === "approve" ||
+        isKnowledgeSpaceApprovalActionCode(actionCode) ||
+        APPROVAL_CENTER_ACTION_CODES.has(actionCode || "");
     const isPendingApprovalStatus = (status?: string) =>
         !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
+    const getActionCode = (notification: MessageItem): string => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        const part = parts.find((c: any) => c?.type === "system_text");
+        const code = part?.content;
+        if (typeof code === "string" && code.trim()) return code.trim();
+        return notification.action_code || "";
+    };
+    const isPendingApprovalItem = (notification: MessageItem) =>
+        isPendingApprovalStatus(notification.status) ||
+        getActionCode(notification) === "approval_task_pending" ||
+        notification.action_code === "approval_task_pending";
     const isApprovedStatus = (status?: string) =>
         !!status && ["approved", "APPROVED"].includes(status);
     const isRejectedStatus = (status?: string) =>
@@ -97,7 +177,14 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         actionCode === "approved_channel" ||
         actionCode === "rejected_channel" ||
         actionCode === "approved_knowledge_space" ||
-        actionCode === "rejected_knowledge_space";
+        actionCode === "rejected_knowledge_space" ||
+        actionCode === "approved_department_knowledge_space_upload" ||
+        actionCode === "rejected_department_knowledge_space_upload" ||
+        actionCode === "sensitive_rejected_department_knowledge_space_upload" ||
+        actionCode === "approval_instance_approved" ||
+        actionCode === "approval_task_rejected" ||
+        actionCode === "approval_exception_cancelled" ||
+        actionCode === "menu_grant_revoked";
 
     const scanAndScheduleNotifyAutoRead = () => {
         const root =
@@ -137,15 +224,23 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         }
     };
 
-    const unreadCounts = useMemo(() => {
-        const allUnread = notifications.filter(isVisuallyUnread).length;
-        const requestUnread = notifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && isVisuallyUnread(n)
-        ).length;
-        return { all: allUnread, request: requestUnread };
-    }, [notifications]);
-
-    const formatBadge = (n: number) => (n > 99 ? "99+" : String(n));
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const detect = () => {
+            // 断点约定：
+            // - <=768: 走移动端布局样式（含 PC 小屏）
+            // - <=768 且不可 hover / 有触控输入：按触屏交互处理
+            const narrowViewport = window.matchMedia("(max-width: 768px)").matches;
+            const hoverCapable = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+            const touchCapable = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+            setIsNarrowMobileLayout(narrowViewport);
+            setCanHover(hoverCapable);
+            setHasTouchInput(touchCapable);
+        };
+        detect();
+        window.addEventListener("resize", detect);
+        return () => window.removeEventListener("resize", detect);
+    }, []);
 
     const loadNotifications = async (nextPage: number, append: boolean) => {
         if (!append) setLoading(true);
@@ -222,10 +317,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const requestGroups = useMemo(() => {
         if (activeTab !== "request") return { pending: [], approved: [] };
         const pending = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalItem(n)
         );
         const approved = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalItem(n)
         );
         return { pending, approved };
     }, [activeTab, filteredNotifications]);
@@ -250,24 +345,72 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         }
     };
 
-    const handleApproval = async (notificationId: string, status: "approved" | "rejected") => {
-        try {
-            await approveMessageApi({
-                message_id: Number(notificationId),
-                action: status === "approved" ? "agree" : "reject",
-            });
-            await markMessageReadApi([Number(notificationId)]);
-            setNotifications(prev =>
-                prev.map(n =>
-                    String(n.id) === notificationId
-                        ? { ...n, status, is_read: true }
-                        : n
-                )
-            );
-            showToast({ message: localize("com_notifications_toast_success"), severity: NotificationSeverity.SUCCESS });
-        } catch {
-            showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
+    const getApprovalRequestId = (notification: MessageItem): number | null => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            if (metadata?.business_type !== "approval_request_id") continue;
+            const data = metadata?.data ?? {};
+            const rawId =
+                data?.approval_request_id ??
+                metadata?.business_id ??
+                data?.business_id;
+            if (rawId === undefined || rawId === null) continue;
+            const num = Number(rawId);
+            if (!Number.isNaN(num)) return num;
         }
+        return null;
+    };
+
+    const resolveApprovalCenterTarget = (notification: MessageItem) => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        let taskId: number | null = null;
+        let instanceId: number | null = null;
+
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            const data = metadata?.data ?? {};
+            const candidates = [
+                [metadata?.business_type, data],
+                [metadata?.type, data],
+            ] as const;
+
+            for (const [businessType, payload] of candidates) {
+                const normalizedType = String(businessType || "");
+                if (!taskId && /approval_task_id|task_id/i.test(normalizedType)) {
+                    const rawTaskId =
+                        payload?.approval_task_id ??
+                        payload?.task_id ??
+                        metadata?.business_id ??
+                        payload?.business_id;
+                    const parsedTaskId = Number(rawTaskId);
+                    if (Number.isFinite(parsedTaskId)) taskId = parsedTaskId;
+                }
+                if (!instanceId && /approval_instance_id|instance_id|approval_request_id/i.test(normalizedType)) {
+                    const rawInstanceId =
+                        payload?.approval_instance_id ??
+                        payload?.instance_id ??
+                        payload?.approval_request_id ??
+                        metadata?.business_id ??
+                        payload?.business_id;
+                    const parsedInstanceId = Number(rawInstanceId);
+                    if (Number.isFinite(parsedInstanceId)) instanceId = parsedInstanceId;
+                }
+            }
+        }
+
+        const actionCode = getSystemTextCode(notification);
+        const tab =
+            isPendingApprovalStatus(notification.status) ||
+                actionCode === "approval_task_pending" ||
+                actionCode === "request_menu_access"
+                ? "my_tasks"
+                : "my_requests";
+        return {
+            tab,
+            taskId,
+            instanceId: instanceId ?? getApprovalRequestId(notification),
+        } as const;
     };
 
     const getTargetName = (notification: MessageItem): string => {
@@ -299,17 +442,31 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     };
 
     const getSystemTextCode = (notification: MessageItem): string => {
+        return getActionCode(notification);
+    };
+
+    const getScenarioCode = (notification: MessageItem): string => {
         const parts = Array.isArray(notification.content) ? notification.content : [];
-        const part = parts.find((c: any) => c?.type === "system_text");
-        const code = part?.content;
-        if (typeof code === "string" && code.trim()) return code.trim();
-        return notification.action_code || "";
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            const data = metadata?.data ?? {};
+            const value = metadata?.scenario_code ?? data?.scenario_code;
+            if (typeof value === "string" && value.trim()) return value.trim();
+        }
+        return "";
     };
 
     const getNotificationText = (notification: MessageItem) => {
         const targetName = getTargetName(notification);
         const actionCode = getSystemTextCode(notification);
-        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
+        const scenarioTextKey =
+            actionCode === "approval_task_pending"
+                ? APPROVAL_TASK_SCENARIO_TEXT_KEYS[getScenarioCode(notification)]
+                : "";
+        const actionTextKey =
+            scenarioTextKey ||
+            NOTIFICATION_ACTION_TEXT_KEYS[actionCode] ||
+            (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
         const safeLocalize = (key: string, vars?: Record<string, string>) => {
             if (!key) return "";
@@ -325,8 +482,15 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             fallbackText;
         const showApproval =
             isApprovalMessageType(notification.message_type, notification.action_code) &&
-            isPendingApprovalStatus(notification.status);
+            isPendingApprovalStatus(notification.status) &&
+            !APPROVAL_NO_BUTTON_ACTION_CODES.has(actionCode);
         return { text, targetName, showApproval };
+    };
+
+    const getSupplementaryText = (notification: MessageItem): string => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        const tooltipPart = parts.find((c: any) => c?.type === "tooltip_text");
+        return typeof tooltipPart?.content === "string" ? tooltipPart.content.trim() : "";
     };
 
     const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -510,14 +674,31 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const createdAt = notification.create_time;
         const approvalStatus = notification.status;
         const { text, targetName, showApproval } = getNotificationText(notification);
+        const supplementaryText = getSupplementaryText(notification);
         const target = getNotificationTarget(notification);
         const targetSplitMatch = targetName
             ? text.match(new RegExp(`^(.*?)([-—\\s]*${escapeRegExp(targetName)})(.*)$`))
             : null;
         const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
         const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
-        const canNavigateTarget = Boolean(target && target.targetId && targetName);
-        const targetLabel = targetSplitMatch ? targetName : ` ${targetName}`;
+        const approvalCenterTarget = isApprovalMessageType(notification.message_type, notification.action_code)
+            ? resolveApprovalCenterTarget(notification)
+            : null;
+        const canOpenApprovalCenter = Boolean(
+            onOpenApprovalCenter &&
+            approvalCenterTarget &&
+            !APPROVAL_NO_BUTTON_ACTION_CODES.has(getSystemTextCode(notification))
+        );
+        const handleOpenApprovalCenter = () => {
+            if (!approvalCenterTarget) return;
+            if (!notification.is_read) markOneAsRead(id);
+            onOpenApprovalCenter?.(approvalCenterTarget);
+            onOpenChange?.(false);
+        };
+        // Approval rows jump to the approval center as a whole; suppress the inline
+        // channel/space name navigation so the message has a single click target.
+        const canNavigateTarget = Boolean(target && target.targetId && targetName) && !canOpenApprovalCenter;
+        const targetLabel = targetName;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
@@ -531,7 +712,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const canShowDeleteInDateSlot =
             isNotifyMessage ||
             isSelfApplicationDecision ||
-            showApproval ||
+            isApprovalMessageType(notification.message_type, notification.action_code) ||
             isCompletedApprovalItem ||
             (!showApproval &&
                 !isApprovalMessageType(notification.message_type, notification.action_code) &&
@@ -563,12 +744,19 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 key={id}
                 data-message-id={id}
                 data-message-type={notification.message_type}
-                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] "
+                className={cn(
+                    "flex flex-col gap-2 px-3",
+                    isTouchMobile
+                        ? "py-3 hover:bg-transparent"
+                        : "py-6 hover:bg-[#f7f8fa]",
+                    canOpenApprovalCenter && "group cursor-pointer",
+                )}
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
                     transitionTimingFunction: 'ease-in-out'
                 }}
+                onClick={canOpenApprovalCenter ? handleOpenApprovalCenter : undefined}
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -604,8 +792,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     observersRef.current[id] = obs;
                 }}
             >
-                {/* Row 1: Avatar + message text + right slot */}
-                <div className="flex items-center gap-3">
+                {/* Row 1: Avatar + message text + right slot（H5：时间下沉到文案下，对齐 Figma） */}
+                <div className={cn("flex gap-2", isTouchMobile ? "items-start" : "items-center gap-3")}>
                     <TooltipAnchor
                         side="left"
                         hideArrow
@@ -624,7 +812,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             </div>
                         }
                     >
-                        <Avatar className="size-9 flex-shrink-0">
+                        <Avatar className={cn("shrink-0", isTouchMobile ? "size-10" : "size-9")}>
                             {userAvatar ? (
                                 <AvatarImage src={userAvatar} alt={userName} />
                             ) : (
@@ -634,13 +822,67 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     </TooltipAnchor>
 
                     {/* Message text */}
-                    <div className={cn("flex-1 min-w-0 text-[14px] flex items-center gap-1 flex-wrap", textColor)}>
-                        <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
+                    <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor, canOpenApprovalCenter && "transition-colors group-hover:text-blue-500")}>
+                        <span className="shrink-0 font-medium hover:text-blue-500">@{userName}</span>
                         <span className="min-w-0">
-                            {textPrefix}
-                            {canNavigateTarget && (
+                            {!targetSplitMatch && canNavigateTarget && (
                                 <span
-                                    className="font-medium cursor-pointer hover:text-[#165dff]"
+                                    className="font-medium cursor-pointer hover:text-blue-500"
+                                    onClick={() => {
+                                        console.info("[NotificationsDialog] target click", {
+                                            notificationId: notification.id,
+                                            messageType: notification.message_type,
+                                            actionCode: notification.action_code,
+                                            systemTextCode: getSystemTextCode(notification),
+                                            targetName,
+                                            resolvedTarget: target,
+                                        });
+                                        if (!target) {
+                                            console.warn("[NotificationsDialog] target unresolved", {
+                                                notificationId: notification.id,
+                                                content: notification.content,
+                                            });
+                                            return;
+                                        }
+                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+                                        if (target.targetType === "channel") {
+                                            const route = isRejectedChannelJoinNotification(notification)
+                                                ? `/channel/share/${target.targetId}?square=1`
+                                                : `/channel/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
+                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        } else {
+                                            const route = `/knowledge/space/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        }
+                                        onOpenChange?.(false);
+                                    }}
+                                >
+                                    {targetLabel}
+                                </span>
+                            )}
+                            {textPrefix}
+                            {targetSplitMatch && !canNavigateTarget && targetLabel && (
+                                <span className="font-medium">{targetLabel}</span>
+                            )}
+                            {targetSplitMatch && canNavigateTarget && (
+                                <span
+                                    className="font-medium cursor-pointer hover:text-blue-500"
                                     onClick={() => {
                                         console.info("[NotificationsDialog] target click", {
                                             notificationId: notification.id,
@@ -691,10 +933,13 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             )}
                             {textSuffix}
                         </span>
+                        <span className={cn("text-[14px] tabular-nums text-[#999999]", isTouchMobile ? "inline" : "hidden")}>
+                            {formatMessageTime(createdAt)}
+                        </span>
                     </div>
 
                     {/* Right slot: fixed width so hover swap (时间 ↔ 删除) does not shrink flex-1 文案区导致 @名 换行/抖动 */}
-                    <div className="relative flex h-7 w-[184px] flex-shrink-0 items-center justify-end whitespace-nowrap">
+                    <div className={cn("relative h-7 w-[184px] shrink-0 items-center justify-end whitespace-nowrap", isTouchMobile ? "hidden" : "flex")}>
                         <span
                             className={cn(
                                 "text-[14px] tabular-nums text-[#999999]",
@@ -707,7 +952,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         {showRightSlotDelete && (
                             <button
                                 type="button"
-                                onClick={() => handleDelete(id)}
+                                onClick={(e) => { e.stopPropagation(); handleDelete(id); }}
                                 className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
                                 title={localize("com_notifications_delete")}
                             >
@@ -718,55 +963,25 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     </div>
                 </div>
 
-                {/* Row 2: approval buttons (pending) / completed status (已同意/已拒绝) */}
-                {showApproval ? (
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                handleApproval(id, "rejected");
-                            }}
-                            className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#f53f3f] border border-[#F2F3F5] bg-white hover:bg-[#fff2f0] rounded-[6px] transition-colors active:translate-y-0"
-                        >
-                            <XIcon className="size-4" />
-                            {localize("com_notifications_reject")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                handleApproval(id, "approved");
-                            }}
-                            className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#00b42a] border border-[#F2F3F5] bg-white hover:bg-[#e8ffea] rounded-[6px] transition-colors active:translate-y-0"
-                        >
-                            <Check className="size-4" />
-                            {localize("com_notifications_accept")}
-                        </button>
-                    </div>
-                ) : isCompletedApprovalItem && !isSelfApplicationDecision && !isNotifyMessage ? (
+                {!canOpenApprovalCenter && isCompletedApprovalItem && !isSelfApplicationDecision && !isNotifyMessage ? (
                     <div className="flex justify-end">
-                        {isApprovedStatus(approvalStatus) ? (
-                            <button
-                                type="button"
-                                disabled
-                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
-                            >
-                                <Check className="size-4" />
-                                {localize("com_notifications_approved")}
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                disabled
-                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
-                            >
-                                <XIcon className="size-4" />
-                                {localize("com_notifications_rejected")}
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            disabled
+                            className="h-7 cursor-default rounded-[6px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 text-[14px] text-[#86909C]"
+                        >
+                            {isApprovedStatus(approvalStatus)
+                                ? localize("com_notifications_approved")
+                                : localize("com_notifications_rejected")}
+                        </button>
                     </div>
                 ) : null}
+
+                {supplementaryText && (
+                    <div className={cn("text-[13px] leading-6 text-[#86909C]", isTouchMobile ? "pl-0" : "pl-12")}>
+                        {supplementaryText}
+                    </div>
+                )}
             </div>
         );
     };
@@ -793,78 +1008,138 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]">
-                <div className="flex flex-col h-full overflow-hidden rounded-2xl">
-                    <div className="flex items-center justify-between h-12 px-6 flex-shrink-0">
-                        <h2 className="text-[16px] font-semibold text-[#1d2129]">{localize("com_notifications_title")}</h2>
-                    </div>
-
+            <DialogContent
+                close={false}
+                onOpenAutoFocus={(e) => {
+                    // 避免小视口（含 PC 小窗）打开即激活搜索框
+                    if (isNarrowMobileLayout || isTouchMobile) {
+                        e.preventDefault();
+                    }
+                }}
+                className={cn(
+                    "p-0 gap-0 shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]",
+                    isNarrowMobileLayout
+                        ? "fixed inset-0 left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-none"
+                        : "h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] rounded-xl sm:rounded-xl",
+                )}
+            >
+                <button
+                    type="button"
+                    onClick={() => onOpenChange?.(false)}
+                    aria-label={localize("com_ui_close")}
+                    className="absolute right-5 top-4 z-10 rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+                >
+                    <XIcon className="h-4 w-4" />
+                </button>
+                <div className={cn("flex h-full flex-col overflow-hidden", isNarrowMobileLayout ? "rounded-none" : "rounded-2xl")}>
                     <Tabs
                         value={activeTab}
                         onValueChange={(v) => setActiveTab(v as "all" | "request")}
-                        className="flex-1 flex flex-col min-h-0"
+                        className="flex min-h-0 flex-1 flex-col"
                     >
-                        <div className="flex flex-col flex-1 min-h-0">
-                            <div className="px-6 py-3 flex-shrink-0">
-                                <div className="flex items-center justify-between">
-                                    <TabsList className="bg-transparent p-0 gap-2">
-                                        <TabsTrigger
-                                            value="all"
-                                            className="appearance-none relative min-w-0 h-8 px-4 py-[5px] leading-none rounded-lg text-[14px] border border-transparent shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:font-medium data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#024DE3] data-[state=active]:text-[#024DE3] data-[state=active]:shadow-none data-[state=active]:[backdrop-filter:blur(4px)] data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]"
-                                        >
-                                            {localize("com_notifications_tab_all")}
-                                            {unreadCounts.all > 0 && (
-                                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-[#f53f3f] text-white text-[11px] rounded-full flex items-center justify-center">
-                                                    {formatBadge(unreadCounts.all)}
-                                                </span>
-                                            )}
-                                        </TabsTrigger>
-                                        <TabsTrigger
-                                            value="request"
-                                            className="appearance-none relative min-w-0 h-8 px-4 py-[5px] leading-none rounded-lg text-[14px] border border-transparent shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:font-medium data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#024DE3] data-[state=active]:text-[#024DE3] data-[state=active]:shadow-none data-[state=active]:[backdrop-filter:blur(4px)] data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]"
-                                        >
-                                            {localize("com_notifications_tab_request")}
-                                            {unreadCounts.request > 0 && (
-                                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-[#f53f3f] text-white text-[11px] rounded-full flex items-center justify-center">
-                                                    {formatBadge(unreadCounts.request)}
-                                                </span>
-                                            )}
-                                        </TabsTrigger>
-                                    </TabsList>
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-4" : "px-5")}>
+                                {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
+                                <div className={cn("flex flex-col", isNarrowMobileLayout ? "gap-3" : "gap-4")}>
+                                    <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[16px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
+                                        {localize("com_notifications_title")}
+                                    </h2>
+                                    <div className={cn("flex gap-4", isNarrowMobileLayout ? "flex-col" : "flex-row items-center justify-between")}>
+                                        <TabsList className={cn("inline-flex h-auto w-auto justify-start bg-transparent p-0 gap-2")}>
+                                            <TabsTrigger
+                                                value="all"
+                                                className={cn(
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
+                                                )}
+                                            >
+                                                {localize("com_notifications_tab_all")}
+                                            </TabsTrigger>
+                                            <TabsTrigger
+                                                value="request"
+                                                className={cn(
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
+                                                )}
+                                            >
+                                                {localize("com_notifications_tab_request")}
+                                            </TabsTrigger>
+                                        </TabsList>
 
-                                    <div className="flex items-center gap-3">
-                                        <ExpandableSearchField
-                                            value={searchQuery}
-                                            onChange={setSearchQuery}
-                                            placeholder={localize("com_notifications_search_placeholder")}
-                                            titleWhenCollapsed={localize("com_notifications_search")}
-                                        />
+                                        {!isNarrowMobileLayout && (
+                                            <div className="flex items-center gap-3">
+                                                <ExpandableSearchField
+                                                    value={searchQuery}
+                                                    onChange={setSearchQuery}
+                                                    placeholder={localize("com_notifications_search_placeholder")}
+                                                    titleWhenCollapsed={localize("com_notifications_search")}
+                                                />
 
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setOnlyUnread((v) => !v)}
+                                                    className={
+                                                        onlyUnread
+                                                            ? "h-8 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-3 py-0 text-[14px] font-normal leading-none text-blue-500 [backdrop-filter:blur(4px)] hover:bg-[rgb(var(--brand-500)/0.28)] hover:text-blue-600 active:translate-y-0"
+                                                            : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                    }
+                                                >
+                                                    {localize("com_notifications_unread_only")}
+                                                </Button>
+
+                                                <Button
+                                                    onClick={() => {
+                                                        setOnlyUnread(false);
+                                                        handleMarkAllAsRead();
+                                                    }}
+                                                    variant="outline"
+                                                    className="h-8 rounded-[6px] border-transparent bg-[#F8F8F8] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                                >
+                                                    {localize("com_notifications_mark_all_read")}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* H5：与稿一致 — 搜索与「仅看未读」「已读全部」同一行，gap 12px */}
+                                {isNarrowMobileLayout && (
+                                    <div className="flex min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#EBECF0] bg-white px-3 py-[5px]">
+                                            <Search className="size-4 shrink-0 text-[#8B8FA8]" aria-hidden />
+                                            <input
+                                                type="search"
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                placeholder={localize("com_notifications_search_placeholder")}
+                                                className="min-w-0 flex-1 bg-transparent text-[14px] leading-normal text-[#212121] outline-none placeholder:text-[#979797]"
+                                                enterKeyHint="search"
+                                            />
+                                        </div>
                                         <Button
                                             type="button"
                                             variant="outline"
                                             onClick={() => setOnlyUnread((v) => !v)}
                                             className={
                                                 onlyUnread
-                                                    ? "h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
-                                                    : "h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] text-[#4e5969] border-[#e5e6eb] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                    ? "h-8 shrink-0 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500 [backdrop-filter:blur(8px)]"
+                                                    : "h-8 shrink-0 rounded-[6px] border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                             }
                                         >
                                             {localize("com_notifications_unread_only")}
                                         </Button>
-
                                         <Button
+                                            type="button"
                                             onClick={() => {
                                                 setOnlyUnread(false);
                                                 handleMarkAllAsRead();
                                             }}
                                             variant="outline"
-                                            className="h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] bg-[#F8F8F8] border-transparent text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                            className="h-8 shrink-0 rounded-[6px] border-transparent bg-[#F8F8F8] px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                         >
                                             {localize("com_notifications_mark_all_read")}
                                         </Button>
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                             <div className="flex-1 overflow-hidden min-h-0">
@@ -872,7 +1147,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "all" ? "true" : "false"}
-                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3"
+                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-5 py-3")}
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -881,7 +1156,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                             <div className="flex items-center justify-center h-full text-[#86909c]">{localize("com_notifications_empty")}</div>
                                         ) : (
                                             <>
-                                                <div className="divide-y divide-[#F2F3F5]">
+                                                <div className="divide-y divide-[#ECECEC]">
                                                     {filteredNotifications.map(renderNotificationItem)}
                                                 </div>
                                                 {loadingMore && (
@@ -899,7 +1174,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "request" ? "true" : "false"}
-                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3"
+                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-5 py-3")}
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -911,7 +1186,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                                 {requestGroups.pending.length > 0 && (
                                                     <div className="mb-3">
                                                         <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">{localize("com_notifications_section_pending")}</div>
-                                                        <div className="divide-y divide-[#F2F3F5]">
+                                                        <div className="divide-y divide-[#ECECEC]">
                                                             {requestGroups.pending.map(renderNotificationItem)}
                                                         </div>
                                                     </div>
@@ -920,7 +1195,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                                 {requestGroups.approved.length > 0 && (
                                                     <div className="mt-2">
                                                         <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">{localize("com_notifications_section_reviewed")}</div>
-                                                        <div className="divide-y divide-[#F2F3F5]">
+                                                        <div className="divide-y divide-[#ECECEC]">
                                                             {requestGroups.approved.map(renderNotificationItem)}
                                                         </div>
                                                     </div>
@@ -940,6 +1215,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     </Tabs>
                 </div>
             </DialogContent>
+
         </Dialog>
     );
 }

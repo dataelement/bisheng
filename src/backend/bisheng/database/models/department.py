@@ -1,0 +1,1828 @@
+"""Department and UserDepartment ORM models + DAO classes.
+
+Part of F002-department-tree.
+"""
+
+import logging
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+    func,
+    or_,
+    text,
+    update,
+)
+from sqlmodel import Field, select
+
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_id_scalar_rows(rows) -> list[int]:
+    """Normalize SQLAlchemy/SQLModel scalar select rows to plain int ids.
+
+    Depending on driver/version, ``select(Department.id)`` rows may be bare ints,
+    ``Row((id,))``, or tuples — callers comparing to ``int(department_id)`` must
+    not receive tuple elements inside sets (``5 in {(5,)}`` is False).
+    """
+    out: list[int] = []
+    for row in rows or []:
+        if isinstance(row, (list, tuple)):
+            out.append(int(row[0]))
+        else:
+            out.append(int(row))
+    return out
+
+
+class Department(SQLModelSerializable, table=True):
+    __tablename__ = "department"
+
+    id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, primary_key=True, autoincrement=True),
+    )
+    dept_id: str = Field(
+        sa_column=Column(
+            String(64),
+            nullable=False,
+            unique=True,
+            comment="Business key, e.g. BS@a3f7e",
+        ),
+    )
+    name: str = Field(
+        sa_column=Column(String(128), nullable=False, comment="Department name"),
+    )
+    parent_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            index=True,
+            comment="Parent department ID, NULL=root",
+        ),
+    )
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=False,
+            server_default=text("1"),
+            index=True,
+            comment="Tenant ID",
+        ),
+    )
+    path: str = Field(
+        default="",
+        sa_column=Column(
+            String(512),
+            nullable=False,
+            server_default=text("''"),
+            index=True,
+            comment="Materialized path /1/2/3/",
+        ),
+    )
+    sort_order: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Sort order among siblings",
+        ),
+    )
+    source: str = Field(
+        default="local",
+        sa_column=Column(
+            String(32),
+            nullable=False,
+            server_default=text("'local'"),
+            comment="Source: local/feishu/wecom/dingtalk",
+        ),
+    )
+    external_id: str | None = Field(
+        default=None,
+        sa_column=Column(
+            String(128),
+            nullable=True,
+            comment="External department ID for sync",
+        ),
+    )
+    status: str = Field(
+        default="active",
+        sa_column=Column(
+            String(16),
+            nullable=False,
+            server_default=text("'active'"),
+            index=True,
+            comment="Status: active/archived",
+        ),
+    )
+    # v2.5.1 F011: tenant mount point flag + linked tenant FK.
+    # Only 1=mount point; mounted_tenant_id resolves to the Child Tenant
+    # whose root department is this node. No DB-level FK to avoid circular
+    # dependency with tenant table — consistency enforced at service layer.
+    is_tenant_root: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="1=Tenant mount point (Child Tenant root dept); v2.5.1 F011",
+        ),
+    )
+    mounted_tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            index=True,
+            comment="FK→tenant.id when is_tenant_root=1 (v2.5.1 F011)",
+        ),
+    )
+    # v2.5.1 F014: distinguishes "authoritatively removed by the SSO/HR source
+    # of truth" from F009's reversible archive. Only consumed by
+    # OrgSyncTsGuard (INV-T12) and F015 reconciliation — existing queries keep
+    # using ``status='active'`` for visibility, so this flag never affects
+    # tenant-tree visibility.
+    is_deleted: int = Field(
+        default=0,
+        sa_column=Column(
+            SmallInteger,
+            nullable=False,
+            server_default=text("0"),
+            comment="F014: 1=removed by SSO authoritative source",
+        ),
+    )
+    # v2.5.1 F014/F015 INV-T12: per-external_id high-water mark so that
+    # Gateway realtime sync and Celery reconciliation converge on
+    # "ts max wins; same ts with upsert vs remove → remove wins".
+    last_sync_ts: int = Field(
+        default=0,
+        sa_column=Column(
+            BigInteger,
+            nullable=False,
+            server_default=text("0"),
+            index=True,
+            comment="F014/F015 INV-T12: latest Gateway/Celery sync ts",
+        ),
+    )
+    default_role_ids: list | None = Field(
+        default=None,
+        sa_column=Column(
+            JsonType,
+            nullable=True,
+            comment="Default role IDs for department members",
+        ),
+    )
+    concurrent_session_limit: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Dept-wide max concurrent daily-mode chat users; 0=unlimited (F030)",
+        ),
+    )
+    create_user: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, comment="Creator user ID"),
+    )
+    create_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+    update_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=False,
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
+        ),
+    )
+
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uk_source_external_id"),)
+
+
+class UserDepartment(SQLModelSerializable, table=True):
+    __tablename__ = "user_department"
+
+    id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
+    )
+    user_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("user.user_id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+            comment="User ID",
+        ),
+    )
+    department_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("department.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+            comment="Department ID",
+        ),
+    )
+    is_primary: int = Field(
+        default=1,
+        sa_column=Column(
+            SmallInteger,
+            nullable=False,
+            server_default=text("1"),
+            comment="1=primary department, 0=secondary",
+        ),
+    )
+    source: str = Field(
+        default="local",
+        sa_column=Column(
+            String(32),
+            nullable=False,
+            server_default=text("'local'"),
+            comment="Source: local/feishu/wecom/dingtalk",
+        ),
+    )
+    create_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+
+    __table_args__ = (UniqueConstraint("user_id", "department_id", name="uk_user_dept"),)
+
+
+# ---------------------------------------------------------------------------
+# DAO: DepartmentDao
+# ---------------------------------------------------------------------------
+
+
+class DepartmentDao:
+    @classmethod
+    def get_by_id(cls, dept_id: int) -> Department | None:
+        with get_sync_db_session() as session:
+            return session.exec(select(Department).where(Department.id == dept_id)).first()
+
+    @classmethod
+    async def aget_by_id(cls, dept_id: int) -> Department | None:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Department).where(Department.id == dept_id))
+            return result.first()
+
+    @classmethod
+    def get_by_dept_id(cls, dept_id: str) -> Department | None:
+        with get_sync_db_session() as session:
+            return session.exec(select(Department).where(Department.dept_id == dept_id)).first()
+
+    @classmethod
+    async def aget_by_ids(cls, dept_ids: list[int]) -> list[Department]:
+        if not dept_ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Department).where(Department.id.in_(dept_ids)))
+            return result.all()
+
+    @classmethod
+    def get_by_ids(cls, dept_ids: list[int]) -> list[Department]:
+        if not dept_ids:
+            return []
+        with get_sync_db_session() as session:
+            return session.exec(select(Department).where(Department.id.in_(dept_ids))).all()
+
+    @classmethod
+    async def aget_by_dept_id(cls, dept_id: str) -> Department | None:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Department).where(Department.dept_id == dept_id))
+            return result.first()
+
+    @classmethod
+    def create(cls, dept: Department) -> Department:
+        with get_sync_db_session() as session:
+            session.add(dept)
+            session.flush()
+            session.refresh(dept)
+            return dept
+
+    @classmethod
+    async def acreate(cls, dept: Department) -> Department:
+        # flush() assigns the autoincrement id but doesn't persist; without
+        # an explicit commit the session's implicit rollback on close would
+        # erase the insert. Callers (e.g. OrgSyncService._create_dept) then
+        # do a follow-up UPDATE that fails with "0 rows matched" because
+        # the row it was trying to update was never actually written.
+        async with get_async_db_session() as session:
+            session.add(dept)
+            await session.commit()
+            await session.refresh(dept)
+            return dept
+
+    @classmethod
+    def update(cls, dept: Department) -> Department:
+        with get_sync_db_session() as session:
+            session.add(dept)
+            session.commit()
+            session.refresh(dept)
+            return dept
+
+    @classmethod
+    async def aupdate(cls, dept: Department) -> Department:
+        async with get_async_db_session() as session:
+            session.add(dept)
+            await session.commit()
+            await session.refresh(dept)
+            return dept
+
+    @classmethod
+    def get_children(cls, parent_id: int) -> list[Department]:
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(Department).where(
+                    Department.parent_id == parent_id,
+                    Department.status == "active",
+                )
+            ).all()
+
+    @classmethod
+    async def aget_children(cls, parent_id: int | None, include_archived: bool = False) -> list[Department]:
+        """Direct children of ``parent_id``, ordered by sort_order then id.
+
+        F038: ``parent_id=None`` returns the root layer (``parent_id IS NULL``) so
+        the lazy tree can fetch the tenant root(s) the same way it fetches any
+        layer. ``include_archived`` lets the management nav tree show archived
+        nodes (active+archived); pickers keep the default (active only).
+        """
+        async with get_async_db_session() as session:
+            parent_clause = Department.parent_id.is_(None) if parent_id is None else Department.parent_id == parent_id
+            stmt = select(Department).where(
+                parent_clause,
+                cls._status_clause(include_archived),
+            )
+            result = await session.exec(stmt.order_by(Department.sort_order, Department.id))
+            return result.all()
+
+    @staticmethod
+    def _status_clause(include_archived: bool):
+        """Status visibility clause: active(+archived). F038 helper."""
+        if include_archived:
+            return Department.status.in_(["active", "archived"])
+        return Department.status == "active"
+
+    @classmethod
+    async def aget_children_existence(cls, parent_ids: list[int], include_archived: bool = False) -> set[int]:
+        """Subset of ``parent_ids`` that have at least one visible child.
+
+        F038: batch ``has_children`` for a single rendered layer in ONE query
+        (``SELECT DISTINCT parent_id ... WHERE parent_id IN (...)``), avoiding an
+        N+1 EXISTS per node. ``parent_ids`` is one layer's worth of ids, so the
+        ``.in_()`` stays small (no DM large-bind-param trap, F038 design §5).
+        """
+        if not parent_ids:
+            return set()
+        async with get_async_db_session() as session:
+            stmt = (
+                select(Department.parent_id)
+                .where(
+                    Department.parent_id.in_(parent_ids),
+                    cls._status_clause(include_archived),
+                )
+                .distinct()
+            )
+            result = await session.exec(stmt)
+            return {int(r) for r in _normalize_id_scalar_rows(result.all())}
+
+    @classmethod
+    async def aget_by_name_like(
+        cls,
+        keyword: str,
+        path_prefixes: list[str] | None = None,
+        limit: int = 50,
+        include_archived: bool = False,
+    ) -> list[Department]:
+        """Department name substring search, scoped by materialized-path prefixes.
+
+        F038: ``path_prefixes`` is the caller's (Service-computed) visible scope —
+        ``None`` means unscoped (system admin); an EMPTY list means an empty scope
+        → no rows (fail-closed, so a caller's empty scope never degrades into an
+        unscoped tenant-wide search); a non-empty list restricts to
+        ``OR(path LIKE prefix%)``. The Service guards empty/whitespace keywords
+        (no full-table scan); ``limit`` caps the result (caller fetches ``limit+1``
+        to detect truncation).
+        """
+        if path_prefixes is not None and not path_prefixes:
+            return []
+        async with get_async_db_session() as session:
+            stmt = select(Department).where(
+                Department.name.like(f"%{keyword}%"),
+                cls._status_clause(include_archived),
+            )
+            if path_prefixes:
+                stmt = stmt.where(or_(*[Department.path.like(f"{p}%") for p in path_prefixes]))
+            stmt = stmt.order_by(Department.sort_order, Department.id).limit(limit)
+            result = await session.exec(stmt)
+            return result.all()
+
+    @classmethod
+    def get_subtree(cls, path_prefix: str) -> list[Department]:
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(Department).where(
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
+                )
+            ).all()
+
+    @classmethod
+    async def aget_subtree(cls, path_prefix: str) -> list[Department]:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
+                )
+            )
+            return result.all()
+
+    @classmethod
+    def get_subtree_ids(cls, path_prefix: str) -> list[int]:
+        with get_sync_db_session() as session:
+            raw = session.exec(
+                select(Department.id).where(
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
+                )
+            ).all()
+            return _normalize_id_scalar_rows(raw)
+
+    @classmethod
+    async def aget_subtree_ids(cls, path_prefix: str) -> list[int]:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department.id).where(
+                    Department.path.like(f"{path_prefix}%"),
+                    Department.status == "active",
+                )
+            )
+            return _normalize_id_scalar_rows(result.all())
+
+    @classmethod
+    def get_all_active(cls) -> list[Department]:
+        with get_sync_db_session() as session:
+            return session.exec(select(Department).where(Department.status == "active")).all()
+
+    @classmethod
+    async def aget_all_active(cls) -> list[Department]:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Department).where(Department.status == "active"))
+            return result.all()
+
+    @classmethod
+    async def aget_active_by_tenant(cls, tenant_id: int) -> list[Department]:
+        """Get all active departments for a specific tenant."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.tenant_id == tenant_id,
+                    Department.status == "active",
+                )
+            )
+            return result.all()
+
+    @classmethod
+    async def aget_by_external_id(
+        cls,
+        external_id: str,
+        tenant_id: int,
+    ) -> Department | None:
+        """Get department by external_id within a tenant (for org sync)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.external_id == external_id,
+                    Department.tenant_id == tenant_id,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    def update_paths_batch(cls, old_prefix: str, new_prefix: str) -> None:
+        with get_sync_db_session() as session:
+            session.execute(
+                update(Department)
+                .where(Department.path.like(f"{old_prefix}%"))
+                .values(path=func.replace(Department.path, old_prefix, new_prefix))
+                # This LIKE-prefix WHERE is not Python-evaluatable, so the ORM would
+                # fall to the "fetch" sync strategy and inject RETURNING. DM's
+                # RETURNING ... INTO is single-row only, so a multi-row rewrite fails
+                # with [CODE:-5016] Invalid return into multi rows. We don't reuse the
+                # updated rows in-session, so disable sync to emit a plain UPDATE.
+                .execution_options(synchronize_session=False)
+            )
+            session.commit()
+
+    @classmethod
+    async def aupdate_paths_batch(cls, old_prefix: str, new_prefix: str) -> None:
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(Department.path.like(f"{old_prefix}%"))
+                .values(path=func.replace(Department.path, old_prefix, new_prefix))
+                # synchronize_session=False: avoid the ORM "fetch" strategy injecting
+                # RETURNING, which DM rejects for multi-row UPDATE ([CODE:-5016]). See
+                # update_paths_batch above.
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+
+    @classmethod
+    async def areparent_root_under(
+        cls,
+        dept_id: int,
+        old_path: str,
+        new_path: str,
+        new_parent_id: int,
+    ) -> int:
+        """Collapse a mis-rooted department subtree under ``new_parent_id``,
+        atomically.
+
+        Rewrites every row whose ``path`` starts with ``old_path`` (the
+        subtree, including the department itself) to the ``new_path``
+        prefix AND sets the department's own ``parent_id`` in one
+        transaction so path and parent never diverge. Mount state
+        (``is_tenant_root`` / ``mounted_tenant_id``) is untouched.
+
+        Used only by the single-root backfill script. Returns the number
+        of subtree rows whose path changed.
+        """
+        async with get_async_db_session() as session:
+            res = await session.execute(
+                update(Department)
+                .where(Department.path.like(f"{old_path}%"))
+                .values(path=func.replace(Department.path, old_path, new_path))
+                # synchronize_session=False: avoid the ORM "fetch" strategy injecting
+                # RETURNING, which DM rejects for multi-row UPDATE ([CODE:-5016]). Also
+                # keeps res.rowcount reliable as the plain affected-row count.
+                .execution_options(synchronize_session=False)
+            )
+            await session.execute(update(Department).where(Department.id == dept_id).values(parent_id=new_parent_id))
+            await session.commit()
+            return res.rowcount or 0
+
+    @classmethod
+    def get_root_by_tenant(cls, tenant_id: int) -> Department | None:
+        """Get the root department for a specific tenant.
+
+        Uses bypass_tenant_filter() at call site since this queries
+        a specific tenant_id explicitly.
+        """
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(Department).where(
+                    Department.parent_id.is_(None),
+                    Department.tenant_id == tenant_id,
+                    Department.status == "active",
+                )
+            ).first()
+
+    @classmethod
+    async def aget_root_by_tenant(cls, tenant_id: int) -> Department | None:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.parent_id.is_(None),
+                    Department.tenant_id == tenant_id,
+                    Department.status == "active",
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_tenant_root_via_pointer(
+        cls,
+        tenant_id: int,
+    ) -> Department | None:
+        """Resolve a tenant's root department via the authoritative
+        ``tenant.root_dept_id`` pointer instead of ``parent_id IS NULL``.
+
+        SSO sync must keep the platform at exactly one root, but while
+        legacy mis-rooted rows still exist (pre-backfill) a
+        ``parent_id IS NULL`` query is ambiguous — it returns an arbitrary
+        sibling root. The pointer set at init is unambiguous. Returns
+        ``None`` when the tenant has no ``root_dept_id`` yet (legacy
+        v2.5.0 env), letting callers fall back to the no-root behaviour.
+        """
+        from bisheng.database.models.tenant import Tenant
+
+        async with get_async_db_session() as session:
+            row = (await session.exec(select(Tenant.root_dept_id).where(Tenant.id == tenant_id))).first()
+            root_dept_id = row[0] if isinstance(row, tuple) else row
+            if root_dept_id is None:
+                return None
+            result = await session.exec(select(Department).where(Department.id == root_dept_id))
+            return result.first()
+
+    @classmethod
+    def check_name_duplicate(
+        cls,
+        parent_id: int,
+        name: str,
+        exclude_id: int | None = None,
+    ) -> bool:
+        with get_sync_db_session() as session:
+            stmt = select(Department).where(
+                Department.parent_id == parent_id,
+                Department.name == name,
+                Department.status == "active",
+            )
+            if exclude_id is not None:
+                stmt = stmt.where(Department.id != exclude_id)
+            return session.exec(stmt).first() is not None
+
+    @classmethod
+    async def acheck_name_duplicate(
+        cls,
+        parent_id: int,
+        name: str,
+        exclude_id: int | None = None,
+    ) -> bool:
+        async with get_async_db_session() as session:
+            stmt = select(Department).where(
+                Department.parent_id == parent_id,
+                Department.name == name,
+                Department.status == "active",
+            )
+            if exclude_id is not None:
+                stmt = stmt.where(Department.id != exclude_id)
+            result = await session.exec(stmt)
+            return result.first() is not None
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F011: tenant mount point DAO (spec §5.3).
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_mount_point(cls, dept_id: int) -> Department | None:
+        """Return the department only if it is flagged as a tenant mount point.
+
+        Used by F011 mount conflict checks and F012 JWT leaf derivation.
+        """
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.id == dept_id,
+                    Department.is_tenant_root == 1,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_mount_tenant_ids(cls) -> dict[int, int]:
+        """Return every valid department mount pointer as ``dept_id → tenant_id``."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department.id, Department.mounted_tenant_id).where(
+                    Department.is_tenant_root == 1,
+                    Department.mounted_tenant_id.is_not(None),
+                )
+            )
+            return {int(row.id): int(row.mounted_tenant_id) for row in result.all()}
+
+    @classmethod
+    async def aget_ancestors_with_mount(
+        cls,
+        dept_id: int,
+    ) -> Department | None:
+        """Return the nearest ancestor (or self) that is a tenant mount point.
+
+        Walks the materialized ``path`` column. Used by:
+          - F011 mount: reject if any ancestor is already a mount point
+                        (enforces INV-T1: 2-layer lock).
+          - F012 TenantResolver: derive a user's leaf tenant from their
+                                 primary department path.
+
+        Returns None if no ancestor (nor self) carries ``is_tenant_root=1``.
+        """
+        dept = await cls.aget_by_id(dept_id)
+        if dept is None:
+            return None
+        # path is like "/1/2/3/"; split and keep non-empty numeric ids.
+        candidate_ids: list[int] = []
+        malformed_parts: list[str] = []
+        if dept.path:
+            for part in dept.path.split("/"):
+                if not part:
+                    continue
+                if part.isdigit():
+                    candidate_ids.append(int(part))
+                else:
+                    malformed_parts.append(part)
+        if malformed_parts:
+            # F002 materialized path should always be "/\\d+/\\d+/..."; a
+            # non-numeric segment means the path column got corrupted or
+            # the format contract was broken by another migration. Surface
+            # it via a WARNING so ops can investigate instead of silently
+            # returning "no mount ancestor".
+            logger.warning(
+                "Malformed department path on dept_id=%s: %r (non-numeric: %s)",
+                dept_id,
+                dept.path,
+                malformed_parts,
+            )
+        # Include self: "self is a mount point" also counts.
+        if dept_id not in candidate_ids:
+            candidate_ids.append(dept_id)
+        if not candidate_ids:
+            return None
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department)
+                .where(
+                    Department.id.in_(candidate_ids),
+                    Department.is_tenant_root == 1,
+                )
+                .order_by(func.length(Department.path).desc())
+                .limit(1)
+            )
+            return result.first()
+
+    @classmethod
+    async def aassert_reparent_legal(
+        cls,
+        dept_id: int,
+        new_parent_id: int | None,
+    ) -> None:
+        """INV-T1 (2-layer tenant lock) gate for every reparent path.
+
+        Mount creation enforces this at ``TenantMountService.mount_child``;
+        the symmetric case is "reparent moves a mounted subtree under
+        another mount point". This helper is the single chokepoint that
+        F002 (manual move), F014 (SSO upsert), and F009 (org-sync move)
+        all call before changing ``parent_id``. Adding a new reparent
+        path? Call this first, or you reintroduce the dept-tree nesting
+        bug fixed in 2.5.1.
+
+        No-op when ``new_parent_id`` is None (top-level — outer mount
+        impossible) or when the moved subtree contains no mount (inner
+        mount irrelevant).
+        """
+        # Local import: errcode module pulls FastAPI's HTTPException, which
+        # would create a heavy cycle if pulled in at module import time.
+        from bisheng.common.errcode.tenant_tree import (
+            TenantTreeNestingForbiddenError,
+        )
+
+        if new_parent_id is None:
+            return
+        inner = await cls.aget_descendant_mount(dept_id)
+        if inner is None:
+            return
+        outer = await cls.aget_ancestors_with_mount(new_parent_id)
+        if outer is None:
+            return
+        raise TenantTreeNestingForbiddenError()
+
+    @classmethod
+    async def aget_descendant_mount(
+        cls,
+        dept_id: int,
+    ) -> Optional["Department"]:
+        """Return one descendant (or self) of ``dept_id`` that carries
+        ``is_tenant_root=1``, or None.
+
+        Used by reparent paths (F002 move, F014 SSO upsert) to enforce
+        INV-T1's 2-layer lock symmetrically: ``aget_ancestors_with_mount``
+        catches "new parent already inside a mount subtree", this helper
+        catches "moved subtree itself contains a mount". When both fire,
+        the move would produce nested mounts and must be rejected.
+        """
+        dept = await cls.aget_by_id(dept_id)
+        if dept is None or not dept.path:
+            return None
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department)
+                .where(
+                    Department.path.like(f"{dept.path}%"),
+                    Department.is_tenant_root == 1,
+                )
+                .limit(1)
+            )
+            return result.first()
+
+    @classmethod
+    async def aset_mount(
+        cls,
+        dept_id: int,
+        tenant_id: int,
+    ) -> None:
+        """Mark ``dept_id`` as a tenant mount point pointing to ``tenant_id``."""
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department).where(Department.id == dept_id).values(is_tenant_root=1, mounted_tenant_id=tenant_id)
+            )
+            await session.commit()
+
+    @classmethod
+    async def aunset_mount(cls, dept_id: int) -> None:
+        """Clear mount flag + linked tenant on ``dept_id`` (unmount path)."""
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department).where(Department.id == dept_id).values(is_tenant_root=0, mounted_tenant_id=None)
+            )
+            await session.commit()
+
+    @classmethod
+    async def aget_user_admin_departments(cls, user_id: int) -> list[Department]:
+        """Get departments where user is admin via OpenFGA.
+
+        Uses FGAClient.list_objects() which respects admin inheritance from parent.
+        Returns empty list if FGA is unavailable.
+
+        Department admin is a cross-tenant relation (FGA stores it without a
+        tenant scope), and this DAO is invoked from tenant-exempt paths such
+        as ``/user/login`` and SSO callbacks where no tenant context exists.
+        Bypass the tenant filter on the row fetch so those callers don't
+        ``raise NoTenantContextError`` when the FGA result is non-empty.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        if fga is None:
+            return []
+        try:
+            raw = await fga.list_objects(
+                user=f"user:{user_id}",
+                relation="admin",
+                type="department",
+            )
+        except Exception:
+            logger.warning(
+                "FGA list_objects failed for user %d department admin",
+                user_id,
+            )
+            return []
+        dept_ids = [int(obj.split(":", 1)[1]) for obj in raw if ":" in obj]
+        if not dept_ids:
+            return []
+        with bypass_tenant_filter():
+            return await cls.aget_by_ids(dept_ids)
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F014: SSO realtime sync DAO (spec §5.1/§5.2, INV-T12).
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_by_source_external_id(
+        cls,
+        source: str,
+        external_id: str,
+    ) -> Department | None:
+        """Get department by (source, external_id) — includes ``is_deleted=1``
+        rows so that :class:`OrgSyncTsGuard` can observe the prior remove and
+        honor INV-T12 (same ts with upsert vs remove → remove wins)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.source == source,
+                    Department.external_id == external_id,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_active_synced_departments_by_source(
+        cls,
+        source: str,
+    ) -> list[Department]:
+        """Active departments with external_id for F014 full_snapshot absent reconcile."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.source == source,
+                    Department.status == "active",
+                    Department.is_tenant_root == 0,
+                    Department.external_id.isnot(None),  # type: ignore[union-attr]
+                )
+            )
+            rows = list(result.all())
+        return [d for d in rows if d.external_id and str(d.external_id).strip()]
+
+    @classmethod
+    async def aupsert_by_external_id(
+        cls,
+        *,
+        source: str,
+        external_id: str,
+        name: str,
+        parent_id: int | None,
+        path: str,
+        sort_order: int,
+        last_sync_ts: int,
+        tenant_id: int = 1,
+    ) -> Department:
+        """Idempotent upsert keyed by (source, external_id) for F014
+        ``/internal/sso/login-sync`` + ``/departments/sync`` flows.
+
+        **Never touches** ``is_tenant_root`` / ``mounted_tenant_id`` — those
+        are bisheng-internal state and SSO sync must stay robust against
+        accidental remount (PRD §5.2.5). On resurrect (previously
+        ``is_deleted=1``), clears the flag and restores ``status='active'``
+        so the department becomes visible again.
+        """
+
+        def final_path(parent_path: str, dept_id: int) -> str:
+            base = (parent_path or "").strip()
+            if base and not base.endswith("/"):
+                base = f"{base}/"
+            if not base.startswith("/"):
+                base = f"/{base}" if base else "/"
+            return f"{base}{dept_id}/".replace("//", "/")
+
+        existing = await cls.aget_by_source_external_id(source, external_id)
+        async with get_async_db_session() as session:
+            if existing is None:
+                dept = Department(
+                    dept_id=f"{source.upper()}@{external_id}",
+                    name=name,
+                    parent_id=parent_id,
+                    tenant_id=tenant_id,
+                    path=path,
+                    sort_order=sort_order,
+                    source=source,
+                    external_id=external_id,
+                    status="active",
+                    is_deleted=0,
+                    last_sync_ts=last_sync_ts,
+                )
+                session.add(dept)
+                await session.commit()
+                await session.refresh(dept)
+                dept.path = final_path(path, int(dept.id))
+                session.add(dept)
+                await session.commit()
+                await session.refresh(dept)
+                return dept
+            await session.execute(
+                update(Department)
+                .where(Department.id == existing.id)
+                .values(
+                    name=name,
+                    parent_id=parent_id,
+                    path=final_path(path, int(existing.id)),
+                    sort_order=sort_order,
+                    status="active",
+                    is_deleted=0,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        refreshed = await cls.aget_by_id(existing.id)
+        return refreshed if refreshed is not None else existing
+
+    @classmethod
+    async def aarchive_by_external_id(
+        cls,
+        source: str,
+        external_id: str,
+        last_sync_ts: int,
+    ) -> Department | None:
+        """Soft-delete a department by (source, external_id) for F014 remove
+        flow. Sets ``status='archived'``, ``is_deleted=1`` and bumps
+        ``last_sync_ts`` atomically. Returns the pre-update row (so callers
+        can inspect ``mounted_tenant_id`` for orphan handling) or None if
+        the department does not exist.
+        """
+        existing = await cls.aget_by_source_external_id(source, external_id)
+        if existing is None:
+            return None
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(Department.id == existing.id)
+                .values(
+                    status="archived",
+                    is_deleted=1,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        return existing
+
+    @classmethod
+    async def aget_active_descendants_under_path(
+        cls,
+        *,
+        tenant_id: int,
+        path_prefix: str,
+        exclude_id: int,
+    ) -> list[Department]:
+        """Active departments strictly under ``path_prefix`` (materialised path).
+
+        Used when an SSO-archived parent must pull down local child departments
+        (PRD §5 cascade).
+        """
+        p = (path_prefix or "").strip()
+        if not p:
+            return []
+        if not p.endswith("/"):
+            p = f"{p}/"
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.tenant_id == tenant_id,
+                    Department.status == "active",
+                    Department.id != exclude_id,
+                    Department.path.like(f"{p}%"),
+                )
+            )
+            return list(result.all())
+
+    @classmethod
+    async def aarchive_by_id_sso_cascade(
+        cls,
+        dept_id: int,
+        last_sync_ts: int,
+    ) -> Department | None:
+        """Archive a row by id for subtree cascade (no per-row ts guard)."""
+        existing = await cls.aget_by_id(dept_id)
+        if existing is None or existing.status != "active":
+            return None
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(
+                    Department.id == dept_id,
+                    Department.status == "active",
+                )
+                .values(
+                    status="archived",
+                    is_deleted=1,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        return existing
+
+    @classmethod
+    async def aget_active_by_source_path_name(
+        cls,
+        source: str,
+        path: str,
+        name: str,
+        exclude_id: int | None = None,
+    ) -> list[Department]:
+        """F015 relink helper: active depts matching (source, path, name).
+
+        Used by :class:`DepartmentRelinkService` to discover candidates
+        for the ``path_plus_name`` strategy after an SSO system
+        migration. ``exclude_id`` lets callers drop the old dept from
+        the candidate pool so it never matches itself.
+        """
+        async with get_async_db_session() as session:
+            stmt = select(Department).where(
+                Department.source == source,
+                Department.path == path,
+                Department.name == name,
+                Department.status == "active",
+            )
+            if exclude_id is not None:
+                stmt = stmt.where(Department.id != exclude_id)
+            result = await session.exec(stmt)
+            return result.all()
+
+    @classmethod
+    async def aupdate_external_id(
+        cls,
+        dept_id: int,
+        new_external_id: str,
+    ) -> bool:
+        """F015 relink helper: rewrite a dept's external_id in place.
+
+        Returns True when exactly one row was updated. The caller is
+        responsible for writing the audit_log entry around the rewrite.
+        """
+        async with get_async_db_session() as session:
+            stmt = update(Department).where(Department.id == dept_id).values(external_id=new_external_id)
+            result = await session.execute(stmt)
+            await session.commit()
+            return result.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# DAO: UserDepartmentDao
+# ---------------------------------------------------------------------------
+
+
+class UserDepartmentDao:
+    @classmethod
+    def add_member(
+        cls,
+        user_id: int,
+        department_id: int,
+        is_primary: int = 1,
+        source: str = "local",
+    ) -> UserDepartment:
+        with get_sync_db_session() as session:
+            ud = UserDepartment(
+                user_id=user_id,
+                department_id=department_id,
+                is_primary=is_primary,
+                source=source,
+            )
+            session.add(ud)
+            session.commit()
+            session.refresh(ud)
+            return ud
+
+    @classmethod
+    async def aadd_member(
+        cls,
+        user_id: int,
+        department_id: int,
+        is_primary: int = 1,
+        source: str = "local",
+    ) -> UserDepartment:
+        async with get_async_db_session() as session:
+            ud = UserDepartment(
+                user_id=user_id,
+                department_id=department_id,
+                is_primary=is_primary,
+                source=source,
+            )
+            session.add(ud)
+            await session.commit()
+            await session.refresh(ud)
+            return ud
+
+    @classmethod
+    def batch_add_members(cls, entries: list[dict]) -> None:
+        with get_sync_db_session() as session:
+            for entry in entries:
+                session.add(UserDepartment(**entry))
+            session.commit()
+
+    @classmethod
+    async def abatch_add_members(cls, entries: list[dict]) -> None:
+        async with get_async_db_session() as session:
+            for entry in entries:
+                session.add(UserDepartment(**entry))
+            await session.commit()
+
+    @classmethod
+    def remove_member(cls, user_id: int, department_id: int) -> None:
+        with get_sync_db_session() as session:
+            ud = session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+            ).first()
+            if ud:
+                session.delete(ud)
+                session.commit()
+
+    @classmethod
+    async def aremove_member(cls, user_id: int, department_id: int) -> None:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            ud = result.first()
+            if ud:
+                await session.delete(ud)
+                await session.commit()
+
+    @classmethod
+    def get_members(
+        cls,
+        department_id: int,
+        page: int = 1,
+        limit: int = 20,
+        keyword: str = "",
+    ) -> tuple[list, int]:
+        """Return (rows, total) for department members with pagination.
+
+        Each row is a UserDepartment joined with user info.
+        """
+        from bisheng.user.domain.models.user import User
+
+        with get_sync_db_session() as session:
+            base = (
+                select(
+                    UserDepartment.user_id,
+                    User.user_name,
+                    UserDepartment.department_id,
+                    UserDepartment.is_primary,
+                    UserDepartment.source,
+                    UserDepartment.create_time,
+                )
+                .join(User, User.user_id == UserDepartment.user_id)
+                .where(
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            if keyword:
+                base = base.where(User.user_name.like(f"%{keyword}%"))
+
+            total = session.exec(select(func.count()).select_from(base.subquery())).one()
+
+            rows = session.exec(base.offset((page - 1) * limit).limit(limit)).all()
+            return rows, total
+
+    @classmethod
+    async def aget_members(
+        cls,
+        department_id: int,
+        page: int = 1,
+        limit: int = 20,
+        keyword: str = "",
+    ) -> tuple[list, int]:
+        from bisheng.user.domain.models.user import User
+
+        async with get_async_db_session() as session:
+            base = (
+                select(
+                    UserDepartment.user_id,
+                    User.user_name,
+                    UserDepartment.department_id,
+                    UserDepartment.is_primary,
+                    UserDepartment.source,
+                    UserDepartment.create_time,
+                )
+                .join(User, User.user_id == UserDepartment.user_id)
+                .where(
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            if keyword:
+                base = base.where(User.user_name.like(f"%{keyword}%"))
+
+            total_result = await session.exec(select(func.count()).select_from(base.subquery()))
+            total = total_result.one()
+
+            result = await session.exec(base.offset((page - 1) * limit).limit(limit))
+            rows = result.all()
+            return rows, total
+
+    @classmethod
+    def get_member_count(cls, department_id: int) -> int:
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(func.count(UserDepartment.id)).where(
+                    UserDepartment.department_id == department_id,
+                )
+            ).one()
+
+    @classmethod
+    async def aget_member_count(cls, department_id: int) -> int:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(func.count(UserDepartment.id)).where(
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            return result.one()
+
+    @classmethod
+    async def aget_user_ids_for_department(cls, department_id: int) -> list[int]:
+        """All user_ids with a membership row on this department (any primary flag)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment.user_id).where(
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            rows = result.all()
+            return [int(r[0]) for r in rows]
+
+    @classmethod
+    def get_user_departments(cls, user_id: int) -> list[UserDepartment]:
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                )
+            ).all()
+
+    @classmethod
+    async def aget_user_departments(cls, user_id: int) -> list[UserDepartment]:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                )
+            )
+            return result.all()
+
+    @classmethod
+    def get_user_primary_department(cls, user_id: int) -> UserDepartment | None:
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.is_primary == 1,
+                )
+            ).first()
+
+    @classmethod
+    async def aget_user_primary_department(
+        cls,
+        user_id: int,
+    ) -> UserDepartment | None:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.is_primary == 1,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_by_user_ids(cls, user_ids: list[int]) -> list[UserDepartment]:
+        """Batch load UserDepartment records for multiple users."""
+        if not user_ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id.in_(user_ids),
+                )
+            )
+            return result.all()
+
+    @classmethod
+    async def aget_primary_department_paths_by_user_ids(
+        cls,
+        user_ids: list[int],
+    ) -> dict[int, tuple[int, str]]:
+        """Batch load each user's deterministic primary department and path."""
+        if not user_ids:
+            return {}
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(
+                    UserDepartment.user_id,
+                    UserDepartment.department_id,
+                    Department.path,
+                )
+                .join(Department, UserDepartment.department_id == Department.id)
+                .where(
+                    UserDepartment.user_id.in_(user_ids),
+                    UserDepartment.is_primary == 1,
+                )
+                .order_by(UserDepartment.user_id.asc(), UserDepartment.id.asc())
+            )
+            primary_by_user: dict[int, tuple[int, str]] = {}
+            for row in result.all():
+                primary_by_user.setdefault(
+                    int(row.user_id),
+                    (int(row.department_id), row.path or ""),
+                )
+            return primary_by_user
+
+    @classmethod
+    def get_by_user_ids(cls, user_ids: list[int]) -> list[UserDepartment]:
+        """Batch load UserDepartment records for multiple users (sync)."""
+        if not user_ids:
+            return []
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id.in_(user_ids),
+                )
+            ).all()
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F014: membership lookups + primary flag management used by
+    # ``LoginSyncService`` — kept at the DAO layer so other sync paths
+    # (F015 reconcile, admin UI) can reuse them without reaching into
+    # service-level helpers.
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_membership(
+        cls,
+        user_id: int,
+        department_id: int,
+    ) -> UserDepartment | None:
+        """Return the exact (user_id, department_id) membership row or None."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_memberships_in_depts(
+        cls,
+        user_id: int,
+        department_ids: list[int],
+    ) -> list[UserDepartment]:
+        """Batch lookup — returns every existing (user_id, dept_id) row whose
+        dept_id is in the given list. Lets callers resolve the N+1 pattern
+        around secondary-department assignment in a single query."""
+        if not department_ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id.in_(department_ids),
+                )
+            )
+            return result.all()
+
+    @classmethod
+    async def aget_user_ids_by_department(
+        cls,
+        department_id: int,
+        is_primary: bool | None = None,
+    ) -> list[int]:
+        """F015: list user ids assigned to a department.
+
+        ``is_primary=True`` returns only primary-department members,
+        which is what the reconcile service needs to trigger
+        ``UserTenantSyncService.sync_user`` on cross-tenant moves
+        (INV-T2). Passing ``None`` returns primary + secondary members
+        alike.
+        """
+        async with get_async_db_session() as session:
+            stmt = select(UserDepartment).where(
+                UserDepartment.department_id == department_id,
+            )
+            if is_primary is True:
+                stmt = stmt.where(UserDepartment.is_primary == 1)
+            elif is_primary is False:
+                stmt = stmt.where(UserDepartment.is_primary == 0)
+            result = await session.exec(stmt)
+            return [row.user_id for row in result.all()]
+
+    @classmethod
+    async def aset_primary_flag(
+        cls,
+        user_id: int,
+        department_id: int,
+        is_primary: int,
+    ) -> None:
+        """Flip the ``is_primary`` flag on an existing membership row."""
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(UserDepartment)
+                .where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+                .values(is_primary=is_primary)
+            )
+            await session.commit()
+
+    @classmethod
+    def check_member_exists(cls, user_id: int, department_id: int) -> bool:
+        with get_sync_db_session() as session:
+            return (
+                session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == department_id,
+                    )
+                ).first()
+                is not None
+            )
+
+    @classmethod
+    async def acheck_member_exists(
+        cls,
+        user_id: int,
+        department_id: int,
+    ) -> bool:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            return result.first() is not None
+
+    # -----------------------------------------------------------------------
+    # F024: tenant user list — authoritative source is "primary dept in
+    # tenant subtree", consistent with TenantResolver.resolve_user_leaf_tenant.
+    # Replaces UserTenantDao.aget_tenant_users for management UI listing,
+    # so v2.5.0 ``aadd_users``-residue rows do not surface as phantom
+    # members. UserTenant is only LEFT-JOINed for last_access_time
+    # decoration; query never filters on UserTenant rows.
+    # -----------------------------------------------------------------------
+    @classmethod
+    async def aget_users_by_tenant_subtree(
+        cls,
+        tenant_id: int,
+        page: int = 1,
+        page_size: int = 20,
+        keyword: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """Get users whose primary department is mounted under the tenant.
+
+        Resolution rules (in order):
+          1. Look up ``tenant.root_dept_id`` → fetch the root dept's path,
+             match ``Department.path LIKE '<root_path>%'``.
+          2. If the tenant has no ``root_dept_id`` (legacy data from v2.5.0
+             or early v2.5.1), fall back to ``Department.tenant_id == tenant_id``
+             — preserves the v2.5.0 flat-model semantic so the UI keeps
+             working during migration.
+
+        ``UserTenant`` is LEFT-JOINed only to surface ``last_access_time``
+        as ``join_time`` for the response (matches the legacy DAO's shape).
+        Phantom UserTenant rows whose user has a primary dept outside the
+        subtree are NOT considered (AC-12).
+        """
+        from bisheng.database.models.tenant import Tenant, UserTenant
+        from bisheng.user.domain.models.user import User
+
+        async with get_async_db_session() as session:
+            # Step 1: resolve tenant.root_dept_id (if set) → path prefix
+            root_path: str | None = None
+            tenant_row = (await session.exec(select(Tenant.root_dept_id).where(Tenant.id == tenant_id))).first()
+            # session.exec with a column-tuple select returns the value
+            # directly on SQLModel >=0.0.14, but on some versions returns a
+            # 1-tuple Row. Normalise.
+            root_dept_id = tenant_row[0] if isinstance(tenant_row, tuple) else tenant_row
+            if root_dept_id is not None:
+                path_row = (
+                    await session.exec(
+                        select(Department.path).where(
+                            Department.id == root_dept_id,
+                        )
+                    )
+                ).first()
+                root_path = path_row[0] if isinstance(path_row, tuple) else path_row
+
+            # Step 2: build the subtree filter
+            if root_path:
+                subtree_filter = Department.path.like(f"{root_path}%")
+            else:
+                # Fallback: legacy flat model
+                subtree_filter = Department.tenant_id == tenant_id
+
+            # Step 3: count distinct users matching the filter
+            count_stmt = (
+                select(func.count(func.distinct(User.user_id)))
+                .select_from(User)
+                .join(
+                    UserDepartment,
+                    UserDepartment.user_id == User.user_id,
+                )
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+            )
+            if keyword:
+                like_pattern = f"%{keyword}%"
+                count_stmt = count_stmt.where(
+                    User.user_name.like(like_pattern),
+                )
+            total = (await session.exec(count_stmt)).one()
+            # ``.one()`` returns a Row(count) on some versions and a scalar
+            # on others; normalise.
+            if isinstance(total, tuple):
+                total = total[0]
+
+            # Step 4: paginated user list. Use a distinct subquery on
+            # user_id to guard against multi-primary anomalies (the G1 fix
+            # closes the write path, but defensive DISTINCT here makes
+            # historical data render cleanly).
+            uid_subq = (
+                select(UserDepartment.user_id)
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+                .distinct()
+                .subquery()
+            )
+
+            stmt = (
+                select(
+                    User.user_id,
+                    User.user_name,
+                    User.external_id,
+                    User.avatar,
+                    UserTenant.last_access_time.label("join_time"),
+                )
+                .join(uid_subq, uid_subq.c.user_id == User.user_id)
+                .outerjoin(
+                    UserTenant,
+                    (UserTenant.user_id == User.user_id)
+                    & (UserTenant.tenant_id == tenant_id)
+                    & (UserTenant.is_active == 1),
+                )
+            )
+            if keyword:
+                like_pattern = f"%{keyword}%"
+                stmt = stmt.where(User.user_name.like(like_pattern))
+            stmt = (
+                stmt.order_by(
+                    UserTenant.last_access_time.desc(),
+                    User.user_id,
+                )
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+            rows = (await session.exec(stmt)).all()
+
+            return [
+                {
+                    "user_id": row.user_id,
+                    "user_name": row.user_name,
+                    "external_id": row.external_id,
+                    "avatar": row.avatar,
+                    "join_time": row.join_time,
+                }
+                for row in rows
+            ], total
+
+    # -----------------------------------------------------------------------
+    # F024 phase-2 follow-up: tenant user_count must use the same "primary
+    # dept in tenant subtree" source as the user list, so the management UI
+    # never shows a non-zero count whose detail dialog is empty (phantom
+    # UserTenant residues from v2.5.0 ``aadd_users``). Replaces
+    # ``TenantDao.acount_tenant_users``/``..._batch`` for display purposes.
+    # -----------------------------------------------------------------------
+    @classmethod
+    async def _aresolve_subtree_root_paths(
+        cls,
+        session,
+        tenant_ids: list[int],
+    ) -> dict:
+        """Resolve ``tenant_id -> Department.path`` for the given tenants.
+
+        Tenants without ``root_dept_id`` (legacy v2.5.0 / early v2.5.1) are
+        omitted from the result so callers can fall back to the flat-model
+        ``Department.tenant_id == tenant_id`` semantic.
+        """
+        from bisheng.database.models.tenant import Tenant
+
+        if not tenant_ids:
+            return {}
+        rows = (
+            await session.exec(
+                select(Tenant.id, Tenant.root_dept_id).where(
+                    Tenant.id.in_(tenant_ids),
+                )
+            )
+        ).all()
+        root_dept_to_tenant: dict = {}
+        for row in rows:
+            tid = row[0] if isinstance(row, (list, tuple)) else row.id
+            rdid = row[1] if isinstance(row, (list, tuple)) else row.root_dept_id
+            if rdid is not None:
+                root_dept_to_tenant.setdefault(rdid, []).append(tid)
+        if not root_dept_to_tenant:
+            return {}
+        path_rows = (
+            await session.exec(
+                select(Department.id, Department.path).where(
+                    Department.id.in_(list(root_dept_to_tenant.keys())),
+                )
+            )
+        ).all()
+        result: dict = {}
+        for row in path_rows:
+            dept_id = row[0] if isinstance(row, (list, tuple)) else row.id
+            path = row[1] if isinstance(row, (list, tuple)) else row.path
+            for tid in root_dept_to_tenant.get(dept_id, []):
+                if path:
+                    result[tid] = path
+        return result
+
+    @classmethod
+    async def acount_users_by_tenant_subtree(cls, tenant_id: int) -> int:
+        """Count users whose primary department is mounted under the tenant.
+
+        Companion of ``aget_users_by_tenant_subtree``. Use this when only
+        the count is needed (tenant list / detail / quota usage), so the
+        UI count column matches the dialog list source exactly.
+        """
+        from bisheng.user.domain.models.user import User
+
+        async with get_async_db_session() as session:
+            paths = await cls._aresolve_subtree_root_paths(
+                session,
+                [tenant_id],
+            )
+            root_path = paths.get(tenant_id)
+            if root_path:
+                subtree_filter = Department.path.like(f"{root_path}%")
+            else:
+                subtree_filter = Department.tenant_id == tenant_id
+            stmt = (
+                select(func.count(func.distinct(User.user_id)))
+                .select_from(User)
+                .join(
+                    UserDepartment,
+                    UserDepartment.user_id == User.user_id,
+                )
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+            )
+            total = (await session.exec(stmt)).one()
+            if isinstance(total, tuple):
+                total = total[0]
+            return int(total or 0)
+
+    @classmethod
+    async def acount_users_by_tenant_subtree_batch(
+        cls,
+        tenant_ids: list[int],
+    ) -> dict:
+        """Batch counterpart of ``acount_users_by_tenant_subtree``.
+
+        Returns ``{tenant_id: count}``. Tenants with zero matches are
+        omitted (callers default missing entries to 0). The query opens a
+        single session, resolves all ``root_path`` prefixes up front, then
+        issues one aggregate query per tenant — N is bounded by the
+        list page size (≤100), so per-tenant round-trips are acceptable
+        and avoid string-SQL UNION fan-out.
+        """
+        from bisheng.user.domain.models.user import User
+
+        if not tenant_ids:
+            return {}
+        async with get_async_db_session() as session:
+            paths = await cls._aresolve_subtree_root_paths(session, tenant_ids)
+            counts: dict = {}
+            for tid in tenant_ids:
+                root_path = paths.get(tid)
+                if root_path:
+                    subtree_filter = Department.path.like(f"{root_path}%")
+                else:
+                    subtree_filter = Department.tenant_id == tid
+                stmt = (
+                    select(func.count(func.distinct(User.user_id)))
+                    .select_from(User)
+                    .join(
+                        UserDepartment,
+                        UserDepartment.user_id == User.user_id,
+                    )
+                    .join(
+                        Department,
+                        Department.id == UserDepartment.department_id,
+                    )
+                    .where(
+                        UserDepartment.is_primary == 1,
+                        subtree_filter,
+                    )
+                )
+                total = (await session.exec(stmt)).one()
+                if isinstance(total, tuple):
+                    total = total[0]
+                if total:
+                    counts[tid] = int(total)
+            return counts
+
+
+# Register ``department_admin_grant`` on SQLModel metadata for migrations / create_all.
+import bisheng.database.models.department_admin_grant  # noqa: F401, E402

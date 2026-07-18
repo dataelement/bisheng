@@ -2,64 +2,111 @@ import asyncio
 import os
 import shutil
 import traceback
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from contextvars import Token
 from datetime import datetime
-from typing import Optional, List, Dict, Callable
 
 from langchain_core.language_models import BaseChatModel
+from langgraph.errors import GraphRecursionError
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
-from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
+from bisheng.common.services.llm_error_classifier import classify_for_event
+from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
+from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
-    ExecuteTaskTypeEnum, LinsightExecuteTask
-from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
-    LinsightSessionVersion
 from bisheng.linsight.domain import utils as linsight_execute_utils
-from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.llm.domain.services import LLMService
+from bisheng.linsight.domain.models.linsight_execute_task import (
+    ExecuteTaskStatusEnum,
+    ExecuteTaskTypeEnum,
+    LinsightExecuteTask,
+    LinsightExecuteTaskDao,
+)
+from bisheng.linsight.domain.models.linsight_session_version import (
+    LinsightSessionVersion,
+    LinsightSessionVersionDao,
+    SessionVersionStatusEnum,
+)
+from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.state_message_manager import (
+    LinsightStateMessageManager,
+    MessageData,
+    MessageEventType,
+)
+from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
+from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
+from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.tool.domain.services.tool import ToolServices
-from bisheng_langchain.linsight.agent import LinsightAgent
-from bisheng_langchain.linsight.const import TaskStatus, ExecConfig
-from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
+from bisheng_langchain.linsight.const import TaskStatus
+from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
 
 
 class TaskExecutionError(Exception):
     """Task Execution Exception"""
+
     pass
 
 
 class UserTerminationError(Exception):
     """User proactively terminates exceptions"""
+
     pass
 
 
 # Task already in progress Exception
 class TaskAlreadyInProgressError(Exception):
     """Task already in progress Exception"""
+
     pass
+
+
+# Apology preamble prepended to a salvaged partial result (L3 tool-loop breaker /
+# L4 recursion ceiling). Followed by the model's intermediate analysis so the
+# user still gets meaningful output instead of a raw recursion error.
+_PARTIAL_RESULT_PREAMBLE = "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
+
+# Friendly failure copy when the abort left nothing salvageable (no analysis text
+# and no captured answer) — still a classified friendly card, never a raw dump.
+_PARTIAL_NO_SALVAGE_MESSAGE = (
+    "任务未能完成：模型多次未能正确调用工具，且没有可供返回的中间结果。建议简化任务范围，或更换能力更强的模型后重试。"
+)
 
 
 class LinsightWorkflowTask:
     """Workflow Task Executor - Responsible for managing the entire mission lifecycle"""
 
-    USER_TERMINATION_CHECK_INTERVAL = 2
+    # Poll interval (s) for the background termination monitor. Kept tight so a
+    # stop request is detected promptly: at 2s a task that finishes within the
+    # window escapes the cancel entirely (terminate-vs-complete race, 2026-06-18).
+    USER_TERMINATION_CHECK_INTERVAL = 1
 
     def __init__(self):
-        self._state_manager: Optional[LinsightStateMessageManager] = None
+        self._state_manager: LinsightStateMessageManager | None = None
         self._is_terminated = False
-        self._termination_task: Optional[asyncio.Task] = None
-        self._final_result: Optional[TaskEnd] = None
-        self.file_dir: Optional[str] = None
-        self.session_version_id: Optional[str] = None
-        self.step_event_extra_files: List[Dict] = []  # File information for storing additional processing of step events
-        self.llm: Optional[BaseChatModel] = None  # For storageLLMInstances
+        self._termination_task: asyncio.Task | None = None
+        self._final_result: TaskEnd | None = None
+        # Fallback answer captured from the agent's final message when no
+        # TaskEnd is emitted (direct-answer/greeting short-circuit, F035).
+        self._last_assistant_text: str | None = None
+        # Set when an ask_user interrupt parked the task (WAITING_FOR_USER_INPUT).
+        # astream then halts with no TaskEnd, but this is NOT a direct-answer
+        # completion — the task must stay parked, not push a FINAL_RESULT.
+        self._waiting_for_input: bool = False
+        # Set when the run was aborted by the L3 tool-loop breaker or the L4
+        # recursion ceiling: instead of a raw failure, salvage the intermediate
+        # analysis + retrieved knowledge and render it as a normal (partial)
+        # result. ``_partial_salvage`` is the middleware-assembled body (empty for
+        # a bare GraphRecursionError, which falls back to _last_assistant_text).
+        self._partial_pending: bool = False
+        self._partial_salvage: str | None = None
+        self._partial_error: BaseException | None = None
+        self.file_dir: str | None = None
+        self.session_version_id: str | None = None
+        self.llm: BaseChatModel | None = None  # For storageLLMInstances
 
     # ==================== Resource Management ====================
 
@@ -75,12 +122,16 @@ class LinsightWorkflowTask:
             raise TaskAlreadyInProgressError("Task already in progress")
 
         try:
-
             # Start Termination Monitoring
             await self._start_termination_monitor(session_model)
 
             # Initialization file directory
             self.file_dir = await self._init_file_directory(session_model)
+
+            # F035 problem 2: ensure the session-level pseudo task row exists so
+            # planning/wrap-up/direct-answer steps (mapper routes them to
+            # task_id = svid) are persisted and survive a refresh.
+            await self._ensure_session_pseudo_task(session_model)
 
             yield session_model
 
@@ -108,7 +159,9 @@ class LinsightWorkflowTask:
         self.session_version_id = session_version_id
         trace_id_var.set(self.session_version_id)
         logger.info(f"Start the task: session_version_id={self.session_version_id}")
+        tenant_context_token: Token | None = None
         try:
+            tenant_context_token = await self._restore_tenant_context(session_version_id)
 
             async with self._managed_execution() as session_model:
                 await self._execute_workflow(session_model)
@@ -118,11 +171,274 @@ class LinsightWorkflowTask:
         except TaskAlreadyInProgressError:
             logger.warning(f"Task already in progress: session_version_id={self.session_version_id}")
         except TaskExecutionError as e:
-            logger.error(f"Task execution failed:<g id='1'></g> : session_version_id={self.session_version_id}")
+            logger.error(
+                f"Task execution failed: {e} : session_version_id={self.session_version_id}",
+                exc_info=True,
+            )
             await self._handle_execution_error(e)
         except Exception as e:
-            logger.error(f"Unknown error: session_version_id={self.session_version_id}, error={e}")
+            logger.exception(f"Unknown error: session_version_id={self.session_version_id}")
             await self._handle_execution_error(e)
+        finally:
+            if tenant_context_token is not None:
+                current_tenant_id.reset(tenant_context_token)
+
+    async def _restore_tenant_context(self, session_version_id: str) -> Token:
+        """Restore tenant ContextVar for standalone Linsight worker tasks."""
+        try:
+            with bypass_tenant_filter():
+                session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+        except Exception as e:
+            raise TaskExecutionError(f"Failed to restore tenant context: {e}") from e
+
+        if not session_model:
+            raise TaskExecutionError(f"Session version not found: {session_version_id}")
+
+        tenant_id = session_model.tenant_id
+        if tenant_id is None:
+            raise TaskExecutionError(f"Session version {session_version_id} is missing tenant_id")
+
+        return set_current_tenant_id(int(tenant_id))
+
+    # ==================== Resume (park-and-release, Track B) ====================
+
+    async def async_resume(self, session_version_id: str, user_input=None) -> None:
+        """Resume a parked (WAITING_FOR_USER_INPUT) task after the user answered.
+
+        park-and-release entry point (design §4.4 / §4.6): a parked task holds no
+        worker slot; once the user answers, /workbench/user-input lpush'es a
+        resume payload to the queue head and an idle worker picks it up and calls
+        this method. We rebuild the agent on the SAME LangGraph ``thread_id =
+        session_version_id`` (so the persisted interrupt checkpoint is found) and
+        drive ``Command(resume=user_input)``. thread_id reuse + a Redis-backed
+        checkpointer let resume run in any worker process at any time.
+        """
+        self.session_version_id = session_version_id
+        trace_id_var.set(self.session_version_id)
+        logger.info(f"Resume the task: session_version_id={self.session_version_id}")
+        tenant_context_token: Token | None = None
+        try:
+            tenant_context_token = await self._restore_tenant_context(session_version_id)
+            async with self._managed_resume() as session_model:
+                await self._resume_workflow(session_model, user_input)
+        except UserTerminationError:
+            logger.info(f"Resumed task terminated by user: session_version_id={self.session_version_id}")
+        except TaskAlreadyInProgressError:
+            logger.warning(f"Resumed task already in progress: session_version_id={self.session_version_id}")
+        except TaskExecutionError as e:
+            logger.error(f"Resume task execution failed: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
+        except Exception as e:
+            logger.error(f"Unknown error on resume: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
+        finally:
+            if tenant_context_token is not None:
+                current_tenant_id.reset(tenant_context_token)
+
+    @asynccontextmanager
+    async def _managed_resume(self):
+        """Like ``_managed_execution`` but for the resume path.
+
+        A parked session is legitimately IN_PROGRESS, so the
+        ``_is_session_in_progress`` guard (which rejects re-entry on the fresh
+        path) must NOT apply here — resume is precisely re-entry into the same
+        session. Everything else (termination monitor, file dir, cleanup) is the
+        same as the fresh path.
+        """
+        self._state_manager = LinsightStateMessageManager(self.session_version_id)
+        session_model = await self._get_session_model(self.session_version_id)
+        try:
+            await self._start_termination_monitor(session_model)
+            self.file_dir = await self._init_file_directory(session_model)
+            # F035 problem 2: resume/continue can also produce session-level
+            # (task_id = svid) steps; ensure the pseudo task row is present.
+            await self._ensure_session_pseudo_task(session_model)
+            yield session_model
+        finally:
+            await self._cleanup_resources()
+
+    async def _resume_workflow(self, session_model: LinsightSessionVersion, user_input) -> None:
+        """Rebuild the agent on the same thread (Redis checkpointer) and drive resume."""
+        from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+        # The task was parked as WAITING_FOR_USER_INPUT; resuming means it is
+        # actively running again. Flip it back to IN_PROGRESS so status reflects
+        # reality (and the worker-startup crash sweep, which scans IN_PROGRESS,
+        # again covers it while a worker is genuinely driving it).
+        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+
+        self.llm = await self._get_llm(session_model)
+        tools = await self._generate_tools(session_model)
+        try:
+            # Rebuild the SAME tool set the parked graph had — INCLUDING the C4
+            # knowledge whitelist. The fresh/continue paths gate SearchKnowledgeBase
+            # with allowed_knowledge_ids; resume MUST pass the same set, otherwise
+            # (a) the resumed graph's tool topology diverges from the parked one, and
+            # (b) the knowledge tool is rebuilt UNGATED (allowed_knowledge_ids=None),
+            # bypassing the C4 whitelist — which since design #1 also leaks into the
+            # researcher subagent's tool subset.
+            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+            linsight_tools = await ToolServices.init_linsight_tools(
+                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+            )
+            tools.extend(linsight_tools)
+            # Rebuild on the SAME thread_id with a durable checkpointer so the
+            # parked interrupt checkpoint is located (design §4.4).
+            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
+            self._check_termination()
+            await self._drive_resume(agent, session_model, user_input)
+            # F035 reload parity: the resume re-stream above may have rewritten the
+            # session pseudo task's history, dropping the is_completed/user_input
+            # stamp on the answered clarify steps. Re-apply the persisted answers
+            # (task_data.clarify_answers) so a refreshed turn still shows the
+            # answered "已明确用户意图" rows. This is the last history write of the
+            # turn, so it wins over anything the re-stream did.
+            await self._state_manager.restamp_clarify_answers(session_model.id)
+            # Finalize the resumed turn. Without this the resumed task never
+            # pushes FINAL_RESULT (the frontend keeps spinning on the answered
+            # ask_user) — the fresh/continue paths finalize, the resume path
+            # historically did not. _handle_task_completion no-ops if the agent
+            # parked AGAIN (another ask_user this round) via _waiting_for_input.
+            await self._handle_task_completion(session_model)
+        finally:
+            for one in tools:
+                if one.name == "bisheng_code_interpreter":
+                    one.close()
+                    break
+
+    async def _drive_resume(self, agent, session_model: LinsightSessionVersion, user_input) -> None:
+        """Resume driver — reuses the Track-A astream + StreamEventMapper pipeline.
+
+        Feeds ``Command(resume=user_input)`` into the same LangGraph thread
+        (``thread_id = session_version_id``) so resumed chunks are normalised and
+        rendered identically to the fresh path (design §4.4). The durable
+        checkpointer is already bound to the agent at construction; thread_id
+        reuse locates the persisted interrupt checkpoint.
+        """
+        from langgraph.types import Command
+
+        linsight_conf = settings.get_linsight_conf()
+        mapper = StreamEventMapper(svid=session_model.id)
+        config = {
+            "configurable": {"thread_id": session_model.id},
+            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+        }
+        try:
+            async for chunk in agent.astream(
+                Command(resume=user_input),
+                config=config,
+                stream_mode=["updates", "messages", "values"],
+                subgraphs=True,
+            ):
+                mode, raw, namespace = self._unpack_stream_chunk(chunk)
+                if mode == "values" and not namespace and isinstance(raw, dict):
+                    text = self._extract_last_message_text(raw.get("messages"))
+                    if text:
+                        self._last_assistant_text = text
+                for event in mapper.normalize(mode, raw, namespace=namespace):
+                    await self._handle_event(agent, event, session_model)
+        except (LinsightToolLoopError, GraphRecursionError) as e:
+            # L3/L4 on the resume path: stash the salvage; the caller's
+            # _handle_task_completion renders it as a partial result.
+            self._stash_partial_abort(e)
+
+    # ==================== Continue (multi-turn conversation) ====================
+
+    async def async_continue(self, session_version_id: str, question: str) -> None:
+        """Continue a finished conversation with a new user turn (F035 multi-turn).
+
+        Unlike ``async_resume`` (which answers a parked ask_user interrupt via
+        ``Command(resume=...)``), this feeds a brand-new ``HumanMessage`` into the
+        SAME LangGraph thread (``thread_id = session_version_id``). Because the
+        Redis checkpointer persists the full message history, the agent keeps the
+        prior context — the follow-up is interpreted against everything said
+        before, not in isolation. One task-mode conversation therefore stays a
+        single session_version + single thread across every round (the legacy
+        "new version per submit" model is bypassed for follow-ups).
+        """
+        self.session_version_id = session_version_id
+        trace_id_var.set(self.session_version_id)
+        logger.info(f"Continue the conversation: session_version_id={self.session_version_id}")
+        tenant_context_token: Token | None = None
+        try:
+            tenant_context_token = await self._restore_tenant_context(session_version_id)
+            async with self._managed_resume() as session_model:
+                await self._continue_workflow(session_model, question)
+        except UserTerminationError:
+            logger.info(f"Continued task terminated by user: session_version_id={self.session_version_id}")
+        except TaskExecutionError as e:
+            logger.error(f"Continue task execution failed: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
+        except Exception as e:
+            logger.error(f"Unknown error on continue: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
+        finally:
+            if tenant_context_token is not None:
+                current_tenant_id.reset(tenant_context_token)
+
+    async def _continue_workflow(self, session_model: LinsightSessionVersion, question: str) -> None:
+        """Rebuild the agent on the same thread and drive a new user turn."""
+        from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+        # A continued round starts from COMPLETED; flip back to IN_PROGRESS so the
+        # frontend leaves the "done" state and re-opens the WS event stream.
+        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+
+        self.llm = await self._get_llm(session_model)
+        tools = await self._generate_tools(session_model)
+        try:
+            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+            linsight_tools = await ToolServices.init_linsight_tools(
+                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+            )
+            tools.extend(linsight_tools)
+            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
+            self._check_termination()
+            await self._drive_continue(agent, session_model, question)
+            await self._handle_task_completion(session_model)
+        finally:
+            for one in tools:
+                if one.name == "bisheng_code_interpreter":
+                    one.close()
+                    break
+
+    async def _drive_continue(self, agent, session_model: LinsightSessionVersion, question: str) -> None:
+        """Continue driver — feeds a new HumanMessage into the same thread.
+
+        Shares the astream + StreamEventMapper pipeline with the fresh/resume
+        paths so continued chunks render identically. ``thread_id`` reuse +
+        durable checkpointer mean the new turn appends to the persisted message
+        history and the agent answers with full prior context.
+        """
+        linsight_conf = settings.get_linsight_conf()
+        mapper = StreamEventMapper(svid=session_model.id)
+        config = {
+            "configurable": {"thread_id": session_model.id},
+            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+        }
+        # Prepend the current-time block (same rationale as _build_agent_input):
+        # per-task time awareness without busting the static system-prompt cache.
+        agent_input = {
+            "messages": [{"role": "user", "content": f"{self._current_time_block()}\n# 用户问题\n{question}"}]
+        }
+        try:
+            async for chunk in agent.astream(
+                agent_input,
+                config=config,
+                stream_mode=["updates", "messages", "values"],
+                subgraphs=True,
+            ):
+                mode, raw, namespace = self._unpack_stream_chunk(chunk)
+                if mode == "values" and not namespace and isinstance(raw, dict):
+                    text = self._extract_last_message_text(raw.get("messages"))
+                    if text:
+                        self._last_assistant_text = text
+                for event in mapper.normalize(mode, raw, namespace=namespace):
+                    await self._handle_event(agent, event, session_model)
+        except (LinsightToolLoopError, GraphRecursionError) as e:
+            # L3/L4 on the continue path: stash the salvage; the caller's
+            # _handle_task_completion renders it as a partial result.
+            self._stash_partial_abort(e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """Execute the core logic of the workflow"""
@@ -130,25 +446,48 @@ class LinsightWorkflowTask:
         # Update session status to in progress
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
+        # F035 Track J: write a placeholder task turn at start so a refresh
+        # mid-execution (incl. parked HITL) still sees the in-flight turn in the
+        # unified conversation stream; completion upserts the same row with the
+        # final answer. The live state (running / waiting_for_user_input) is read
+        # by SV from the linsight detail endpoints on reload.
+        await linsight_execute_utils.persist_task_turn_message(session_model)
+
+        # Cross-turn continuity: seed this turn's workspace from the previous turn
+        # so a follow-up (e.g. "convert the report to HTML") can read and build on
+        # the prior turn's deliverables. New-turn path only (resume reuses the same
+        # svid workspace). Best-effort — never blocks the turn.
+        await self._seed_workspace_from_previous(session_model)
+
         # Initialization Execution Component
-        self.llm = await self._get_llm(invoke_user_id=session_model.user_id)
+        self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
-            # Build Tool List
-            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            # Build Tool List. The knowledge tool is gated by the user's
+            # accessible-KB whitelist (C4) so the model cannot search a KB/file
+            # it has no access to.
+            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+            linsight_tools = await ToolServices.init_linsight_tools(
+                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+            )
             tools.extend(linsight_tools)
-            # Create agent
-            agent = await self._create_agent(session_model, tools)
+            # Create agent (deepagents CompiledStateGraph, F035 §2.1).
+            # Durable Redis checkpointer (same as the resume path) so a HITL
+            # interrupt parked here is locatable on resume — which rebuilds the
+            # agent on the same thread_id in a possibly different worker process.
+            from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
 
             # Check if terminated during initialization
             self._check_termination()
 
-            # Generate and save tasks
-            task_info = await agent.generate_task(session_model.sop)
-            await self._save_task_info(session_model, task_info)
-
-            # Do Task
-            success = await self._execute_agent_tasks(agent, task_info, session_model)
+            # F035: the legacy `agent.generate_task` precall is removed. With the
+            # deepagents kernel the task清单 is produced by the planner during
+            # `astream` (write_todos) and emitted as GenerateSubTask by the
+            # StreamEventMapper -> _handle_generate_subtask -> _save_task_info
+            # (design §3.3 row 2). Tasks are no longer pre-generated/saved here.
+            success = await self._execute_agent_tasks(agent, session_model)
         finally:
             # Clean the sandbox of the code interpreter
             for one in tools:
@@ -185,16 +524,30 @@ class LinsightWorkflowTask:
 
     # ==================== Component Initialization ====================
 
-    async def _get_llm(self, invoke_user_id: int) -> BaseChatModel:
-        """DapatkanLLMInstances"""
+    async def _get_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
+        """Resolve the per-task execution LLM (tool init / helper calls).
+
+        Reuses ``agent_factory._resolve_model`` so this helper LLM and the agent
+        itself share one model-resolution path: the per-task ``model`` chosen at
+        submit time (``session_model.model``), falling back to the tenant
+        ``linsight_default_model_id`` only when it is empty. Previously this
+        ignored the per-task model and always pulled the tenant default, so a
+        task with a valid frontend-selected model still failed when the tenant
+        default was missing/deleted/offline. F022 INV-T18: tenant resolution +
+        share fallback are threaded inside ``_resolve_model`` via
+        ``session_model.tenant_id`` (admin-scope ContextVar is unset in the
+        Worker subprocess).
+        """
         try:
-            workbench_conf = await LLMService.get_workbench_llm()
-            linsight_conf = settings.get_linsight_conf()
-            return await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
-                                                             model_id=workbench_conf.task_model.id,
-                                                             temperature=linsight_conf.default_temperature)
+            return await _resolve_model(session_model, getattr(session_model, "model", None))
         except Exception as e:
-            raise TaskExecutionError("The task has been terminated, please contact the administrator to check the status of the Ideas task execution model")
+            # Keep the generic user-facing message, but chain + log the real
+            # cause so the original stack trace surfaces (project error-handling
+            # rule: never launder exceptions into a flat message).
+            logger.exception(f"Linsight LLM resolution failed: session_version_id={self.session_version_id}")
+            raise TaskExecutionError(
+                "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"
+            ) from e
 
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
@@ -206,25 +559,34 @@ class LinsightWorkflowTask:
         if not session_model.files:
             return file_dir
 
+        # Only entries that carry a parsed-markdown object can be prefetched. A
+        # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
+        # still parsing) must be SKIPPED — not crash task startup. (The agent reads
+        # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
+        # this local prefetch is best-effort cache warming, not the access path.)
+        downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
+        skipped = len(session_model.files) - len(downloadable)
+        if skipped:
+            logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
+
         # Concurrent downloads
-        download_tasks = [
-            self._download_file(file_info, file_dir)
-            for file_info in session_model.files
-        ]
+        download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
 
         results = await asyncio.gather(*download_tasks, return_exceptions=True)
 
         # Record Download Failed Files
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                file_name = os.path.basename(session_model.files[i]["markdown_file_path"])
+                file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
                 logger.error(f"This content failed to load {file_name}: {result}")
 
         return file_dir
 
     async def _download_file(self, file_info: dict, target_dir: str) -> str:
         """Download individual files"""
-        object_name = file_info["markdown_file_path"]
+        object_name = file_info.get("markdown_file_path")
+        if not object_name:
+            raise ValueError("file entry missing markdown_file_path")
         file_name = file_info.get("markdown_filename", os.path.basename(object_name))
         file_path = os.path.join(target_dir, file_name)
         minio_client = await get_minio_storage()
@@ -245,34 +607,145 @@ class LinsightWorkflowTask:
             logger.error(f"Download failed {object_name}: {e}")
             raise
 
-    async def _generate_tools(self, session_model: LinsightSessionVersion) -> List:
+    async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
         """Build Tool List"""
         if not session_model.tools:
             return []
 
-        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=self.llm,
-                                                                      need_upload=True, file_dir=self.file_dir)
-
-    async def _create_agent(self, session_model: LinsightSessionVersion, tools: List) -> LinsightAgent:
-
-        workbench_conf = await LLMService.get_workbench_llm()
-        linsight_conf = settings.get_linsight_conf()
-        exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_model.id)
-
-        """Create agent"""
-        return LinsightAgent(
-            llm=self.llm,
-            query=session_model.question,
-            tools=tools,
-            file_dir=self.file_dir,
-            task_mode=workbench_conf.linsight_executor_mode,
-            exec_config=exec_config,
+        return await LinsightWorkbenchImpl.init_linsight_config_tools(
+            session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
         )
+
+    async def _create_agent(self, session_model: LinsightSessionVersion, tools: list, checkpointer=None):
+        """Create the deepagents-backed agent (F035 §2.1).
+
+        Returns a LangGraph ``CompiledStateGraph`` driven by ``agent.astream``.
+        Model selection follows the per-task ``model`` persisted on the session
+        (design §2.2.1); tenant resolution + share fallback live inside the
+        factory's call to ``LLMService.get_bisheng_linsight_llm``. We inject the
+        REAL WorkspaceBackend (MinIO truth + write-through cache, design §9) so
+        the agent's write_file/read_file tools actually persist — the factory's
+        FakeWorkspaceBackend default is a test stub with no ``awrite``. The
+        resume path passes a Redis-backed ``checkpointer`` so the parked
+        interrupt checkpoint (thread_id = session_version_id) is located.
+        """
+        from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
+        from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+        minio = await get_minio_storage()
+        backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+        # F035 Fork X: copy this run's allowed skill bundles into the workspace
+        # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
+        # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
+        # fresh agent each time. skills_present gates attaching the skills middleware.
+        copied_skills = await materialize_session_skills(
+            backend, session_model.tenant_id, getattr(session_model, "skills", None)
+        )
+        return await create_linsight_agent(
+            session_model=session_model,
+            tools=tools,
+            model_id=getattr(session_model, "model", None),
+            file_dir=self.file_dir,
+            svid=session_model.id,
+            checkpointer=checkpointer,
+            backend=backend,
+            skills_present=bool(copied_skills),
+        )
+
+    async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
+        """Cross-turn continuity: copy the previous turn's deliverables/sources
+        into this turn's workspace (跨轮工作区延续).
+
+        A follow-up turn runs under a fresh ``session_version_id`` with an empty
+        ``workspace/{svid}/`` prefix, so it cannot see a prior turn's output
+        (e.g. ``output/report.md``) — ``read_file`` on it would otherwise fail.
+        Server-side copy the immediately-previous version's ``output/`` +
+        ``uploads/`` into this turn's prefix so ``read_file``/``ls`` transparently
+        surface them. Best-effort — a failure never blocks the turn; the first
+        turn (no predecessor) no-ops.
+        """
+        try:
+            from bisheng.linsight.domain.services.workspace_backend import seed_workspace_from_previous
+
+            versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
+            # Ordered by version DESC. The most recent OTHER version is the
+            # immediately-previous turn; its workspace is cumulative (it inherited
+            # its own predecessor), so one copy carries the whole conversation.
+            prev = next((v for v in versions if v.id != session_model.id), None)
+            if prev is None:
+                return
+            minio = await get_minio_storage()
+            copied = await seed_workspace_from_previous(minio, src_svid=prev.id, dst_svid=session_model.id)
+            if copied:
+                logger.info(
+                    f"Seeded {copied} file(s) from previous turn {prev.id[:8]} into "
+                    f"{session_model.id[:8]} (cross-turn continuity)"
+                )
+        except Exception as e:
+            logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
 
     # ==================== Mission Execution ====================
 
-    async def _save_task_info(self, session_model: LinsightSessionVersion, task_info: List[dict]):
-        """Save Task Information"""
+    async def _ensure_session_pseudo_task(self, session_model: LinsightSessionVersion) -> None:
+        """Create the session-level pseudo task row (F035 problem 2).
+
+        The StreamEventMapper routes steps to ``task_id = svid`` whenever no todo
+        is in_progress (planning phase, wrap-up, or a direct answer that plans no
+        todo). Without a DB row whose id == svid, those steps hit the orphan
+        branch in ``add_execution_task_step`` / ``update_execution_task_status``
+        and are dropped — invisible after a refresh. This inserts one pseudo task
+        (id == svid) to carry them. Idempotent: skips when it already exists, so
+        resume/continue re-entry and concurrent workers are safe. tenant_id is
+        injected by the SQLAlchemy tenant event (worker has restored the context).
+        """
+        svid = session_model.id
+        try:
+            existing = await LinsightExecuteTaskDao.get_by_id(svid)
+            if existing:
+                return
+            pseudo = LinsightExecuteTask(
+                id=svid,
+                session_version_id=svid,
+                parent_task_id=None,
+                previous_task_id=None,
+                next_task_id=None,
+                task_type=ExecuteTaskTypeEnum.SINGLE,
+                task_data={"name": "执行准备", "is_session_global": True},
+                status=ExecuteTaskStatusEnum.IN_PROGRESS,
+                history=[],
+            )
+            await LinsightExecuteTaskDao.batch_create_tasks([pseudo])
+            logger.info(f"Created session-level pseudo task for {svid}")
+        except Exception as e:
+            # A concurrent worker may have created it first; non-fatal — orphan
+            # steps simply fall back to the (now rare) skip branch.
+            logger.warning(f"Failed to ensure session pseudo task for {svid}: {e}")
+
+    async def _complete_session_pseudo_task(self, session_model: LinsightSessionVersion) -> None:
+        """Mark the session pseudo task SUCCESS on normal completion (best-effort).
+
+        Empty-history pseudo tasks are dropped by ``get_execute_task_detail`` so a
+        SUCCESS flip on an empty one is harmless; one that carried orphan steps
+        then shows as a completed "执行准备" node instead of a stuck in_progress.
+        """
+        try:
+            await self._state_manager.update_execution_task_status(
+                task_id=session_model.id, status=ExecuteTaskStatusEnum.SUCCESS
+            )
+        except Exception as e:
+            logger.warning(f"Failed to finalize session pseudo task: {e}")
+
+    async def _save_task_info(self, session_model: LinsightSessionVersion, task_info: list[dict]):
+        """Save Task Information.
+
+        Idempotent on replay: on a HITL resume LangGraph replays the graph from
+        the persisted checkpoint, so ``write_todos`` (and thus this method) can
+        fire again with the SAME task ids that were already persisted before the
+        park. A plain batch INSERT then hits a duplicate-PK IntegrityError and
+        kills the resume. So we only insert task ids that don't yet exist for this
+        session_version, and reuse the persisted rows (which carry the latest
+        status/result) for the ones that do — keeping the pushed task list whole.
+        """
         try:
             tasks = []
             # step_idIt doesn't have to be regular.step_int, FROMagentGot ittask_infoThe order is the execution order
@@ -287,36 +760,95 @@ class LinsightWorkflowTask:
                     session_version_id=session_model.id,
                     previous_task_id=previous_task_id,
                     next_task_id=next_task_id,
-                    task_type=ExecuteTaskTypeEnum.COMPOSITE if task_info.get(
-                        "node_loop") else ExecuteTaskTypeEnum.SINGLE,
-                    task_data=task_info
+                    task_type=ExecuteTaskTypeEnum.COMPOSITE
+                    if task_info.get("node_loop")
+                    else ExecuteTaskTypeEnum.SINGLE,
+                    task_data=task_info,
                 )
                 tasks.append(task)
 
-            await LinsightExecuteTaskDao.batch_create_tasks(tasks)
-            await self._state_manager.set_execution_tasks(tasks)
+            # Skip rows already persisted for this SV (resume replay) — insert only
+            # the new ones, but keep the full ordered list (persisted row preferred,
+            # so its status/result survives) for the state push.
+            existing = await LinsightExecuteTaskDao.get_by_session_version_id(session_model.id)
+            existing_by_id = {t.id: t for t in (existing or [])}
+            new_tasks = [t for t in tasks if t.id not in existing_by_id]
+            if new_tasks:
+                await LinsightExecuteTaskDao.batch_create_tasks(new_tasks)
+
+            merged = [existing_by_id.get(t.id, t) for t in tasks]
+            await self._state_manager.set_execution_tasks(merged)
 
             # Push Generate Task Message
-            await self._state_manager.push_message(MessageData(
-                event_type=MessageEventType.TASK_GENERATE,
-                data={"tasks": [task.model_dump() for task in tasks]}
-            ))
+            await self._state_manager.push_message(
+                MessageData(
+                    event_type=MessageEventType.TASK_GENERATE, data={"tasks": [task.model_dump() for task in merged]}
+                )
+            )
 
-            logger.info(f"Set {len(tasks)} execution tasks")
+            logger.info(f"Set {len(merged)} execution tasks ({len(new_tasks)} newly inserted)")
 
         except Exception as e:
             logger.error(f"Failed to save task information: {e}")
             raise TaskExecutionError(f"Failed to save task information: {e}")
 
-    async def _execute_agent_tasks(self, agent, task_info: List[dict],
-                                   session_model) -> bool:
-        """Perform agent tasks - Modified version supports user termination"""
+    async def _execute_agent_tasks(self, agent, session_model) -> bool:
+        """Perform agent tasks - deepagents astream + StreamEventMapper (F035 §3.2).
+
+        Replaces the legacy ``agent.ainvoke`` generator with the LangGraph
+        ``agent.astream`` protocol. Each raw chunk is translated by the pure
+        ``StreamEventMapper.normalize`` into 0..N ``BaseEvent`` instances, which
+        the existing ``_handle_event`` dispatch table consumes unchanged. The
+        mapper holds only translation bookkeeping (call_id merge, todo task_id
+        diff, terminal dedup) — all Redis/MySQL side effects stay in
+        ``_handle_event`` (design §3.2 / §3.4).
+        """
+        linsight_conf = settings.get_linsight_conf()
+        mapper = StreamEventMapper(svid=session_model.id)
 
         async def agent_execution():
-            """Agent performs a task"""
+            """Agent performs a task via astream + mapper."""
             file_list = await LinsightWorkbenchImpl.prepare_file_list(session_model)
-            async for event in agent.ainvoke(task_info, session_model.sop, file_list=file_list):
-                await self._handle_event(agent, event, session_model)
+            # F035 Track J: rebuild prior conversation context (by chat_id) so a
+            # fresh task turn answers with the whole conversation in view, not just
+            # this turn's question (the per-session checkpointer can't see earlier
+            # daily/task turns — design §3.2).
+            history_summary = await linsight_execute_utils.build_prior_conversation_summary(session_model.session_id)
+            # F035 unified-resource: deepagents flow skips the SOP step where the
+            # knowledge list used to be injected, so resolve the user's KBs here
+            # (coarse: all org/personal KBs of the enabled type) and feed their ids
+            # to the agent — otherwise search_knowledge_base has no real id to use.
+            knowledge_block = await self._resolve_knowledge_block(session_model)
+            # First-message input: prior context + question + sop + file pointer block.
+            task_input = self._build_agent_input(session_model, file_list, history_summary, knowledge_block)
+            config = {
+                "configurable": {"thread_id": self.session_version_id},
+                # max_steps -> recursion_limit (design §2.5)
+                "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+            }
+            # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
+            # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
+            # LIVE (design #1, 2026-06-17): the `task` subagent tool is RE-ENABLED —
+            # agent_factory now registers a single "general-purpose" researcher
+            # subagent and no longer strips `task`, so subgraph events ARE emitted
+            # with a non-empty namespace. The mapper drops namespaced todos (the main
+            # plan stays clean) and tags namespaced tool steps step_type="subagent".
+            async for chunk in agent.astream(
+                task_input,
+                config=config,
+                stream_mode=["updates", "messages", "values"],
+                subgraphs=True,
+            ):
+                mode, raw, namespace = self._unpack_stream_chunk(chunk)
+                # Capture the agent's latest top-level reply as a fallback
+                # answer for the no-TaskEnd case (e.g. a greeting the planner
+                # answers directly without spawning sub-tasks).
+                if mode == "values" and not namespace and isinstance(raw, dict):
+                    text = self._extract_last_message_text(raw.get("messages"))
+                    if text:
+                        self._last_assistant_text = text
+                for event in mapper.normalize(mode, raw, namespace=namespace):
+                    await self._handle_event(agent, event, session_model)
             return True
 
         async def termination_monitor():
@@ -332,10 +864,7 @@ class LinsightWorkflowTask:
             monitor_task = asyncio.create_task(termination_monitor())
 
             # Waiting for any one task to be completed
-            done, pending = await asyncio.wait(
-                [agent_task, monitor_task],
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait([agent_task, monitor_task], return_when=asyncio.FIRST_COMPLETED)
 
             # Cancel Incomplete Task
             for task in pending:
@@ -365,16 +894,216 @@ class LinsightWorkflowTask:
         except UserTerminationError:
             logger.info("Agent task terminated by user")
             return False
+        except (LinsightToolLoopError, GraphRecursionError) as e:
+            # L3/L4: a same-tool failure loop (LinsightToolLoopError, carries a
+            # salvaged partial_result) or the recursion ceiling (GraphRecursionError,
+            # bare) aborted the run. Do NOT surface a raw recursion error — stash the
+            # salvage and return True so _handle_task_completion renders the
+            # intermediate analysis as a normal (partial) result. See _handle_task_partial.
+            self._stash_partial_abort(e)
+            return True
         except Exception as e:
             logger.error(f"task_exec_error {traceback.format_exc()}")
-            raise TaskExecutionError(f"Agent task execution failed: {e}")
+            # ``from e`` preserves the original provider exception as __cause__ so
+            # the failure classifier can unwrap it (e.g. an aliyun content-filter
+            # BadRequestError) and emit a precise error_type to the frontend.
+            raise TaskExecutionError(f"Agent task execution failed: {e}") from e
+
+    @staticmethod
+    def _current_time_block() -> str:
+        """Current server-local time block for the first user message.
+
+        Injected into the dynamic first message (NOT the static system prompt)
+        so the system prompt stays byte-identical across tasks and remains
+        prefix-cacheable by the model provider, while the agent still gets
+        per-task time awareness. Uses server-local time, consistent with the
+        repo-wide ``default_factory=datetime.now``.
+        """
+        now = datetime.now()
+        weekday = "一二三四五六日"[now.weekday()]
+        return f"# 当前时间\n{now.strftime('%Y-%m-%d %H:%M')} 周{weekday}（服务器本地时区）"
+
+    @staticmethod
+    def _build_agent_input(
+        session_model: LinsightSessionVersion,
+        file_list,
+        history_summary: str | None = None,
+        knowledge_block: str | None = None,
+    ) -> dict:
+        """Assemble the first-message input for the deepagents graph.
+
+        LangGraph agents take ``{"messages": [...]}``. We seed the user turn with
+        the prior conversation context (F035 Track J, by chat_id) + question; the
+        file pointer block (offload-first, design §9) and the available
+        knowledge-base list (so ``search_knowledge_base`` has real ids) are
+        appended when present. The deepagents kernel plans the todo清单 from this
+        seed during astream.
+        """
+        # Lead with the current-time block so the agent is time-aware. Placing it
+        # in the (already dynamic) first user message keeps the system prompt
+        # static and prefix-cacheable.
+        parts: list[str] = [LinsightWorkflowTask._current_time_block()]
+        if history_summary:
+            parts.append(history_summary)
+        if session_model.question:
+            # Header the question like every other block (# 当前时间 / # 可用文件 /
+            # # 可用知识库 / # 前情回顾) so it is clearly delimited from the time
+            # block above it instead of bleeding into it.
+            parts.append(f"# 用户问题\n{session_model.question}")
+        if file_list:
+            # file_list is a list[str] (prepare_file_list returns a single-element
+            # list holding the <uploaded_files> block). Join it — interpolating the
+            # list directly emits its Python repr (brackets/quotes + escaped "\n"),
+            # mangling the pointer block the model has to parse.
+            files_block = "\n".join(file_list) if isinstance(file_list, (list, tuple)) else str(file_list)
+            parts.append(f"\n# 可用文件\n{files_block}")
+        if knowledge_block:
+            parts.append(
+                f"\n# 可用知识库(用 search_knowledge_base 检索,knowledge_id 用下方括号内的 id)\n{knowledge_block}"
+            )
+        content = "\n".join(parts) if parts else (session_model.question or "")
+        return {"messages": [{"role": "user", "content": content}]}
+
+    async def _resolve_user_knowledge_bases(self, session_model: LinsightSessionVersion) -> list:
+        """Resolve the EXACT knowledge bases the user picked in the daily picker.
+
+        Mirrors daily mode (``_resolve_user_kb_selection``): load precisely the
+        selected organization-KB ids + knowledge-space ids — NOT every KB of a
+        coarse type. The deprecated ``org_knowledge_enabled`` /
+        ``personal_knowledge_enabled`` booleans are intentionally NOT consulted
+        here; an empty id selection means the user picked none. Both the prompt
+        advertisement (``_resolve_knowledge_block``) and the tool gate
+        (``_resolve_allowed_knowledge_ids``) derive from this list, so what the
+        model is told it may search and what it is actually allowed to search stay
+        in lockstep.
+        """
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+        org_ids = [int(x) for x in (session_model.organization_knowledge_ids or [])]
+        space_ids = [int(x) for x in (session_model.knowledge_space_ids or [])]
+        ids = org_ids + space_ids
+        if not ids:
+            return []
+        try:
+            return list(await KnowledgeDao.aget_list_by_ids(ids))
+        except Exception as e:
+            logger.warning(f"Failed to load selected knowledge bases {ids}: {e}")
+            return []
+
+    async def _resolve_knowledge_block(self, session_model: LinsightSessionVersion) -> str | None:
+        """Render the user's accessible KBs into a prompt block advertising each
+        KB's id, so the agent's search_knowledge_base tool can target a real id."""
+        try:
+            kbs = await self._resolve_user_knowledge_bases(session_model)
+            if not kbs:
+                return None
+            knowledge_strs = await LinsightWorkbenchImpl.prepare_knowledge_list(kbs)
+            return "\n".join(knowledge_strs) if knowledge_strs else None
+        except Exception as e:
+            logger.warning(f"Failed to resolve knowledge block: {e}")
+            return None
+
+    async def _resolve_allowed_knowledge_ids(self, session_model: LinsightSessionVersion) -> set[str]:
+        """Build the SearchKnowledgeBase whitelist (C4 permission isolation).
+
+        Allowed = the user-visible KB / knowledge-space ids (same source as the
+        prompt block). The tool refuses any id outside this set, so a
+        hallucinated/coaxed id can never reach another tenant's KB. Uploaded files
+        are NOT included: they are not searched through this tool — the agent reads
+        their parsed markdown from the workspace via ``read_file``.
+        """
+        allowed: set[str] = set()
+        try:
+            kbs = await self._resolve_user_knowledge_bases(session_model)
+            for kb in kbs:
+                allowed.add(str(kb.id))
+        except Exception as e:
+            logger.warning(f"Failed to resolve allowed knowledge ids: {e}")
+        return allowed
+
+    @staticmethod
+    def _unpack_stream_chunk(chunk):
+        """Normalize an astream chunk into ``(mode, raw, namespace)``.
+
+        With ``subgraphs=True`` + multi ``stream_mode`` LangGraph yields
+        ``(namespace, mode, data)`` triples; without subgraphs it yields
+        ``(mode, data)`` pairs. This tolerates both shapes so the mapper always
+        receives a consistent ``(mode, raw, namespace)`` (design §3.1).
+        """
+        if isinstance(chunk, tuple) and len(chunk) == 3:
+            namespace, mode, raw = chunk
+            return mode, raw, namespace
+        if isinstance(chunk, tuple) and len(chunk) == 2:
+            mode, raw = chunk
+            return mode, raw, None
+        # Defensive: unexpected shape — treat as a values snapshot with no ns.
+        return "values", chunk, None
+
+    @staticmethod
+    def _is_assistant_message(msg) -> bool:
+        """True iff ``msg`` is an assistant/AI message (not Tool/Human/System).
+
+        Uses the LangChain ``.type`` discriminator ("ai" / "tool" / "human" /
+        "system"; "AIMessageChunk" for streamed chunks) and falls back to the
+        ``type``/``role`` key on dict-shaped messages.
+        """
+        t = getattr(msg, "type", None)
+        if t is None and isinstance(msg, dict):
+            t = msg.get("type") or msg.get("role")
+        return t in ("ai", "assistant", "AIMessageChunk")
+
+    @staticmethod
+    def _message_text(msg) -> str | None:
+        """Plain text of a single message's content (str or content-block list).
+
+        Tolerates LangChain message objects and dicts, and content that is a
+        string or a list of content blocks (multimodal/tool-call shape).
+        """
+        content = getattr(msg, "content", None)
+        if content is None and isinstance(msg, dict):
+            content = msg.get("content")
+        if isinstance(content, str):
+            return content.strip() or None
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict) and isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+            return "".join(parts).strip() or None
+        return None
+
+    @staticmethod
+    def _extract_last_message_text(messages) -> str | None:
+        """Pull plain text from the last *assistant* message of a values snapshot.
+
+        Walks backward to the last AIMessage carrying text, skipping
+        ToolMessage / HumanMessage / etc. This matters on the L3/L4 abort paths:
+        when a run is cut off mid tool-loop the trailing message is usually a raw
+        ToolMessage — e.g. a ``bisheng_code_interpreter`` ``{"exitcode":..,
+        "log":..}`` blob. Returning that as "the model's last words" leaked raw
+        tool output into the user-facing partial-result salvage (apology preamble
+        + body). Only genuine assistant text is eligible; when the model never
+        produced any, return None so the caller degrades to a friendly failure
+        instead of dumping tool JSON.
+        """
+        if not messages:
+            return None
+        for msg in reversed(messages):
+            if not LinsightWorkflowTask._is_assistant_message(msg):
+                continue
+            text = LinsightWorkflowTask._message_text(msg)
+            if text:
+                return text
+        return None
 
     # ==================== Event processing ====================
 
-    async def _handle_event(self, agent: LinsightAgent, event: BaseEvent, session_model: LinsightSessionVersion):
+    async def _handle_event(self, agent, event: BaseEvent, session_model: LinsightSessionVersion):
         """handle incidents"""
 
-        event_handlers: Dict[type[BaseEvent], Callable] = {
+        event_handlers: dict[type[BaseEvent], Callable] = {
             GenerateSubTask: self._handle_generate_subtask,
             TaskStart: self._handle_task_start,
             TaskEnd: self._handle_task_end,
@@ -388,127 +1117,100 @@ class LinsightWorkflowTask:
         else:
             logger.warning(f"Unknown event type: {type(event)}")
 
-    async def _handle_generate_subtask(self, agent: LinsightAgent, event: GenerateSubTask,
-                                       session_model: LinsightSessionVersion):
+    async def _handle_generate_subtask(self, agent, event: GenerateSubTask, session_model: LinsightSessionVersion):
         """Handle build subtask events"""
         await self._save_task_info(session_model, event.subtask)
         logger.debug(f"Generate subtasks: {event}")
 
-    async def _handle_task_start(self, agent: LinsightAgent, event: TaskStart, session_model: LinsightSessionVersion):
+    async def _handle_task_start(self, agent, event: TaskStart, session_model: LinsightSessionVersion):
         """Handle task start events"""
         task_data = await self._state_manager.update_execution_task_status(
-            task_id=event.task_id,
-            status=ExecuteTaskStatusEnum.IN_PROGRESS
+            task_id=event.task_id, status=ExecuteTaskStatusEnum.IN_PROGRESS
         )
 
-        await self._state_manager.push_message(
-            MessageData(event_type=MessageEventType.TASK_START, data=task_data)
-        )
+        await self._state_manager.push_message(MessageData(event_type=MessageEventType.TASK_START, data=task_data))
 
-    async def _handle_task_end(self, agent: LinsightAgent, event: TaskEnd, session_model: LinsightSessionVersion):
+    async def _handle_task_end(self, agent, event: TaskEnd, session_model: LinsightSessionVersion):
         """Handle task end events"""
-        status = ExecuteTaskStatusEnum.SUCCESS if event.status == TaskStatus.SUCCESS.value else ExecuteTaskStatusEnum.FAILED
-
-        task_data = await self._state_manager.update_execution_task_status(
-            task_id=event.task_id,
-            status=status,
-            result={"answer": event.answer},
-            task_data=event.data
+        status = (
+            ExecuteTaskStatusEnum.SUCCESS if event.status == TaskStatus.SUCCESS.value else ExecuteTaskStatusEnum.FAILED
         )
 
-        await self._state_manager.push_message(
-            MessageData(event_type=MessageEventType.TASK_END, data=task_data)
-        )
+        # F035 fix: TaskEnd.data is frequently empty for deepagents tasks; passing
+        # it as task_data would OVERWRITE the task_data stored at write_todos time
+        # (which holds the task name), leaving completed tasks with an empty
+        # task_data — so the history view rebuilt from the DB shows blank task
+        # rows. Only overwrite task_data when the event actually carries it;
+        # otherwise preserve the write_todos task_data (and its name).
+        update_kwargs = {"status": status, "result": {"answer": event.answer}}
+        if event.data:
+            update_kwargs["task_data"] = event.data
+        task_data = await self._state_manager.update_execution_task_status(task_id=event.task_id, **update_kwargs)
+
+        await self._state_manager.push_message(MessageData(event_type=MessageEventType.TASK_END, data=task_data))
 
         # Save Final Result
         self._final_result = event
 
-    async def _handle_need_user_input(self, agent: LinsightAgent, event: NeedUserInput,
-                                      session_model: LinsightSessionVersion):
-        """Handle events that require user input"""
-        asyncio.create_task(self._wait_for_user_input(agent, event))
+    async def _handle_need_user_input(self, agent, event: NeedUserInput, session_model: LinsightSessionVersion):
+        """Handle events that require user input (park-and-release, F035 §4.6).
 
-    async def _handle_exec_step(self, agent: LinsightAgent, event: ExecStep, session_model: LinsightSessionVersion):
-        """Handle execution step events"""
+        With the deepagents kernel, ``interrupt()`` halts ``astream`` after the
+        ``__interrupt__`` chunk. We no longer spawn a polling coroutine: this
+        handler just records the call-user-input step, flips the task to
+        WAITING_FOR_USER_INPUT and pushes the ``user_input`` event. The agent
+        loop then ends naturally; the task驻留 in the checkpointer. Re-queue +
+        ``Command(resume)``续跑 is owned by Track B (worker.py +
+        /workbench/user-input endpoint), not by an in-place wait here.
+        """
+        # Record the interrupt as a history step so set_user_input can locate
+        # the matching call_user_input entry later.
+        await self._state_manager.add_execution_task_step(event.task_id, step=event)
 
-        # Additional Processing Step Events
-        event = await linsight_execute_utils.handle_step_event_extra(event, self)
+        await self._state_manager.update_execution_task_status(
+            event.task_id,
+            status=ExecuteTaskStatusEnum.WAITING_FOR_USER_INPUT,
+        )
 
+        await self._state_manager.push_message(
+            MessageData(event_type=MessageEventType.USER_INPUT, data=event.model_dump())
+        )
+
+        # The agent loop ends naturally after this interrupt. Mark the task as
+        # parked so _handle_task_completion does NOT mistake the missing TaskEnd
+        # for a direct-answer completion and push a FINAL_RESULT (which would
+        # close the session and hide the clarify card).
+        self._waiting_for_input = True
+
+        # Flip the SESSION-version status to WAITING_FOR_USER_INPUT too. Without
+        # this the parked session stays IN_PROGRESS, and the worker-startup crash
+        # sweep (check_and_terminate_incomplete_tasks scans IN_PROGRESS) sees a
+        # parked task whose owner key was released by park-and-release and wrongly
+        # marks it FAILED ("Worker node crash detected"). The dedicated WAITING
+        # status keeps parked tasks out of that IN_PROGRESS sweep; resume flips it
+        # back to IN_PROGRESS.
+        await self._update_session_status(session_model, SessionVersionStatusEnum.WAITING_FOR_USER_INPUT)
+
+    async def _handle_exec_step(self, agent, event: ExecStep, session_model: LinsightSessionVersion):
+        """Handle execution step events.
+
+        Files written by a step are persisted by the deepagents WorkspaceBackend
+        (MinIO truth + write-through cache) and surfaced as deliverables by
+        ``get_final_result_file`` (output/ zone scan), so no per-step file upload
+        is done here. The legacy ``handle_step_event_extra`` hook (which keyed off
+        the retired local_file tool names) is removed.
+        """
         await self._state_manager.add_execution_task_step(event.task_id, step=event)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=event.model_dump())
         )
 
-    async def _wait_for_user_input(self, agent: LinsightAgent, event: NeedUserInput):
-        """Waiting for user input"""
-        try:
-
-            await self._state_manager.add_execution_task_step(event.task_id, step=event)
-
-            # Update status to wait for user input
-            await self._state_manager.update_execution_task_status(
-                event.task_id,
-                status=ExecuteTaskStatusEnum.WAITING_FOR_USER_INPUT,
-            )
-
-            # Push user input events
-            await self._state_manager.push_message(
-                MessageData(event_type=MessageEventType.USER_INPUT, data=event.model_dump())
-            )
-
-            # Wait for user input to complete
-            task_model = await self._wait_for_input_completion(event.task_id)
-
-            user_input_event = task_model.history[-1] if task_model.history else None
-            if user_input_event is None or user_input_event.get("step_type") != "call_user_input":
-                raise TaskExecutionError(f"Task {event.task_id} No user input events found while waiting for user input")
-
-            user_input_event = UserInputEventSchema.model_validate(user_input_event)
-
-            # Check if the user uploaded a file
-            if user_input_event.files:
-                # Concurrent downloads
-                download_tasks = [
-                    self._download_file(file_info, self.file_dir)
-                    for file_info in user_input_event.files
-                ]
-
-                results = await asyncio.gather(*download_tasks, return_exceptions=True)
-
-                # Record Download Failed Files
-                for i, result in enumerate(results):
-                    if isinstance(result, Exception):
-                        file_name = os.path.basename(user_input_event.files[i]["markdown_file_path"])
-                        logger.error(f"This content failed to load {file_name}: {result}")
-
-                user_input_event.user_input += f"\n\nUploaded File:\n" + \
-                                               "\n".join([f"- {file}" for file in results if
-                                                          not isinstance(file, Exception)])
-
-            # Push Input Completion Event
-            await self._state_manager.push_message(
-                MessageData(event_type=MessageEventType.USER_INPUT_COMPLETED, data=task_model.model_dump())
-            )
-
-            # Resume Task
-            await agent.continue_task(event.task_id, user_input_event.user_input)
-
-        except Exception as e:
-            raise TaskExecutionError(f"Failed to wait for user input task_id={event.task_id}: {e}")
-
-    async def _wait_for_input_completion(self, task_id: str) -> Optional[LinsightExecuteTask]:
-        """Wait for user input to complete"""
-        while True:
-            self._check_termination()
-
-            task_model = await self._state_manager.get_execution_task(task_id)
-            if task_model is None:
-                raise ValueError(f"Task {task_id} Does not exist")
-
-            if task_model.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED:
-                return task_model
-
-            await asyncio.sleep(1)
+    # F035 §4.5/§4.6: the legacy `_wait_for_user_input` coroutine and the
+    # `_wait_for_input_completion` 1s polling loop are REMOVED. Under
+    # park-and-release there is no in-place wait: `interrupt()` halts `astream`,
+    # `_handle_need_user_input` pushes the `user_input` event and releases the
+    # worker. The /workbench/user-input endpoint persists the answer and
+    # re-queues the task; an idle worker resumes via `Command(resume)` (Track B).
 
     # ==================== Terminate Inspection ====================
 
@@ -550,8 +1252,7 @@ class LinsightWorkflowTask:
 
         try:
             current_session = await self._state_manager.get_session_version_info()
-            return (current_session and
-                    current_session.status == SessionVersionStatusEnum.TERMINATED)
+            return current_session and current_session.status == SessionVersionStatusEnum.TERMINATED
         except Exception as e:
             logger.error(f"Failed to check user termination status: {e}")
             return False
@@ -575,8 +1276,8 @@ class LinsightWorkflowTask:
                 data={
                     "message": "Task has been actively stopped by the user",
                     "session_id": session_model.id,
-                    "terminated_at": datetime.now().isoformat()
-                }
+                    "terminated_at": datetime.now().isoformat(),
+                },
             )
         )
 
@@ -584,14 +1285,166 @@ class LinsightWorkflowTask:
 
     async def _handle_task_completion(self, session_model: LinsightSessionVersion):
         """Processing Task Completion"""
+        # Terminate-vs-complete race (2026-06-18): a stop request can land while
+        # the agent is finishing its last step. The periodic monitor may miss a
+        # task that completes inside the poll window, so the agent returns
+        # "success" and this path would overwrite the user's TERMINATED status
+        # with COMPLETED. Re-read the authoritative status (fresh from Redis) and
+        # honor a termination that arrived before completion instead of clobbering
+        # it. Covers the fresh-run, resume, and continue completion entry points.
+        if await self._check_user_termination():
+            logger.info("Termination detected at completion; honoring stop over completion")
+            await self._handle_user_termination(session_model)
+            return
+
+        if self._waiting_for_input:
+            # An ask_user interrupt parked the task; astream halted with no
+            # TaskEnd on purpose. Leave it WAITING — the user-input endpoint
+            # will re-queue and resume it. Do not push any completion message.
+            logger.info("Task parked on user input; skipping completion handling")
+            return
+
+        if self._partial_pending:
+            # L3/L4: aborted by the tool-loop breaker or recursion ceiling.
+            # Render the salvaged intermediate result instead of a raw failure.
+            await self._handle_task_partial(session_model)
+            return
+
         if not self._final_result:
-            logger.error("No final task results found")
+            # No TaskEnd was emitted — the agent answered directly without
+            # planning sub-tasks (e.g. a greeting). Don't leave the frontend
+            # stuck on '规划中': fall back to the agent's final message so the
+            # user still gets a reply and the session closes.
+            logger.warning("No final task result; using direct-answer fallback")
+            await self._handle_direct_answer_completion(session_model)
             return
 
         if self._final_result.status == TaskStatus.SUCCESS.value:
             await self._handle_task_success(session_model)
         else:
-            await self._handle_task_failure(session_model, "Task execution failed:<g id='1'></g> ")
+            # NB: ``<g id='1'></g>`` here was a machine-translation artifact that
+            # clobbered the ``{...}`` interpolation (same class of bug fixed in
+            # 54be7498e for the async_run error log). Restore the real failure
+            # reason — TaskEnd.answer carries the agent's final result/message.
+            await self._handle_task_failure(session_model, f"Task execution failed: {self._final_result.answer}")
+
+    async def _handle_direct_answer_completion(self, session_model: LinsightSessionVersion):
+        """Complete a session that produced no TaskEnd event.
+
+        The deepagents planner can answer trivial inputs (greetings, plain Q&A)
+        directly without emitting sub-tasks, so ``self._final_result`` stays
+        unset. Push the agent's final message as the result and close the
+        session COMPLETED so the user still gets feedback instead of an endless
+        '规划中'. Fall back to a clean failure if no text was captured, so the
+        frontend still unsticks.
+        """
+        answer = (self._last_assistant_text or "").strip()
+        if not answer:
+            await self._handle_task_failure(session_model, "Task produced no result")
+            return
+
+        session_model.status = SessionVersionStatusEnum.COMPLETED
+        # A direct-answer completion with NO sub-tasks is a genuine trivial reply
+        # (greeting / plain Q&A) — no deliverable expected, keep final_files empty.
+        # But a weak model can plan (write_todos) yet finish without a TaskEnd or any
+        # output/ file; that still warrants a report. So when todos were generated,
+        # collect any output/ deliverable and otherwise synthesize one from the
+        # answer (F035 backstop) — same as the _handle_task_success path.
+        final_files = []
+        execution_tasks = await self._state_manager.get_execution_tasks()
+        # Only REAL planned todos warrant a *synthesized* report. The always-present
+        # session-level pseudo task (F035 problem 2) must NOT count here, otherwise
+        # a trivial greeting/Q&A that planned no todo would wrongly get a report.
+        planned_tasks = [
+            t for t in execution_tasks if not (getattr(t, "task_data", None) or {}).get("is_session_global")
+        ]
+        # Always collect real ``output/`` deliverables, even with no planned todos:
+        # a simple "把报告转成 docx/pdf" turn calls export_docx/export_pdf (or
+        # write_file) and finishes WITHOUT planning a todo. Gating collection on
+        # planned_tasks dropped those files from the result panel ("暂无产物文件")
+        # though they were written to the workspace. read_file_directory returns []
+        # for an empty output/, so a greeting still yields nothing here.
+        file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
+        final_files = await linsight_execute_utils.get_final_result_file(
+            session_model=session_model, file_details=file_details, answer=answer
+        )
+        # Synthesize a fallback report ONLY when the model actually planned work but
+        # produced no deliverable — never for a trivial greeting/Q&A with no output.
+        if not final_files and planned_tasks:
+            final_files = await linsight_execute_utils.build_fallback_report_file(
+                session_model=session_model, answer=answer, file_dir=self.file_dir
+            )
+        session_model.output_result = {
+            "answer": answer,
+            "final_files": final_files,
+            "all_from_session_files": [],
+        }
+        await self._state_manager.set_session_version_info(session_model)
+        # F035 problem 2: finalize the session pseudo task carrying any
+        # planning/direct-answer steps so it isn't left stuck in_progress.
+        await self._complete_session_pseudo_task(session_model)
+        # F035 Track J: land the answer in the unified conversation stream.
+        await linsight_execute_utils.persist_task_turn_message(session_model)
+        await self._state_manager.push_message(
+            MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
+        )
+        logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
+
+    def _stash_partial_abort(self, e: BaseException) -> None:
+        """Record an L3/L4 abort so ``_handle_task_completion`` renders a salvaged
+        partial result instead of a raw failure. Shared by the fresh / resume /
+        continue drivers so a tool loop or recursion ceiling is handled uniformly.
+        """
+        logger.warning(f"task aborted, salvaging partial result: {type(e).__name__}: {e}")
+        self._partial_pending = True
+        self._partial_error = e
+        self._partial_salvage = getattr(e, "partial_result", None)
+
+    async def _handle_task_partial(self, session_model: LinsightSessionVersion):
+        """Render a salvaged partial result after an L3/L4 abort.
+
+        The L3 tool-loop breaker (``LinsightToolLoopError``) carries a
+        middleware-assembled ``partial_result`` (analysis conclusions + a trimmed
+        digest of retrieved knowledge). A bare L4 ``GraphRecursionError`` has no
+        such body, so we fall back to the last streamed assistant text. Either
+        way, surface it as a NORMAL (COMPLETED) result with an apology preamble —
+        the user gets meaningful output instead of a raw recursion error. Mirrors
+        ``_handle_direct_answer_completion``. If nothing is salvageable, degrade to
+        a friendly classified failure (never a raw dump).
+        """
+        body = (self._partial_salvage or "").strip() or (self._last_assistant_text or "").strip()
+        if not body:
+            await self._handle_task_failure(session_model, _PARTIAL_NO_SALVAGE_MESSAGE, exc=self._partial_error)
+            return
+
+        answer = f"{_PARTIAL_RESULT_PREAMBLE}\n\n{body}"
+        session_model.status = SessionVersionStatusEnum.COMPLETED
+        # Collect any output/ deliverable the model managed to write before looping;
+        # otherwise synthesize a report from the salvaged answer (same backstop as
+        # the success / direct-answer paths).
+        file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
+        final_files = await linsight_execute_utils.get_final_result_file(
+            session_model=session_model, file_details=file_details, answer=answer
+        )
+        if not final_files:
+            final_files = await linsight_execute_utils.build_fallback_report_file(
+                session_model=session_model, answer=answer, file_dir=self.file_dir
+            )
+        session_model.output_result = {
+            "answer": answer,
+            "final_files": final_files,
+            "all_from_session_files": [],
+            # Marker so the frontend/analytics can tell this was a degraded run
+            # even though it renders as a normal result (no frontend change required).
+            "partial": True,
+        }
+        await self._state_manager.set_session_version_info(session_model)
+        await self._complete_session_pseudo_task(session_model)
+        await linsight_execute_utils.persist_task_turn_message(session_model)
+        await self._state_manager.push_message(
+            MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
+        )
+        logger.info(f"Task completed via partial-result salvage ({len(final_files)} files)")
 
     async def _handle_task_success(self, session_model: LinsightSessionVersion):
         """Processing task successful"""
@@ -600,30 +1453,44 @@ class LinsightWorkflowTask:
             file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
             logger.debug(f"Read File Directory File Details: {file_details}")
 
+            # The TaskEnd answer can be empty when the model delegates to `task`
+            # sub-agents (the parent's final message carries no text). Fall back to
+            # the last streamed assistant text so the answer field — and the
+            # synthesized report below — still carry the real content.
+            answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
+
             final_result_files = await linsight_execute_utils.get_final_result_file(
-                session_model=session_model,
-                file_details=file_details,
-                answer=self._final_result.answer
+                session_model=session_model, file_details=file_details, answer=answer
             )
+            # F035 backstop: weak models can finish without ever writing an output/
+            # deliverable (they loop on write_todos), leaving no report. Synthesize
+            # one from the final answer so the task always yields a report file.
+            if not final_result_files:
+                final_result_files = await linsight_execute_utils.build_fallback_report_file(
+                    session_model=session_model, answer=answer, file_dir=self.file_dir
+                )
             execution_tasks = await self._state_manager.get_execution_tasks()
             all_from_session_files = await linsight_execute_utils.get_all_files_from_session(
-                execution_tasks=execution_tasks, file_details=file_details)
+                execution_tasks=execution_tasks, file_details=file_details
+            )
 
             # Update session status
             session_model.status = SessionVersionStatusEnum.COMPLETED
             session_model.output_result = {
-                "answer": self._final_result.answer,
+                "answer": answer,
                 "final_files": final_result_files,
-                "all_from_session_files": all_from_session_files
+                "all_from_session_files": all_from_session_files,
             }
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)
+            # F035 problem 2: finalize the session pseudo task carrying any
+            # planning/wrap-up steps so it isn't left stuck in_progress.
+            await self._complete_session_pseudo_task(session_model)
+            # F035 Track J: land the answer in the unified conversation stream.
+            await linsight_execute_utils.persist_task_turn_message(session_model)
             await self._state_manager.push_message(
-                MessageData(
-                    event_type=MessageEventType.FINAL_RESULT,
-                    data=session_model.model_dump()
-                )
+                MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
             )
 
             logger.info(f"Task completed successfully, processed {len(final_result_files)} files")
@@ -641,24 +1508,59 @@ class LinsightWorkflowTask:
 
             for task in execution_tasks:
                 # Update each task status to Terminated
-                if task.status not in [ExecuteTaskStatusEnum.TERMINATED, ExecuteTaskStatusEnum.SUCCESS,
-                                       ExecuteTaskStatusEnum.FAILED]:
-                    await self._state_manager.update_execution_task_status(task_id=task.id,
-                                                                           status=ExecuteTaskStatusEnum.TERMINATED)
+                if task.status not in [
+                    ExecuteTaskStatusEnum.TERMINATED,
+                    ExecuteTaskStatusEnum.SUCCESS,
+                    ExecuteTaskStatusEnum.FAILED,
+                ]:
+                    await self._state_manager.update_execution_task_status(
+                        task_id=task.id, status=ExecuteTaskStatusEnum.TERMINATED
+                    )
         except Exception as e:
             logger.warning(f"Error setting task failed: {e}")
 
-    async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
-        """Processing task failed"""
+    async def _handle_task_failure(
+        self, session_model: LinsightSessionVersion, error_msg: str, *, exc: Exception | None = None
+    ):
+        """Processing task failed.
+
+        Classifies the failure (灵思LLM容错) into a stable ``error_type`` (e.g.
+        ``content_filter`` / ``quota_exhausted`` / ``network_timeout``) so the
+        frontend can render a localized, user-friendly card instead of the raw
+        provider message. ``exc`` (the original exception) is preferred for
+        precise classification; without it the message string is classified
+        best-effort. The raw provider text is kept in ``detail`` for the
+        "view details" disclosure. Vendor-agnostic — see ``llm_error_classifier``.
+        """
+        classified = classify_for_event(exc if exc is not None else error_msg)
         session_model.status = SessionVersionStatusEnum.FAILED
-        session_model.output_result = {"error_message": error_msg}
+        session_model.output_result = {
+            "error_message": error_msg,
+            "error_code": classified.error_code,
+            "error_type": classified.error_type,
+            "detail": classified.detail,
+        }
         await self._state_manager.set_session_version_info(session_model)
+        # F035 Track J: still land a (failed) task turn in the unified stream so the
+        # conversation isn't left with a dangling question; extra points to the SV
+        # whose detail panel shows the failure.
+        await linsight_execute_utils.persist_task_turn_message(session_model)
 
         # Set all tasks to failed
         await self._set_tasks_failed()
 
+        # error_message event: keep ``error`` for backward compatibility (old
+        # clients display it raw); new fields drive the classified friendly card.
         await self._state_manager.push_message(
-            MessageData(event_type=MessageEventType.ERROR_MESSAGE, data={"error": error_msg})
+            MessageData(
+                event_type=MessageEventType.ERROR_MESSAGE,
+                data={
+                    "error": error_msg,
+                    "error_code": classified.error_code,
+                    "error_type": classified.error_type,
+                    "detail": classified.detail,
+                },
+            )
         )
         system_config = await settings.aget_all_config()
         # DapatkanLinsight_invitation_code
@@ -670,6 +1572,8 @@ class LinsightWorkflowTask:
         """Processing execution error"""
         try:
             session_model = await LinsightSessionVersionDao.get_by_id(self.session_version_id)
-            await self._handle_task_failure(session_model, str(error))
+            # Pass the exception object (not just str) so the classifier can unwrap
+            # TaskExecutionError -> original provider cause for a precise error_type.
+            await self._handle_task_failure(session_model, str(error), exc=error)
         except Exception as e:
             logger.error(f"Processing execution error failed: session_version_id={self.session_version_id}, error={e}")

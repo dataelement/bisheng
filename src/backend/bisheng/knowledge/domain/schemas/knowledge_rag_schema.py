@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,9 @@ class Metadata(BaseModel):
     chunk_index: Optional[int] = Field(default=None, description="Chunk Index")
     bbox: Optional[str] = Field(default=None, description="Bounding Box information")
     page: Optional[int] = Field(default=None, description="Page number")
+    nav_path: Optional[List[str]] = Field(default=None, description="Hierarchical path for preview only")
+    nav_depth: Optional[int] = Field(default=None, description="Hierarchical depth for preview only")
+    is_heading: Optional[bool] = Field(default=None, description="Whether the paragraph originated from a heading")
     knowledge_id: Optional[int] = Field(default=None, description="Knowledge ID")
     upload_time: Optional[int] = Field(default=None, description="Upload timestamp")
     update_time: Optional[int] = Field(default=None, description="Update timestamp")

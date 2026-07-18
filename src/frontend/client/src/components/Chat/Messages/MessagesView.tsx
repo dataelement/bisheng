@@ -66,7 +66,7 @@ export default function MessagesView({
         >
           <div className="flex flex-1 flex-col pb-3 dark:bg-transparent">
             {(_messagesTree && _messagesTree.length == 0) ||
-            _messagesTree === null ? (
+              _messagesTree === null ? (
               <div
                 className={cn(
                   "flex w-full items-center justify-center p-3 text-text-secondary",
@@ -128,7 +128,7 @@ export default function MessagesView({
           timeout={400}
           classNames="scroll-down"
           unmountOnExit={false}
-          // appear
+        // appear
         >
           {() =>
             showScrollButton &&

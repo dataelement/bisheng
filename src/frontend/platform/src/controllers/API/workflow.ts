@@ -104,6 +104,13 @@ export async function getWorkFlowVersions(flow_id): Promise<{ data: any[], total
     });
 }
 
+/**
+ * 切换工作流当前版本.
+ */
+export async function changeWorkflowCurrentVersion({ flow_id, version_id }: { flow_id: string, version_id: number }) {
+    return await axios.post(`/api/v1/workflow/change_version?flow_id=${flow_id}&version_id=${version_id}`);
+}
+
 
 /** 上线工作流 & 修改信息 
  * status: 2 上线 1 下线
@@ -479,7 +486,7 @@ const workflowTemplate = [
                             2
                         ],
                         "step": 0.1,
-                        "value": 0.7
+                        "value": 1
                     }
                 ]
             },
@@ -589,7 +596,7 @@ const workflowTemplate = [
                             2
                         ],
                         "step": 0.1,
-                        "value": 0.7
+                        "value": 1
                     }
                 ]
             },
@@ -650,6 +657,15 @@ const workflowTemplate = [
                             "type": "knowledge",
                             "value": []
                         }
+                    },
+                    {
+                        // F041: 用户知识库权限校验 — default OFF; ON gates knowledge-space
+                        // retrieval by the runtime user's view_file, OFF by the config author's.
+                        "key": "user_auth",
+                        "label": "true",
+                        "type": "switch",
+                        "value": false,
+                        "help": "true"
                     }
                 ]
             },
@@ -845,7 +861,7 @@ const workflowTemplate = [
                             2
                         ],
                         "step": 0.1,
-                        "value": 0.7
+                        "value": 1
                     }
                 ]
             },

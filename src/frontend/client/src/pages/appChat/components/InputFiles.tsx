@@ -1,12 +1,13 @@
 
-import { X } from "lucide-react";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { Loader2, X } from "lucide-react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
-import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import LegacyFileIcon from "~/components/ui/icon/File";
 import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
-import { cn, generateUUID, getFileExtension } from "~/utils";
+import { cn, generateUUID } from "~/utils";
 
 const checkFileType = (file, accepts) => {
     if (!accepts || accepts === '*') return true;
@@ -23,7 +24,9 @@ const checkFileType = (file, accepts) => {
 };
 
 // @accepts '.png,.jpg'
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode }, ref) => {
+// `hideTrigger` hides the built-in attachment icon; caller invokes
+// `openPicker()` via the imperative ref (e.g. from the "+" menu).
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, onFilesStateChange, uploadMode, hideTrigger = false, hideList = false }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -32,19 +35,46 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
     const fileInputRef = useRef(null);
     const fileSizeLimit = size * 1024 * 1024; // File size limit in bytes
+    const defaultParsingStatus = uploadMode === 'linsight' ? 'running' : 'completed';
+    const isLinsightParsing = (file) => {
+        return uploadMode === 'linsight'
+            && file?.parsingStatus
+            && !['completed', 'failed'].includes(file.parsingStatus);
+    };
+    const getUploadedFileIds = () => filesRef.current.filter(f => f.id).map(f => ({
+        file_id: f.fileId || f.id,
+        filepath: f.filePath,
+        type: f.type,
+        name: f.name,
+        filename: f.name,
+        file_name: f.name,
+        parsing_status: f.parsingStatus || defaultParsingStatus,
+        // Local object URL for image chips so pinned images stay previewable in
+        // the input box before send (revoked on remove / clear / unmount).
+        previewUrl: f.previewUrl,
+    }));
 
     const handleFileChange = (selectedFiles) => {
         const validFiles = [];
         const invalidFiles = [];
         const invalidTypeFiles = [];
+        const duplicateFiles = [];
 
         fileInputRef.current.value = ''
+        // Block re-uploading a file already attached this round (filesRef stays in
+        // sync with state) plus intra-batch dupes — the chat has no server-side
+        // dedup. Scoped to the current turn since the list clears after send.
+        const seenNames = new Set(filesRef.current.map((f) => f.name));
         // Validate files based on file extensions
         selectedFiles.forEach((file) => {
             if (!checkFileType(file, accepts)) {
                 invalidTypeFiles.push(file);
                 return;
+            } else if (seenNames.has(file.name)) {
+                duplicateFiles.push(file);
+                return;
             } else if (file.size <= fileSizeLimit) {
+                seenNames.add(file.name);
                 validFiles.push({ id: generateUUID(6), file });
             } else {
                 invalidFiles.push({ id: generateUUID(6), file });
@@ -53,6 +83,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
         if (invalidTypeFiles.length > 0) {
             showToast({ message: t('com_ui_upload_file_type_error'), status: 'error' }); // 请确保你有对应多语言key或直接写死中文测试
+        }
+        // Notify about skipped duplicates
+        if (duplicateFiles.length > 0) {
+            showToast({ message: t('com_error_files_dupe'), status: 'info' });
         }
         // Show invalid file toast
         if (invalidFiles.length > 0) {
@@ -75,13 +109,16 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 isUploading: true,
                 progress: 0, // Set initial progress to 0
                 id, // Use the generated id
-                file // Keep original file object for later use
+                file, // Keep original file object for later use
+                // Preview URL from the local blob for images (docs get none).
+                previewUrl: file.type?.startsWith('image/') ? URL.createObjectURL(file) : undefined,
             };
         });
 
         setFiles(prevFiles => {
             const res = [...prevFiles, ...filesWithProgress];
             filesRef.current = res;
+            onFilesStateChange?.(res);
             return res;
         });
 
@@ -101,25 +138,29 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                         return f;
                     });
                     filesRef.current = updatedFiles;
+                    onFilesStateChange?.(updatedFiles);
                     return updatedFiles;
                 });
             }, uploadMode).then(response => {
+                const responseData = response?.data ?? response;
                 // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
                 // for any caller/endpoint that still uses the snake-case form.
-                const filePath = response.data.filepath ?? response.data.file_path;
-                const fileId = response.data.file_id; // Server-returned file_id
+                const filePath = responseData.filepath ?? responseData.file_path;
+                const fileId = responseData.file_id; // Server-returned file_id
+                const parsingStatus = responseData.parsing_status ?? defaultParsingStatus;
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
-                        return { ...f, isUploading: false, filePath, fileId, progress: 100 }; // Set progress to 100 when uploaded
+                        return { ...f, isUploading: false, filePath, fileId, parsingStatus, progress: 100 }; // Set progress to 100 when uploaded
                     }
                     return f;
                 });
                 setFiles(filesRef.current);
+                onFilesStateChange?.(filesRef.current);
 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // Once all files are uploaded, trigger onChange with the file IDs
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+                    const uploadedFileIds = getUploadedFileIds();
                     onChange(uploadedFileIds); // Pass the file IDs to onChange
                 }
             }).catch((e) => {
@@ -129,7 +170,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // If no files remain, trigger onChange immediately
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+                    const uploadedFileIds = getUploadedFileIds();
                     onChange(uploadedFileIds);
                 }
             });
@@ -138,7 +179,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         // Wait for all files to finish uploading
         Promise.all(uploadPromises).then(() => {
             // Once all files are uploaded, trigger onChange with the file IDs
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+            const uploadedFileIds = getUploadedFileIds();
             onChange(uploadedFileIds); // Pass the file IDs to onChange
         });
     };
@@ -148,83 +189,112 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             if (disabled) return;
             handleFileChange(Array.from(fileList));
         },
+        removeByName: (fileName) => {
+            handleFileRemove(fileName);
+        },
+        updateParsingStatus: (statusMap) => {
+            setFiles((prevFiles) => {
+                const updatedFiles = prevFiles.reduce((result, file) => {
+                    const fileId = file.fileId || file.file_id;
+                    const status = statusMap?.get?.(fileId);
+
+                    if (!status) {
+                        result.push(file);
+                        return result;
+                    }
+
+                    if (status === 'failed') {
+                        return result;
+                    }
+
+                    result.push({ ...file, parsingStatus: status, isUploading: false });
+                    return result;
+                }, []);
+
+                filesRef.current = updatedFiles;
+                onFilesStateChange?.(updatedFiles);
+                return updatedFiles;
+            });
+        },
+        openPicker: () => {
+            if (disabled) return;
+            fileInputRef.current?.click();
+        },
         clear: () => {
+            filesRef.current.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
             setFiles([]);
             filesRef.current = [];
+            onFilesStateChange?.([]);
             onChange([]);
         }
     }));
 
+    // Release any live object URLs when the component unmounts so pinned image
+    // previews don't leak blobs.
+    useEffect(() => () => {
+        filesRef.current.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+    }, []);
+
     const handleFileRemove = (fileName) => {
+        const removed = filesRef.current.find(file => file.name === fileName);
+        if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
         const res = filesRef.current.filter(file => file.name !== fileName);
         filesRef.current = res
         setFiles(res);
+        onFilesStateChange?.(res);
 
         // If we manually remove a file during upload, we decrease the remaining upload counter
         remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+            const uploadedFileIds = getUploadedFileIds();
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
-    };
-
-    const formatFileSize = (size) => {
-        let fileSize = typeof size === 'string' ? parseFloat(size) : size;
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let index = 0;
-
-        while (fileSize >= 1024 && index < units.length - 1) {
-            fileSize /= 1024;
-            index++;
-        }
-
-        return `${fileSize.toFixed(2)} ${units[index]}`;
     };
 
     return (
         <div className="">
             {/* Displaying files */}
-            {!!files.length && <div className="flex flex-wrap gap-2 p-2 rounded-xl max-h-96 overflow-y-auto">
+            {!hideList && !!files.length && <div className="flex max-w-full flex-nowrap gap-1 overflow-x-auto overflow-y-hidden p-2">
                 {files.map((file, index) => (
-                    <div key={index} className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-2xl cursor-default">
-                        {/* Remove button */}
-                        <span
-                            onClick={() => handleFileRemove(file.name)}
-                            className="opacity-0 group-hover:opacity-100 absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full cursor-pointer transition-opacity"
-                        >
-                            <X size={14} />
+                    <div
+                        key={index}
+                        className="group inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+                    >
+                        {file.isUploading || isLinsightParsing(file) ? (
+                            <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
+                        ) : (
+                            <LegacyFileIcon className="mr-1 size-4 shrink-0 text-[#999]" type={getFileTypebyFileName(file.name)} />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
+                            {file.name}
                         </span>
-
-                        {/* File Icon */}
-                        <FileIcon loading={file.isUploading} type={getFileTypebyFileName(file.name)} />
-
-                        {/* File details */}
-                        <div className="flex-1">
-                            <div className="max-w-48 text-sm font-medium text-gray-700 truncate" title={file.name}>
-                                {file.name}
-                            </div>
-                            {file.isUploading ? file.progress === 100
-                                ? <div className="text-xs text-gray-500">{t('com_inputfiles_parsing')}</div>
-                                : <div className="text-xs text-gray-500">{t('com_inputfiles_uploading')} {file.progress}%</div>
-                                : <div className="text-xs text-gray-500">{getFileExtension(file.name)} {formatFileSize(file.size)}</div>}
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => handleFileRemove(file.name)}
+                            className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                            aria-label="Remove file"
+                        >
+                            <X size={12} />
+                        </button>
                     </div>
                 ))}
             </div>}
 
-            {/* File Upload Button disabled */}
-            <div
-                className={cn(
-                    'absolute z-10 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
-                    showVoice ? 'right-[92px]' : 'right-14',
-                    disabled ? 'pointer-events-none opacity-40' : ''
-                )}
-                onClick={() => !disabled && fileInputRef.current.click()}
-            >
-                <AttachmentIcon />
-            </div>
+            {/* File Upload Button — hidden when invoked from the "+" menu. */}
+            {!hideTrigger && (
+                <div
+                    className={cn(
+                        'absolute z-10 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
+                        showVoice ? 'right-[92px]' : 'right-14',
+                        disabled ? 'pointer-events-none opacity-40' : ''
+                    )}
+                    onClick={() => !disabled && fileInputRef.current.click()}
+                >
+                    <AttachmentIcon />
+                </div>
+            )}
 
             {/* File Input */}
             <input

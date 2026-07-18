@@ -1,6 +1,7 @@
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronRight, Circle } from 'lucide-react';
+import { Check, Circle } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -24,14 +25,14 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm font-medium outline-none hover:bg-gray-100 focus:bg-gray-100 data-[state=open]:bg-gray-100 dark:hover:bg-gray-900 dark:focus:bg-gray-900 dark:data-[state=open]:bg-gray-900',
+      'flex cursor-default select-none items-center rounded-[6px] px-2 py-[5px] text-sm font-medium outline-none hover:bg-[#F2F3F5] focus:bg-[#F2F3F5] data-[state=open]:bg-[#F2F3F5] dark:hover:bg-gray-900 dark:focus:bg-gray-900 dark:data-[state=open]:bg-gray-900',
       inset ? 'pl-8' : '',
       className,
     )}
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto h-4 w-4" />
+    <Outlined.Right className="ml-auto h-4 w-4 text-[#999]" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
@@ -43,7 +44,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-100 bg-white p-1 text-gray-700 shadow-md animate-in slide-in-from-left-1 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400',
+      'z-50 min-w-[8rem] overflow-hidden rounded-[8px] border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in slide-in-from-left-1 dark:bg-gray-800 dark:text-gray-400',
       className,
     )}
     {...props}
@@ -60,7 +61,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 flex min-w-[8rem] flex-col gap-1 overflow-hidden rounded-[8px] border border-gray-100 bg-white p-1 text-gray-700 shadow-md animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400',
+        'z-50 flex min-w-[8rem] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:bg-gray-800 dark:text-gray-400',
         className,
       )}
       {...props}
@@ -78,7 +79,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-[8px] px-2 py-1.5 text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
+      'relative flex cursor-pointer select-none items-center rounded-[6px] px-2 py-[5px] text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
       inset ? 'pl-8' : '',
       className,
     )}

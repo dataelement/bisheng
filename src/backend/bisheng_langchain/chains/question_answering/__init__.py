@@ -1,20 +1,20 @@
 """Load question answering chains."""
 from typing import Any, Mapping, Optional, Protocol
 
-# from langchain.chains.combine_documents.stuff import StuffDocumentsChain
+# from langchain_classic.chains.combine_documents.stuff import StuffDocumentsChain
 from bisheng_langchain.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain.callbacks.base import BaseCallbackManager
-from langchain.callbacks.manager import Callbacks
-from langchain.chains import ReduceDocumentsChain
-from langchain.chains.combine_documents.base import BaseCombineDocumentsChain
-from langchain.chains.combine_documents.map_reduce import MapReduceDocumentsChain
-from langchain.chains.combine_documents.map_rerank import MapRerankDocumentsChain
-from langchain.chains.combine_documents.refine import RefineDocumentsChain
-from langchain.chains.llm import LLMChain
-from langchain.chains.question_answering import map_reduce_prompt, refine_prompts, stuff_prompt
-from langchain.chains.question_answering.map_rerank_prompt import PROMPT as MAP_RERANK_PROMPT
-from langchain.schema.language_model import BaseLanguageModel
-from langchain.schema.prompt_template import BasePromptTemplate
+from langchain_classic.callbacks.base import BaseCallbackManager
+from langchain_classic.callbacks.manager import Callbacks
+from langchain_classic.chains import ReduceDocumentsChain
+from langchain_classic.chains.combine_documents.base import BaseCombineDocumentsChain
+from langchain_classic.chains.combine_documents.map_reduce import MapReduceDocumentsChain
+from langchain_classic.chains.combine_documents.map_rerank import MapRerankDocumentsChain
+from langchain_classic.chains.combine_documents.refine import RefineDocumentsChain
+from langchain_classic.chains.llm import LLMChain
+from langchain_classic.chains.question_answering import map_reduce_prompt, refine_prompts, stuff_prompt
+from langchain_classic.chains.question_answering.map_rerank_prompt import PROMPT as MAP_RERANK_PROMPT
+from langchain_classic.schema.language_model import BaseLanguageModel
+from langchain_classic.schema.prompt_template import BasePromptTemplate
 
 
 class LoadingCallable(Protocol):

@@ -15,6 +15,7 @@ export interface FlowData {
   status: number;
   update_time: string; // ISO 8601 format date string
   user_id: null | string; // Assuming it can be null or string
+  can_share?: boolean;
 }
 
 //
@@ -29,6 +30,7 @@ export type ChatMessageType = {
   end: boolean;
   id?: number;
   source?: number;
+  citations?: any[] | null;
   noAccess?: boolean;
   user_name: string;
   at?: string;
@@ -36,7 +38,8 @@ export type ChatMessageType = {
   sender?: string;
   /** @某人 */
   receiver?: any;
-  liked?: boolean;
+  /** Feedback verdict: 0 none / 1 thumbs up / 2 thumbs down (mirrors chatmessage.liked). */
+  liked?: number;
   extra?: string;
   create_time: string;
   update_time: string;
@@ -112,6 +115,17 @@ export type BishengConfig = {
   enable_registration: boolean;
   /** 最大上传文件大小 mb */
   uploaded_files_maximum_size: number;
+  /** 音视频单文件最大上传大小 mb */
+  uploaded_media_maximum_size?: number;
+  /** System YAML `env.workbench_menu_unavailable_message` — plain text on /menu-unavailable */
+  workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
   enable_etl4lm: boolean;
+  /** Knowledge space feature flags */
+  knowledges?: {
+    version_management?: {
+      enabled: boolean;
+      simhash_similarity_threshold?: number;
+    };
+  };
 };

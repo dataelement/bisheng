@@ -5,7 +5,6 @@ import { Dialog, DialogContent } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, readFileByLibDatabase, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
@@ -23,13 +22,13 @@ import PreviewParagraph from './PreviewParagraph';
 // Import metadata components
 import { MainMetadataDialog, MetadataSideDialog } from './MetadataDialog';
 
-export default function Paragraphs({ fileId, onBack }) {
+export default function Paragraphs({ fileId, onBack, canEditKb = false, canDeleteKb = false }) {
     console.log('Props fileId:', fileId);
 
     const { t } = useTranslation('knowledge');
     const { id } = useParams();
     const navigate = useNavigate();
-    const { isEditable, selectedBbox } = useKnowledgeStore();
+    const { selectedBbox } = useKnowledgeStore();
     const [hasInited, setHasInited] = useState(false);
     const location = useLocation();
     const [chunkSwitchTrigger, setChunkSwitchTrigger] = useState(0);
@@ -40,7 +39,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
-    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false);
+    const isKnowledgeAdmin = canEditKb;
 
     // Metadata related states
     const [metadataDialog, setMetadataDialog] = useState({
@@ -75,6 +74,7 @@ export default function Paragraphs({ fileId, onBack }) {
     // Refs
     const isChangingRef = useRef(false);
     const [previewUrl, setPreviewUrl] = useState()
+    const [previewData, setPreviewData] = useState<any>(null)
     const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
     const latestFileUrlRef = useRef('');
     const latestPreviewUrlRef = useRef('');
@@ -207,6 +207,7 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [datalist, selectedFileId, chunkSwitchTrigger]);
 
     const handleChunkChange = useCallback((chunkIndex, text) => {
+        if (!canEditKb) return;
         let chunkIndexPage = chunkIndex % pageSize;
         console.log('Converted localIndex:', chunkIndexPage);
 
@@ -228,7 +229,7 @@ export default function Paragraphs({ fileId, onBack }) {
             (item) => item?.metadata?.chunk_index === chunkIndex,
             (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
         );
-    }, [id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
+    }, [canEditKb, id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
 
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('Getting file URL:', fileId);
@@ -249,6 +250,17 @@ export default function Paragraphs({ fileId, onBack }) {
             // Check if there are valid preview_url and original_url
             const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
+            setPreviewData({
+                ...res,
+                original_url: res.original_url || '',
+                preview_url: res.preview_url || '',
+                file_source: res.file_source || '',
+                source_url: res.source_url || '',
+                final_url: res.final_url || '',
+                web_title: res.web_title || '',
+                media_kind: res.media_kind || '',
+                html_preview_url: res.html_preview_url || '',
+            });
 
             if (currentFile) {
                 if (hasPreviewUrl) {
@@ -279,6 +291,7 @@ export default function Paragraphs({ fileId, onBack }) {
             } else {
                 setFileUrl('');
                 setPreviewUrl('');
+                setPreviewData(null);
                 latestOriginalUrlRef.current = '';
                 return '';
             }
@@ -286,6 +299,7 @@ export default function Paragraphs({ fileId, onBack }) {
             console.error('Failed to get file URL:', err);
             setFileUrl('');
             setPreviewUrl('');
+            setPreviewData(null);
             setPartitions([]);
             latestOriginalUrlRef.current = '';
             return '';
@@ -499,6 +513,7 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [closeSideDialog, mainMetadataList, t]);
 
     const handleMetadataClick = useCallback(async () => {
+        if (!canEditKb) return;
         if (currentFile?.fullData) {
             try {
                 const res = await getMetaFile(currentFile.id);
@@ -532,10 +547,11 @@ export default function Paragraphs({ fileId, onBack }) {
                 });
             }
         }
-    }, [currentFile]);
+    }, [canEditKb, currentFile]);
 
     // Adjust segmentation strategy
     const handleAdjustSegmentation = useCallback(() => {
+        if (!canEditKb) return;
         const currentFileUrl = latestOriginalUrlRef.current;
         const currentPreviewUrl = latestPreviewUrlRef.current;
 
@@ -556,7 +572,7 @@ export default function Paragraphs({ fileId, onBack }) {
                 isAdjustMode: true
             }
         });
-    }, [id, selectedFileId, currentFile, navigate]);
+    }, [canEditKb, id, selectedFileId, currentFile, navigate]);
 
     // Parse segmentation strategy description (keep original logic)
     const splitRuleDesc = useCallback((file) => {
@@ -601,6 +617,7 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [t]);
 
     const handleDeleteChunk = useCallback(async (data) => {
+        if (!canDeleteKb) return;
         try {
             const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
             setChunks(updatedChunks);
@@ -624,6 +641,7 @@ export default function Paragraphs({ fileId, onBack }) {
             await reload();
         }
     }, [
+        canDeleteKb,
         id,
         reload,
         chunks,
@@ -754,11 +772,10 @@ export default function Paragraphs({ fileId, onBack }) {
         };
     }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
 
-    const handleWriteableChange = (writable: boolean) => {
-        setIsKnowledgeAdmin(writable);
-    }
+    const handleWriteableChange = () => {}
 
     const handleSaveUserMetadata = useCallback(async () => {
+        if (!canEditKb) return;
         const knowledge_id = selectedFileId
         const user_metadata_list = mainMetadataList.map(item => {
             if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
@@ -791,10 +808,10 @@ export default function Paragraphs({ fileId, onBack }) {
             console.error('Failed to save metadata:', error);
             setMetadataError(t('metadialog.saveFailed'));
         }
-    }, [mainMetadataList, selectedFileId, t]);
+    }, [canEditKb, mainMetadataList, selectedFileId, t]);
 
     return (
-        <div className="relative flex flex-col h-[calc(100vh-64px)]">
+        <div className="relative flex flex-col h-[calc(100vh-64px-var(--license-banner-h,0px))]">
             {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
@@ -826,18 +843,23 @@ export default function Paragraphs({ fileId, onBack }) {
                             disabled={!selectedFileId}
                         />
                     </div>
-                    <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
+                    {canEditKb && (
+                    <Button
+                        variant="outline"
+                        onClick={handleMetadataClick}
+                        className="px-4 whitespace-nowrap"
+                    >
                         <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                         {t('metadialog.title')}
                     </Button>
-                    <Tip content={!isEditable && t('common.noPermission')} side='top'>
+                    )}
+                    {canEditKb && (
                         <Button
-                            disabled={!isEditable}
                             onClick={handleAdjustSegmentation}
-                            className={`px-4 whitespace-nowrap disabled:pointer-events-auto`}>
+                            className={`px-4 whitespace-nowrap`}>
                             {t('segment.adjustStrategy')}
                         </Button>
-                    </Tip>
+                    )}
                 </div>
             </div>
 
@@ -854,8 +876,9 @@ export default function Paragraphs({ fileId, onBack }) {
                         file={currentFile}
                         chunks={chunks}
                         setChunks={setChunks}
+                        previewData={previewData}
                         rules={previewRules}
-                        edit
+                        edit={canEditKb}
                     />
                 ) : (
                     !isParagraphVisible && (
@@ -874,9 +897,10 @@ export default function Paragraphs({ fileId, onBack }) {
                                 key={`preview-${selectedFileId}-${chunkSwitchTrigger}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
-                                edit={isEditable}
+                                edit={canEditKb}
+                                canDelete={canDeleteKb}
                                 page={page}
-                                className="h-[calc(100vh-206px)] pb-6"
+                                className="h-[calc(100vh-206px-var(--license-banner-h,0px))] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={chunks}
@@ -902,6 +926,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     page={page}
                     pageSize={pageSize}
                     total={total}
+                    showTotal={true}
                     onChange={setPage}
                     disabled={!selectedFileId}
                 />
@@ -928,7 +953,7 @@ export default function Paragraphs({ fileId, onBack }) {
             <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph(prev => ({ ...prev, show }))}>
                 <DialogContent close={false} className='size-full max-w-full sm:rounded-none p-0 border-none'>
                     <ParagraphEdit
-                        edit={isEditable}
+                        edit={canEditKb}
                         fileId={paragraph.fileId}
                         chunkId={paragraph.chunkId}
                         isUns={paragraph.isUns || ['etl4lm', 'un_etl4lm'].includes(paragraph.parseType)}

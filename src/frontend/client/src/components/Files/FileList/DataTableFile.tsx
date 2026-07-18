@@ -89,8 +89,8 @@ export default function DataTableFile<TData, TValue>({
         <h2 className="text-lg">
           <strong>Files</strong>
         </h2>
-        <div className="mt-3 flex w-full flex-col-reverse justify-between md:flex-row">
-          <div className="mt-3 flex w-full flex-row justify-center gap-x-3 md:m-0 md:justify-start">
+        <div className="mt-3 flex w-full flex-col-reverse justify-between touch-desktop:flex-row">
+          <div className="mt-3 flex w-full flex-row justify-center gap-x-3 touch-desktop:m-0 touch-desktop:justify-start">
             <ActionButton
               onClick={() => {
                 console.log('click');

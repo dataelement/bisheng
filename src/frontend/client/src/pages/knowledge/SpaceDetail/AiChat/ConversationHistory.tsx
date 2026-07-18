@@ -3,25 +3,16 @@
  * Displays server-backed session records with inline rename + delete support.
  */
 import { useEffect, useRef, useState } from "react";
-import {
-    HistoryIcon,
-    MessageSquareIcon,
-    MoreHorizontalIcon,
-    PencilLine,
-    Trash2Icon,
-    XIcon,
-} from "lucide-react";
+import { MessageSquareIcon } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
-import { Button } from "~/components";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Input } from "~/components/ui/Input";
 import type { FolderSession } from "~/api/chatApi";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
@@ -32,7 +23,12 @@ interface ConversationHistoryProps {
     onSelect: (chatId: string) => void;
     onDelete: (chatId: string) => void;
     onRename: (chatId: string, name: string) => Promise<boolean>;
-    onClose: () => void;
+    /** Back to the conversation view (leaves the panel open). */
+    onBack: () => void;
+    /** Start a fresh conversation and reveal it. */
+    onNewChat: () => void;
+    /** Collapse the whole dock. */
+    onCollapse: () => void;
 }
 
 export function ConversationHistory({
@@ -41,7 +37,9 @@ export function ConversationHistory({
     onSelect,
     onDelete,
     onRename,
-    onClose,
+    onBack,
+    onNewChat,
+    onCollapse,
 }: ConversationHistoryProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -135,27 +133,49 @@ export function ConversationHistory({
 
     return (
         <div className="absolute inset-0 z-30 flex flex-col bg-white animate-in slide-in-from-right duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e6eb] shrink-0">
-                <div className="flex items-center gap-2">
-                    <HistoryIcon className="size-4 text-[#4e5969]" />
-                    <h3 className="text-sm font-medium text-[#1d2129]">
+            {/* Header — mirrors the AI assistant header exactly (px-4 py-3, no bottom
+                border, leading-[22px] title row, right icon group in py-1) so both panels
+                line up. Left: back to the conversation; right: new chat + collapse. */}
+            <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
+                {/* Back arrow · divider · title — 12px gap between all three. */}
+                <div className="flex shrink-0 items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        aria-label={localize("com_ui_go_back")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                    >
+                        <Outlined.ArrowLeft className="size-4" />
+                    </button>
+                    <span className="h-3.5 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                    <h3 className="text-sm font-medium leading-[22px] text-[#212121]">
                         {localize("com_knowledge.history_chat")}
                     </h3>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
-                    onClick={onClose}
-                >
-                    <XIcon className="size-4" />
-                </Button>
+                <div className="min-w-0 flex-1" aria-hidden />
+                <div className="flex shrink-0 items-center justify-end gap-3 py-1">
+                    <button
+                        type="button"
+                        onClick={onNewChat}
+                        aria-label={localize("com_knowledge.create_chat")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                    >
+                        <Outlined.MessagePlus className="size-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onCollapse}
+                        aria-label={localize("com_ui_collapse")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                    >
+                        <Outlined.DoubleDown className="size-4" />
+                    </button>
+                </div>
             </div>
 
             {/* Session list */}
             <div className="flex-1 overflow-y-auto">
-                {sessions.length === 0 ? (
+                {!Array.isArray(sessions) || sessions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-2">
                         <MessageSquareIcon className="size-10 text-[#c9cdd4]" />
                         <p className="text-sm text-[#86909c]">
@@ -170,49 +190,57 @@ export function ConversationHistory({
                             return (
                                 <div
                                     key={session.chat_id}
-                                    className={`group flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-colors ${
-                                        isEditing ? "cursor-default" : "cursor-pointer"
-                                    } ${
+                                    className={cn(
+                                        // Active + hover colors match the knowledge-space sidebar item (gray, no blue).
+                                        "group flex h-8 items-center gap-2 rounded-lg px-3 text-[#1d2129] transition-colors",
+                                        isEditing ? "cursor-default" : "cursor-pointer",
                                         session.chat_id === activeChatId
-                                            ? "bg-[#e8f3ff] text-[#165dff]"
-                                            : "text-[#4e5969] hover:bg-[#f7f8fa]"
-                                    }`}
+                                            ? "bg-[#EEEEEE] hover:bg-[#EEEEEE]"
+                                            : "hover:bg-[#F4F4F4]",
+                                    )}
                                     onClick={() => {
                                         if (isEditing) return;
                                         onSelect(session.chat_id);
                                     }}
                                 >
-                                    <div className="flex-1 min-w-0 pr-1">
-                                        {isEditing ? (
-                                            <Input
-                                                ref={renameInputRef}
-                                                value={renameValue}
-                                                onChange={(e) => setRenameValue(e.target.value)}
-                                                disabled={renameSubmitting}
-                                                className="h-7 text-sm font-medium px-2 py-1 border-[#c9cdd4] focus-visible:ring-1"
-                                                onClick={(e) => e.stopPropagation()}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter") {
-                                                        e.preventDefault();
-                                                        void commitRename();
-                                                    } else if (e.key === "Escape") {
-                                                        e.preventDefault();
-                                                        cancelRename();
-                                                    }
-                                                }}
-                                                onBlur={() => {
+                                    {isEditing ? (
+                                        <Input
+                                            ref={renameInputRef}
+                                            value={renameValue}
+                                            onChange={(e) => setRenameValue(e.target.value)}
+                                            disabled={renameSubmitting}
+                                            className="h-6 flex-1 px-2 py-0 text-sm font-medium border-[#c9cdd4] focus-visible:ring-1"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                    e.preventDefault();
                                                     void commitRename();
-                                                }}
-                                            />
-                                        ) : (
-                                            <p className="text-sm font-medium truncate">
+                                                } else if (e.key === "Escape") {
+                                                    e.preventDefault();
+                                                    cancelRename();
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                void commitRename();
+                                            }}
+                                        />
+                                    ) : (
+                                        // Name + time on one line: name truncates, time sticks right after it.
+                                        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+                                            <span
+                                                className={cn(
+                                                    "min-w-0 truncate text-sm",
+                                                    // Active conversation title = semibold (600), matching the sidebar selected item.
+                                                    session.chat_id === activeChatId ? "font-semibold" : "font-medium",
+                                                )}
+                                            >
                                                 {getSessionDisplayName(session)}
-                                            </p>
-                                        )}
-                                        <p className="text-xs text-[#86909c] mt-0.5">
-                                            {formatDate(session.update_time || session.create_time)}
-                                        </p>
-                                    </div>
+                                            </span>
+                                            <span className="shrink-0 text-xs text-[#86909c]">
+                                                {formatDate(session.update_time || session.create_time)}
+                                            </span>
+                                        </div>
+                                    )}
                                     {!isEditing && (
                                         <DropdownMenu
                                             open={menuOpen}
@@ -224,41 +252,40 @@ export function ConversationHistory({
                                                 <button
                                                     type="button"
                                                     className={cn(
-                                                        "flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity",
+                                                        "flex-shrink-0 rounded p-1 text-[#86909c] hover:bg-black/5 hover:text-[#4e5969] transition-opacity",
+                                                        // Desktop mouse: show on row hover or when menu open / active session; touch: always visible
+                                                        "opacity-0 group-hover:opacity-100 coarse-pointer:opacity-100",
                                                         (menuOpen || session.chat_id === activeChatId) &&
-                                                            "opacity-100"
+                                                            "opacity-100",
                                                     )}
                                                     onClick={(e) => e.stopPropagation()}
                                                     aria-label="More actions"
                                                 >
-                                                    <MoreHorizontalIcon className="size-4" />
+                                                    <Outlined.More className="size-4" />
                                                 </button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent
-                                                align="end"
-                                                className={cn("min-w-[140px]", knowledgeSpaceDropdownSurfaceClassName)}
+                                            <ActionMenuContent
+                                                width={140}
                                                 onClick={(e) => e.stopPropagation()}
                                             >
-                                                <DropdownMenuItem
+                                                <ActionMenuItem
+                                                    icon={<Outlined.Edit />}
+                                                    label={localize("com_knowledge.rename")}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         startInlineRename(session);
                                                     }}
-                                                >
-                                                    <PencilLine className="size-4 mr-2" />
-                                                    {localize("com_knowledge.rename")}
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    className="text-[#f53f3f] focus:text-[#f53f3f]"
+                                                />
+                                                <ActionMenuItem
+                                                    danger
+                                                    icon={<Outlined.Delete />}
+                                                    label={localize("com_notifications_delete")}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         onDelete(session.chat_id);
                                                     }}
-                                                >
-                                                    <Trash2Icon className="size-4 mr-2 text-[#f53f3f]" />
-                                                    {localize("com_notifications_delete")}
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
+                                                />
+                                            </ActionMenuContent>
                                         </DropdownMenu>
                                     )}
                                 </div>

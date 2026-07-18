@@ -21,7 +21,7 @@ export default function Toast() {
         marginBottom: '0px',
       }}
     >
-      <div className="w-full p-1 text-center md:w-auto md:text-justify">
+      <div className="w-full p-1 text-center touch-desktop:w-auto touch-desktop:text-justify">
         <div
           className={`alert-root pointer-events-auto inline-flex flex-row gap-2 rounded-md border px-3 py-2 text-white ${
             severityClassName[toast.severity]

@@ -3,12 +3,14 @@ from typing import Optional, List
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, Integer, text
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
 
+
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 class VariableBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='Belonging Skills')
@@ -18,10 +20,15 @@ class VariableBase(SQLModelSerializable):
     value_type: int = Field(index=False, description='Variable type1=Text 2=list 3=file')
     is_option: int = Field(index=False, default=1, description='Required? 1=Required 0=Price is not required')
     value: str = Field(index=False, default=0, description='variable value, the length of the incoming text when the text is')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     @field_validator('variable_name')
     @classmethod

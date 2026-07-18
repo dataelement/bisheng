@@ -26,7 +26,7 @@ import logging
 from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -175,23 +175,34 @@ HTML_TEMPLATE = r"""
 
 class MarkdownToPdfError(Exception):
     """Markdown Transfer PDF Conversion error custom exception."""
+
     pass
 
 
-DISALLOWED_HTML_TAGS = {
-    'base', 'embed', 'frame', 'iframe', 'link', 'meta', 'object', 'script', 'style'
-}
-URL_ATTRS = {'action', 'cite', 'data', 'formaction', 'href', 'poster', 'src', 'srcset', 'xlink:href'}
-RESOURCE_URL_ATTRS = {'action', 'data', 'formaction', 'poster', 'src', 'srcset', 'xlink:href'}
-SAFE_LINK_SCHEMES = {'http', 'https', 'mailto', 'tel'}
-SAFE_RESOURCE_SCHEMES = {'http', 'https', 'data'}
+DISALLOWED_HTML_TAGS = {"base", "embed", "frame", "iframe", "link", "meta", "object", "script", "style"}
+URL_ATTRS = {"action", "cite", "data", "formaction", "href", "poster", "src", "srcset", "xlink:href"}
+RESOURCE_URL_ATTRS = {"action", "data", "formaction", "poster", "src", "srcset", "xlink:href"}
+SAFE_LINK_SCHEMES = {"http", "https", "mailto", "tel"}
+SAFE_RESOURCE_SCHEMES = {"http", "https", "data"}
 VOID_HTML_TAGS = {
-    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
-    'meta', 'param', 'source', 'track', 'wbr'
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
 }
 
 
-def _sanitize_url_attr_value(value: str, *, allow_anchor_only: bool, allow_data_uri: bool) -> Optional[str]:
+def _sanitize_url_attr_value(value: str, *, allow_anchor_only: bool, allow_data_uri: bool) -> str | None:
     """Return a sanitized URL value or None when the value is unsafe."""
     if not value:
         return None
@@ -203,7 +214,7 @@ def _sanitize_url_attr_value(value: str, *, allow_anchor_only: bool, allow_data_
     if any(ord(char) < 32 for char in normalized_value):
         return None
 
-    if allow_anchor_only and normalized_value.startswith('#'):
+    if allow_anchor_only and normalized_value.startswith("#"):
         return normalized_value
 
     parsed = urlparse(normalized_value)
@@ -212,8 +223,8 @@ def _sanitize_url_attr_value(value: str, *, allow_anchor_only: bool, allow_data_
     if not scheme:
         return None
 
-    if allow_data_uri and scheme == 'data':
-        if normalized_value.lower().startswith('data:image/'):
+    if allow_data_uri and scheme == "data":
+        if normalized_value.lower().startswith("data:image/"):
             return normalized_value
         return None
 
@@ -232,10 +243,10 @@ class _PdfHtmlSanitizer(HTMLParser):
         self.result: list[str] = []
         self.blocked_tag_stack: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._handle_tag(tag, attrs, is_self_closing=False)
 
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._handle_tag(tag, attrs, is_self_closing=True)
 
     def handle_endtag(self, tag: str) -> None:
@@ -248,7 +259,7 @@ class _PdfHtmlSanitizer(HTMLParser):
         if tag_lower in VOID_HTML_TAGS:
             return
 
-        self.result.append(f'</{tag_lower}>')
+        self.result.append(f"</{tag_lower}>")
 
     def handle_data(self, data: str) -> None:
         if not self.blocked_tag_stack:
@@ -256,39 +267,46 @@ class _PdfHtmlSanitizer(HTMLParser):
 
     def handle_entityref(self, name: str) -> None:
         if not self.blocked_tag_stack:
-            self.result.append(f'&{name};')
+            self.result.append(f"&{name};")
 
     def handle_charref(self, name: str) -> None:
         if not self.blocked_tag_stack:
-            self.result.append(f'&#{name};')
+            self.result.append(f"&#{name};")
 
     def handle_comment(self, data: str) -> None:
         if not self.blocked_tag_stack:
-            self.result.append(f'<!--{data}-->')
+            self.result.append(f"<!--{data}-->")
 
     def handle_decl(self, decl: str) -> None:
         if not self.blocked_tag_stack:
-            self.result.append(f'<!{decl}>')
+            self.result.append(f"<!{decl}>")
 
     def handle_pi(self, data: str) -> None:
         if not self.blocked_tag_stack:
-            self.result.append(f'<?{data}>')
+            self.result.append(f"<?{data}>")
 
     def _handle_tag(
-            self,
-            tag: str,
-            attrs: list[tuple[str, Optional[str]]],
-            *,
-            is_self_closing: bool,
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+        *,
+        is_self_closing: bool,
     ) -> None:
         tag_lower = tag.lower()
+        # A disallowed tag that is ALSO a void element (meta/base/embed/link) has
+        # NO closing tag, so it must never open a block. Treat it like a
+        # self-closing tag and drop just this one tag. Otherwise ``<meta>`` (emitted
+        # un-closed by the docx md2html: ``<head><meta charset="utf-8">``) pushes a
+        # block that never closes, swallowing the entire <body> that follows — which
+        # produced blank .docx / .pdf deliverables.
+        opens_block = not is_self_closing and tag_lower not in VOID_HTML_TAGS
         if self.blocked_tag_stack:
-            if not is_self_closing and tag_lower in DISALLOWED_HTML_TAGS:
+            if opens_block and tag_lower in DISALLOWED_HTML_TAGS:
                 self.blocked_tag_stack.append(tag_lower)
             return
 
         if tag_lower in DISALLOWED_HTML_TAGS:
-            if not is_self_closing:
+            if opens_block:
                 self.blocked_tag_stack.append(tag_lower)
             return
 
@@ -296,7 +314,7 @@ class _PdfHtmlSanitizer(HTMLParser):
         for attr_name, attr_value in attrs:
             attr_name_lower = attr_name.lower()
 
-            if attr_name_lower.startswith('on') or attr_name_lower == 'style':
+            if attr_name_lower.startswith("on") or attr_name_lower == "style":
                 continue
 
             if attr_name_lower in URL_ATTRS:
@@ -310,18 +328,18 @@ class _PdfHtmlSanitizer(HTMLParser):
             else:
                 sanitized_attrs.append(f'{attr_name_lower}="{escape(attr_value, quote=True)}"')
 
-        attrs_str = f" {' '.join(sanitized_attrs)}" if sanitized_attrs else ''
-        closing = ' /' if is_self_closing else ''
-        self.result.append(f'<{tag_lower}{attrs_str}{closing}>')
+        attrs_str = f" {' '.join(sanitized_attrs)}" if sanitized_attrs else ""
+        closing = " /" if is_self_closing else ""
+        self.result.append(f"<{tag_lower}{attrs_str}{closing}>")
 
     @staticmethod
-    def _sanitize_url_attr(attr_name: str, attr_value: Optional[str]) -> Optional[str]:
+    def _sanitize_url_attr(attr_name: str, attr_value: str | None) -> str | None:
         if attr_value is None:
             return None
 
-        if attr_name == 'srcset':
+        if attr_name == "srcset":
             sanitized_candidates = []
-            for candidate in str(attr_value).split(','):
+            for candidate in str(attr_value).split(","):
                 candidate = candidate.strip()
                 if not candidate:
                     continue
@@ -335,16 +353,16 @@ class _PdfHtmlSanitizer(HTMLParser):
                 if not sanitized_url:
                     continue
 
-                descriptor = f" {' '.join(parts[1:])}" if len(parts) > 1 else ''
-                sanitized_candidates.append(f'{sanitized_url}{descriptor}')
+                descriptor = f" {' '.join(parts[1:])}" if len(parts) > 1 else ""
+                sanitized_candidates.append(f"{sanitized_url}{descriptor}")
 
             if sanitized_candidates:
-                return ', '.join(sanitized_candidates)
+                return ", ".join(sanitized_candidates)
             return None
 
         return _sanitize_url_attr_value(
             str(attr_value),
-            allow_anchor_only=attr_name == 'href',
+            allow_anchor_only=attr_name == "href",
             allow_data_uri=attr_name in RESOURCE_URL_ATTRS,
         )
 
@@ -354,25 +372,23 @@ def sanitize_html_for_pdf(html_body: str) -> str:
     sanitizer = _PdfHtmlSanitizer()
     sanitizer.feed(html_body)
     sanitizer.close()
-    return ''.join(sanitizer.result)
+    return "".join(sanitizer.result)
 
 
 class MarkdownToPdfConverter:
     """
     Has Typora The power of style rendering Markdown Transfer PDF Converter
 
-    Such provision will Markdown Convert file or string to PDF short circuit exist. 
+    Such provision will Markdown Convert file or string to PDF short circuit exist.
     Use Playwright Render and include comprehensive error handling.
     """
 
-    SUPPORTED_PAGE_FORMATS = {'A4', 'A3', 'A5', 'Letter', 'Legal', 'Tabloid'}
+    SUPPORTED_PAGE_FORMATS = {"A4", "A3", "A5", "Letter", "Legal", "Tabloid"}
     DEFAULT_TIMEOUT = 60000  # ms
 
-    def __init__(self,
-                 default_css: Optional[str] = None,
-                 enable_math: bool = False,
-                 page_format: str = 'A4',
-                 margin_mm: int = 20):
+    def __init__(
+        self, default_css: str | None = None, enable_math: bool = False, page_format: str = "A4", margin_mm: int = 20
+    ):
         """
         Initializes the converter with default settings.
 
@@ -387,36 +403,35 @@ class MarkdownToPdfConverter:
         """
         if not PLAYWRIGHT_AVAILABLE:
             raise MarkdownToPdfError(
-                'Playwright Not installed. Please install: pip install playwright && playwright install chromium'
+                "Playwright Not installed. Please install: pip install playwright && playwright install chromium"
             )
 
         if page_format not in self.SUPPORTED_PAGE_FORMATS:
             raise MarkdownToPdfError(
-                f'Unsupported page format: {page_format}Supported Formats: {self.SUPPORTED_PAGE_FORMATS}'
+                f"Unsupported page format: {page_format}Supported Formats: {self.SUPPORTED_PAGE_FORMATS}"
             )
 
         if not isinstance(margin_mm, (int, float)) or margin_mm < 0:
-            raise MarkdownToPdfError('Margins must be non-negative')
+            raise MarkdownToPdfError("Margins must be non-negative")
 
         self.default_css = default_css or DEFAULT_CSS
         self.enable_math = enable_math
         self.page_format = page_format
         self.margin_mm = margin_mm
 
-        logger.info("MarkdownToPdfConverter Initialized, Format=%s Margin=%dmm",
-                    page_format, margin_mm)
+        logger.info("MarkdownToPdfConverter Initialized, Format=%s Margin=%dmm", page_format, margin_mm)
 
     def _validate_input_path(self, file_path: Union[str, Path]) -> Path:
         """Validate input file path and go back Path of research."""
         path = Path(file_path)
 
         if not path.exists():
-            raise MarkdownToPdfError(f'This input file does not exist.: {path}')
+            raise MarkdownToPdfError(f"This input file does not exist.: {path}")
 
         if not path.is_file():
-            raise MarkdownToPdfError(f'Input path is not a file: {path}')
+            raise MarkdownToPdfError(f"Input path is not a file: {path}")
 
-        if not path.suffix.lower() in {'.md', '.markdown', '.txt'}:
+        if path.suffix.lower() not in {".md", ".markdown", ".txt"}:
             logger.warning("Input file not available markdown extension: %s", path.suffix)
 
         return path
@@ -428,7 +443,7 @@ class MarkdownToPdfConverter:
         # Make sure the parent directory exists
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        if path.suffix.lower() != '.pdf':
+        if path.suffix.lower() != ".pdf":
             logger.warning("Output file not available .pdf extension: %s", path.suffix)
 
         return path
@@ -438,9 +453,9 @@ class MarkdownToPdfConverter:
         try:
             css_file = Path(css_path)
             if not css_file.exists():
-                raise MarkdownToPdfError(f'CSS File don\'t exists: {css_file}')
+                raise MarkdownToPdfError(f"CSS File don't exists: {css_file}")
 
-            with open(css_file, 'r', encoding='utf-8') as f:
+            with open(css_file, encoding="utf-8") as f:
                 css_content = f.read().strip()
 
             if not css_content:
@@ -449,7 +464,7 @@ class MarkdownToPdfConverter:
             return css_content
 
         except (OSError, UnicodeDecodeError) as e:
-            raise MarkdownToPdfError(f'read out CSS Doc. {css_path} Kalah: {e}') from e
+            raise MarkdownToPdfError(f"read out CSS Doc. {css_path} Kalah: {e}") from e
 
     @staticmethod
     def _get_markdown_extensions() -> list:
@@ -459,12 +474,11 @@ class MarkdownToPdfConverter:
 
         from bisheng.common.utils.markdown_cmpnt.md_to_docx.parser.ext_md_syntax import ExtMdSyntax
 
-        return [ExtMdSyntax(), 'extra', 'codehilite', 'toc', 'tables', 'sane_lists', 'fenced_code']
+        return [ExtMdSyntax(), "extra", "codehilite", "toc", "tables", "sane_lists", "fenced_code"]
 
-    def render_markdown_to_html(self,
-                                markdown_text: str,
-                                custom_css: Optional[str] = None,
-                                enable_math: Optional[bool] = None) -> str:
+    def render_markdown_to_html(
+        self, markdown_text: str, custom_css: str | None = None, enable_math: bool | None = None
+    ) -> str:
         """
         will be Markdown Convert text to with style and MathJax Supportive HTML。
 
@@ -480,42 +494,37 @@ class MarkdownToPdfConverter:
             MarkdownToPdfError: Automatically close purchase order after Markdown Failed to Process
         """
         if not isinstance(markdown_text, str):
-            raise MarkdownToPdfError('Markdown Text must be a string')
+            raise MarkdownToPdfError("Markdown Text must be a string")
 
         if not markdown_text.strip():
             logger.warning("SERVICES  Markdown Konten kosong")
 
         try:
             # Using the extension will Markdown Convert To HTML
-            html_body = markdown.markdown(
-                markdown_text,
-                extensions=self._get_markdown_extensions()
-            )
+            html_body = markdown.markdown(markdown_text, extensions=self._get_markdown_extensions())
             html_body = sanitize_html_for_pdf(html_body)
 
             # OK CSS And MathJax Pengaturan
             css_content = custom_css or self.default_css
             use_math = enable_math if enable_math is not None else self.enable_math
-            math_snippet = MATHJAX_SNIPPET if use_math else '\n'
+            math_snippet = MATHJAX_SNIPPET if use_math else "\n"
 
             # Generate full HTML Documentation
-            html_document = HTML_TEMPLATE.format(
-                css=css_content,
-                mathjax=math_snippet,
-                body=html_body
-            )
+            html_document = HTML_TEMPLATE.format(css=css_content, mathjax=math_snippet, body=html_body)
 
             logger.debug("Success will %d character (s) of Markdown Convert To HTML", len(markdown_text))
             return html_document
 
         except Exception as e:
-            raise MarkdownToPdfError(f'will be Markdown Render As HTML Kalah: {e}') from e
+            raise MarkdownToPdfError(f"will be Markdown Render As HTML Kalah: {e}") from e
 
-    def convert_html_to_pdf(self,
-                            html_content: str,
-                            output_path: Union[str, Path],
-                            page_format: Optional[str] = None,
-                            margin_mm: Optional[int] = None) -> None:
+    def convert_html_to_pdf(
+        self,
+        html_content: str,
+        output_path: Union[str, Path],
+        page_format: str | None = None,
+        margin_mm: int | None = None,
+    ) -> None:
         """
         Use Playwright will be HTML Convert content to PDF。
 
@@ -529,14 +538,14 @@ class MarkdownToPdfConverter:
             MarkdownToPdfError: Automatically close purchase order after PDF failed to transform
         """
         if not isinstance(html_content, str) or not html_content.strip():
-            raise MarkdownToPdfError('HTML Content cannot be empty')
+            raise MarkdownToPdfError("HTML Content cannot be empty")
 
         output_file = self._validate_output_path(output_path)
         format_to_use = page_format or self.page_format
         margin_to_use = margin_mm if margin_mm is not None else self.margin_mm
 
         if format_to_use not in self.SUPPORTED_PAGE_FORMATS:
-            raise MarkdownToPdfError(f'Unsupported page format: {format_to_use}')
+            raise MarkdownToPdfError(f"Unsupported page format: {format_to_use}")
 
         try:
             # Use Playwright Convert To PDF
@@ -545,12 +554,11 @@ class MarkdownToPdfConverter:
             logger.info("Slider Created Successfully. PDF: %s", output_file)
 
         except Exception as e:
-            raise MarkdownToPdfError(f'will be HTML Convert To PDF Kalah: {e}') from e
+            raise MarkdownToPdfError(f"will be HTML Convert To PDF Kalah: {e}") from e
 
-    def convert_html_to_pdf_bytes(self,
-                                  html_content: str,
-                                  page_format: Optional[str] = None,
-                                  margin_mm: Optional[int] = None) -> bytes:
+    def convert_html_to_pdf_bytes(
+        self, html_content: str, page_format: str | None = None, margin_mm: int | None = None
+    ) -> bytes:
         """
         Use Playwright will be HTML Convert content to PDF Bytes of data.
 
@@ -566,13 +574,13 @@ class MarkdownToPdfConverter:
             MarkdownToPdfError: Automatically close purchase order after PDF failed to transform
         """
         if not isinstance(html_content, str) or not html_content.strip():
-            raise MarkdownToPdfError('HTML Content cannot be empty')
+            raise MarkdownToPdfError("HTML Content cannot be empty")
 
         format_to_use = page_format or self.page_format
         margin_to_use = margin_mm if margin_mm is not None else self.margin_mm
 
         if format_to_use not in self.SUPPORTED_PAGE_FORMATS:
-            raise MarkdownToPdfError(f'Unsupported page format: {format_to_use}')
+            raise MarkdownToPdfError(f"Unsupported page format: {format_to_use}")
 
         try:
             # Use Playwright Convert To PDF Bytes of data
@@ -582,21 +590,19 @@ class MarkdownToPdfConverter:
             return pdf_bytes
 
         except Exception as e:
-            raise MarkdownToPdfError(f'will be HTML Convert To PDF Byte Data Failure: {e}') from e
+            raise MarkdownToPdfError(f"will be HTML Convert To PDF Byte Data Failure: {e}") from e
 
-    def _render_pdf_with_playwright(self,
-                                    html_content: str,
-                                    output_path: Path,
-                                    page_format: str,
-                                    margin_mm: int) -> None:
+    def _render_pdf_with_playwright(
+        self, html_content: str, output_path: Path, page_format: str, margin_mm: int
+    ) -> None:
         """<g id="Bold">Medical Treatment:</g> Playwright PDF The internal method of the build."""
         try:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
                 try:
                     page = browser.new_page()
-                    page.route('file://*', lambda route: route.abort())
-                    page.set_content(html_content, wait_until='load', timeout=self.DEFAULT_TIMEOUT)
+                    page.route("file://*", lambda route: route.abort())
+                    page.set_content(html_content, wait_until="load", timeout=self.DEFAULT_TIMEOUT)
 
                     # If enabled MathJax, waiting for typesetting to complete
                     if self.enable_math:
@@ -604,37 +610,29 @@ class MarkdownToPdfConverter:
 
                     # Build with specified settings PDF
                     margin_config = {
-                        'top': f'{margin_mm}mm',
-                        'bottom': f'{margin_mm}mm',
-                        'left': f'{margin_mm}mm',
-                        'right': f'{margin_mm}mm'
+                        "top": f"{margin_mm}mm",
+                        "bottom": f"{margin_mm}mm",
+                        "left": f"{margin_mm}mm",
+                        "right": f"{margin_mm}mm",
                     }
 
-                    page.pdf(
-                        path=str(output_path),
-                        format=page_format,
-                        margin=margin_config,
-                        print_background=True
-                    )
+                    page.pdf(path=str(output_path), format=page_format, margin=margin_config, print_background=True)
 
                 finally:
                     browser.close()
 
         except Exception as e:
-            raise MarkdownToPdfError(f'Playwright PDF Generation Failed: {e}') from e
+            raise MarkdownToPdfError(f"Playwright PDF Generation Failed: {e}") from e
 
-    def _render_pdf_bytes_with_playwright(self,
-                                          html_content: str,
-                                          page_format: str,
-                                          margin_mm: int) -> bytes:
+    def _render_pdf_bytes_with_playwright(self, html_content: str, page_format: str, margin_mm: int) -> bytes:
         """<g id="Bold">Medical Treatment:</g> Playwright PDF Internal method for byte data generation."""
         try:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
                 try:
                     page = browser.new_page()
-                    page.route('file://*', lambda route: route.abort())
-                    page.set_content(html_content, wait_until='load', timeout=self.DEFAULT_TIMEOUT)
+                    page.route("file://*", lambda route: route.abort())
+                    page.set_content(html_content, wait_until="load", timeout=self.DEFAULT_TIMEOUT)
 
                     # If enabled MathJax, waiting for typesetting to complete
                     if self.enable_math:
@@ -642,17 +640,13 @@ class MarkdownToPdfConverter:
 
                     # Build with specified settings PDF Bytes of data
                     margin_config = {
-                        'top': f'{margin_mm}mm',
-                        'bottom': f'{margin_mm}mm',
-                        'left': f'{margin_mm}mm',
-                        'right': f'{margin_mm}mm'
+                        "top": f"{margin_mm}mm",
+                        "bottom": f"{margin_mm}mm",
+                        "left": f"{margin_mm}mm",
+                        "right": f"{margin_mm}mm",
                     }
 
-                    pdf_bytes = page.pdf(
-                        format=page_format,
-                        margin=margin_config,
-                        print_background=True
-                    )
+                    pdf_bytes = page.pdf(format=page_format, margin=margin_config, print_background=True)
 
                     return pdf_bytes
 
@@ -660,26 +654,27 @@ class MarkdownToPdfConverter:
                     browser.close()
 
         except Exception as e:
-            raise MarkdownToPdfError(f'Playwright PDF Byte data generation failed: {e}') from e
+            raise MarkdownToPdfError(f"Playwright PDF Byte data generation failed: {e}") from e
 
     def _wait_for_mathjax(self, page) -> None:
         """Menunggu MathJax Finish typography with timeout."""
         try:
             logger.debug("Menunggu MathJax Format...")
             page.wait_for_function(
-                "() => window.MathJax && window.MathJax.typesetPromise",
-                timeout=self.DEFAULT_TIMEOUT
+                "() => window.MathJax && window.MathJax.typesetPromise", timeout=self.DEFAULT_TIMEOUT
             )
             page.evaluate("() => window.MathJax && window.MathJax.typesetPromise()")
             logger.debug("MathJax Typography complete")
         except Exception as e:
             logger.debug("MathJax Timeout or non-existent (this is normal): %s", e)
 
-    def convert_file(self,
-                     input_path: Union[str, Path],
-                     output_path: Union[str, Path],
-                     css_file: Optional[Union[str, Path]] = None,
-                     **kwargs) -> None:
+    def convert_file(
+        self,
+        input_path: Union[str, Path],
+        output_path: Union[str, Path],
+        css_file: Union[str, Path] | None = None,
+        **kwargs,
+    ) -> None:
         """
         will be Markdown Convert file to PDF。
 
@@ -696,7 +691,7 @@ class MarkdownToPdfConverter:
 
         try:
             # read out Markdown Contents
-            with open(input_file, 'r', encoding='utf-8') as f:
+            with open(input_file, encoding="utf-8") as f:
                 markdown_content = f.read()
 
             logger.info("FROM %s read %d characters", input_file, len(markdown_content))
@@ -711,13 +706,11 @@ class MarkdownToPdfConverter:
             self.convert_string(markdown_content, output_path, custom_css, **kwargs)
 
         except (OSError, UnicodeDecodeError) as e:
-            raise MarkdownToPdfError(f'Read input file {input_file} Kalah: {e}') from e
+            raise MarkdownToPdfError(f"Read input file {input_file} Kalah: {e}") from e
 
-    def convert_string(self,
-                       markdown_text: str,
-                       output_path: Union[str, Path],
-                       custom_css: Optional[str] = None,
-                       **kwargs) -> None:
+    def convert_string(
+        self, markdown_text: str, output_path: Union[str, Path], custom_css: str | None = None, **kwargs
+    ) -> None:
         """
         will be Markdown Convert string to PDF。
 
@@ -733,28 +726,22 @@ class MarkdownToPdfConverter:
         try:
             # will be Markdown Render As HTML
             html_content = self.render_markdown_to_html(
-                markdown_text,
-                custom_css=custom_css,
-                enable_math=kwargs.get('enable_math')
+                markdown_text, custom_css=custom_css, enable_math=kwargs.get("enable_math")
             )
 
             # will be HTML Convert To PDF
             self.convert_html_to_pdf(
-                html_content,
-                output_path,
-                page_format=kwargs.get('page_format'),
-                margin_mm=kwargs.get('margin_mm')
+                html_content, output_path, page_format=kwargs.get("page_format"), margin_mm=kwargs.get("margin_mm")
             )
 
         except MarkdownToPdfError:
             raise
         except Exception as e:
-            raise MarkdownToPdfError(f'failed to transform: {e}') from e
+            raise MarkdownToPdfError(f"failed to transform: {e}") from e
 
-    def convert_file_to_bytes(self,
-                              input_path: Union[str, Path],
-                              css_file: Optional[Union[str, Path]] = None,
-                              **kwargs) -> bytes:
+    def convert_file_to_bytes(
+        self, input_path: Union[str, Path], css_file: Union[str, Path] | None = None, **kwargs
+    ) -> bytes:
         """
         will be Markdown Convert file to PDF Bytes of data.
 
@@ -773,7 +760,7 @@ class MarkdownToPdfConverter:
 
         try:
             # read out Markdown Contents
-            with open(input_file, 'r', encoding='utf-8') as f:
+            with open(input_file, encoding="utf-8") as f:
                 markdown_content = f.read()
 
             logger.info("FROM %s read %d characters", input_file, len(markdown_content))
@@ -788,12 +775,9 @@ class MarkdownToPdfConverter:
             return self.convert_string_to_bytes(markdown_content, custom_css, **kwargs)
 
         except (OSError, UnicodeDecodeError) as e:
-            raise MarkdownToPdfError(f'Read input file {input_file} Kalah: {e}') from e
+            raise MarkdownToPdfError(f"Read input file {input_file} Kalah: {e}") from e
 
-    def convert_string_to_bytes(self,
-                                markdown_text: str,
-                                custom_css: Optional[str] = None,
-                                **kwargs) -> bytes:
+    def convert_string_to_bytes(self, markdown_text: str, custom_css: str | None = None, **kwargs) -> bytes:
         """
         will be Markdown Convert string to PDF Bytes of data.
 
@@ -811,22 +795,18 @@ class MarkdownToPdfConverter:
         try:
             # will be Markdown Render As HTML
             html_content = self.render_markdown_to_html(
-                markdown_text,
-                custom_css=custom_css,
-                enable_math=kwargs.get('enable_math')
+                markdown_text, custom_css=custom_css, enable_math=kwargs.get("enable_math")
             )
 
             # will be HTML Convert To PDF Bytes of data
             return self.convert_html_to_pdf_bytes(
-                html_content,
-                page_format=kwargs.get('page_format'),
-                margin_mm=kwargs.get('margin_mm')
+                html_content, page_format=kwargs.get("page_format"), margin_mm=kwargs.get("margin_mm")
             )
 
         except MarkdownToPdfError:
             raise
         except Exception as e:
-            raise MarkdownToPdfError(f'failed to transform: {e}') from e
+            raise MarkdownToPdfError(f"failed to transform: {e}") from e
 
 
 # Backward compatibility function
@@ -836,20 +816,23 @@ def render_markdown_to_html(md_text: str, css: str = None, enable_math: bool = F
     return converter.render_markdown_to_html(md_text, custom_css=css, enable_math=enable_math)
 
 
-def html_to_pdf_with_playwright(html: str, output_path: str, format: str = 'A4', margin_mm: int = 20):
+def html_to_pdf_with_playwright(html: str, output_path: str, format: str = "A4", margin_mm: int = 20):
     """Legacy functions for backward compatibility."""
     converter = MarkdownToPdfConverter(page_format=format, margin_mm=margin_mm)
     converter.convert_html_to_pdf(html, output_path, page_format=format, margin_mm=margin_mm)
 
 
-def md_to_pdf(input_md: str, output_pdf: str, css_file: str = None, is_path: bool = False,
-              enable_math: bool = False, page_format: str = 'A4', margin_mm: int = 20):
+def md_to_pdf(
+    input_md: str,
+    output_pdf: str,
+    css_file: str = None,
+    is_path: bool = False,
+    enable_math: bool = False,
+    page_format: str = "A4",
+    margin_mm: int = 20,
+):
     """Legacy functions for backward compatibility."""
-    converter = MarkdownToPdfConverter(
-        enable_math=enable_math,
-        page_format=page_format,
-        margin_mm=margin_mm
-    )
+    converter = MarkdownToPdfConverter(enable_math=enable_math, page_format=page_format, margin_mm=margin_mm)
 
     if is_path:
         converter.convert_file(input_md, output_pdf, css_file=css_file)
@@ -860,8 +843,14 @@ def md_to_pdf(input_md: str, output_pdf: str, css_file: str = None, is_path: boo
         converter.convert_string(input_md, output_pdf, custom_css=custom_css)
 
 
-def md_to_pdf_bytes(input_md: str, css_file: str = None, is_path: bool = False,
-                    enable_math: bool = False, page_format: str = 'A4', margin_mm: int = 20) -> bytes:
+def md_to_pdf_bytes(
+    input_md: str,
+    css_file: str = None,
+    is_path: bool = False,
+    enable_math: bool = False,
+    page_format: str = "A4",
+    margin_mm: int = 20,
+) -> bytes:
     """
     will be Markdown Convert To PDF Handy function for byte data.
 
@@ -879,11 +868,7 @@ def md_to_pdf_bytes(input_md: str, css_file: str = None, is_path: bool = False,
     Raises:
         MarkdownToPdfError: If the conversion fails
     """
-    converter = MarkdownToPdfConverter(
-        enable_math=enable_math,
-        page_format=page_format,
-        margin_mm=margin_mm
-    )
+    converter = MarkdownToPdfConverter(enable_math=enable_math, page_format=page_format, margin_mm=margin_mm)
 
     if is_path:
         return converter.convert_file_to_bytes(input_md, css_file=css_file)

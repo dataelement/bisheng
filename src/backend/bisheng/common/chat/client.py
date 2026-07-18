@@ -12,6 +12,11 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    save_message_citations,
+    select_registry_items_for_persistence,
+)
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -155,9 +160,19 @@ class ChatClient:
             AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 
-    async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
-                            message_id: int = None):
+    async def send_response(
+            self,
+            category: str,
+            msg_type: str,
+            message: str,
+            intermediate_steps: str = '',
+            message_id: int = None,
+            citation_registry_items: List[CitationRegistryItemSchema] | None = None,
+            citations: List[CitationRegistryItemSchema] | None = None,
+    ):
         is_bot = 0 if msg_type == 'human' else 1
+        if citations is None:
+            citations = citation_registry_items
         await self.send_json(ChatResponse(
             message_id=message_id,
             category=category,
@@ -169,6 +184,8 @@ class ChatClient:
             chat_id=self.chat_id,
             extra=json.dumps({'client_key': self.client_key}, ensure_ascii=False),
             intermediate_steps=intermediate_steps,
+            citations=citations,
+            citation_registry_items=citation_registry_items,
         ))
 
     async def init_gpts_agent(self):
@@ -328,6 +345,7 @@ class ChatClient:
 
             # Get callback history
             chat_history = await self.get_latest_history()
+            self.gpts_agent.reset_citation_registry_items()
             # RecallagentGet Results
             result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
             logger.debug(f'gpts agent {self.client_key} result: {result}')
@@ -357,8 +375,33 @@ class ChatClient:
 
             res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
             res = await self.add_message('bot', answer, 'answer')
+            citation_items = select_registry_items_for_persistence(
+                self.gpts_agent.collect_citation_registry_items(),
+                answer,
+            )
+            if res:
+                await save_message_citations(
+                    message_id=res.id,
+                    items=citation_items,
+                    chat_id=self.chat_id,
+                    flow_id=self.client_id,
+                )
+            else:
+                await save_message_citations(
+                    message_id=None,
+                    items=citation_items,
+                    chat_id=self.chat_id,
+                    flow_id=self.client_id,
+                )
             await self.send_response('answer', 'start', '')
-            await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
+            await self.send_response(
+                'answer',
+                answer_end_type,
+                answer,
+                message_id=res.id if res else None,
+                citation_registry_items=citation_items,
+                citations=citation_items,
+            )
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
 

@@ -1,10 +1,10 @@
 from importlib import metadata
 
-# from bisheng.processing.process import load_flow_from_json  # noqa: E402
+# from bisheng.processing.process import load_flow_from_json
 
 try:
     # SetujuciGo to automatic modification
-    __version__ = '2.4.0'
+    __version__ = '2.6.0'
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ''

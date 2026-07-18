@@ -47,6 +47,16 @@ class UserNameTooLongError(BaseErrorCode):
     Msg: str = 'Username length cannot exceed30characters'
 
 
+class UserNoRoleForLoginError(BaseErrorCode):
+    Code: int = 10609
+    Msg: str = 'No assignable role; please contact your administrator'
+
+
+class UserNoWebMenuForLoginError(BaseErrorCode):
+    Code: int = 10611
+    Msg: str = '当前无页面权限，请联系管理员。'
+
+
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = 'There are still users in the user group and cannot be deleted'
@@ -54,12 +64,17 @@ class UserGroupNotDeleteError(BaseErrorCode):
 
 class UserForbiddenError(BaseErrorCode):
     Code: int = 10620
-    Msg: str = 'The user is disabled, please contact the administrator'
+    Msg: str = 'Account cannot be used, please contact the administrator'
 
 
 class UserPasswordMaxTryError(BaseErrorCode):
     Code: int = 10621
     Msg: str = 'The account has been automatically disabled due to too many failed login attempts, please contact your administrator'
+
+
+class UserPasswordStrengthError(BaseErrorCode):
+    Code: int = 10622
+    Msg: str = 'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol'
 
 
 class UserGroupEmptyError(BaseErrorCode):

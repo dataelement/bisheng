@@ -1,13 +1,12 @@
 import base64
 import os
-from typing import List, Dict, Tuple
 
 import cv2
 import fitz
 import requests
-from PIL import Image
 from langchain_core.documents import Document
 from loguru import logger
+from PIL import Image
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.types import TextBbox
@@ -15,10 +14,21 @@ from bisheng.utils.exceptions import EtlException
 
 
 class Etl4lmLoader(BaseBishengLoader):
-    def __init__(self, url: str, ocr_sdk_url: str, enable_formular: bool = True, force_ocr: bool = True,
-                 filter_page_header_footer: bool = False, start: int = 0, n: int = None, timeout: int = 60,
-                 retain_images: bool = True, *args, **kwargs):
-        super(Etl4lmLoader, self).__init__(*args, **kwargs)
+    def __init__(
+        self,
+        url: str,
+        ocr_sdk_url: str,
+        enable_formular: bool = True,
+        force_ocr: bool = True,
+        filter_page_header_footer: bool = False,
+        start: int = 0,
+        n: int = None,
+        timeout: int = 60,
+        retain_images: bool = True,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
         self.url = url
         self.ocr_sdk_url = ocr_sdk_url
         self.enable_formular = enable_formular
@@ -29,7 +39,7 @@ class Etl4lmLoader(BaseBishengLoader):
         self.timeout = timeout
         self.retain_images = retain_images
 
-    def parse_bbox_list(self, partitions: List[Dict]):
+    def parse_bbox_list(self, partitions: list[dict]):
         """Resolve BuildbboxCorrespondence with text"""
         if not partitions:
             return None
@@ -41,34 +51,38 @@ class Etl4lmLoader(BaseBishengLoader):
             text = part["text"]
             for index, bbox in enumerate(bboxes):
                 if index == len(bboxes) - 1:
-                    val = text[indexes[index][0]:]
+                    val = text[indexes[index][0] :]
                 else:
-                    val = text[indexes[index][0]:indexes[index][1]]
-                self.bbox_list.append(TextBbox(
-                    text=val,
-                    type=part["type"],
-                    part_id=str(part_index),
-                    bbox=bbox,
-                    page=pages[index],
-                ))
+                    val = text[indexes[index][0] : indexes[index][1]]
+                self.bbox_list.append(
+                    TextBbox(
+                        text=val,
+                        type=part["type"],
+                        part_id=str(part_index),
+                        bbox=bbox,
+                        page=pages[index],
+                    )
+                )
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         b64_data = base64.b64encode(open(self.file_path, "rb").read()).decode()
-        parameters = {"start": self.start, "n": self.n}
-        # TODO: add filter_page_header_footer into payload when elt4llm is ready.
+        parameters = {
+            "start": self.start,
+            "n": self.n,
+            "filter_page_header_footer": self.filter_page_header_footer,
+        }
         payload = dict(
             filename=self.file_name,
             b64_data=[b64_data],
             mode="partition",
             force_ocr=self.force_ocr,
             enable_formula=self.enable_formular,
+            filter_page_header_footer=self.filter_page_header_footer,
             ocr_sdk_url=self.ocr_sdk_url,
             parameters=parameters,
         )
         try:
-            resp = requests.post(
-                self.url, json=payload, timeout=self.timeout
-            )
+            resp = requests.post(self.url, json=payload, timeout=self.timeout)
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
             raise EtlException("etl4lm server timeout")
@@ -78,25 +92,19 @@ class Etl4lmLoader(BaseBishengLoader):
                 raise EtlException("etl4lm server timeout")
             raise e
         if resp.status_code != 200:
-            raise EtlException(
-                f"file partition {self.file_name} failed resp={resp.text}"
-            )
+            raise EtlException(f"file partition {self.file_name} failed resp={resp.text}")
 
         resp = resp.json()
         if 200 != resp.get("status_code"):
-            logger.info(
-                f"file partition {self.file_name} error resp={resp}"
-            )
-            raise EtlException(
-                f"file partition error {self.file_name} error resp={resp}"
-            )
+            logger.info(f"file partition {self.file_name} error resp={resp}")
+            raise EtlException(f"file partition error {self.file_name} error resp={resp}")
         partitions = resp["partitions"]
         if partitions:
-            logger.info(f"content_from_partitions")
+            logger.info("content_from_partitions")
             content, metadata = self.merge_partitions(partitions)
             self.parse_bbox_list(partitions)
         elif resp.get("text"):
-            logger.info(f"content_from_text")
+            logger.info("content_from_text")
             content = resp["text"]
             metadata = {
                 "bboxes": [],
@@ -109,13 +117,13 @@ class Etl4lmLoader(BaseBishengLoader):
             content = ""
             metadata = {}
 
-        logger.info(f'unstruct_return code={resp.get("status_code")}')
+        logger.info(f"unstruct_return code={resp.get('status_code')}")
 
         metadata.update(self.file_metadata)
         return [Document(page_content=content, metadata=metadata)]
 
     @staticmethod
-    def get_image_tag(results: Dict, part: Dict) -> str:
+    def get_image_tag(results: dict, part: dict) -> str:
         element_id = part.get("element_id", None)
         url = results.get(element_id, element_id)
         return f"![]({url})"
@@ -140,17 +148,38 @@ class Etl4lmLoader(BaseBishengLoader):
                 page_dict[page_id].append(item)
         return page_dict
 
-    def crop_image(self, image_file: str, item: Dict):
+    def crop_image(self, image_file: str, item: dict) -> str | None:
         element_id = item.get("element_id")
         bbox = item.get("bboxes")
         img = cv2.imread(image_file)
-        x1, y1, x2, y2 = bbox
+        if img is None:
+            logger.warning(f"crop_image_skip element_id={element_id}: unreadable page image {image_file}")
+            return None
+        height, width = img.shape[:2]
+        try:
+            x1, y1, x2, y2 = (int(v) for v in bbox)
+        except (TypeError, ValueError):
+            logger.warning(f"crop_image_skip element_id={element_id}: invalid bbox={bbox}")
+            return None
+        # bbox coords come from the ETL service and may be inverted, rounded
+        # past the page edge, or degenerate. Normalize + clamp to image bounds;
+        # an empty slice would make cv2.imwrite raise and abort the whole parse.
+        x1, x2 = sorted((max(0, min(x1, width)), max(0, min(x2, width))))
+        y1, y2 = sorted((max(0, min(y1, height)), max(0, min(y2, height))))
+        if x2 <= x1 or y2 <= y1:
+            logger.warning(f"crop_image_skip element_id={element_id}: empty crop bbox={bbox} img={width}x{height}")
+            return None
         cropped_img = img[y1:y2, x1:x2]
-        file_name = f"{self.local_image_dir}{os.sep}{element_id}.png"
-        cv2.imwrite(file_name, cropped_img)
-        return file_name
+        filename = f"{element_id}.png"
+        local_path = os.path.join(self.local_image_dir, filename)
+        if not cv2.imwrite(local_path, cropped_img):
+            logger.warning(f"crop_image_skip element_id={element_id}: imwrite failed {local_path}")
+            return None
+        # Embed the eventual MinIO URL now. Bytes get uploaded later by
+        # ImageUploadTransformer (which reads them from local_image_dir).
+        return self.build_image_url(filename)
 
-    def extract_images(self, partitions: List[Dict]) -> Dict:
+    def extract_images(self, partitions: list[dict]) -> dict:
         if not self.retain_images:
             return {}
         image_parts = self.get_image_parts(partitions=partitions)
@@ -158,9 +187,8 @@ class Etl4lmLoader(BaseBishengLoader):
             return {}
 
         pdf_page_dir = os.path.join(self.tmp_dir, "pdf_page")
-        self.local_image_dir = os.path.join(self.tmp_dir, "images")
         os.makedirs(pdf_page_dir, exist_ok=True)
-        os.makedirs(self.local_image_dir, exist_ok=True)
+        self.ensure_local_image_dir()
 
         result = {}
         pdf_document = fitz.open(self.file_path)
@@ -172,10 +200,14 @@ class Etl4lmLoader(BaseBishengLoader):
                 image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                 image.save(pdf_page_image_path)
             for item in items:
-                result[item["element_id"]] = self.crop_image(pdf_page_image_path, item)
+                image_url = self.crop_image(pdf_page_image_path, item)
+                # Skip images whose crop failed; get_image_tag falls back to the
+                # raw element_id rather than emitting a tag for a missing file.
+                if image_url is not None:
+                    result[item["element_id"]] = image_url
         return result
 
-    def merge_partitions(self, partitions: List[Dict]) -> Tuple[str, Dict]:
+    def merge_partitions(self, partitions: list[dict]) -> tuple[str, dict]:
         # Pre-proces sing pdf, Extracting Images
         local_image_result = self.extract_images(partitions=partitions)
         text_elem_sep = "\n"
@@ -191,6 +223,15 @@ class Etl4lmLoader(BaseBishengLoader):
             if label == "Image":
                 part["text"] = self.get_image_tag(local_image_result, part)
                 text = part["text"]
+                # API-supplied extra_data["indexes"] is computed against the
+                # original (often empty) text; rewriting the partition text
+                # would otherwise leave indexes pointing to a zero-width range
+                # in front of the inserted image tag, making the image bbox
+                # unreachable via IntervalSearch.
+                extra_data["indexes"] = [[0, len(text)]]
+                extra_data["bboxes"] = extra_data.get("bboxes", [])[:1] or [[0, 0, 0, 0]]
+                extra_data["pages"] = extra_data.get("pages", [])[:1] or [0]
+                extra_data["types"] = (extra_data.get("types", []) or ["image"])[:1]
 
             if is_first_elem:
                 f_text = text + "\n" if label == "Title" else text
@@ -210,9 +251,7 @@ class Etl4lmLoader(BaseBishengLoader):
                         doc_content.append(text_elem_sep + text)
 
             last_label = label
-            metadata["bboxes"].extend(
-                list(map(lambda x: list(map(int, x)), extra_data["bboxes"]))
-            )
+            metadata["bboxes"].extend(list(map(lambda x: list(map(int, x)), extra_data["bboxes"])))
             metadata["pages"].extend(extra_data["pages"])
             metadata["types"].extend(extra_data["types"])
 

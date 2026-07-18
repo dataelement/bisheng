@@ -1,0 +1,78 @@
+/**
+ * F035: state for the INLINE workspace panel embedded on the right of the
+ * chat-embedded task mode (ChatView). Unlike the legacy drawer
+ * (useArtifactsPanel), the panel stays mounted while switching between the
+ * file list and the in-place file preview, and carries a `fullscreen` flag that
+ * expands the preview to fill the whole chat `main` (the task-mode chat column
+ * is hidden, not the browser).
+ *
+ *  - open === false           → panel hidden, header shows the entry button
+ *  - open && !previewFile      → file-list view (fig. workspace)
+ *  - open && previewFile       → in-place preview view (fig. preview)
+ */
+import { useEffect, useState } from 'react';
+import { openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
+
+export function useWorkspacePanel(versionId: string) {
+    const [open, setOpen] = useState(false);
+    const [previewFile, setPreviewFile] = useState<ArtifactFile | null>(null);
+    const [fullscreen, setFullscreen] = useState(false);
+
+    // The panel is bound to ChatView's latest task turn (versionId). ChatView is
+    // KeepAlive-cached, so switching conversations / new task / new chat never
+    // unmounts this hook — it only changes versionId. Reset the panel whenever the
+    // bound version changes, otherwise the file opened in the previous conversation
+    // stays docked on the right of the new one (F035 stale-preview bug).
+    useEffect(() => {
+        setPreviewFile(null);
+        setFullscreen(false);
+        setOpen(false);
+    }, [versionId]);
+
+    /** Open the panel on the file list (entry button). */
+    const openWorkspace = () => {
+        setPreviewFile(null);
+        setFullscreen(false);
+        setOpen(true);
+    };
+
+    /** Close the whole panel (list X or preview Close); entry button returns.
+     * Keep previewFile as-is so a preview collapses while still showing the file
+     * instead of flashing back to the list mid-animation; openWorkspace (and the
+     * versionId reset above) restore the list view on the next open. */
+    const closeWorkspace = () => {
+        setFullscreen(false);
+        setOpen(false);
+    };
+
+    /** Preview a file in place. html artifacts still open in the standalone tab
+     *  (needs versionId to resolve the MinIO object key into a presigned link). */
+    const openPreview = (file: ArtifactFile) => {
+        if (file.file_name?.toLowerCase().endsWith('.html')) {
+            openHtmlArtifactViewer(file, versionId);
+            return;
+        }
+        setOpen(true);
+        setPreviewFile(file);
+    };
+
+    /** Back from preview to the file list (ArrowLeft); keeps the panel open. */
+    const backToList = () => {
+        setPreviewFile(null);
+        setFullscreen(false);
+    };
+
+    const toggleFullscreen = () => setFullscreen((v) => !v);
+
+    return {
+        open,
+        previewFile,
+        fullscreen,
+        openWorkspace,
+        closeWorkspace,
+        openPreview,
+        backToList,
+        toggleFullscreen,
+        setFullscreen,
+    };
+}

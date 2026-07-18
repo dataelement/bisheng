@@ -18,16 +18,24 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             const { value } = e.target;
             if (type === "number") {
-                // 使用正则表达式精确阻止负数（包括粘贴操作）
+                // Block minus (including paste)
                 if (/-/.test(value)) return;
 
-                // 阻止单独的0
-                if (props.min > 0 && value === "0") return;
+                /* Only block lone "0" when min is an integer-style floor (≥1).
+                 * For fractional min (e.g. 0.1 GB) we must allow "0"/"0."/… so users can type 0.1. */
+                const minNum = props.min === undefined ? NaN : Number(props.min as number | string)
+                if (Number.isFinite(minNum) && minNum >= 1 && value === "0") {
+                    return
+                }
 
-                // 最大长度限制
-                if (maxLength && value.length > maxLength) return;
-                // 最大值限制
-                if (props.max && value > props.max) return
+                // Max length limit
+                if (maxLength && value.length > maxLength) return
+                /* Live max clamp: numeric compare so intermediate typing is not wrongly blocked by string order */
+                if (props.max !== undefined && value !== "" && Number.isFinite(Number(value))) {
+                    const num = Number(value)
+                    const maxNum = Number(props.max as number | string)
+                    if (Number.isFinite(maxNum) && num > maxNum) return
+                }
             }
 
             setCurrentValue(value);
@@ -66,7 +74,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                 <input
                     type={type}
                     className={cname(
-                        "flex h-8 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                        "flex h-8 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:text-muted-foreground read-only:cursor-default read-only:text-muted-foreground read-only:dark:text-muted-foreground",
                         type === 'number' ? 'number-input-arrows' : '',
                         className
                     )}
@@ -380,7 +388,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
             <div className={cname('relative w-full', boxClassName)}>
                 <textarea
                     className={cname(
-                        "flex min-h-[80px] w-full rounded-md border border-input bg-search-input px-3 py-2 text-sm text-[#111] dark:text-gray-50 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                        "flex min-h-[80px] w-full rounded-md border border-input bg-search-input px-3 py-2 text-sm text-[#111] dark:text-gray-50 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:text-muted-foreground read-only:cursor-default read-only:text-muted-foreground read-only:dark:text-muted-foreground",
                         className
                     )}
                     ref={ref}
@@ -540,6 +548,9 @@ const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
     disabled,
     ...props
 }, ref) => {
+    // Strip maxLength so out-of-range numeric input is allowed; range
+    // violations surface as inline error text instead of hard truncation.
+    const { maxLength: _ignoredMaxLength, ...inputProps } = props;
     const defaultStr = defaultValue.toString();
     const [internalValue, setInternalValue] = React.useState<string>(() => {
         if (value !== undefined && value !== null) return String(value);
@@ -568,20 +579,19 @@ const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
         const raw = e.target.value;
         if (raw === '') {
             setInternalValue('');
-            // setInternalError('不能为空');
+            setInternalError('');
             onChange?.(e);
             return;
         }
         if (!/^\d*$/.test(raw)) return;
         if (raw.length > 1 && raw.startsWith('0')) return;
+
+        // Always reflect typed value so display matches what the user sees.
+        // Out-of-range values surface an error but do not propagate to parent.
+        setInternalValue(raw);
         const err = validate(raw);
         setInternalError(err);
 
-        if (err) {
-            setInternalError(err);
-            return;
-        }
-        setInternalValue(raw);
         if (!err) {
             const num = parseInt(raw, 10);
             onValueChange?.(num);
@@ -623,10 +633,10 @@ const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
                 id={id}
                 name={name}
                 className={cname(
-                    "flex h-7 w-full rounded-md border border-input bg-search-input px-2 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                    "flex h-7 w-full rounded-md border border-input bg-search-input px-2 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:text-muted-foreground read-only:cursor-default read-only:text-muted-foreground read-only:dark:text-muted-foreground",
                     inputClassName
                 )}
-                {...props}
+                {...inputProps}
             />
             {displayError && (
                 <p className="text-xs text-red-500 mt-1">{displayError}</p>

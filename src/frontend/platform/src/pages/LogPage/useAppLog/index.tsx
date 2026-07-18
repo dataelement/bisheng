@@ -204,6 +204,7 @@ export default function AppUseLog() {
                     t('log.csvHeaders.appName'),
                     t('log.csvHeaders.sessionCreationTime'),
                     t('log.csvHeaders.userName'),
+                    t('log.csvHeaders.userGroup'),
                     t('log.csvHeaders.messageRole'),
                     t('log.csvHeaders.messageSendTime'),
                     t('log.csvHeaders.messageContent'),
@@ -237,6 +238,8 @@ export default function AppUseLog() {
                         item.flow_type === 15 ? t('log.workbench_daily') : item.flow_name,
                         item.create_time.replace('T', ' '),
                         item.user_name,
+                        // Join user group names with comma separator
+                        (item.user_groups?.map((g: { name: string }) => g.name).join(',') ?? ''),
                         msg.category === 'question' ? t('log.userRole') : t('log.aiRole'),
                         msg.create_time.replace('T', ' '),
                         handleMessage(message, msg.category, item.flow_id + '_' + item.chat_id),
@@ -264,7 +267,7 @@ export default function AppUseLog() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
+        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-20">
             <div className="flex flex-wrap gap-4">
                 <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
                 <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
@@ -397,6 +400,7 @@ export default function AppUseLog() {
                     pageText={t('log.pagination.page')}
                     pageSize={pageSize}
                     total={total}
+                    showTotal={true}
                     onChange={(newPage) => setPage(newPage)}
                 />
             </div>

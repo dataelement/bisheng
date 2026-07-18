@@ -1,15 +1,20 @@
-import { ChevronLeft, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
-import { currentChatState } from '~/pages/appChat/store/atoms';
-import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
-import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
-import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
-import { cn } from '~/utils';
+import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
-import { useLocalize } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { UserPopMenu } from '~/layouts/UserPopMenu';
+import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
+import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
+import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
+import { currentChatState } from '~/pages/appChat/store/atoms';
+import { resolveAppChatExitNavigateTarget } from '~/pages/appChat/appChatOrigin';
+import { cn } from '~/utils';
 
 function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
     return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
@@ -65,12 +70,19 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 }
 
 export function SideNav() {
-    const navigate = useNavigate();
     const location = useLocation();
+    const navigate = useNavigate();
+    const { conversationId, fid: flowId, type: flowType } = useParams();
+
+    const handleGoBack = () => {
+        const target = resolveAppChatExitNavigateTarget(conversationId, location);
+        navigate(target, { replace: target === '/apps' });
+    };
+
     const localize = useLocalize();
-    const { fid: flowId, type: flowType } = useParams();
-    const from = new URLSearchParams(location.search).get('from');
-    const backPath = from === 'explore' ? '/apps/explore' : '/apps';
+    const isTabletOrMobile = usePrefersMobileLayout();
+    const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
+    const { data: bsConfig } = useGetBsConfig();
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -90,25 +102,48 @@ export function SideNav() {
     // e.g. right after deleting the last conversation, chatState is cleared but the
     // sidebar card should still show the app's name / logo / description.
     const flowData = chatState?.flow ?? currentApp;
+    const showShareApp = flowData?.can_share === true;
 
     return (
-        <div className="w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-3 py-5 overflow-hidden text-[#212121]">
-            {/* Top back button */}
-            <div className="flex items-center gap-[8px] shrink-0">
-                <button
-                    onClick={() => navigate(backPath)}
-                    className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-[rgba(255,255,255,0.5)] border border-[#ebecf0] backdrop-blur-[4px] hover:bg-gray-50 transition-colors"
-                >
-                    <ChevronLeft size={16} className="text-[#212121]" />
-                </button>
-                <span className="text-[14px] font-medium leading-[22px]">{localize('com_app_chat_sidebar_title')}</span>
+        <div
+            className={cn(
+                "relative h-full w-full overflow-hidden bg-white text-[#212121] flex flex-col",
+                isTabletOrMobile
+                    ? "border-r-0 px-0 pb-0 pt-0 gap-0"
+                    : "border-r border-[#e5e6eb] px-3 pb-2 pt-3 gap-4",
+            )}
+        >
+            <div className="hidden touch-mobile:block">
+                <MobileSidebarHeaderTabs
+                    logoSrc={bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : undefined}
+                    onClose={() => setSidebarVisible(false)}
+                    onLinkClick={(link) => {
+                        if (link.closeDrawerOnNavigate) setSidebarVisible(false);
+                    }}
+                />
             </div>
 
-            {/* App card */}
-            <div className="shrink-0">
+            {/* PC: back + title — original desktop sidebar chrome */}
+            <div className="hidden touch-desktop:flex shrink-0 items-center gap-2">
+                <button
+                    type="button"
+                    onClick={handleGoBack}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#212121] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
+                    aria-label={localize('com_ui_go_back')}
+                >
+                    <ChevronLeft size={16} className="shrink-0" />
+                </button>
+                <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[#ebecf0]" />
+                <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                    {localize('com_app_chat_sidebar_title')}
+                </span>
+            </div>
+
+            {/* App card — 应用内对话侧栏固定展示 */}
+            <div className="shrink-0 touch-mobile:px-2 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
-                    style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
+                    style={{ backgroundImage: "linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)" }}
                 >
                     <div className="flex items-center gap-[8px]">
                         <AppAvator
@@ -136,15 +171,19 @@ export function SideNav() {
                     </div>
 
                     <div className="flex items-center justify-center gap-[4px]">
-                        <button
-                            onClick={shareApp}
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
-                        >
-                            {localize('com_app_share_app')}
-                        </button>
+                        {showShareApp ? (
+                            <button
+                                onClick={shareApp}
+                                type="button"
+                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-[6px] border border-[#ececec] bg-white text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 touch-mobile:px-2"
+                            >
+                                {localize('com_app_share_app')}
+                            </button>
+                        ) : null}
                         <button
                             onClick={createNewChat}
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                            type="button"
+                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
                         >
                             {localize('com_knowledge_start_new_chat')}
                         </button>
@@ -153,9 +192,14 @@ export function SideNav() {
             </div>
 
             {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
+            <div
+                className={cn(
+                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2',
+                    'touch-mobile:pt-3',
+                )}
+            >
                 {groups.length === 0 ? (
-                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
+                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
                         <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
@@ -164,7 +208,7 @@ export function SideNav() {
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">
                             {/* Time label */}
-                            <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
+                            <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
                                 {formatConversationTimeGroupLabel(group.label, localize)}
                             </div>
                             {/* Items */}
@@ -176,7 +220,12 @@ export function SideNav() {
                                             key={conv.id}
                                             conv={conv}
                                             isActive={isActive}
-                                            onClick={() => switchConversation(conv)}
+                                            onClick={() => {
+                                                switchConversation(conv);
+                                                if (isTabletOrMobile) {
+                                                    setSidebarVisible(false);
+                                                }
+                                            }}
                                             onRenameSuccess={() => fetchConversations()}
                                             onDeleteSuccess={async () => {
                                                 const list = await fetchConversations();
@@ -186,9 +235,8 @@ export function SideNav() {
                                                     switchConversation(list[0]);
                                                 } else if (flowId && flowType) {
                                                     // Last conversation deleted — land on empty state, don't auto-create
-                                                    const qs = from ? `?from=${from}` : '';
-                                                    navigate(`/app/${flowId}/${flowType}${qs}`, {
-                                                        state: { fromDelete: true },
+                                                    navigate(`/app/${flowId}/${flowType}`, {
+                                                        state: { ...(location.state as object | null), fromDelete: true },
                                                     });
                                                 }
                                             }}
@@ -202,6 +250,11 @@ export function SideNav() {
                         </div>
                     ))
                 )}
+            </div>
+
+            {/* Footer user panel: mobile only (<768px) */}
+            <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1 hidden max-[768px]:block">
+                <UserPopMenu variant="drawer" />
             </div>
         </div>
     );

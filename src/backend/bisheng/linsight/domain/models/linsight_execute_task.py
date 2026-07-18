@@ -2,13 +2,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, List
 
-from sqlalchemy import Enum as SQLEnum, Column, JSON, DateTime, text, CHAR, ForeignKey, update
+from sqlalchemy import Enum as SQLEnum, Column, Integer, DateTime, text, CHAR, ForeignKey, update
 from sqlmodel import Field, select, col
 
 from bisheng.core.database import get_async_db_session
 from bisheng.database.base import uuid_hex
 from bisheng.common.models.base import SQLModelSerializable
 
+
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 class ExecuteTaskTypeEnum(str, Enum):
     """
@@ -59,14 +61,22 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
                                                          nullable=True))
     task_type: ExecuteTaskTypeEnum = Field(..., description='Task type',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
-    task_data: Optional[dict] = Field(None, description='Task Data', sa_type=JSON, nullable=True)
+    task_data: Optional[dict] = Field(None, description='Task Data', sa_column=Column(JsonType, nullable=True))
 
     # input_prompt: Optional[str] = Field(None, description='Enter a prompt', sa_type=Text, nullable=True)
     # user_input: Optional[str] = Field(None, description='User input', sa_type=Text, nullable=True)
-    history: Optional[List[Dict]] = Field(None, description='Execute Step Record', sa_type=JSON, nullable=True)
+    history: Optional[List[Dict]] = Field(None, description='Execute Step Record', sa_column=Column(JsonType, nullable=True))
+    # Plain VARCHAR (no native ENUM / CHECK): a native ENUM freezes the allowed set
+    # at table-creation time, so a newly-added status like WAITING_FOR_USER_INPUT is
+    # rejected with "Data truncated" on upgraded DBs. Storage stays the enum NAME.
     status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="Status Misi",
-                                          sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
-    result: Optional[Dict] = Field(None, description='Result of Task', sa_type=JSON, nullable=True)
+                                          sa_column=Column(SQLEnum(ExecuteTaskStatusEnum, native_enum=False, length=50, create_constraint=False), nullable=False))
+    result: Optional[Dict] = Field(None, description='Result of Task', sa_column=Column(JsonType, nullable=True))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
 
 class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
@@ -79,7 +89,7 @@ class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     __tablename__ = "linsight_execute_task"
 

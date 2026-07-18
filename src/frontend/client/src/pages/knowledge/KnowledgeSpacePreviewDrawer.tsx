@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
+import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
@@ -15,12 +16,18 @@ import {
     getJoinedSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
-    subscribeSpaceApi
+    subscribeSpaceApi,
+    unsubscribeSpaceApi
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { checkPermission } from "~/api/permission";
+import { cn } from "~/utils";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
+    initialSpace?: KnowledgeSpace | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     /** Notify parent to sync square card status */
@@ -29,24 +36,104 @@ interface KnowledgeSpacePreviewDrawerProps {
 
 export function KnowledgeSpacePreviewDrawer({
     spaceId,
+    initialSpace = null,
     open,
     onOpenChange,
     onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
+    const spacePreviewScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showToast } = useToastContext();
-    const MAX_JOINED_SPACES = 50;
+    const { isOverQuota } = useEffectiveQuota();
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
     const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
+    // Bumped on every drawer open. The file-list effect below keys on values derived from
+    // `space`/`status`; reopening the SAME space leaves those primitives unchanged, so the
+    // effect would not re-run and the cleared list would never reload. This token forces a
+    // fresh fetch on each open.
+    const [filesReloadKey, setFilesReloadKey] = useState(0);
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
+    // True while the FIRST page of the file list is in flight, so the empty
+    // state is not flashed before data arrives.
+    const [loadingFiles, setLoadingFiles] = useState(false);
+    // Guards against out-of-order responses when the effect re-fires (space /
+    // folder switch) while a previous first-page request is still pending.
+    const filesRequestSeqRef = useRef(0);
+    // F027: cursor for the next page of `getSpaceChildrenApi`. null on first
+    // page (and after a parent/space switch). Backend `next_cursor` advances
+    // it as the user scrolls.
+    const preview_next_cursor_ref = useRef<string | null>(null);
+    const [loadingSpace, setLoadingSpace] = useState(false);
+    const [canViewApprovalContent, setCanViewApprovalContent] = useState<boolean | null>(null);
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
+    const initialSpaceRef = useRef<KnowledgeSpace | null>(initialSpace);
+    const onOpenChangeRef = useRef(onOpenChange);
+    const onSquareStatusChangeRef = useRef(onSquareStatusChange);
+    const lastSyncedSquareStatusRef = useRef<string | null>(null);
+    const localizeRef = useRef(localize);
+    const showToastRef = useRef(showToast);
+
+    useEffect(() => {
+        initialSpaceRef.current = initialSpace;
+    }, [initialSpace]);
+
+    useEffect(() => {
+        onOpenChangeRef.current = onOpenChange;
+    }, [onOpenChange]);
+
+    useEffect(() => {
+        onSquareStatusChangeRef.current = onSquareStatusChange;
+    }, [onSquareStatusChange]);
+
+    useEffect(() => {
+        localizeRef.current = localize;
+    }, [localize]);
+
+    useEffect(() => {
+        showToastRef.current = showToast;
+    }, [showToast]);
+
+    const syncPreviewStatus = (info: KnowledgeSpace) => {
+        const emitSquareStatus = (nextStatus: "join" | "joined" | "pending" | "rejected") => {
+            const syncKey = `${String(info.id)}:${nextStatus}`;
+            if (lastSyncedSquareStatusRef.current === syncKey) {
+                return;
+            }
+            lastSyncedSquareStatusRef.current = syncKey;
+            onSquareStatusChangeRef.current?.(String(info.id), nextStatus);
+        };
+
+        const subscriptionStatus = String(info.subscriptionStatus ?? info.squareStatus ?? "").toLowerCase();
+        if (subscriptionStatus === "rejected") {
+            setStatus("rejected");
+            emitSquareStatus("rejected");
+            return;
+        }
+        if (info.isPending || subscriptionStatus === "pending") {
+            setStatus("pending");
+            emitSquareStatus("pending");
+            return;
+        }
+        if (
+            info.isFollowed ||
+            subscriptionStatus === "subscribed" ||
+            subscriptionStatus === "joined"
+        ) {
+            setStatus("joined");
+            emitSquareStatus("joined");
+            return;
+        }
+        setStatus("none");
+        emitSquareStatus("join");
+    };
 
     /**
      * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
@@ -64,14 +151,24 @@ export function KnowledgeSpacePreviewDrawer({
         if (!open || !spaceId) return;
         console.info("[KnowledgeSpacePreviewDrawer] open", { open, spaceId });
 
-        setSpace(null);
+        const fallbackSpace = initialSpaceRef.current;
+
+        setLoadingSpace(true);
+        setSpace(fallbackSpace ?? null);
         setStatus("none");
         setFilesPreview([]);
         setChildrenPage(1);
         setChildrenTotal(0);
+        setCanViewApprovalContent(null);
         setParentStack([]);
         setParentNameStack([]);
         setLoadingChildrenMore(false);
+        setFilesReloadKey(k => k + 1);
+        lastSyncedSquareStatusRef.current = null;
+
+        if (fallbackSpace) {
+            syncPreviewStatus(fallbackSpace);
+        }
 
         // 1) Top detail: GET /api/v1/knowledge/space/{space_id}/info
         getSpaceInfoApi(spaceId)
@@ -84,62 +181,77 @@ export function KnowledgeSpacePreviewDrawer({
                     isPending: info.isPending,
                 });
                 setSpace(info);
-                const sub = String(info.subscriptionStatus ?? "").toLowerCase();
-                // /info may still set is_followed when subscription_status is rejected; prefer explicit status.
-                if (sub === "rejected") {
-                    setStatus("rejected");
-                    onSquareStatusChange?.(String(info.id), "rejected");
-                } else if (info.isPending) {
-                    setStatus("pending");
-                    onSquareStatusChange?.(String(info.id), "pending");
-                } else if (info.isFollowed) {
-                    setStatus("joined");
-                    onSquareStatusChange?.(String(info.id), "joined");
-                } else {
-                    setStatus("none");
-                    onSquareStatusChange?.(String(info.id), "join");
-                }
+                syncPreviewStatus(info);
             })
             .catch(() => {
                 console.warn("[KnowledgeSpacePreviewDrawer] load space info failed", { spaceId });
-                showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
-                onOpenChange(false);
+                if (fallbackSpace) {
+                    setSpace(fallbackSpace);
+                    syncPreviewStatus(fallbackSpace);
+                    return;
+                }
+                showToastRef.current({
+                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                onOpenChangeRef.current(false);
+            })
+            .finally(() => {
+                setLoadingSpace(false);
             });
     }, [open, spaceId]);
 
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
         if (!space || !canViewFiles) {
+            filesRequestSeqRef.current += 1;
             setFilesPreview([]);
             setChildrenTotal(0);
             setChildrenPage(1);
+            setLoadingFiles(false);
             return;
         }
 
         // Reset + initial load
+        const requestSeq = ++filesRequestSeqRef.current;
         setFilesPreview([]);
         setChildrenPage(1);
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
+        setLoadingFiles(true);
+        // F027: reset cursor so the first request after a parent/space switch
+        // fetches page 1 (cursor=null) instead of inheriting a stale token.
+        preview_next_cursor_ref.current = null;
 
         const fileStatusFilter = getPreviewFileStatusFilter(space);
         getSpaceChildrenApi({
             space_id: space.id,
             ...(currentParentId ? { parent_id: currentParentId } : {}),
-            page: 1,
+            // F027: first page = no cursor.
             page_size: 20,
             ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
         })
             .then(res => {
+                if (requestSeq !== filesRequestSeqRef.current) return;
                 setFilesPreview(res.data);
-                setChildrenTotal(res.total);
+                // F027: derive a count surrogate from `has_more` since `total`
+                // is gone (used only to decide "load more" visibility).
+                setChildrenTotal(res.has_more ? res.data.length + 1 : res.data.length);
+                preview_next_cursor_ref.current = res.next_cursor ?? null;
             })
             .catch(() => {
+                if (requestSeq !== filesRequestSeqRef.current) return;
                 setFilesPreview([]);
                 setChildrenTotal(0);
+            })
+            .finally(() => {
+                if (requestSeq !== filesRequestSeqRef.current) return;
+                setLoadingFiles(false);
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
-    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
+        // canViewApprovalContent is resolved asynchronously (checkPermission) for APPROVAL spaces; without it as a
+        // dependency the effect would have already bailed (canViewFiles=false) and never refetch once access is granted.
+    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status, filesReloadKey, canViewApprovalContent]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;
@@ -153,12 +265,17 @@ export function KnowledgeSpacePreviewDrawer({
             const res = await getSpaceChildrenApi({
                 space_id: space.id,
                 ...(currentParentId ? { parent_id: currentParentId } : {}),
-                page: nextPage,
+                // F027: page-number replaced by `cursor` from previous response.
+                cursor: preview_next_cursor_ref.current,
                 page_size: 20,
                 ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
             });
             setFilesPreview(prev => [...prev, ...res.data]);
-            setChildrenTotal(res.total);
+            // F027: surrogate total derived from accumulated rows + has_more
+            // (1-row sentinel so the "load more" UI stays visible).
+            const newRowCount = filesPreview.length + res.data.length;
+            setChildrenTotal(res.has_more ? newRowCount + 1 : newRowCount);
+            preview_next_cursor_ref.current = res.next_cursor ?? null;
             setChildrenPage(nextPage);
         } catch {
             // ignore
@@ -183,41 +300,83 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    const isOwnerOrAdmin = space?.role === SpaceRole.CREATOR || space?.role === SpaceRole.ADMIN;
     const subscriptionRejected =
         String(space?.subscriptionStatus ?? "").toLowerCase() === "rejected" || status === "rejected";
-    // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
-    const canViewFiles =
+    const hasReadableGrant =
         !!space &&
         !subscriptionRejected &&
-        (space.visibility === VisibilityType.PUBLIC ||
-            (space.visibility === VisibilityType.APPROVAL &&
-                (String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
-                    space.isFollowed === true ||
-                    status === "joined")));
+        (
+            isOwnerOrAdmin ||
+            String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
+            space.isFollowed === true ||
+            status === "joined"
+        );
+    const canViewFiles =
+        isPublic ||
+        isOwnerOrAdmin ||
+        (
+            hasReadableGrant &&
+            (
+                space?.visibility !== VisibilityType.APPROVAL ||
+                canViewApprovalContent === true
+            )
+        );
+
+    useEffect(() => {
+        if (!space || space.visibility !== VisibilityType.APPROVAL || isOwnerOrAdmin || !hasReadableGrant) {
+            setCanViewApprovalContent(null);
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+
+        checkPermission(
+            "knowledge_space",
+            String(space.id),
+            "can_read",
+            "view_space",
+            { signal: controller.signal },
+        )
+            .then((res) => {
+                if (!cancelled) {
+                    setCanViewApprovalContent(Boolean(res?.allowed));
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setCanViewApprovalContent(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [space?.id, space?.visibility, isOwnerOrAdmin, hasReadableGrant]);
 
     const handleClickAction = () => {
         if (!space) return;
 
-        if (status === "joined" || status === "pending" || status === "rejected") return;
+        if (status === "joined" || status === "pending") return;
         if (subscribing) return;
 
-        const nextUiStatus: "joined" | "pending" = isPublic ? "joined" : "pending";
         const prevUiStatus = status;
+        const prevSquareStatus = prevUiStatus === "none" ? "join" : prevUiStatus;
 
         (async () => {
             setSubscribing(true);
-            setStatus(nextUiStatus);
-            onSquareStatusChange?.(String(space.id), nextUiStatus);
 
             const rollback = () => {
                 setStatus(prevUiStatus);
-                onSquareStatusChange?.(String(space.id), "join");
+                onSquareStatusChange?.(String(space.id), prevSquareStatus);
             };
 
             try {
                 try {
                     const joinedSpaces = await getJoinedSpacesApi();
-                    if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                    if (isOverQuota("knowledge_space_subscribe", joinedSpaces.length)) {
                         rollback();
                         showToast({
                             message: localize("com_knowledge.join_space_limit_reached_50"),
@@ -229,20 +388,36 @@ export function KnowledgeSpacePreviewDrawer({
                     // If the limit check fails, fall back to existing behavior.
                 }
 
-                await subscribeSpaceApi(space.id);
-                if (isPublic) {
+                const result = await subscribeSpaceApi(space.id);
+                const nextUiStatus: "joined" | "pending" = result.status === "subscribed" ? "joined" : "pending";
+                setStatus(nextUiStatus);
+                setSpace((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              squareStatus: nextUiStatus,
+                              subscriptionStatus: result.status,
+                              isFollowed: nextUiStatus === "joined",
+                              isPending: nextUiStatus === "pending",
+                          }
+                        : prev
+                );
+                onSquareStatusChange?.(String(space.id), nextUiStatus);
+                if (nextUiStatus === "joined") {
                     showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
                 } else {
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
             } catch (e) {
                 rollback();
+                const code = (e as any)?.status_code;
                 const rawMessage =
                     (e as any)?.message ||
                     (e as any)?.status_message ||
                     "";
 
-                if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+                // Backend errcode 18032: SpaceSubscribeLimitError (join limit reached)
+                if (code === 18032) {
                     showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
                 } else {
                     const message =
@@ -257,10 +432,9 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const getButtonConfig = () => {
-        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中/已驳回”保持原文案
-        if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
-        if (status === "rejected") return { label: localize("rejected"), variant: "secondary" as const, disabled: true };
+        if (status === "joined") return { label: localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
+        if (status === "pending") return { label: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
+        if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
@@ -271,21 +445,35 @@ export function KnowledgeSpacePreviewDrawer({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full min-h-0 overflow-hidden"
+                className={cn(
+                    "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-[1000px] sm:max-w-[1000px]",
+                    "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
+                )}
                 hideClose
             >
-                <button
-                    type="button"
-                    aria-label={localize("com_knowledge.collapse_drawer")}
-                    onClick={() => onOpenChange(false)}
-                    className="absolute left-1 top-1/2 -translate-y-1/2 h-16 w-6 bg-white text-[#C9CDD4] hover:text-[#B6BBC5] flex items-center justify-center z-20"
-                >
-                    <ChevronRight className="size-6 stroke-[2.75]" />
-                </button>
-                {space && (
+                {!isH5 ? (
+                    <button
+                        type="button"
+                        aria-label={localize("com_knowledge.collapse_drawer")}
+                        onClick={() => onOpenChange(false)}
+                        className="absolute left-1 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-white text-[#C9CDD4] hover:text-[#B6BBC5]"
+                    >
+                        <ChevronRight className="size-6 stroke-[2.75]" />
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        aria-label={localize("com_knowledge.close")}
+                        onClick={() => onOpenChange(false)}
+                        className="absolute right-4 top-4 z-20 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                    >
+                        <X className="size-4" />
+                    </button>
+                )}
+                {space ? (
                     <>
-                        <SheetHeader className="px-6 pt-6 pb-4 gap-0 border-b border-gray-100 text-left">
-                            <SheetTitle className="font-semibold text-[#1d2129] leading-tight mb-1">
+                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
+                            <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold touch-mobile:pr-10">
                                 {space.name}
                             </SheetTitle>
                             {space.description && (
@@ -302,7 +490,7 @@ export function KnowledgeSpacePreviewDrawer({
                             )}
 
                             <div className="flex items-center gap-1.5 mb-3 mt-4">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#165DFF] text-white text-xs">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs">
                                     {space.creator?.[0] || "?"}
                                 </span>
                                 <span className="text-sm text-[#86909c]">{space.creator}</span>
@@ -317,7 +505,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                        : status === "pending" || status === "rejected"
+                                        : status === "pending"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                             : ""
                                         }`}
@@ -330,7 +518,8 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover px-6 py-4"
+                            ref={spacePreviewScrollRevealRef}
+                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
@@ -339,11 +528,11 @@ export function KnowledgeSpacePreviewDrawer({
                             }}
                         >
                             {canViewFiles ? (
-                                <div className="space-y-2">
+                                <div className="flex min-h-full flex-col space-y-2">
                                     <div className="mb-1 text-sm text-[#4E5969] flex items-center gap-2 flex-wrap">
                                         <button
                                             type="button"
-                                            className="text-[#165DFF] hover:underline"
+                                            className="text-blue-500 hover:underline"
                                             onClick={() => goToParentDepth(0)}
                                         >
                                             {localize("com_knowledge.all_files")}</button>
@@ -355,7 +544,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     <button
                                                         type="button"
                                                         onClick={() => goToParentDepth(depth)}
-                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-[#165DFF] hover:underline"}
+                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-blue-500 hover:underline"}
                                                         disabled={depth === parentNameStack.length}
                                                     >
                                                         {name}
@@ -364,11 +553,19 @@ export function KnowledgeSpacePreviewDrawer({
                                             );
                                         })}
                                     </div>
-                                    {filesPreview.length === 0 ? (
-                                        <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">
-                                            {localize("com_knowledge.no_files")}</div>
+                                    {loadingFiles ? (
+                                        <div className="flex flex-1 items-center justify-center">
+                                            <LoadingIcon className="size-20 text-primary" />
+                                        </div>
+                                    ) : filesPreview.length === 0 ? (
+                                        <div className="flex flex-1 flex-col items-center justify-center text-center">
+                                            <EmptyStateIllustration className="size-[120px] mb-4" />
+                                            <p className="text-[14px] font-normal text-[#999999]">
+                                                {localize("com_knowledge.no_files")}
+                                            </p>
+                                        </div>
                                     ) : (
-                                        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                                        <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
                                             {filesPreview.map((f) => (
                                                 <FileCard
                                                     key={f.id}
@@ -376,7 +573,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     userRole={space?.role ?? SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
-                                                            onDownload={() => { }}
+                                                    onDownload={() => { }}
                                                     onRename={() => { }}
                                                     onDelete={() => { }}
                                                     onEditTags={() => { }}
@@ -387,8 +584,8 @@ export function KnowledgeSpacePreviewDrawer({
                                                     }}
                                                     onPreview={handlePreviewFile}
                                                     disableClickNavigate
-                                                            hideSelectionCheckbox
-                                                            hideDownloadActions
+                                                    hideSelectionCheckbox
+                                                    hideDownloadActions
                                                 />
                                             ))}
                                         </div>
@@ -406,18 +603,29 @@ export function KnowledgeSpacePreviewDrawer({
                                 </div>
                             ) : space?.visibility === VisibilityType.APPROVAL ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <img
-                                        className="size-[140px] object-contain mb-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
-                                        alt="Locked"
-                                    />
-                                    <div className="text-[#1d2129] text-[14px]">
+                                    <NoPermissionIllustration className="size-[120px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
-                            ) : null}
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
+                                    <NoPermissionIllustration className="size-[120px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">
+                                        {localize("com_knowledge.space_view_requires_join")}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
+                ) : (
+                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-[#86909c] touch-mobile:px-0">
+                        {loadingSpace ? (
+                            <LoadingIcon className="size-20 text-primary" />
+                        ) : (
+                            localize("com_knowledge.space_invalid_or_deleted")
+                        )}
+                    </div>
                 )}
             </SheetContent>
         </Sheet>

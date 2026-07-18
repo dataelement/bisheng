@@ -1,11 +1,13 @@
 import axios from 'axios';
 import React from 'react';
+import { stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';
 
 export { default as buildDefaultConvo } from './buildDefaultConvo';
 export { default as buildTree } from './buildTree';
 export { default as cleanupPreset } from './cleanupPreset';
 export { default as cn } from './cn';
 export * from './convos';
+export * from './duration';
 export * from './endpoints';
 export * from './files';
 export * from './forms';
@@ -204,37 +206,49 @@ export function formatStrTime(time: string, notSameDayFormat: string): string {
     date1.getDate() === date2.getDate() ? formatDate(date1, 'HH:mm') : formatDate(date1, notSameDayFormat)
 }
 
-const copyTextInDom = (dom: HTMLElement): Promise<string> => {
+// Pull visible text out of a DOM node. Prefers the live selection range so
+// that user-select:none subtrees (e.g. citation badges) are excluded; falls
+// back to innerText when no selection is available.
+const extractVisibleText = (dom: HTMLElement): string => {
   const range = document.createRange();
   range.selectNode(dom);
   const selection = window.getSelection();
+  let text = dom.innerText;
   if (selection) {
     selection.removeAllRanges();
     selection.addRange(range);
+    const selected = selection.toString();
+    if (selected) text = selected;
+    selection.removeAllRanges();
   }
-  return new Promise((resolve) => {
-    document.execCommand('copy');
-    window.getSelection()?.removeAllRanges();
-    resolve(dom.innerText);
-  });
+  return text;
 };
 
-// Copy text to clipboard with Firefox-compatible fallback
-export const copyText = (text: string | HTMLElement): Promise<string | void> => {
-  // Copy DOM element content
-  if (typeof text !== 'string') return copyTextInDom(text);
-
+const copyStringToClipboard = (text: string): Promise<void> => {
   // Always run the legacy fallback first — it is synchronous and works reliably
   // inside focus-trapped dialogs (Radix Dialog portals) where the async Clipboard
   // API may silently resolve without actually writing in Firefox.
-  // If the fallback succeeds we are done; otherwise try the Clipboard API.
   const fallbackOk = copyTextFallbackSync(text);
   if (fallbackOk) return Promise.resolve();
-
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard.writeText(text);
   }
   return Promise.reject(new Error('copy failed'));
+};
+
+const copyTextInDom = (dom: HTMLElement): Promise<string> => {
+  // Strip private-use citation markers so they don't leak to the clipboard
+  // (the rendered badges have no plain-text counterpart).
+  const cleanText = stripCitationMarkers(extractVisibleText(dom));
+  return copyStringToClipboard(cleanText).then(() => cleanText);
+};
+
+// Copy text to clipboard with Firefox-compatible fallback. Always strips
+// private-use citation markers so they never reach the clipboard regardless
+// of whether the caller passes a DOM node or a pre-extracted string.
+export const copyText = (text: string | HTMLElement): Promise<string | void> => {
+  if (typeof text !== 'string') return copyTextInDom(text);
+  return copyStringToClipboard(stripCitationMarkers(text));
 };
 
 /**
@@ -250,8 +264,14 @@ function copyTextFallbackSync(text: string): boolean {
   textarea.style.left = '-9999px';
   textarea.style.top = '-9999px';
   textarea.style.opacity = '0';
-  // Append inside the active dialog to avoid focus-trap interference
-  const container = document.activeElement?.closest('[role="dialog"]') || document.body;
+  // Append inside the active dialog/menu to avoid focus-trap interference.
+  // Radix DropdownMenu/Select content ([role="menu"]/[role="listbox"]) traps focus
+  // via FocusScope: a textarea appended to <body> loses focus immediately, so
+  // select()+execCommand copies nothing. Keeping it inside the trapped container
+  // preserves the selection (fixes copy from a mobile WebView dropdown menu item).
+  const container =
+    document.activeElement?.closest('[role="dialog"],[role="menu"],[role="listbox"]') ||
+    document.body;
   container.appendChild(textarea);
   textarea.focus();
   textarea.select();

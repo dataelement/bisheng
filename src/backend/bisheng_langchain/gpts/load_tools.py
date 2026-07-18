@@ -81,8 +81,8 @@ def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
             api_wrapper=AzureDallEWrapper(**kwargs)
         )
     if kwargs.get('openai_proxy'):
-        kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
-        kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))
+        kwargs['http_async_client'] = httpx.AsyncClient(proxy=kwargs.get('openai_proxy'))
+        kwargs['http_client'] = httpx.Client(proxy=kwargs.get('openai_proxy'))
     kwargs['api_key'] = kwargs.pop('openai_api_key')
     kwargs['base_url'] = kwargs.pop('openai_api_base', None)
     return DallEImageGenerator(

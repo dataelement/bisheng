@@ -23,6 +23,9 @@ knowledges: # 知识库相关配置
       x-api-key: "11"
     request_kwargs:
       useChartRecognition: false
+  version_management:
+    enabled: false
+    simhash_similarity_threshold: 0.85
 
 llm_request:
   # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值
@@ -69,12 +72,29 @@ env:
   enable_registration: true
   # 前端上传文件的最大限制，单位MB
   uploaded_files_maximum_size: 50
+  # 知识库/知识空间音视频上传最大限制，单位MB（其余文件仍用 uploaded_files_maximum_size）
+  uploaded_media_maximum_size: 1024
+  # 工作台「无菜单权限」占位页（/menu-unavailable）展示的纯文案，可在系统配置中修改；不配置则使用前端默认文案
+  workbench_menu_unavailable_message: "暂无使用过的应用，可以前往应用广场探索更多应用"
 
 workflow:
   # 节点运行最大步数
   max_steps: 50
   # 等待用户输入的超时时间，单位分钟
   timeout: 5
+
+# 日常聊天（Agent 模式）相关配置
+daily_chat:
+  # Agent function-calling 循环最大迭代次数（LangGraph recursion_limit）。
+  # 默认 50；配置缺失 / 类型错误 / <= 0 时也使用 50。
+  agent_max_iterations: 50
+  # 送入模型的历史消息合计 token 上限；超出会从最旧一条开始丢弃，直到总量不超过。
+  # 需要按目标模型的 context window 调整：
+  #   - 200k 长上下文模型（GPT-5.1 / Claude 4.x）：可放大到 20000~30000
+  #   - 32k context 模型（GPT-4 Turbo 等）：建议 6000~10000
+  #   - 8k context 小模型：建议 2000~4000
+  # 默认 8000；配置缺失 / 类型错误 / <= 0 时也使用 8000。
+  history_max_tokens: 8000
 
 # 灵思模块相关配置
 linsight:
@@ -107,3 +127,8 @@ information_conf:
 
 mcp:
   enable_stdio: true
+
+knowledge_space:
+  # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）
+  # 默认 true；中粮场内部署改为 false 走原 Tab 布局
+  tree_structured_directory_display: true

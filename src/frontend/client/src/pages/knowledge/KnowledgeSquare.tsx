@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import { ArrowLeft, Search } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import {
+    getSquareSpacesApi,
+    subscribeSpaceApi,
+    type KnowledgeSpace,
+} from "~/api/knowledge";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -17,9 +22,10 @@ interface KnowledgeSquareProps {
     searchPlaceholder?: string;
     emptyText?: string;
     joinToastPrefix?: string;
-    onPreviewSpace?: (spaceId: string) => void;
+    onPreviewSpace?: (space: KnowledgeSpace) => void;
     /** Optional status override from parent (e.g. preview drawer join) */
     statusOverride?: Record<string, SquareSpaceStatus>;
+    onSquareStatusChange?: (spaceId: string, status: SquareSpaceStatus) => void;
 }
 
 export default function KnowledgeSquare({
@@ -31,11 +37,19 @@ export default function KnowledgeSquare({
     joinToastPrefix,
     onPreviewSpace,
     statusOverride,
+    onSquareStatusChange,
 }: KnowledgeSquareProps) {
-    const MAX_JOINED_SPACES = 50;
-
     const { showToast } = useToastContext();
     const localize = useLocalize();
+
+    // 卡片每行列数自适应，与应用广场保持一致：lg+ 3 列，md 2 列，窄屏 1 列
+    const isAtLeast768 = useMediaQuery("(min-width: 768px)");
+    const isAtLeast1024 = useMediaQuery("(min-width: 1024px)");
+    const squareCols = useMemo(() => {
+        if (isAtLeast1024) return 3;
+        if (isAtLeast768) return 2;
+        return 1;
+    }, [isAtLeast768, isAtLeast1024]);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [page, setPage] = useState(1);
@@ -43,11 +57,18 @@ export default function KnowledgeSquare({
     const [loadingMore, setLoadingMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const [spaces, setSpaces] = useState<KnowledgeSpace[]>([]);
-    const [joiningId, setJoiningId] = useState<string | null>(null);
+    // In-flight join requests keyed by space id, so concurrent joins to
+    // different spaces (e.g. clicking quickly across pages) don't block each
+    // other — a single shared id used to silently drop them (see handleJoin).
+    const [joiningIds, setJoiningIds] = useState<Set<string>>(() => new Set());
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const searchImeComposingRef = useRef(false);
-    const PAGE_SIZE = 20;
+    // Larger page reduces the "subscribe reorders rows mid-pagination" issue:
+    // the not-subscribed-first sort moves a space to the back the moment it's
+    // joined, which with offset pagination skips/duplicates rows across pages.
+    // Fitting more per page keeps most spaces on one page.
+    const PAGE_SIZE = 60;
 
     const MAX_SEARCH_LEN = 40;
 
@@ -147,66 +168,56 @@ export default function KnowledgeSquare({
     }, [hasMorePage, loadingMore, load, page]);
 
     const handleJoin = async (space: KnowledgeSpace) => {
-        const nextStatus: SquareSpaceStatus =
-            space.visibility === VisibilityType.PUBLIC ? "joined" : "pending";
+        // Rejected applications can be submitted again.
+        const currentStatus =
+            statusOverride?.[String(space.id)] ??
+            ((space.squareStatus as SquareSpaceStatus) || "join");
+        if (currentStatus !== "join" && currentStatus !== "rejected") return;
+        // Per-space guard only: block double-submitting the SAME space, never
+        // others. A single shared in-flight id silently dropped concurrent joins
+        // to different spaces — clicking quickly across pages left some requests
+        // unsent, so those spaces stayed "join" after a refresh.
+        if (joiningIds.has(space.id)) return;
 
-        // Only join when currently "join"
-        const currentStatus = (space.squareStatus as SquareSpaceStatus) || "join";
-        if (currentStatus !== "join") return;
-        if (joiningId) return;
+        setJoiningIds((prev) => new Set(prev).add(space.id));
 
-        const prevSpaces = spaces;
-        setJoiningId(space.id);
-        setSpaces((prev) =>
-            prev.map((s) =>
-                s.id === space.id
-                    ? {
-                          ...s,
-                          squareStatus: nextStatus,
-                          isFollowed: nextStatus === "joined",
-                          isPending: nextStatus === "pending",
-                      }
-                    : s
-            )
-        );
-
-        const rollback = () => {
-            setSpaces(prevSpaces);
-            setJoiningId(null);
-        };
-
-        // Join/apply upper limit (includes followed + pending applications)
+        // No client-side cap: the join limit is role-configurable on the backend
+        // (F005 quota knowledge_space_subscribe, default 100) and enforced there;
+        // an over-limit attempt comes back as errcode 18032 and is surfaced below.
         try {
-            const joinedSpaces = await getJoinedSpacesApi();
-            if (joinedSpaces.length >= MAX_JOINED_SPACES) {
-                rollback();
-                showToast({
-                    message: localize("com_knowledge.join_space_limit_reached_50"),
-                    severity: NotificationSeverity.WARNING,
-                });
-                return;
-            }
-        } catch {
-            // If the limit check fails, keep the existing behavior instead of blocking.
-        }
-
-        try {
-            await subscribeSpaceApi(space.id);
+            const result = await subscribeSpaceApi(space.id);
+            const nextStatus: SquareSpaceStatus = result.status === "subscribed" ? "joined" : "pending";
+            setSpaces((prev) =>
+                prev.map((s) =>
+                    s.id === space.id
+                        ? {
+                              ...s,
+                              squareStatus: nextStatus,
+                              subscriptionStatus: result.status,
+                              isFollowed: nextStatus === "joined",
+                              isPending: nextStatus === "pending",
+                          }
+                        : s
+                )
+            );
+            onSquareStatusChange?.(String(space.id), nextStatus);
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
                 showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch (e) {
-            rollback();
+            // No optimistic space-list change to undo (status is set only on
+            // success, via a per-space functional update), so just surface the
+            // error; `finally` clears the in-flight flag for this space.
+            const code = (e as any)?.status_code;
             const rawMessage =
                 (e as any)?.message ||
                 (e as any)?.status_message ||
                 "";
 
-            // Backend errcode 18032: SpaceSubscribeLimitError
-            // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
-            if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+            // Backend errcode 18032: SpaceSubscribeLimitError (join limit reached)
+            if (code === 18032) {
                 showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
             } else {
                 const message =
@@ -215,28 +226,42 @@ export default function KnowledgeSquare({
                 showToast({ message, severity: NotificationSeverity.ERROR });
             }
         } finally {
-            setJoiningId(null);
+            setJoiningIds((prev) => {
+                const next = new Set(prev);
+                next.delete(space.id);
+                return next;
+            });
         }
     };
-
-    const spaceRows: KnowledgeSpace[][] = [];
-    for (let i = 0; i < visibleSpaces.length; i += 3) {
-        spaceRows.push(visibleSpaces.slice(i, i + 3));
-    }
 
     return (
         <div className="h-full w-full flex flex-col bg-white overflow-hidden">
             <div
-                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
-                style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg.svg)` }}
+                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
             >
+                {/* Decorative scattered icons — kept from the original banner art, recolored
+                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-blue-200"
+                    style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
+                        WebkitMaskSize: "cover",
+                        maskSize: "cover",
+                        WebkitMaskPosition: "center",
+                        maskPosition: "center",
+                        WebkitMaskRepeat: "no-repeat",
+                        maskRepeat: "no-repeat",
+                    }}
+                />
 
                 {onBack && (
                     <div className="absolute left-4 top-4 z-10">
                         <Button
                             variant="ghost"
                             onClick={onBack}
-                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#165DFF]"
+                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-blue-500"
                         >
                             <ArrowLeft className="size-3.5" />
                         </Button>
@@ -244,66 +269,63 @@ export default function KnowledgeSquare({
                 )}
 
                 <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
-                    <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">{tTitle}</h1>
+                    <h1 className="mb-1 text-[26px] font-semibold text-blue-500">{tTitle}</h1>
                     <p className="text-[13px] text-[#86909C]">{tSubtitle}</p>
                 </div>
             </div>
 
             <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
+                // `scrollbar-os` opts out of the global custom ::-webkit-scrollbar so the
+                // native OS scrollbar setting (always-show vs show-on-scroll-only) is respected.
+                // Without it, the global :not(.scrollbar-os) rule forces an always-present bar.
+                className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
             >
-                <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-                    <Input
-                        type="text"
-                        placeholder={tSearchPlaceholder}
-                        value={searchQuery}
-                        onChange={handleSearch}
-                        onCompositionStart={handleSearchCompositionStart}
-                        onCompositionEnd={handleSearchCompositionEnd}
-                        className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
-                    />
+                {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
+                    the search icon so it stays aligned with the input after the padding inset. */}
+                <div className="mx-auto mb-1 mt-6 w-full max-w-[480px] max-[767px]:px-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
+                        <Input
+                            type="text"
+                            placeholder={tSearchPlaceholder}
+                            value={searchQuery}
+                            onChange={handleSearch}
+                            onCompositionStart={handleSearchCompositionStart}
+                            onCompositionEnd={handleSearchCompositionEnd}
+                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+                        />
+                    </div>
                 </div>
 
-                <div className="max-w-[1032px] mx-auto px-4 py-4">
+                <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 py-4">
                     {loading && spaces.length === 0 ? (
-                        <div className="flex items-center justify-center h-64 text-[#86909C]">{localize("com_knowledge.loading")}</div>
-                    ) : spaceRows.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
-                            <img
-                                className="size-[120px] mb-3 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
+                        <div className="flex-1 flex items-center justify-center text-[#86909C]">{localize("com_knowledge.loading")}</div>
+                    ) : visibleSpaces.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
+                            <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {spaceRows.map((row, rowIndex) => (
-                                <div key={rowIndex} className="flex gap-3">
-                                    {row.map((space) => (
-                                        <KnowledgeSquareCard
-                                            key={space.id}
-                                            space={space}
-                                            status={
-                                                statusOverride?.[String(space.id)] ??
-                                                ((space.squareStatus as SquareSpaceStatus) || "join")
-                                            }
-                                            onPreview={() => onPreviewSpace?.(space.id)}
-                                            onAction={() => handleJoin(space)}
-                                        />
-                                    ))}
-
-                                    {row.length < 3 && (
-                                        <>
-                                            {Array.from({ length: 3 - row.length }).map((_, i) => (
-                                                <div key={`empty-${i}`} className="flex-1 min-w-0" />
-                                            ))}
-                                        </>
-                                    )}
-                                </div>
-                            ))}
+                            <div
+                                className="grid gap-3"
+                                style={{ gridTemplateColumns: `repeat(${squareCols}, minmax(0, 1fr))` }}
+                            >
+                                {visibleSpaces.map((space) => (
+                                    <KnowledgeSquareCard
+                                        key={space.id}
+                                        space={space}
+                                        status={
+                                            statusOverride?.[String(space.id)] ??
+                                            ((space.squareStatus as SquareSpaceStatus) || "join")
+                                        }
+                                        isActing={joiningIds.has(space.id)}
+                                        onPreview={() => onPreviewSpace?.(space)}
+                                        onAction={() => handleJoin(space)}
+                                    />
+                                ))}
+                            </div>
 
                             <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
                                 {loadingMore ? localize("com_knowledge.loading") : !hasMorePage ? localize("com_knowledge.no_more_content") : ""}
@@ -315,4 +337,3 @@ export default function KnowledgeSquare({
         </div>
     );
 }
-

@@ -27,6 +27,11 @@ const ToolSelector = ({
   expandedItems,
   setManuallyExpandedItems,
   toggleGroup,
+  // Optional: when set, renders a "是否默认勾选" checkbox column in the selected
+  // panel (daily-mode variant). LinSight leaves it unset and behaves as before.
+  showDefaultChecked = false,
+  onDefaultCheckedChange,
+  defaultCheckedLabel,
 }) => {
   const { t } = useTranslation()
   const [scrollToParentId, setScrollToParentId] = useState<string | null>(null);
@@ -230,7 +235,14 @@ const ToolSelector = ({
         className="w-1/3 flex border rounded-lg bg-white"
       >
         <div className="flex-1 p-4">
-          <h3 className="text-[16px] font-medium">{t('toolSelector.selectedTools')}</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-[16px] font-medium">{t('toolSelector.selectedTools')}</h3>
+            {showDefaultChecked && selectedTools.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {defaultCheckedLabel || t('bench.defaultChecked')}
+              </span>
+            )}
+          </div>
 
           {selectedTools.length === 0 ? (
             <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-6 px-4 text-center">
@@ -270,7 +282,7 @@ const ToolSelector = ({
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="truncate max-w-[240px]">{tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool' }) : tool.name}</span>
+                                    <span className="truncate max-w-[240px]">{tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name}</span>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>{tool.name}</p>
@@ -278,15 +290,31 @@ const ToolSelector = ({
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeTool(index);
-                              }}
-                              className="text-red-500 hover:text-red-700 ml-2"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-3 ml-2">
+                              {showDefaultChecked && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDefaultCheckedChange?.(tool.id, !tool.default_checked);
+                                  }}
+                                  className={`w-4 h-4 border rounded flex items-center justify-center ${
+                                    tool.default_checked ? 'bg-primary border-primary' : 'border-gray-300'
+                                  }`}
+                                >
+                                  {tool.default_checked && <Check className="w-3 h-3 text-white" />}
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeTool(index);
+                                }}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         )}
                       </Draggable>
@@ -391,7 +419,7 @@ const ToolSelector = ({
                           <TooltipTrigger asChild>
                             <div className="flex flex-col min-w-0">
                               <p className="truncate max-w-[180px]">
-                                {(tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool' }) : tool.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                {(tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                   part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
                                     <span key={i} className="bg-yellow-200">{part}</span>
                                   ) : (
@@ -402,7 +430,7 @@ const ToolSelector = ({
                               {/* 一级菜单描述 - 与二级菜单样式一致 */}
                               {tool.description && (
                                 <p className="text-xs text-gray-500 truncate mt-1 max-w-[260px]">
-                                  {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool' }) : tool.description}
+                                  {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool', defaultValue: tool.description || '' }) : tool.description}
                                 </p>
                               )}
                             </div>
@@ -435,7 +463,7 @@ const ToolSelector = ({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <p className="truncate max-w-[180px]">
-                                    {(tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool' }) : child.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                    {(tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool', defaultValue: child.name }) : child.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                       part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
                                         <span key={i} className="bg-yellow-200">{part}</span>
                                       ) : (
@@ -445,7 +473,7 @@ const ToolSelector = ({
                                   </p>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool' }) : child.name}</p>
+                                  <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool', defaultValue: child.name }) : child.name}</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -453,10 +481,10 @@ const ToolSelector = ({
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool' }) : child.desc}</p>
+                                    <p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool', defaultValue: child.desc || '' }) : child.desc}</p>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool' }) : child.desc}</p>
+                                    <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool', defaultValue: child.desc || '' }) : child.desc}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>

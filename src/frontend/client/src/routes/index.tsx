@@ -10,6 +10,7 @@ import AppChatEntry from '@/pages/appChat/AppChatEntry';
 import AgentCenter from '@/pages/apps';
 import ExplorePlaza from '@/pages/apps/explore';
 import Share from '@/pages/share';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
@@ -18,12 +19,65 @@ import RouteErrorBoundary from './RouteErrorBoundary';
 import Sop from '@/components/Sop';
 import MainLayout from '@/layouts/MainLayout';
 import Page404 from '@/pages/Page404';
+import Page403 from '@/pages/Page403';
 import { AliveScope } from 'react-activation';
 import Subscription from '~/pages/Subscription';
 import AppRoot from './AppRoot';
 import Root from './Root';
 import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
+import ArticlePage from '~/pages/Subscription/Article/ArticlePage';
+import DevLogin from '~/pages/DevLogin';
+import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
+import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
+import { useAuthContext } from '@/hooks';
+import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
+import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
+import { canOpenWorkbench } from '@/utils/platformAccess';
+
+function HomeEntryRedirect() {
+  const { user } = useAuthContext();
+  const plugins = (user as { plugins?: string[] } | null)?.plugins;
+  if (!Array.isArray(plugins)) {
+    return <Navigate to="/c/new" replace />;
+  }
+  const canOpenWorkbenchEntry = canOpenWorkbench({
+    role: user?.role,
+    plugins,
+    is_department_admin: (user as { is_department_admin?: boolean } | null)?.is_department_admin,
+  });
+  if (!canOpenWorkbenchEntry) {
+    return <Navigate to="/404" replace />;
+  }
+  const has = (id: string) => plugins.includes(id);
+  // Only users with WEB_MENU `home` land on chat home; do not use menu_approval_mode here — it incorrectly
+  // forced /c/new for every user when approval was on (same class of bug as apps center).
+  if (has('home')) {
+    return <Navigate to="/c/new" replace />;
+  }
+  if (has('apps')) {
+    return <Navigate to={appsSectionLinkTarget()} replace />;
+  }
+  if (has('subscription')) {
+    return <Navigate to="/channel" replace />;
+  }
+  if (has('knowledge_space')) {
+    return <Navigate to="/knowledge" replace />;
+  }
+  // In approval mode, a new user may have workbench entry but no nav plugins yet.
+  // Send them to the default apply page so they can request access instead of seeing
+  // a dead-end generic message.
+  // Workspace landing fallback uses the workbench approval scope (legacy flag as fallback).
+  const menuApprovalMode = Boolean(
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean } | null)
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode,
+  );
+  if (menuApprovalMode) {
+    return <Navigate to="/menu-unavailable?plugin=home" replace />;
+  }
+  return <Navigate to="/menu-unavailable" replace />;
+}
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -43,6 +97,24 @@ const baseConfig = {
   //@ts-ignore
   basename: __APP_ENV__.BASE_URL
 }
+
+// DEV-ONLY component gallery for the UI unification effort (docs-ui-refactor/).
+// `import.meta.env.DEV` is statically false in production builds, so both the lazy
+// import and the route below are tree-shaken out — the gallery never ships to users.
+const GalleryApp = import.meta.env.DEV
+  ? lazy(() => import('~/pages/_gallery/GalleryApp'))
+  : null;
+
+const devGalleryRoutes = import.meta.env.DEV && GalleryApp
+  ? [{
+      path: '/gallery',
+      element: (
+        <Suspense fallback={null}>
+          <GalleryApp />
+        </Suspense>
+      ),
+    }]
+  : [];
 
 export const router = createBrowserRouter([
   {
@@ -65,10 +137,32 @@ export const router = createBrowserRouter([
             path: '',
             element: <Root />,
             children: [
-              { index: true, element: <Navigate to="/c/new" replace /> },
-              { path: 'c/:conversationId?', element: <ChatRoute /> },
-              { path: 'linsight/:conversationId?', element: <Sop /> },
-              { path: 'linsight/case/:sopId', element: <Sop /> },
+              { index: true, element: <HomeEntryRedirect /> },
+              {
+                path: 'c/:conversationId?',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    <ChatRoute />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'linsight/:conversationId?',
+                element: (
+                  // F035: task mode has its own menu permission key, split from `home`
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
+                    <Sop />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'linsight/case/:sopId',
+                element: (
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
+                    <Sop />
+                  </MenuApprovalPluginGate>
+                ),
+              },
               // { path: 'apps', element: <AgentCenter /> },
             ],
           },
@@ -83,22 +177,68 @@ export const router = createBrowserRouter([
             path: 'chat/:conversationId/:fid/:type',
             element: <LegacyRedirect toPattern={(p) => `/app/${p.conversationId}/${p.fid}/${p.type}`} />
           },
-          { path: 'apps', element: <AgentCenter /> },
-          { path: 'apps/explore', element: <ExplorePlaza /> },
-          { path: 'channel', element: <Subscription /> },
+          {
+            path: 'apps',
+            element: (
+              <MenuApprovalPluginGate pluginId="apps">
+                <AgentCenter />
+              </MenuApprovalPluginGate>
+            ),
+          },
+          {
+            path: 'apps/explore',
+            element: (
+              <MenuApprovalPluginGate pluginId="apps">
+                <ExplorePlaza />
+              </MenuApprovalPluginGate>
+            ),
+          },
+          { path: 'channel', element: (
+            <MenuApprovalPluginGate pluginId="subscription">
+              <Subscription />
+            </MenuApprovalPluginGate>
+          )},
           { path: 'channel/share/:channelId', element: <Subscription /> },
-          { path: 'channel/:channelId', element: <Subscription /> },
-          { path: 'knowledge', element: <Knowledge /> },
-          { path: 'knowledge/space/:spaceId', element: <Knowledge /> },
-          { path: 'knowledge/space/:spaceId/folder/:folderId', element: <Knowledge /> },
+          { path: 'channel/:channelId', element: (
+            <MenuApprovalPluginGate pluginId="subscription">
+              <Subscription />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge', element: (
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId', element: (
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId/folder/:folderId', element: (
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
+          { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
         ],
       },
+      // Standalone chat — auth (login required, inside AuthLayout)
+      { path: 'chat/flow/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="workflow" /> },
+      { path: 'chat/assistant/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="assistant" /> },
+
       { path: 'share/:token/:vid?', element: <Share /> },
       { path: 'knowledge/file/:fileId', element: <FilePreviewPage /> },
+      { path: 'channel/:channelId/article/:articleId', element: <ArticlePage /> },
     ],
   },
+  // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)
+  { path: 'chat/flow/:flowId', element: <StandaloneChatPage mode="guest" flowType="workflow" />, errorElement: <RouteErrorBoundary /> },
+  { path: 'chat/assistant/:flowId', element: <StandaloneChatPage mode="guest" flowType="assistant" />, errorElement: <RouteErrorBoundary /> },
   { path: '/html', element: <WebView /> },
+  ...devGalleryRoutes,
+  { path: '/__dev/login', element: <DevLogin /> },
   { path: '/404', element: <Page404 /> },
+  { path: '/403', element: <Page403 /> },
   { path: "*", element: <Navigate to="/404" replace /> }
 ], baseConfig);

@@ -2,9 +2,9 @@ import {
   useRevokeAllUserKeysMutation,
   useRevokeUserKeyMutation,
 } from '~/hooks/queries';
-import React, { useState } from 'react';
-import { Button, Label, OGDialog, OGDialogTrigger, Spinner } from '~/components';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import React from 'react';
+import { Button } from '~/components';
+import { useConfirm } from '~/Providers';
 import { useLocalize } from '~/hooks';
 
 export const RevokeKeysButton = ({
@@ -19,7 +19,7 @@ export const RevokeKeysButton = ({
   setDialogOpen?: (open: boolean) => void;
 }) => {
   const localize = useLocalize();
-  const [open, setOpen] = useState(false);
+  const confirm = useConfirm();
   const revokeKeyMutation = useRevokeUserKeyMutation(endpoint);
   const revokeKeysMutation = useRevokeAllUserKeysMutation();
 
@@ -31,14 +31,6 @@ export const RevokeKeysButton = ({
     setDialogOpen(false);
   };
 
-  const onClick = () => {
-    if (all) {
-      revokeKeysMutation.mutate({});
-    } else {
-      revokeKeyMutation.mutate({}, { onSuccess: handleSuccess });
-    }
-  };
-
   const dialogTitle = all
     ? localize('com_ui_revoke_keys')
     : localize('com_ui_revoke_key_endpoint', { 0: endpoint });
@@ -47,32 +39,31 @@ export const RevokeKeysButton = ({
     ? localize('com_ui_revoke_keys_confirm')
     : localize('com_ui_revoke_key_confirm');
 
-  const isLoading = revokeKeyMutation.isLoading || revokeKeysMutation.isLoading;
+  const handleRevoke = async () => {
+    const ok = await confirm({
+      variant: 'destructive',
+      title: dialogTitle,
+      description: dialogMessage,
+      confirmText: localize('com_ui_revoke'),
+    });
+    if (!ok) {
+      return;
+    }
+    if (all) {
+      revokeKeysMutation.mutate({});
+    } else {
+      revokeKeyMutation.mutate({}, { onSuccess: handleSuccess });
+    }
+  };
 
   return (
-    <OGDialog open={open} onOpenChange={setOpen}>
-      <OGDialogTrigger asChild>
-        <Button
-          variant="destructive"
-          className="flex items-center justify-center rounded-lg transition-colors duration-200"
-          onClick={() => setOpen(true)}
-          disabled={disabled}
-        >
-          {localize('com_ui_revoke')}
-        </Button>
-      </OGDialogTrigger>
-      <OGDialogTemplate
-        showCloseButton={false}
-        title={dialogTitle}
-        className="max-w-[450px]"
-        main={<Label className="text-left text-sm font-medium">{dialogMessage}</Label>}
-        selection={{
-          selectHandler: onClick,
-          selectClasses:
-            'bg-destructive text-white transition-all duration-200 hover:bg-destructive/80',
-          selectText: isLoading ? <Spinner /> : localize('com_ui_revoke'),
-        }}
-      />
-    </OGDialog>
+    <Button
+      variant="destructive"
+      className="flex items-center justify-center rounded-lg transition-colors duration-200"
+      onClick={handleRevoke}
+      disabled={disabled}
+    >
+      {localize('com_ui_revoke')}
+    </Button>
   );
 };

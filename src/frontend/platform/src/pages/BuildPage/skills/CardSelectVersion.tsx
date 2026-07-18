@@ -1,14 +1,19 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { changeCurrentVersion } from "@/controllers/API/flow";
+import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { AppNumType } from "@/types/app";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const SelectComp = ({ value, onChange = (id) => { }, data, disabled = false }) => {
 
     const handleChange = (id) => {
-        captureAndAlertRequestErrorHoc(changeCurrentVersion({ flow_id: data.id, version_id: Number(id) }))
+        const request = data.flow_type === AppNumType.FLOW
+            ? changeWorkflowCurrentVersion
+            : changeCurrentVersion
+        captureAndAlertRequestErrorHoc(request({ flow_id: data.id, version_id: Number(id) }))
         onChange(id)
     }
 

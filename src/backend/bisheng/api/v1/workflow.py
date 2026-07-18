@@ -24,6 +24,8 @@ from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, Fl
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
@@ -53,7 +55,12 @@ async def check_app_write_auth(
     if not flow_info:
         raise NotFoundError.http_exception()
     owner_id = flow_info.user_id
-    if await login_user.async_access_check(owner_id, flow_id, check_auth_type):
+    if await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'assistant' if flow_type == FlowType.ASSISTANT.value else 'workflow',
+        str(flow_id),
+        ['edit_app'],
+    ):
         return resp_200()
     return AppWriteAuthError.return_resp()
 
@@ -71,7 +78,12 @@ async def get_report_file(
     flow_info = await FlowDao.aget_flow_by_id(workflow_id)
     if not flow_info:
         raise NotFoundError.http_exception()
-    if not await login_user.async_access_check(flow_info.user_id, workflow_id, AccessType.WORKFLOW):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'workflow',
+        str(workflow_id),
+        ['view_app', 'use_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     if not version_key:
@@ -152,6 +164,17 @@ async def workflow_ws(*,
                       chat_id: Optional[str] = None,
                       login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     try:
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'workflow',
+            str(workflow_id),
+            ['use_app'],
+        ):
+            await websocket.close(
+                code=http_status.WS_1008_POLICY_VIOLATION,
+                reason='No permission to use this app',
+            )
+            return
         await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
@@ -159,6 +182,7 @@ async def workflow_ws(*,
 
 
 @router.post('/create', status_code=201)
+@require_quota(QuotaResourceType.WORKFLOW)
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
     # Determine if the user repeats the skill name
@@ -169,6 +193,11 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
             raise WorkflowNameExistsError.http_exception()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
+    # Defense-in-depth: Flow.tenant_id default is None and the framework's
+    # before_flush hook (bisheng.core.database.tenant_filter) auto-fills it
+    # from current_tenant_id. Keeping this explicit assignment so future
+    # callers without an HTTP middleware (CLI, scripts) still set it right.
+    db_flow.tenant_id = login_user.tenant_id
     db_flow.create_time = None
     db_flow.update_time = None
     db_flow.flow_type = FlowType.WORKFLOW.value
@@ -231,15 +260,15 @@ def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserP
 
 
 @router.post('/change_version', status_code=200)
-def change_version(*,
-                   request: Request,
-                   flow_id: str = Query(default=None, description='Skill UniqueID'),
-                   version_id: int = Query(default=None, description='Current version that needs to be setID'),
-                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def change_version(*,
+                         request: Request,
+                         flow_id: str = Query(default=None, description='Skill UniqueID'),
+                         version_id: int = Query(default=None, description='Current version that needs to be setID'),
+                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Modify Current Version
     """
-    return FlowService.change_current_version(request, login_user, flow_id, version_id)
+    return await FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
 @router.get('/get_one_flow/{flow_id}')
@@ -260,7 +289,12 @@ async def update_flow(*,
     if not db_flow:
         raise NotFoundError()
 
-    if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'workflow',
+        str(flow_id),
+        ['edit_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
@@ -295,21 +329,34 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
 
 
 @router.get('/list', status_code=200)
-def read_flows(*,
-               login_user: UserPayload = Depends(UserPayload.get_login_user),
-               name: str = Query(default=None,
-                                 description='accordingnameFind databases with fuzzy searches for descriptions'),
-               tag_id: int = Query(default=None, description='labelID'),
-               flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
-               page_size: int = Query(default=10, description='Items per page'),
-               page_num: int = Query(default=1, description='Page'),
-               status: int = None,
-               managed: bool = Query(default=False,
-                                     description='Whether to query the list of apps with administrative permissions')):
-    """Read all flows."""
-    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size,
-                                                managed)
-    return resp_200(data={
-        'data': data,
-        'total': total
-    })
+async def read_flows(*,
+                     login_user: UserPayload = Depends(UserPayload.get_login_user),
+                     name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+                     tag_id: int = Query(default=None, description='labelID'),
+                     flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
+                     page_size: int = Query(default=10, description='Items per page'),
+                     status: int = None,
+                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions'),
+                     permission_id: str = Query(default='use_app', description='Fine-grained permission id for non-managed app lists'),
+                     cursor: Optional[str] = Query(
+                         default=None,
+                         description='F027 cursor-based pagination token from the previous response\'s '
+                                     '`next_cursor`. Omit (or pass empty) to fetch the first page.',
+                     )):
+    """Read all flows (F027 cursor-based pagination).
+
+    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    The legacy ``total`` / ``page_num`` fields have been removed (AC-02).
+    """
+    result = await WorkFlowService.get_all_flows_envelope(
+        login_user,
+        name,
+        status,
+        tag_id,
+        flow_type,
+        cursor=cursor,
+        page_size=page_size,
+        managed=managed,
+        permission_id=permission_id,
+    )
+    return resp_200(data=result)

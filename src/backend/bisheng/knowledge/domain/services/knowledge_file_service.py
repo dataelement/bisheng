@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
 from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.open_endpoints.domain.schemas.knowledge import DeleteUserMetadataReq
 from bisheng.user.domain.models.user import UserDao
 
@@ -27,6 +28,21 @@ class KnowledgeFileService:
         self.knowledge_file_repository = knowledge_file_repository
         self.knowledge_repository = knowledge_repository
 
+    @staticmethod
+    async def _ensure_knowledge_access(
+            login_user: 'UserPayload',
+            knowledge_model,
+            access_type: AccessType,
+    ) -> None:
+        allowed = await KnowledgePermissionService().check_access_async(
+            login_user=login_user,
+            owner_user_id=knowledge_model.user_id,
+            knowledge_id=knowledge_model.id,
+            access_type=access_type,
+        )
+        if not allowed:
+            raise UnAuthorizedError()
+
     async def get_knowledge_file_info(self, login_user: 'UserPayload', knowledge_file_id: int):
         """Get Knowledge File Information"""
         knowledge_file_model = await self.knowledge_file_repository.find_by_id(
@@ -38,11 +54,7 @@ class KnowledgeFileService:
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_file_model.knowledge_id)
 
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_file_model.knowledge_id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError()
+        await self._ensure_knowledge_access(login_user, knowledge_model, AccessType.KNOWLEDGE)
 
         create_user = await UserDao.aget_user(user_id=knowledge_file_model.user_id)
         update_user = await UserDao.aget_user(user_id=knowledge_file_model.updater_id)
@@ -116,11 +128,7 @@ class KnowledgeFileService:
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_file_model.knowledge_id)
 
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_file_model.knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
+        await self._ensure_knowledge_access(login_user, knowledge_model, AccessType.KNOWLEDGE_WRITE)
 
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
@@ -182,11 +190,7 @@ class KnowledgeFileService:
         if not knowledge_model:
             raise KnowledgeFileNotExistError()
 
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
+        await self._ensure_knowledge_access(login_user, knowledge_model, AccessType.KNOWLEDGE_WRITE)
 
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
@@ -276,11 +280,7 @@ class KnowledgeFileService:
         if not knowledge_model:
             raise KnowledgeFileNotExistError()
 
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
+        await self._ensure_knowledge_access(login_user, knowledge_model, AccessType.KNOWLEDGE_WRITE)
 
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
@@ -376,11 +376,7 @@ class KnowledgeFileService:
         if not knowledge_model:
             raise KnowledgeFileNotExistError()
 
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
+        await self._ensure_knowledge_access(login_user, knowledge_model, AccessType.KNOWLEDGE_WRITE)
 
         existing_files = await self.knowledge_file_repository.find_by_ids(
             [req.knowledge_file_id for req in delete_user_metadata_req])
@@ -455,11 +451,7 @@ class KnowledgeFileService:
         if not knowledge_model:
             raise KnowledgeFileNotExistError()
 
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError()
+        await self._ensure_knowledge_access(login_user, knowledge_model, AccessType.KNOWLEDGE)
 
         user_metadata_dict = await self.knowledge_file_repository.get_user_metadata_by_knowledge_file_ids(
             knowledge_id=knowledge_id,

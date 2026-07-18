@@ -13,19 +13,32 @@ import "./style/classes.css";
 import "./style/markdown.css";
 import { QueryClient, QueryClientProvider } from "react-query";
 
-if (__VCONSOLE_ENABLED__) {
-  import('vconsole').then(({ default: VConsole }) => {
-    const vc = new VConsole();
-    vc.hideSwitch();
-    let visible = false;
-    window.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        visible ? vc.hide() : vc.show();
-        visible = !visible;
-      }
-    });
-  });
+// if (__VCONSOLE_ENABLED__) {
+//   import('vconsole').then(({ default: VConsole }) => {
+//     const vc = new VConsole();
+//     vc.hideSwitch();
+//     let visible = false;
+//     window.addEventListener('keydown', (e) => {
+//       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+//         e.preventDefault();
+//         visible ? vc.hide() : vc.show();
+//         visible = !visible;
+//       }
+//     });
+//   });
+// }
+
+// Backdoor entry: when landing on /admin-login, drop any stored third-party
+// redirect URLs synchronously — before React mounts and before /user/info fires —
+// so the 401 interceptor in request.ts cannot bounce us straight to the IdP.
+{
+  // @ts-ignore
+  const baseUrl: string = (typeof __APP_ENV__ !== 'undefined' && __APP_ENV__?.BASE_URL) || ''
+  const normalizedPath = window.location.pathname.replace(baseUrl, '')
+  if (normalizedPath === '/admin-login' || normalizedPath.startsWith('/admin-login/')) {
+    localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
+    localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+  }
 }
 
 const root = ReactDOM.createRoot(

@@ -11,8 +11,9 @@ from openai import OpenAI
 thread_ids = set()
 
 
-client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY', ''), 
-                http_client=httpx.Client(proxies=os.environ.get('OPENAI_PROXY', '')))
+client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY', ''),
+                # httpx 0.28 rejects an empty proxy string; treat unset as no proxy.
+                http_client=httpx.Client(proxy=os.environ.get('OPENAI_PROXY') or None))
 
 
 def upload_files(data_folder, excel_file, save_excel_file):

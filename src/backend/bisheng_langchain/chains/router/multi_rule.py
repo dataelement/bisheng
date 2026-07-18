@@ -1,6 +1,6 @@
 from typing import List, Mapping
 
-from langchain.chains.router.base import Chain, MultiRouteChain, RouterChain
+from langchain_classic.chains.router.base import Chain, MultiRouteChain, RouterChain
 
 
 class MultiRuleChain(MultiRouteChain):

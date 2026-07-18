@@ -1,8 +1,8 @@
 from typing import Any, List, Tuple
 
-from langchain.callbacks.manager import Callbacks
-from langchain.chains.combine_documents.stuff import StuffDocumentsChain as StuffDocumentsChainOld
-from langchain.docstore.document import Document
+from langchain_classic.callbacks.manager import Callbacks
+from langchain_classic.chains.combine_documents.stuff import StuffDocumentsChain as StuffDocumentsChainOld
+from langchain_classic.docstore.document import Document
 
 
 class StuffDocumentsChain(StuffDocumentsChainOld):

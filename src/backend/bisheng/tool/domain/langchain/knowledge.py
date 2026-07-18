@@ -1,6 +1,6 @@
 from typing import Any, Type, List, Optional
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.documents import Document, BaseDocumentCompressor
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
@@ -76,7 +76,7 @@ class KnowledgeRetrieverTool(BaseTool):
         rrf_rerank = RRFRerank(retrievers=[self.vector_retriever, self.elastic_retriever],
                                weights=self.rrf_weights,
                                remove_zero_score=self.rrf_remove_zero_score)
-        finally_docs = rrf_rerank.compress_documents(documents=[es_docs, milvus_docs], query=query)
+        finally_docs = rrf_rerank.compress_documents(documents=[milvus_docs, es_docs], query=query)
 
         # limit by max_chunk_size
         doc_num, doc_content_sum = 0, 0
@@ -130,20 +130,22 @@ class KnowledgeRagTool(BaseTool):
 
     def _run(self, query: str) -> Any:
         # 1. retrieve documents
-        finally_docs = self.knowledge_retriever_tool.invoke({"query": query})
-        llm_inputs = self._get_llm_inputs(query, finally_docs)
+        retrieval_result = self.knowledge_retriever_tool.invoke({"query": query})
+        llm_inputs = self._get_llm_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
         return qa_chain.invoke(llm_inputs)
 
     async def _arun(self, query: str) -> Any:
-        finally_docs = await self.knowledge_retriever_tool.ainvoke({"query": query})
-        llm_inputs = self._get_llm_inputs(query, finally_docs)
+        retrieval_result = await self.knowledge_retriever_tool.ainvoke({"query": query})
+        llm_inputs = self._get_llm_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
         return await qa_chain.ainvoke(llm_inputs)
 
-    def _get_llm_inputs(self, query: str, finally_docs: List[Document]) -> Any:
+    def _get_llm_inputs(self, query: str, retrieval_result: Any) -> Any:
+        """Build prompt inputs from retrieved documents."""
+        source_documents = list(retrieval_result or [])
         inputs = {
-            "context": finally_docs,
+            "context": source_documents,
         }
         if "question" in self.chat_prompt.input_variables:
             inputs["question"] = query

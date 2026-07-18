@@ -1,63 +1,140 @@
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import List, Optional, AsyncIterator, Tuple, Dict, Any
+from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from loguru import logger
 
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 from bisheng.api.v1.schemas import ChatResponse, KnowledgeSpaceConfig
 from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    annotate_rag_documents_with_citations,
+    cache_citation_registry_items,
+    collect_rag_citation_registry_items,
+    save_message_citations,
+    select_registry_items_for_persistence,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.message import ChatMessageDao, ChatMessage
-from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.database.models.tag import TagDao
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
+from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.utils import generate_uuid
 
+_background_tasks: set[asyncio.Task[Any]] = set()
+
 
 class KnowledgeSpaceChatService:
-    """ Service class for handling Knowledge Space AI Chat operations """
+    """Service class for handling Knowledge Space AI Chat operations"""
 
     def __init__(self, request: Request, login_user: UserPayload):
         self.request = request
         self.login_user = login_user
 
+    def _permission_service(self):
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+        if not hasattr(self, "_knowledge_space_permission_service"):
+            self._knowledge_space_permission_service = KnowledgeSpaceService(self.request, self.login_user)
+        return self._knowledge_space_permission_service
+
+    def _visibility_service(self):
+        """F029: lazy KnowledgeFileVisibilityService for the two-layer view_file filter."""
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        if not hasattr(self, "_knowledge_file_visibility_service"):
+            svc = KnowledgeFileVisibilityService(self.request, self.login_user)
+            svc.version_repo = getattr(self, "version_repo", None)
+            self._knowledge_file_visibility_service = svc
+        return self._knowledge_file_visibility_service
+
+    def _qa_filter_conf(self):
+        """F029 retrieval-loop config (multipliers, base k)."""
+        try:
+            from bisheng.common.services.config_service import settings
+
+            return settings.knowledge_qa_filter
+        except (AttributeError, ImportError):
+            from bisheng.core.config.settings import KnowledgeQAFilterConf
+
+            return KnowledgeQAFilterConf()
+
+    async def _require_space_view_permission(self, space_id: int):
+        svc = self._permission_service()
+        await svc._require_read_permission(space_id)
+        await svc._require_permission_id("knowledge_space", space_id, "view_space")
+
+    async def _require_folder_view_permission(self, space_id: int, folder_id: int):
+        svc = self._permission_service()
+        folder = await svc._require_folder_relation(space_id, folder_id, "can_read")
+        await svc._require_permission_id("folder", folder_id, "view_folder", space_id=space_id)
+        return folder
+
+    async def _require_file_view_permission(self, space_id: int, file_id: int):
+        svc = self._permission_service()
+        file_record = await svc._require_file_relation(file_id, "can_read", space_id=space_id)
+        await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
+        return file_record
+
+    @staticmethod
+    async def _prepare_rag_citation_context(
+        documents: list[Document],
+    ) -> tuple[str, list[CitationRegistryItemSchema]]:
+        annotated_documents = annotate_rag_documents_with_citations(documents)
+        citation_items = collect_rag_citation_registry_items(annotated_documents)
+        await cache_citation_registry_items(citation_items)
+        context = "\n".join(KnowledgeUtils.format_retrieved_chunk(doc) for doc in annotated_documents)
+        return context, citation_items
+
     @classmethod
     def generate_flow_id_for_file(cls, knowledge_id: int, file_id: int) -> str:
-        """ Generate a unique flow_id representation for a single file chat """
+        """Generate a unique flow_id representation for a single file chat"""
         return f"space_{knowledge_id}_file_{file_id}"
 
     @classmethod
     def generate_flow_id_for_folder(cls, knowledge_id: int, folder_id: int = 0) -> str:
-        """ Generate a unique flow_id representation for a folder chat """
+        """Generate a unique flow_id representation for a folder chat"""
         return f"space_{knowledge_id}_folder_{folder_id}"
 
-    async def chat_single_file(self, knowledge_id: int, file_id: int, query: str,
-                               model_id: int) \
-            -> AsyncIterator[ChatResponse]:
-        """ Single file RAG query """
+    async def chat_single_file(
+        self, knowledge_id: int, file_id: int, query: str, model_id: int
+    ) -> AsyncIterator[ChatResponse]:
+        """Single file RAG query"""
         # Verify file exists and is a file
-        file_record = await KnowledgeFileDao.query_by_id(file_id)
-        if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 1:
-            raise NotFoundError(msg="Invalid file for chat")
+        file_record = await self._require_file_view_permission(knowledge_id, file_id)
+        # F029/AC-09: trace that the view_file gate passed; the document_id == file_id
+        # filter on the retriever guarantees no chunks from other files can leak.
+        logger.debug(
+            "chat_single_file: view_file check passed | file_id={} space_id={}",
+            file_id,
+            knowledge_id,
+        )
 
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
@@ -65,65 +142,65 @@ class KnowledgeSpaceChatService:
 
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
 
-        session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
-                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            flow_ids=[flow_id],
+            flow_type=[FlowType.KNOLEDGE_SPACE.value],
+            user_ids=[self.login_user.user_id],
+            include_delete=False,
+        )
         if not session:
-            session = await MessageSessionDao.async_insert_one(MessageSession(
-                chat_id=generate_uuid(),
-                flow_id=flow_id,
-                flow_name=file_record.file_name,
-                flow_type=FlowType.KNOLEDGE_SPACE.value,
-                user_id=self.login_user.user_id,
-            ))
+            session = await MessageSessionDao.async_insert_one(
+                MessageSession(
+                    chat_id=generate_uuid(),
+                    flow_id=flow_id,
+                    flow_name=file_record.file_name,
+                    flow_type=FlowType.KNOLEDGE_SPACE.value,
+                    user_id=self.login_user.user_id,
+                )
+            )
         else:
             session = session[0]
 
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(search_kwargs={
-            "k": 100,
-            "param": {"ef": 110},
-            "expr": f"document_id == {file_id}"
-        })
+        vector_retriever = milvus_vector.as_retriever(
+            search_kwargs={"k": 100, "param": {"ef": 110}, "expr": f"document_id == {file_id}"}
+        )
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        es_retriever = es_vector.as_retriever(search_kwargs={
-            "filter": [{"term": {"metadata.document_id": file_id}}]
-        })
+        es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
         async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
             yield one
 
-    async def space_rag(self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None) \
-            -> AsyncIterator[ChatResponse]:
+    async def space_rag(
+        self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
+    ) -> AsyncIterator[ChatResponse]:
         llm, space_conf = await self.get_space_llm_config(model_id=model_id)
 
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=vector_retriever,
             elastic_retriever=es_retriever,
             max_content=space_conf.max_chunk_size,
-            sort_by_source_and_index=True
+            sort_by_source_and_index=True,
         )
-        finally_docs: List[Document] = await retriever_tool.ainvoke(query)
-        file_content = ""
+        finally_docs: list[Document] = await retriever_tool.ainvoke(query)
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        for one in finally_docs:
-            file_content += one.page_content + "\n"
+        file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
 
         prompt_service = await get_prompt_manager()
 
         if space_conf.system_prompt:
             inputs = [
-                SystemMessage(content=space_conf.system_prompt.format(cur_date=datetime.now().strftime('%Y-%m-%d'))),
+                SystemMessage(content=space_conf.system_prompt.format(cur_date=datetime.now().strftime("%Y-%m-%d"))),
                 HumanMessage(
-                    content=space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)),
+                    content=space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)
+                ),
             ]
         else:
             prompt_obj = prompt_service.render_prompt(
                 namespace="knowledge_space",
                 prompt_name="rag_prompt",
-                cur_date=datetime.now().strftime('%Y-%m-%d'),
+                cur_date=datetime.now().strftime("%Y-%m-%d"),
                 retrieved_file_content=file_content,
-                question=query
+                question=query,
             )
             inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
         answer = ""
@@ -134,25 +211,37 @@ class KnowledgeSpaceChatService:
             history.insert(0, inputs[0])
             inputs = history
 
+        logger.info(
+            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} | messages={}",
+            session.chat_id,
+            model_id,
+            len(finally_docs),
+            [{"role": m.type, "content": m.content} for m in inputs],
+        )
+
         async for one in llm.astream(inputs):
+            chunk_reasoning_content = extract_reasoning_content(one)
             yield ChatResponse(
                 category=MessageCategory.STREAM,
                 message={
                     "content": one.content,
-                    "reasoning_content": one.additional_kwargs.get("reasoning_content", ""),
+                    "reasoning_content": chunk_reasoning_content,
                 },
-                type="stream"
+                type="stream",
             )
-            reasoning_content += one.additional_kwargs.get("reasoning_content", "")
+            reasoning_content += chunk_reasoning_content
             answer += one.content
         messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
-                message=json.dumps({
-                    "query": query,
-                    "tags": tags,
-                    "model_id": model_id,
-                }, ensure_ascii=False),
+                message=json.dumps(
+                    {
+                        "query": query,
+                        "tags": tags,
+                        "model_id": model_id,
+                    },
+                    ensure_ascii=False,
+                ),
                 chat_id=session.chat_id,
                 flow_id=session.flow_id,
                 user_id=self.login_user.user_id,
@@ -161,37 +250,52 @@ class KnowledgeSpaceChatService:
             ),
             ChatMessage(
                 category=MessageCategory.ANSWER,
-                message=json.dumps({
-                    "content": answer,
-                    "reasoning_content": reasoning_content
-                }, ensure_ascii=False),
+                message=json.dumps({"content": answer, "reasoning_content": reasoning_content}, ensure_ascii=False),
                 chat_id=session.chat_id,
                 flow_id=session.flow_id,
                 user_id=self.login_user.user_id,
                 type="end",
                 is_bot=True,
-            )
+            ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        await save_message_citations(
+            message_id=messages[1].id,
+            items=cited_items,
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+        )
         if not session.name:
-            asyncio.create_task(self.generate_conversation(
-                user_id=self.login_user.user_id,
-                chat_id=session.chat_id,
-                question=query,
-                answer=answer,
-            ))
+            title_task = asyncio.create_task(
+                self.generate_conversation(
+                    user_id=self.login_user.user_id,
+                    chat_id=session.chat_id,
+                    question=query,
+                    answer=answer,
+                )
+            )
+            _background_tasks.add(title_task)
+            title_task.add_done_callback(_background_tasks.discard)
 
         yield ChatResponse(
             category=MessageCategory.STREAM,
             message={
                 "content": answer,
-                "reasoning_content": reasoning_content
+                "reasoning_content": reasoning_content,
+                # Real persisted answer ChatMessage id: the client renders the
+                # streamed answer under a temporary placeholder id; sending the
+                # real id on the end event lets it swap in immediately so
+                # like/dislike writes to the right row (previously a like clicked
+                # before a page refresh was lost, since it hit the placeholder id).
+                "message_id": messages[1].id,
             },
-            type="end"
+            citations=cited_items,
+            type="end",
         )
 
     @staticmethod
-    async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str = None):
+    async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
         llm_conf = await LLMService.get_workbench_llm()
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             logger.debug("not found chat title llm")
@@ -199,110 +303,413 @@ class KnowledgeSpaceChatService:
         llm = await LLMService.get_bisheng_llm(
             model_id=llm_conf.chat_title_llm.id,
             app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-            app_name='knowledge_sapce_chat_title',
+            app_name="knowledge_sapce_chat_title",
             app_type=ApplicationTypeEnum.DAILY_CHAT,
-            user_id=user_id
+            user_id=user_id,
         )
         title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
         await MessageSessionDao.update_session_name(chat_id, title)
 
-    async def single_file_history(self, knowledge_id: int, file_id: int, page_size: int = 20) \
-            -> List[ChatMessageHistoryResponse]:
+    async def single_file_history(
+        self, knowledge_id: int, file_id: int, page_size: int = 20
+    ) -> list[ChatMessageHistoryResponse]:
+        await self._require_file_view_permission(knowledge_id, file_id)
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
 
-        session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
-                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            flow_ids=[flow_id],
+            flow_type=[FlowType.KNOLEDGE_SPACE.value],
+            user_ids=[self.login_user.user_id],
+            include_delete=False,
+        )
         if not session:
             return []
         session = session[0]
         return await ChatSessionService.get_chat_history(session.chat_id, session.flow_id, page_size=page_size)
 
     async def clear_file_history(self, knowledge_id: int, file_id: int) -> bool:
+        await self._require_file_view_permission(knowledge_id, file_id)
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
-        session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
-                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            flow_ids=[flow_id],
+            flow_type=[FlowType.KNOLEDGE_SPACE.value],
+            user_ids=[self.login_user.user_id],
+            include_delete=False,
+        )
         if not session:
             return True
         session = session[0]
         await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
         return True
 
-    async def get_chat_folder_session(self, space_id: int, folder_id: int) -> List[MessageSession]:
-        """ Query sessions for a specific folder_id """
+    async def get_chat_folder_session(self, space_id: int, folder_id: int) -> list[MessageSession]:
+        """Query sessions for a specific folder_id"""
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
 
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
 
-        session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
-                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            flow_ids=[flow_id],
+            flow_type=[FlowType.KNOLEDGE_SPACE.value],
+            user_ids=[self.login_user.user_id],
+            include_delete=False,
+        )
         return session
 
     async def create_chat_folder_session(self, space_id: int, folder_id: int) -> MessageSession:
+        await self._require_space_view_permission(space_id)
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise NotFoundError(msg="Knowledge space not found for chat")
         flow_name = space.name
         if folder_id:
-            folder_record = await KnowledgeFileDao.query_by_id(folder_id)
-            if not folder_record or folder_record.knowledge_id != space_id:
-                raise NotFoundError(msg="Knowledge folder not found for chat")
+            folder_record = await self._require_folder_view_permission(space_id, folder_id)
             flow_name = f"{flow_name}-{folder_record.file_name}"
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
-        session = await MessageSessionDao.async_insert_one(MessageSession(
-            chat_id=generate_uuid(),
-            flow_id=flow_id,
-            flow_type=FlowType.KNOLEDGE_SPACE.value,
-            flow_name=f"Knowledge Space Dir: {flow_name}",
-            user_id=self.login_user.user_id,
-        ))
+        session = await MessageSessionDao.async_insert_one(
+            MessageSession(
+                chat_id=generate_uuid(),
+                flow_id=flow_id,
+                flow_type=FlowType.KNOLEDGE_SPACE.value,
+                flow_name=f"Knowledge Space Dir: {flow_name}",
+                user_id=self.login_user.user_id,
+            )
+        )
         return session
 
     async def delete_chat_folder_session(self, space_id: int, folder_id: int, chat_id: str) -> bool:
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
-        session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
-                                                          flow_ids=[flow_id],
-                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            chat_ids=[chat_id],
+            flow_ids=[flow_id],
+            flow_type=[FlowType.KNOLEDGE_SPACE.value],
+            user_ids=[self.login_user.user_id],
+            include_delete=False,
+        )
         if session:
             await MessageSessionDao.delete_session(chat_id=chat_id)
         return True
 
-    async def get_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str, page_size: int = 20) \
-            -> List[ChatMessageHistoryResponse]:
+    async def get_chat_folder_history(
+        self, space_id: int, folder_id: int, chat_id: str, page_size: int = 20
+    ) -> list[ChatMessageHistoryResponse]:
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         return await ChatSessionService.get_chat_history(chat_id, flow_id, page_size=page_size)
 
     async def delete_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str) -> bool:
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
-        session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
-                                                          flow_ids=[flow_id],
-                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            chat_ids=[chat_id],
+            flow_ids=[flow_id],
+            flow_type=[FlowType.KNOLEDGE_SPACE.value],
+            user_ids=[self.login_user.user_id],
+            include_delete=False,
+        )
         if not session:
             return True
         session = session[0]
         await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
         return True
 
-    async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
-                          model_id: int, tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
-        """ Folder RAG query """
+    async def _build_folder_search_kwargs(
+        self,
+        knowledge_id: int,
+        target_file_ids: list[int] | None,
+    ) -> tuple[dict | None, dict | None]:
+        """Compute Milvus and ES search_kwargs with primary-version-only filtering.
+
+        Args:
+            knowledge_id: the knowledge space id being queried.
+            target_file_ids: None means "whole space"; a list (possibly empty) means
+                "specific files" derived from folder/tag resolution.
+
+        Returns:
+            (milvus_search_kwargs, es_search_kwargs)
+            Both are None when target_file_ids is non-None but empty (caller should
+            skip retriever construction).
+        """
+        # Fetch non-primary file ids once, used in both branches.
+        excluded: list[int] = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([knowledge_id])
+
+        if target_file_ids is None:
+            # Branch A: whole-space query — apply not-in filter when exclusions exist.
+            milvus_expr, es_filter = build_primary_only_filter(excluded)
+            milvus_kwargs: dict = {"k": 100, "param": {"ef": 110}}
+            es_kwargs: dict = {"k": 100}
+            if milvus_expr is not None:
+                milvus_kwargs["expr"] = milvus_expr
+            if es_filter:
+                es_kwargs["filter"] = es_filter
+            return milvus_kwargs, es_kwargs
+
+        # Branch B: specific files — remove non-primary ids from the target set.
+        excluded_set = set(excluded)
+        effective_target = [fid for fid in target_file_ids if fid not in excluded_set]
+
+        if not effective_target:
+            # All candidates are non-primary or the set was already empty.
+            return None, None
+
+        # The in-clause already restricts to primary files; no must_not needed.
+        milvus_kwargs = {
+            "k": 100,
+            "param": {"ef": 110},
+            "expr": f"document_id in {effective_target}",
+        }
+        es_kwargs = {
+            "k": 100,
+            "filter": [{"terms": {"metadata.document_id": effective_target}}],
+        }
+        return milvus_kwargs, es_kwargs
+
+    async def _retrieve_and_filter(
+        self,
+        *,
+        space,
+        query: str,
+        candidate_file_ids: list[int] | None,
+        max_content: int,
+    ) -> list[Document]:
+        """F029: two-layer view_file filter retrieval loop (AD-01 / AD-03).
+
+        Returns docs whose ``document_id`` belongs to a file the current user
+        has ``view_file`` on. Caps at two retrieval attempts; emits one
+        structured ``permission_filter`` log line per attempt (AC-27).
+        """
+        visibility = self._visibility_service()
+        conf = self._qa_filter_conf()
+
+        index_filter = await visibility.build_index_prefilter(space.id, candidate_file_ids)
+        if index_filter.is_empty:
+            logger.info(
+                "permission_filter | space_id={} strategy=empty accessible_ids_size={} "
+                "prefilter_candidate_size=0 retrieval_attempts=0 post_filter_dropped_count=0",
+                space.id,
+                index_filter.accessible_size,
+            )
+            return []
+
+        base_milvus_expr = index_filter.milvus_expr
+        base_es_filter = index_filter.es_filter or []
+        multipliers = (
+            conf.retrieval_initial_multiplier,
+            conf.retrieval_expansion_multiplier,
+        )
+
+        survivors: list[Document] = []
+        for attempt_idx, multiplier in enumerate(multipliers, start=1):
+            base_k = 100  # current retrieval default; multiplier scales it
+            milvus_kwargs: dict[str, Any] = {
+                "k": base_k * multiplier,
+                "param": {"ef": 110},
+            }
+            if base_milvus_expr:
+                milvus_kwargs["expr"] = base_milvus_expr
+            es_kwargs: dict[str, Any] = {"k": base_k * multiplier}
+            if base_es_filter:
+                es_kwargs["filter"] = base_es_filter
+
+            milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+                self.login_user.user_id, knowledge=space
+            )
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
+            es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+
+            retriever_tool = KnowledgeRetrieverTool(
+                vector_retriever=vector_retriever,
+                elastic_retriever=es_retriever,
+                max_content=max_content,
+                sort_by_source_and_index=True,
+            )
+            docs: list[Document] = await retriever_tool.ainvoke(query)
+
+            unique_file_ids = {
+                int(d.metadata.get("document_id"))
+                for d in docs
+                if d.metadata and d.metadata.get("document_id") is not None
+            }
+            permitted = await visibility.post_filter_visible_files(space.id, unique_file_ids)
+            survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
+            dropped = len(docs) - len(survivors)
+
+            logger.info(
+                "permission_filter | space_id={} strategy={} accessible_ids_size={} "
+                "prefilter_candidate_size={} retrieval_attempts={} "
+                "post_filter_dropped_count={}",
+                space.id,
+                index_filter.strategy,
+                index_filter.accessible_size,
+                len(docs),
+                attempt_idx,
+                dropped,
+            )
+
+            if survivors:
+                break  # AD-03: stop on first non-empty attempt
+
+        return survivors
+
+    async def _render_rag_response(
+        self,
+        session,
+        finally_docs: list[Document],
+        query: str,
+        model_id: int,
+        tags: Any = None,
+    ) -> AsyncIterator[ChatResponse]:
+        """F029: prompt rendering + LLM streaming, given pre-fetched docs.
+
+        Extracted from ``space_rag`` so ``chat_folder`` can drive retrieval via
+        ``_retrieve_and_filter`` while reusing the unchanged prompt + stream path.
+        """
+        llm, space_conf = await self.get_space_llm_config(model_id=model_id)
+        logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
+        file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
+
+        prompt_service = await get_prompt_manager()
+
+        if space_conf.system_prompt:
+            inputs = [
+                SystemMessage(content=space_conf.system_prompt.format(cur_date=datetime.now().strftime("%Y-%m-%d"))),
+                HumanMessage(
+                    content=space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)
+                ),
+            ]
+        else:
+            prompt_obj = prompt_service.render_prompt(
+                namespace="knowledge_space",
+                prompt_name="rag_prompt",
+                cur_date=datetime.now().strftime("%Y-%m-%d"),
+                retrieved_file_content=file_content,
+                question=query,
+            )
+            inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
+        answer = ""
+        reasoning_content = ""
+        history = await self.get_history(chat_id=session.chat_id, limit=4)
+        if history:
+            history.append(inputs[1])
+            history.insert(0, inputs[0])
+            inputs = history
+
+        logger.info(
+            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} | messages={}",
+            session.chat_id,
+            model_id,
+            len(finally_docs),
+            [{"role": m.type, "content": m.content} for m in inputs],
+        )
+
+        async for one in llm.astream(inputs):
+            chunk_reasoning_content = extract_reasoning_content(one)
+            yield ChatResponse(
+                category=MessageCategory.STREAM,
+                message={
+                    "content": one.content,
+                    "reasoning_content": chunk_reasoning_content,
+                },
+                type="stream",
+            )
+            reasoning_content += chunk_reasoning_content
+            answer += one.content
+        messages = [
+            ChatMessage(
+                category=MessageCategory.QUESTION,
+                message=json.dumps(
+                    {
+                        "query": query,
+                        "tags": tags,
+                        "model_id": model_id,
+                    },
+                    ensure_ascii=False,
+                ),
+                chat_id=session.chat_id,
+                flow_id=session.flow_id,
+                user_id=self.login_user.user_id,
+                type="end",
+                is_bot=False,
+            ),
+            ChatMessage(
+                category=MessageCategory.ANSWER,
+                message=json.dumps({"content": answer, "reasoning_content": reasoning_content}, ensure_ascii=False),
+                chat_id=session.chat_id,
+                flow_id=session.flow_id,
+                user_id=self.login_user.user_id,
+                type="end",
+                is_bot=True,
+            ),
+        ]
+        await ChatMessageDao.ainsert_batch(messages)
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        await save_message_citations(
+            message_id=messages[1].id,
+            items=cited_items,
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+        )
+        if not session.name:
+            title_task = asyncio.create_task(
+                self.generate_conversation(
+                    user_id=self.login_user.user_id,
+                    chat_id=session.chat_id,
+                    question=query,
+                    answer=answer,
+                )
+            )
+            _background_tasks.add(title_task)
+            title_task.add_done_callback(_background_tasks.discard)
+
+        yield ChatResponse(
+            category=MessageCategory.STREAM,
+            message={
+                "content": answer,
+                "reasoning_content": reasoning_content,
+                # Real persisted answer ChatMessage id: the client renders the
+                # streamed answer under a temporary placeholder id; sending the
+                # real id on the end event lets it swap in immediately so
+                # like/dislike writes to the right row (previously a like clicked
+                # before a page refresh was lost, since it hit the placeholder id).
+                "message_id": messages[1].id,
+            },
+            citations=cited_items,
+            type="end",
+        )
+
+    async def chat_folder(
+        self,
+        knowledge_id: int,
+        folder_id: int,
+        chat_id: str,
+        query: str,
+        model_id: int,
+        tags: list[dict] | None = None,
+    ) -> AsyncIterator[ChatResponse]:
+        """Folder RAG query"""
         flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
-        session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
-                                                          flow_ids=[flow_id],
-                                                          user_ids=[self.login_user.user_id],
-                                                          include_delete=False)
+        session = await MessageSessionDao.afilter_session(
+            chat_ids=[chat_id], flow_ids=[flow_id], user_ids=[self.login_user.user_id], include_delete=False
+        )
         if not session:
             raise NotFoundError(msg="Folder session not found")
         session = session[0]
 
+        await self._require_space_view_permission(knowledge_id)
         space = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not space:
             raise NotFoundError(msg="Knowledge space not found for chat")
@@ -310,7 +717,7 @@ class KnowledgeSpaceChatService:
         target_file_ids = None
 
         if folder_id:
-            file_record = await KnowledgeFileDao.query_by_id(folder_id)
+            file_record = await self._require_folder_view_permission(knowledge_id, folder_id)
             if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
                 raise NotFoundError(msg="Invalid folder for chat")
             file_level_path = file_record.file_level_path + f"/{file_record.id}"
@@ -319,8 +726,9 @@ class KnowledgeSpaceChatService:
             target_file_ids = [one.id for one in folder_files]
 
         if tags:
-            tag_file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
-                                                               resource_type=ResourceTypeEnum.SPACE_FILE)
+            tag_file_ids = await TagDao.aget_resources_by_tags(
+                [one.get("id") for one in tags], resource_type=ResourceTypeEnum.SPACE_FILE
+            )
             tag_file_ids = [int(one.resource_id) for one in tag_file_ids]
 
             if target_file_ids is not None:
@@ -328,49 +736,36 @@ class KnowledgeSpaceChatService:
             else:
                 target_file_ids = tag_file_ids
 
-        vector_retriever, es_retriever = None, None
+        # F029: two-layer view_file filter retrieval (AD-01 / AD-02 / AD-03).
+        # `_retrieve_and_filter` consults KnowledgeFileVisibilityService for
+        # both the index-layer IN/NOT-IN/none strategy and the result-layer
+        # view_file post-filter, returning only chunks from files the user can
+        # see in the list UI.
+        _, space_conf = await self.get_space_llm_config(model_id=model_id)
+        finally_docs = await self._retrieve_and_filter(
+            space=space,
+            query=query,
+            candidate_file_ids=target_file_ids,
+            max_content=space_conf.max_chunk_size,
+        )
 
-        if target_file_ids is None:
-            # Query the whole space
-            milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
-                                                                                 knowledge=space)
-            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            vector_retriever = milvus_vector.as_retriever(search_kwargs={
-                "k": 100,
-                "param": {"ef": 110}
-            })
-            es_retriever = es_vector.as_retriever(search_kwargs={"k": 100})
-        elif target_file_ids:
-            # Query specific files
-            milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
-                                                                                 knowledge=space)
-            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            vector_retriever = milvus_vector.as_retriever(search_kwargs={
-                "k": 100,
-                "param": {"ef": 110},
-                "expr": f"document_id in {target_file_ids}"
-            })
-            es_retriever = es_vector.as_retriever(search_kwargs={
-                "k": 100,
-                "filter": [{"terms": {"metadata.document_id": target_file_ids}}]
-            })
-
-        # executeQuery(vector_retriever, es_retriever, query)
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, tags):
+        async for one in self._render_rag_response(session, finally_docs, query, model_id, tags):
             yield one
 
-    async def get_space_llm_config(self, model_id: int) -> Tuple[BaseChatModel, KnowledgeSpaceConfig]:
+    async def get_space_llm_config(self, model_id: int) -> tuple[BaseChatModel, KnowledgeSpaceConfig]:
         """
         Get chat configuration (model and prompts)
 
         Returns:
             tuple: (model_id, subscription_config)
         """
-        llm = await LLMService.get_bisheng_llm(model_id=model_id,
-                                               app_id=ApplicationTypeEnum.KNOWLEDGE_SPACE.value,
-                                               app_name=ApplicationTypeEnum.KNOWLEDGE_SPACE.value,
-                                               app_type=ApplicationTypeEnum.KNOWLEDGE_SPACE,
-                                               user_id=self.login_user.user_id)
+        llm = await LLMService.get_bisheng_llm(
+            model_id=model_id,
+            app_id=ApplicationTypeEnum.KNOWLEDGE_SPACE.value,
+            app_name=ApplicationTypeEnum.KNOWLEDGE_SPACE.value,
+            app_type=ApplicationTypeEnum.KNOWLEDGE_SPACE,
+            user_id=self.login_user.user_id,
+        )
 
         # Get subscription configuration
         config = await WorkStationService.get_knowledge_space_config()
@@ -379,8 +774,276 @@ class KnowledgeSpaceChatService:
 
         return llm, config
 
+    async def _resolve_kb_target_file_ids(
+        self,
+        knowledge_id: int,
+        tag_names: list[str],
+    ) -> list[int] | None:
+        """Map a list of tag names (scoped to a knowledge space) to file ids.
+
+        Returns ``None`` when no tag filter is requested (caller treats as
+        whole-space). Returns an empty list when tags are provided but resolve
+        to no files (caller short-circuits and skips this KB).
+        """
+        if not tag_names:
+            return None
+
+        resolved_tag_ids: list[int] = []
+        for tag_name in tag_names:
+            tags = await TagDao.get_tags_by_business(
+                business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+                business_id=str(knowledge_id),
+                name=tag_name,
+            )
+            resolved_tag_ids.extend([t.id for t in tags])
+        if not resolved_tag_ids:
+            return []
+
+        tag_links = await TagDao.aget_resources_by_tags(
+            resolved_tag_ids,
+            resource_type=ResourceTypeEnum.SPACE_FILE,
+        )
+        return [int(link.resource_id) for link in tag_links]
+
+    async def aretrieve_chunks(
+        self,
+        *,
+        query: str,
+        knowledge_base_ids: list[int],
+        kb_filters: dict[int, dict[str, Any]] | None = None,
+        top_k: int = 10,
+        max_content: int = 15000,
+    ) -> list[tuple[int, Document]]:
+        """Retrieve chunks across one or more knowledge bases without LLM generation.
+
+        Args:
+            query: User question.
+            knowledge_base_ids: Knowledge space ids to search.
+            kb_filters: Optional ``{kb_id: {"tags": [name, ...], "tag_match_mode": "ANY"}}``
+                entries used to narrow each KB by tag. ``tag_match_mode`` other than
+                ``"ANY"`` raises HTTP 400.
+            top_k: Hard cap on returned chunks across all KBs.
+            max_content: Per-KB combined-content size limit handed to KnowledgeRetrieverTool.
+
+        Returns:
+            Up to ``top_k`` ``(knowledge_id, Document)`` pairs.
+        """
+        if not knowledge_base_ids:
+            raise HTTPException(status_code=400, detail="knowledge_base_ids must not be empty")
+
+        kb_id_set = set(knowledge_base_ids)
+        filters_by_kb: dict[int, dict[str, Any]] = {}
+        if kb_filters:
+            for kb_id, spec in kb_filters.items():
+                if kb_id not in kb_id_set:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"filter references kb_id {kb_id} not present in knowledge_base_ids",
+                    )
+                mode = (spec or {}).get("tag_match_mode", "ANY")
+                if mode != "ANY":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="tag_match_mode=ALL is not yet supported",
+                    )
+                filters_by_kb[kb_id] = spec
+
+        per_kb_results = await asyncio.gather(
+            *(
+                self._aretrieve_chunks_dispatch(
+                    kb_id,
+                    query=query,
+                    tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
+                    max_content=max_content,
+                )
+                for kb_id in knowledge_base_ids
+            )
+        )
+
+        flattened: list[tuple[int, Document]] = []
+        for chunks in per_kb_results:
+            flattened.extend(chunks)
+        flattened = flattened[:top_k]
+        await self._attach_document_update_time(flattened)
+        return flattened
+
+    async def _attach_document_update_time(self, results: list[tuple[int, Document]]) -> None:
+        """Annotate each chunk's metadata with its source file's latest update time.
+
+        The metadata ``document_id`` equals the ``KnowledgeFile`` id, so a single
+        batched lookup resolves the update time for every distinct document. The
+        value is formatted as ``YYYY-MM-DD HH:mm:ss``; documents without a record
+        or update time get an empty string.
+        """
+        document_ids = {
+            int(doc.metadata.get("document_id", 0)) for _, doc in results if doc.metadata.get("document_id")
+        }
+        document_ids.discard(0)
+        if not document_ids:
+            return
+
+        files = await KnowledgeFileDao.aget_file_by_ids(list(document_ids))
+        update_time_by_id = {f.id: f.update_time.strftime("%Y-%m-%d %H:%M:%S") if f.update_time else "" for f in files}
+        for _, doc in results:
+            doc_id = int(doc.metadata.get("document_id", 0))
+            doc.metadata["document_update_time"] = update_time_by_id.get(doc_id, "")
+
+    async def _aretrieve_chunks_for_kb(
+        self,
+        kb_id: int,
+        *,
+        query: str,
+        tag_names: list[str],
+        max_content: int,
+    ) -> list[tuple[int, Document]]:
+        """Retrieve chunks for a single knowledge base. Raises NotFoundError if missing."""
+        await self._require_space_view_permission(kb_id)
+        space = await KnowledgeDao.aquery_by_id(kb_id)
+        if not space:
+            raise NotFoundError(msg=f"Knowledge base {kb_id} not found")
+
+        target_file_ids = await self._resolve_kb_target_file_ids(kb_id, tag_names)
+        if tag_names and not target_file_ids:
+            return []
+
+        milvus_kwargs, es_kwargs = await self._build_folder_search_kwargs(kb_id, target_file_ids)
+        if milvus_kwargs is None and es_kwargs is None:
+            return []
+
+        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
+        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
+        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+
+        retriever_tool = KnowledgeRetrieverTool(
+            vector_retriever=vector_retriever,
+            elastic_retriever=es_retriever,
+            max_content=max_content,
+            sort_by_source_and_index=False,
+        )
+        docs: list[Document] = await retriever_tool.ainvoke(query)
+        return [(kb_id, d) for d in docs]
+
+    async def _aretrieve_chunks_dispatch(
+        self,
+        kb_id: int,
+        *,
+        query: str,
+        tag_names: list[str],
+        max_content: int,
+    ) -> list[tuple[int, Document]]:
+        """F030: route a single id to the space or document-knowledge-base path.
+
+        Knowledge space (type=3) keeps the view_space/view_file-gated path; a
+        **document** knowledge base (type=0) uses KB read permission + whole-KB
+        (or tag-filtered) retrieval.
+
+        QA knowledge base (type=1) is **not yet supported**: QA stores data with a
+        different schema (page_content=question, answer in metadata.extra, file_id
+        instead of document_id) and needs answer-oriented recall — routing it
+        through the document path would return mismatched results. It is rejected
+        with KnowledgeTypeNotSupportedError until a dedicated QA recall path lands.
+        Personal KB (type=2) is likewise not exposed.
+        """
+        row = await KnowledgeDao.aquery_by_id(kb_id)
+        if not row:
+            raise NotFoundError(msg=f"Knowledge resource {kb_id} not found")
+        if row.type == KnowledgeTypeEnum.SPACE.value:
+            return await self._aretrieve_chunks_for_kb(kb_id, query=query, tag_names=tag_names, max_content=max_content)
+        if row.type == KnowledgeTypeEnum.NORMAL.value:
+            return await self._aretrieve_chunks_for_knowledge_base(
+                row, query=query, tag_names=tag_names, max_content=max_content
+            )
+        # QA (type=1) / personal (type=2) / illegal types are not retrievable here.
+        raise KnowledgeTypeNotSupportedError()
+
+    async def _aretrieve_chunks_for_knowledge_base(
+        self,
+        kb,
+        *,
+        query: str,
+        tag_names: list[str],
+        max_content: int,
+    ) -> list[tuple[int, Document]]:
+        """Retrieve chunks for a document/QA knowledge base (type 0/1, F030).
+
+        Uses knowledge-base read permission (not view_space) and retrieves across
+        the whole KB, or only files carrying the requested tags. No folder /
+        version-primary logic (those are knowledge-space-only concepts).
+        """
+        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+        kb_id = kb.id
+        # KB-level read permission (raises UnAuthorizedError on denial → surfaced
+        # by the endpoint's BaseErrorCode handler).
+        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+            login_user=self.login_user,
+            owner_user_id=kb.user_id,
+            knowledge_id=kb_id,
+        )
+
+        target_file_ids = await self._resolve_kb_file_ids_by_tags(kb_id, tag_names)
+        if tag_names and not target_file_ids:
+            return []
+
+        if target_file_ids:
+            milvus_kwargs: dict = {
+                "k": 100,
+                "param": {"ef": 110},
+                "expr": f"document_id in {target_file_ids}",
+            }
+            es_kwargs: dict = {
+                "k": 100,
+                "filter": [{"terms": {"metadata.document_id": target_file_ids}}],
+            }
+        else:
+            milvus_kwargs = {"k": 100, "param": {"ef": 110}}
+            es_kwargs = {"k": 100}
+
+        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=kb)
+        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=kb)
+        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
+        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+
+        retriever_tool = KnowledgeRetrieverTool(
+            vector_retriever=vector_retriever,
+            elastic_retriever=es_retriever,
+            max_content=max_content,
+            sort_by_source_and_index=False,
+        )
+        docs: list[Document] = await retriever_tool.ainvoke(query)
+        return [(kb_id, d) for d in docs]
+
+    async def _resolve_kb_file_ids_by_tags(
+        self,
+        knowledge_id: int,
+        tag_names: list[str],
+    ) -> list[int] | None:
+        """Map tag names (scoped to a knowledge base) to file ids.
+
+        ``None`` = no tag filter (whole KB). Empty list = tags given but no files
+        match (caller short-circuits and skips this KB).
+        """
+        if not tag_names:
+            return None
+        resolved_tag_ids: list[int] = []
+        for tag_name in tag_names:
+            tags = await TagDao.get_tags_by_business(
+                business_type=TagBusinessTypeEnum.KNOWLEDGE,
+                business_id=str(knowledge_id),
+                name=tag_name,
+            )
+            resolved_tag_ids.extend([t.id for t in tags])
+        if not resolved_tag_ids:
+            return []
+        tag_links = await TagDao.aget_resources_by_tags(
+            resolved_tag_ids,
+            resource_type=ResourceTypeEnum.KNOWLEDGE_FILE,
+        )
+        return [int(link.resource_id) for link in tag_links]
+
     @staticmethod
-    async def get_history(chat_id: str, limit: int = 4) -> List[BaseMessage]:
+    async def get_history(chat_id: str, limit: int = 4) -> list[BaseMessage]:
         res = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ["question", "answer"], limit=limit)
         messages = []
         for one in res:

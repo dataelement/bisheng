@@ -1,0 +1,315 @@
+/**
+ * F035 Track H (P3): the new conversational execution view (spec §0/§3) —
+ * replaces the legacy SOPEditor/TaskFlow split panes. Top-down flow:
+ *   user question bubble → step rows (appended as WS events stream in) →
+ *   artifacts area (P4 slot) → footer: task checklist panel + unified input.
+ * Everything renders from the Recoil linsight store keyed by versionId; the
+ * WS hook (task-message-stream) is mounted here so the event pump stays alive
+ * after the old TaskFlow stops rendering.
+ */
+import { OctagonX } from 'lucide-react';
+import { useMemo, useRef } from 'react';
+import { SopStatus } from '~/store/linsight';
+import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
+import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
+import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
+import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
+import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
+import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
+import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { useLinsightWebSocket } from '~/hooks/Websocket';
+import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
+import { useAutoScroll } from '~/hooks/useAutoScroll';
+import { useLocalize } from '~/hooks';
+import { BreathingRow } from './BreathingRow';
+import { ClarifyCard } from './ClarifyCard';
+import { ConversationRound } from './ConversationRound';
+import { LegacySopRow } from './LegacySopRow';
+import { QueueCard } from './QueueCard';
+import { ExecutionTimeline } from './ExecutionTimeline';
+import { ResultPanel } from './ResultPanel';
+import { TaskPanel } from './TaskPanel';
+import { TaskErrorCard } from './TaskErrorCard';
+import { TaskStepRow, type ExecTask } from './TaskStepRow';
+import { ExecutionLiveContext } from './executionLive';
+import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import type { ExecStepEventData } from './stepUtils';
+
+interface ExecutionFlowProps {
+    versionId: string;
+    /** conversation id for the input's per-session memory */
+    conversationId?: string;
+    isSharePage?: boolean;
+    /** Historical linsight session opened from the home list (flowType 20 →
+        /linsight/:id). The follow-up / continuation flow now lives in the daily
+        /c chat, so the standalone viewer is read-only: render the flow but hide
+        the bottom input (display-only, cannot be used). */
+    readOnly?: boolean;
+    /** workspace/preview panel state — lifted to Sop/index so the Header's
+        workspace button drives the same drawer */
+    artifactsPanel: ReturnType<typeof useArtifactsPanel>;
+}
+
+export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
+    const localize = useLocalize();
+    const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
+    // Mount the WS pump here (the legacy TaskFlow used to own it).
+    const { stop, sendInput } = useLinsightWebSocket(versionId);
+
+    const linsight = getLinsight(versionId);
+    // On reload, session-level steps come back inside the "执行准备" pseudo-task;
+    // lift them out so the rebuilt view matches the live one (inline + IntentRow).
+    const { tasks, sessionSteps } = splitSessionPseudoTask<ExecTask>(
+        (linsight?.tasks as any) || [],
+        ((linsight as any)?.sessionSteps as ExecStepEventData[]) || [],
+    );
+    const status = linsight?.status;
+    const running = status === SopStatus.Running;
+    const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
+    const stopped = status === SopStatus.Stoped;
+    // Poll queue-status while queued (running but no execution output yet); the
+    // badge clears when the worker picks us up (index → 0) or steps arrive.
+    const noProgressYet = !tasks.length && !sessionSteps.length;
+    useLinsightQueuePolling(versionId, running && noProgressYet);
+    // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
+    // last-polled queueCount may stay stale >0, so this prevents the queue card
+    // from lingering next to real task rows.
+    const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
+
+    // P4 artifacts: output files + the shared right-side panel (workspace/preview)
+    const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
+    // Workspace drawer shows both zones: user-uploaded sources + agent deliverables.
+    const uploadedFiles = useMemo(
+        () => toUploadedArtifacts(linsight?.files as any[]),
+        [linsight?.files],
+    );
+    const workspaceFiles = useMemo(() => [...uploadedFiles, ...fileList], [uploadedFiles, fileList]);
+
+    // clarify requests: the newest unanswered one is the active card;
+    // session-level answered ones become flow-level intent rows
+    // (task-level answered ones render inside their TaskStepRow)
+    const pendingInput = useMemo(
+        () => (running ? findPendingUserInput(sessionSteps, tasks) : null),
+        [running, sessionSteps, tasks],
+    );
+
+    // The session-global pseudo task (id == versionId) carries planning/wrap-up
+    // steps; exclude it so it doesn't count as a "real" planned todo in the
+    // loading-state flags (on reload it arrives inside `tasks`; live it lives in
+    // sessionSteps).
+    const realTasks = useMemo(() => tasks.filter((t: any) => t.id !== versionId), [tasks, versionId]);
+
+    // Does the session timeline already have content to render? Once deep-thinking
+    // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
+    // through the gap), so the planning row must not run concurrently. Memo keyed
+    // on a composite signature because the WS pump mutates sessionSteps in place.
+    const hasSessionTimeline = useMemo(
+        () => hasRenderableTimeline(sessionSteps),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
+        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+    );
+
+    // planning row: running, todo list not generated yet, nothing else pending, and
+    // the session timeline has no content yet (deep-thinking hasn't started — else
+    // it would render concurrently with "正在深度思考").
+    const planning = running && !queueing && !pendingInput && !realTasks.length && !hasSessionTimeline;
+    // generating row: todos exist but no task is actively streaming a spinner
+    // right now — bridges the gaps before the first task, between tasks, AND the
+    // final report-generation phase (status stays Running with no step events
+    // while the backend synthesizes the deliverable). Without this the run looks
+    // frozen in those windows. Mirrors TaskTurnPanel's catch-all live indicator.
+    const generating =
+        running && !queueing && !pendingInput && realTasks.length > 0 && !realTasks.some((t: any) => isTaskRunning(t.status));
+
+    const handleClarifySubmit = (taskId: string, answer: string) => {
+        sendInput({ task_id: taskId || versionId, user_input: answer, files: [] });
+    };
+
+    const scrollRef = useRef<HTMLDivElement>(null);
+    // Streaming-tuned auto-scroll (F6): instant follow (no per-frame smooth
+    // jitter), a tight 64px stick threshold, and release-on-scroll-up so a
+    // manual scroll-up detaches the follow until the user returns to bottom.
+    useAutoScroll(scrollRef, [tasks, sessionSteps, status], {
+        scrollBehavior: 'auto',
+        threshold: 64,
+        releaseOnScrollUp: true,
+    });
+
+    return (
+        // Liveness for the SESSION-LEVEL timeline (the active round's planning
+        // thinking). This context only reaches that ExecutionTimeline — ConversationRound
+        // (history) and TaskStepRow re-provide their own. Live ⇒ NOT a dangling step
+        // after the turn ends, NOT a park (ask_user suspends the agent), AND no task
+        // has started yet (!realTasks.length). Once the first task appears the
+        // planning is done, so the planning thinking collapses to "已深度思考" instead
+        // of lingering as a pulsing "正在深度思考" concurrent with the running task.
+        <ExecutionLiveContext.Provider value={running && !pendingInput && !realTasks.length}>
+        <div className="relative flex h-full w-full flex-col">
+            {/* Soft top fade: content dissolves into the page as it scrolls under the
+                top edge, instead of a hard cut. Sits ABOVE normal scroll content
+                (z-10) so it fades, but BELOW pinned sticky headers (z-20) — the
+                overflow container creates no stacking context, so a header's z-20
+                bubbles up to outrank this overlay and stays crisp. */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-white to-transparent" />
+            {/* ── conversational flow ─────────────────────────────────────── */}
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
+                <div className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">
+                    {/* F035 multi-turn: completed prior rounds, stacked above the
+                        active round so the conversation reads top-to-bottom. */}
+                    {(linsight?.history || []).map((round, i) => (
+                        <ConversationRound
+                            key={round.roundId || `round_${i}`}
+                            round={round}
+                            versionId={versionId}
+                            onPreview={(file) => artifactsPanel.openPreview(file)}
+                        />
+                    ))}
+
+                    {/* user question bubble (active round) */}
+                    {linsight?.question && (
+                        <div className="mb-4 flex justify-end">
+                            <div className="max-w-[80%] whitespace-pre-wrap rounded-[12px] bg-[#F4F4F4] px-4 py-3 text-[14px] leading-relaxed text-[#212121]">
+                                {linsight.question}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* legacy SOP document (read-only, pre-F035 sessions only) */}
+                    <LegacySopRow sop={linsight?.sop} />
+
+                    {/* queueing card (auto-disappears when the worker picks us up) */}
+                    {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
+
+                    {!queueing && (
+                        // §1.4 spacing rhythm: a uniform gap-3 between top-level
+                        // groups (timeline groups incl. inline intent / breathing /
+                        // task rows / clarify) so the flow reads with one cadence
+                        // instead of each row's ad-hoc margin. Structure/logic unchanged.
+                        <div className="flex flex-col gap-3">
+                            {/* session-level steps (task_id == svid pseudo task, e.g.
+                                planning-stage tools); an answered clarify renders as an
+                                inline IntentRow at its chronological position here. */}
+                            <ExecutionTimeline history={sessionSteps} />
+
+                            {/* planning breathing row */}
+                            {planning && <BreathingRow state="planning" />}
+
+                            {/* task rows with nested sub-step flows — only tasks
+                                execution has reached; not-started ones stay in TaskPanel. */}
+                            {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
+                                <TaskStepRow key={task.id} task={task} />
+                            ))}
+
+                            {/* generating breathing row — bridges the gaps between
+                                tasks / wrap-up + the final report phase so the run
+                                never looks frozen */}
+                            {generating && <BreathingRow state="generating" />}
+
+                            {/* active clarify / follow-up card */}
+                            {pendingInput && (
+                                <ClarifyCard data={pendingInput} disabled={isSharePage} onSubmit={handleClarifySubmit} />
+                            )}
+                        </div>
+                    )}
+
+                    {/* error / terminated banners */}
+                    {linsight?.taskError && (
+                        <TaskErrorCard
+                            errorType={linsight.taskErrorInfo?.error_type}
+                            detail={linsight.taskErrorInfo?.detail}
+                            fallbackMessage={linsight.taskError}
+                            // Transient errors show a Retry — re-run this round via the
+                            // same continueConversation path as the follow-up input
+                            // (same SV + agent thread). Off on share/history/no-question.
+                            onRetry={
+                                isSharePage || readOnly || !linsight?.question
+                                    ? undefined
+                                    : () => continueConversation(versionId, linsight.question)
+                            }
+                        />
+                    )}
+                    {stopped && !linsight?.taskError && (
+                        <div className="my-2 flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                            <OctagonX size={16} className="shrink-0" />
+                            {localize('com_linsight_task_terminated')}
+                        </div>
+                    )}
+
+                    {/* ── artifacts area (P4): report link / answer markdown / file
+                        card — lifted into the terminal ResultPanel (peak-end). ── */}
+                    {completed && (
+                        <ResultPanel
+                            messageId={linsight?.message_id ?? undefined}
+                            liked={linsight?.liked ?? undefined}
+                            allowFeedback={!readOnly && !isSharePage}
+                            onLikedChange={(l) => updateLinsight(versionId, { liked: l })}
+                        >
+                            <ResultSection
+                                answer={linsight?.output_result?.answer}
+                                files={fileList}
+                                versionId={versionId}
+                                onPreview={(file) => artifactsPanel.openPreview(file)}
+                            />
+                        </ResultPanel>
+                    )}
+                </div>
+            </div>
+
+            {/* ── footer: task panel + unified input ────────────────────────── */}
+            <div className="mx-auto w-full max-w-[800px] shrink-0 px-4 pb-4">
+                {/* Design (Figma 12221-40080/40081): card inset 24px each side
+                    relative to the input, 12px gap above it. */}
+                <div className="px-6 pb-3">
+                    <TaskPanel tasks={tasks} completed={completed} />
+                </div>
+                {/* Share pages AND historical sessions are read-only — no input.
+                    Continuation now happens in the daily /c chat; the standalone
+                    linsight viewer only displays ("make same style" removed, F035). */}
+                {!isSharePage && !readOnly && (
+                    <TaskModeInput
+                        // The landing route URL is rewritten via history.replaceState after the
+                        // first submit, so react-router's `conversationId` stays 'new'. Treat
+                        // 'new'/empty as "no real id yet" and fall back to the live session_id,
+                        // otherwise follow-up rounds drop session_id and spawn a new session.
+                        conversationId={
+                            conversationId && conversationId !== 'new'
+                                ? conversationId
+                                : linsight?.session_id || 'new'
+                        }
+                        disabled={running || !!pendingInput}
+                        // While actively executing, the disabled input's action button
+                        // morphs into a Stop button — the only stop affordance once the
+                        // task leaves the queue. `stop` (WS hook) terminates the live
+                        // session. During a park (pendingInput) the task is suspended
+                        // awaiting the user's answer (given via the ClarifyCard above),
+                        // NOT executing — so drop the Stop button: showing it reads as
+                        // "running" when nothing is actually running.
+                        running={running && !pendingInput}
+                        onStop={stop}
+                        // F035 multi-turn: a send here continues THIS conversation
+                        // (same session_version + agent thread) instead of starting
+                        // a new session. versionId is the live session_version id.
+                        onFollowUp={(question) => continueConversation(versionId, question)}
+                    />
+                )}
+            </div>
+
+            {/* ── right-side area: workspace drawer / file preview (mutually exclusive) ── */}
+            <WorkspaceDrawer
+                open={artifactsPanel.workspaceOpen}
+                onOpenChange={artifactsPanel.setWorkspaceOpen}
+                files={workspaceFiles}
+                onPreview={(file) => artifactsPanel.openPreview(file, true)}
+            />
+            <FilePreviewPanel
+                open={!!artifactsPanel.previewFile}
+                onOpenChange={(open) => !open && artifactsPanel.closePreview()}
+                file={artifactsPanel.previewFile}
+                versionId={versionId}
+                fileList={workspaceFiles}
+                onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
+            />
+        </div>
+        </ExecutionLiveContext.Provider>
+    );
+}

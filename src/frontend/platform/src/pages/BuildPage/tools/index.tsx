@@ -1,5 +1,7 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -23,6 +25,12 @@ const MANAGED_TOOLS = [
     '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
 
+const TOOL_MANAGE_PERMISSION_IDS = [
+    'manage_tool_owner',
+    'manage_tool_manager',
+    'manage_tool_viewer',
+]
+
 interface TabToolsProps {
     select?: any;
     onSelect: (tool: any) => void;
@@ -42,14 +50,22 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     useToolType(setType)
     const [loading, setLoading] = useState(false)
 
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
+    const toolIds = allData.map((el: any) => String(el.id));
+    const { permissions: permIds } = usePermissionIds('tool', toolIds, TOOL_MANAGE_PERMISSION_IDS);
+    const canManageTool = (id: string | number) =>
+        TOOL_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, id, permissionId));
+
     const loadData = async (_type = "custom") => {
-        await getToolsApi(_type).then((res) => {
+        await getToolsApi(_type, { permissionId: 'view_tool' }).then((res) => {
             setAllData(res);
         });
         setLoading(false)
     };
     const loadMcpData = async () => {
-        await getToolsApi('mcp').then((res) => {
+        await getToolsApi('mcp', { permissionId: 'view_tool' }).then((res) => {
             setAllData(res);
         });
         setLoading(false)
@@ -76,7 +92,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     }, [keyword, type, allData]);
 
     const hasSet = (name) => {
-        if (user.role !== 'admin') return false
+        const canManageBuiltinTools = Boolean(
+            user?.is_global_super || user?.role === 'admin' || user?.is_child_admin
+        );
+        if (!canManageBuiltinTools) return false
         return MANAGED_TOOLS.includes(name)
     }
 
@@ -118,10 +137,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             <span>{t("tools.mcpTools")}</span>
                         </div>
                     </div>
-                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-betwee px-2">
-                        <p className="text-sm text-muted-foreground break-all">
-                            {t("tools.manageCustomTools")}
-                        </p>
+                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm text-muted-foreground break-keep">
+                                {t("tools.manageCustomTools")}
+                            </p>
+                            {/* F027 AC-12: "总记录数" badge removed from the tool list UI; backend response shape unchanged. */}
+                        </div>
                     </div>
                 </div>
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
@@ -173,6 +195,9 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                             type === 'mcp' ? mcpDialogRef.current.open(el) :
                                                 editRef.current.edit(el)
                                         }}
+                                        onPermission={canManageTool(el.id)
+                                            ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
+                                            : null}
                                     ></ToolItem>
                                 ))
                             ) : (
@@ -201,6 +226,17 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
             />
 
             <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
+
+            {/* Permission management dialog */}
+            {permTarget && (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="tool"
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
+                />
+            )}
         </div>
     );
 }

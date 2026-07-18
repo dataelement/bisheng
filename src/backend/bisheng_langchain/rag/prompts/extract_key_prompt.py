@@ -1,4 +1,4 @@
-from langchain.prompts.prompt import PromptTemplate
+from langchain_classic.prompts.prompt import PromptTemplate
 
 
 EXTRACT_KEY_PROMPT = PromptTemplate(

@@ -11,12 +11,18 @@ import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { Check, Plus } from "lucide-react";
 import { forwardRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+
+// Keep in sync with backend WSModel (bisheng/api/v1/schemas.py).
+export const MODEL_DESCRIPTION_MAX_LENGTH = 50;
 
 export interface Model {
     key: string;
     id: string;
     name: string;
     displayName: string;
+    /** Optional one-line intro shown in the workspace model picker. */
+    description?: string;
     visual?: boolean;
 }
 interface ModelManagementProps {
@@ -27,12 +33,45 @@ interface ModelManagementProps {
     onRemove: (index: number) => void;
     onModelChange: (index: number, id: string) => void;
     onNameChange: (index: number, name: string) => void;
+    onDescriptionChange?: (index: number, description: string) => void;
     onVisualToggle?: (index: number, enabled: boolean) => void;
+    /** Linsight default model: the model id used as the default executor for Linsight tasks. */
+    linsightDefaultModelId?: string | null;
+    onLinsightDefaultChange?: (id: string) => void;
 }
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
-    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onVisualToggle }, ref) => {
-        const { llmOptions } = useModel();
+    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onDescriptionChange, onVisualToggle, linsightDefaultModelId, onLinsightDefaultChange }, ref) => {
+        // `assistant` mode hits /api/v1/llm/assistant/llm_list which is already
+        // filtered to the admin-configured assistant allowlist (default model
+        // and its server are placed first). Avoids the fetch-all + client-side
+        // filter round-trip.
+        const { llmOptions: assistantLlmOptions } = useModel('assistant');
         const { t } = useTranslation();
+        const navigate = useNavigate();
+
+        // Resolve the selected model's name from the cascader options so the
+        // display-name input can fall back to it as placeholder when left empty.
+        const getModelLabel = (id: string) => {
+            if (!id) return '';
+            for (const group of assistantLlmOptions) {
+                const hit = group.children?.find((el) => el.value == id);
+                if (hit) return hit.label;
+            }
+            return '';
+        };
+
+        const selectFooter = (
+            <div
+                className="px-3 py-2 text-sm text-primary cursor-pointer hover:bg-[#EBF0FF] dark:hover:bg-gray-700"
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate('/model/management?systemModel=assis');
+                }}
+            >
+                + {t('bench.addMoreModels')}
+            </div>
+        );
 
         // Bind ref to each model item
         const setItemRef = (el: HTMLDivElement | null, index: number) => {
@@ -50,32 +89,45 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         // }, [models, llmOptions])
 
         return (
-            <div className="mt-2 border p-4 rounded-md bg-muted">
-                <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}>
+            <div className="mt-2 border p-4 rounded-md bg-background">
+                <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "1.2fr 0.85fr 1.3fr 72px 116px 36px" }}>
                     <div className="">
                         <Label className="bisheng-label">{t('bench.model')}</Label>
                     </div>
                     <div className="">
                         <Label className="bisheng-label">{t('bench.displayName')}</Label>
                     </div>
+                    <div className="">
+                        <Label className="bisheng-label">{t('bench.modelDescription')}</Label>
+                    </div>
                     <div className="flex items-center justify-center">
                         <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
                         <QuestionTooltip className="text-[#999999]" content={t('bench.visionText')} />
+                    </div>
+                    <div className="flex items-center justify-center">
+                        <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('model:model.linsightDefaultModel')}</Label>
+                        <QuestionTooltip className="text-[#999999]" content={t('model:model.linsightDefaultModelTooltip')} />
                     </div>
                     <div className="text-center">
                     </div>
                 </div>
 
                 {models.map((model, index) => (
-                    <div key={model.key} className="grid items-center mb-4" style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}>
+                    <div
+                        key={model.key}
+                        ref={(el) => setItemRef(el, index)}
+                        className="grid items-center mb-4"
+                        style={{ gridTemplateColumns: "1.2fr 0.85fr 1.3fr 72px 116px 36px" }}
+                    >
                         <div className="pr-2" id={model.id}>
-                            {llmOptions.length > 0 ? (
+                            {assistantLlmOptions.length > 0 ? (
                                 <ModelSelect
                                     key={model.id}
                                     label={''}
                                     value={model.id}
-                                    options={llmOptions}
+                                    options={assistantLlmOptions}
                                     onChange={(val) => onModelChange(index, val)}
+                                    footer={selectFooter}
                                 />
                             ) : (
                                 <ModelSelect
@@ -84,6 +136,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                     value={''}
                                     options={[]}
                                     onChange={(val) => { }}
+                                    footer={selectFooter}
                                 />
                             )}
                             {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}
@@ -92,9 +145,17 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                             <Input
                                 value={model.displayName}
                                 onChange={(e) => onNameChange(index, e.target.value)}
-                                placeholder={t('bench.displayName')}
+                                placeholder={getModelLabel(model.id) || t('bench.displayName')}
                             />
                             {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
+                        </div>
+                        <div className="pr-2">
+                            <Input
+                                value={model.description || ''}
+                                maxLength={MODEL_DESCRIPTION_MAX_LENGTH}
+                                onChange={(e) => onDescriptionChange?.(index, e.target.value)}
+                                placeholder={t('bench.modelDescriptionPlaceholder')}
+                            />
                         </div>
 
                         <div className="flex items-center justify-center">
@@ -105,6 +166,18 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                         onVisualToggle(index, checked);
                                     }
                                 }}
+                            />
+                        </div>
+
+                        {/* Linsight default model: single-select radio across the whole column */}
+                        <div className="flex items-center justify-center">
+                            <input
+                                type="radio"
+                                name="linsight-default-model"
+                                className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                                checked={!!model.id && model.id === linsightDefaultModelId}
+                                disabled={!model.id}
+                                onChange={() => model.id && onLinsightDefaultChange?.(model.id)}
                             />
                         </div>
 

@@ -10,6 +10,8 @@ export interface AppItem {
   is_pinned?: boolean; // Pinned state from backend
   last_chat_time?: string; // ISO date of last conversation
   last_chat_id?: string; // Last conversation ID (for "continue chat")
+  /** ReBAC relation-model ``share_app`` — hide share UI when false */
+  can_share?: boolean;
 }
 
 /** Tag/category */

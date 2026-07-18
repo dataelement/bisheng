@@ -41,7 +41,7 @@ const assistantTemp = {
   guide_word: "",
   guide_question: [],
   model_name: "",
-  temperature: 0.5,
+  temperature: 1,
   status: 0,
   user_id: 1,
   create_time: "",

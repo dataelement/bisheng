@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import logging
-from langchain.docstore.document import Document
+from langchain_classic.docstore.document import Document
 from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForChainRun
@@ -12,9 +12,9 @@ from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from pydantic import Field
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter
 
-from langchain.chains.base import Chain
-from langchain.chains.llm import LLMChain
-from langchain.chains.qa_generation.prompt import PROMPT_SELECTOR, CHAT_PROMPT, PROMPT
+from langchain_classic.chains.base import Chain
+from langchain_classic.chains.llm import LLMChain
+from langchain_classic.chains.qa_generation.prompt import PROMPT_SELECTOR, CHAT_PROMPT, PROMPT
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ import numpy as np
 import pypdfium2
 import requests
 from image import LayoutParser
-from langchain.document_loaders.blob_loaders import Blob
+from langchain_classic.document_loaders.blob_loaders import Blob
 
 
 def norm_rect(bbox):

@@ -13,12 +13,53 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "exit | mysql -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "mysql -u root -p$$MYSQL_ROOT_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS openfga;'"]
       start_period: 30s
       interval: 20s
       timeout: 10s
       retries: 4
     restart: on-failure
+
+  openfga-migrate:
+    container_name: bisheng-openfga-migrate
+    image: openfga/openfga:latest
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: mysql
+      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  openfga:
+    container_name: bisheng-openfga
+    image: openfga/openfga:latest
+    command: run
+    environment:
+      OPENFGA_DATASTORE_METRICS_ENABLED: "true"
+      OPENFGA_DATASTORE_ENGINE: mysql
+      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
+      OPENFGA_LOG_FORMAT: json
+      OPENFGA_PLAYGROUND_ENABLED: "true"
+      OPENFGA_CHECK_QUERY_CACHE_ENABLED: "true"
+      OPENFGA_CHECK_QUERY_CACHE_TTL: 30s
+      OPENFGA_CHECK_ITERATOR_CACHE_ENABLED: "true"
+      OPENFGA_CHECK_ITERATOR_CACHE_TTL: 30s
+      OPENFGA_CHECK_ITERATOR_CACHE_MAX_RESULTS: 10000
+      OPENFGA_CACHE_CONTROLLER_ENABLED: "true"
+      OPENFGA_CACHE_CONTROLLER_TTL: 10s
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: 80
+      OPENFGA_DATASTORE_MAX_IDLE_CONNS: 40
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "2112:2112"
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    # 不在 compose 里写 HEALTHCHECK：openfga 官方镜像为 distroless，无 /bin/sh、无 wget，
+    # CMD-SHELL 会永久 unhealthy。未定义时 Compose 将 ``service_healthy`` 视为已启动即可。
+    restart: unless-stopped
 
   redis:
     container_name: bisheng-redis
@@ -40,11 +81,12 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.4.0
+    image: dataelement/bisheng-backend:v2.6.0
     ports:
       - "7860:7860"
     environment:
       TZ: Asia/Shanghai
+      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -75,12 +117,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-  
+      # openfga 官方镜像无 HEALTHCHECK，Compose v5 无法用 service_healthy
+      openfga:
+        condition: service_started
+
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.4.0
+    image: dataelement/bisheng-backend:v2.6.0
     environment:
       TZ: Asia/Shanghai
+      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -105,11 +151,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
+      openfga:
+        condition: service_started
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v2.4.0
+    image: dataelement/bisheng-frontend:v2.6.0
     ports:
       - "3001:3001"
     environment:

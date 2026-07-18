@@ -9,7 +9,7 @@ export default function NoPromptGroup() {
     <div className="relative min-h-full w-full px-4">
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center font-bold dark:text-gray-200">
-          <h1 className="text-lg font-bold dark:text-gray-200 md:text-2xl">
+          <h1 className="text-lg font-bold dark:text-gray-200 touch-desktop:text-2xl">
             {localize('com_ui_prompt_preview_not_shared')}
           </h1>
           <Button

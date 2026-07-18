@@ -1,10 +1,10 @@
 from typing import Optional, Any
 
 from langchain_core.language_models import LanguageModelInput
-from langchain_openai import ChatOpenAI
+from .chat_openai_reasoning import ChatOpenAIReasoning
 
 
-class ChatOpenAICompatible(ChatOpenAI):
+class ChatOpenAICompatible(ChatOpenAIReasoning):
     """
     A ChatOpenAI subclass that ensures compatibility with older parameter names.
     use max_tokens instead of max_completion_tokens.

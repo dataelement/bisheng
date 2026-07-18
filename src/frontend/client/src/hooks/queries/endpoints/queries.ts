@@ -6,6 +6,21 @@ import { getKnowledgeStatusApi } from '~/api';
 import { BsConfig, QueryKeys, TEndpointsConfig, TStartupConfig, dataService } from '~/types/chat';
 import store from '~/store';
 
+const externalUrlRE = /^(?:https?:|data:|blob:|\/\/)/i;
+
+function getAppBaseUrl() {
+  return (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+}
+
+function withAppBaseUrl(url?: string) {
+  if (!url) return '';
+  if (externalUrlRE.test(url)) return url;
+
+  const baseUrl = getAppBaseUrl();
+  if (!baseUrl || url.startsWith(`${baseUrl}/`)) return url;
+  return url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
+}
+
 export const useGetEndpointsQuery = <TData = TEndpointsConfig>(
   config?: UseQueryOptions<TEndpointsConfig, unknown, TData>,
 ): QueryObserverResult<TData> => {
@@ -57,21 +72,28 @@ export const useGetBsConfig = (
       if (!data.voiceInput) data.voiceInput = { enabled: false, model: '' };
       if (!data.knowledgeBase) data.knowledgeBase = { enabled: false, prompt: '' };
       if (!data.fileUpload) data.fileUpload = { enabled: false, prompt: '' };
+      if (!data.skillEntry) data.skillEntry = { enabled: false };
+      if (!data.shougang) data.shougang = { enabled: false };
 
       // Update favicon
       if (data.assistantIcon.image) {
         const favicon = document.createElement('link');
         favicon.type = 'image/x-icon';
         favicon.rel = 'shortcut icon';
-        favicon.href = __APP_ENV__.BASE_URL + data.assistantIcon.image;
+        favicon.href = withAppBaseUrl(data.assistantIcon.image);
         document.head.appendChild(favicon);
       }
       return data;
     }),
     {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: 'always',
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      // Config rarely changes within a session; don't refetch on every new
+      // consumer mount (the send-triggered layout flip mounts several config
+      // consumers and fired workstation/config repeatedly). Cache is shared by
+      // key, so one fetch covers all consumers.
+      refetchOnMount: false,
+      staleTime: 5 * 60 * 1000,
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,
     },

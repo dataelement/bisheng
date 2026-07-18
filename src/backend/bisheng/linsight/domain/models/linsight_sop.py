@@ -3,7 +3,8 @@ from typing import Optional, Dict, Any, List, Literal
 
 from loguru import logger
 from sqlalchemy import update
-from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import Integer
+from bisheng.core.database.dialect_helpers import LargeText, UPDATE_TIME_SERVER_DEFAULT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementUpdateSchema
@@ -20,7 +21,7 @@ class LinsightSOPBase(SQLModelSerializable):
     description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOPContents',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
+                         sa_column=Column(LargeText, nullable=False, comment="SOPContents"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
     showcase: Optional[bool] = Field(default=False, index=True, description='Whether to display it on the homepage as a featured case')
@@ -30,10 +31,15 @@ class LinsightSOPBase(SQLModelSerializable):
     linsight_version_id: Optional[str] = Field(default=None,
                                                description='Inspiration Conversation VersionID, used to query the running results of a featured case',
                                                sa_column=Column(CHAR(36), nullable=True))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class LinsightSOP(LinsightSOPBase, table=True):
@@ -54,15 +60,20 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOPContents',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
+                         sa_column=Column(LargeText, nullable=False, comment="SOPContents"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
     execute_feedback: Optional[str] = Field(None, description='Execution Result Feedback Information', sa_type=Text, nullable=True)
     linsight_version_id: Optional[str] = Field(default=None, description='Inspiration Conversation Versionid, sync ratings')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class LinsightSOPDao(LinsightSOPBase):

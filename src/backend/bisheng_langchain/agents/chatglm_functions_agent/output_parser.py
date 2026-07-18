@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Optional, Union
-from pydantic import Field
+from typing import ClassVar, Union
 
-from langchain.agents.agent import AgentOutputParser
-from langchain.agents.structured_chat.prompt import FORMAT_INSTRUCTIONS
-from langchain.output_parsers import OutputFixingParser
-from langchain.schema import AgentAction, AgentFinish, OutputParserException
-from langchain.schema.language_model import BaseLanguageModel
+from langchain_classic.agents.agent import AgentOutputParser
+from langchain_classic.agents.structured_chat.prompt import FORMAT_INSTRUCTIONS
+from langchain_classic.output_parsers import OutputFixingParser
+from langchain_classic.schema import AgentAction, AgentFinish, OutputParserException
+from langchain_classic.schema.language_model import BaseLanguageModel
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 class StructuredChatOutputParser(AgentOutputParser):
     """Output parser for the structured chat agent."""
 
-    pattern = re.compile(r"```(?:json)?\n(.*?)```", re.DOTALL)
+    # ClassVar so pydantic v2 (langchain 1.x base models) treats it as a
+    # constant rather than an unannotated model field.
+    pattern: ClassVar[re.Pattern] = re.compile(r"```(?:json)?\n(.*?)```", re.DOTALL)
 
     def get_format_instructions(self) -> str:
         return FORMAT_INSTRUCTIONS
@@ -53,7 +55,7 @@ class StructuredChatOutputParserWithRetries(AgentOutputParser):
 
     base_parser: AgentOutputParser = Field(default_factory=StructuredChatOutputParser)
     """The base parser to use."""
-    output_fixing_parser: Optional[OutputFixingParser] = None
+    output_fixing_parser: OutputFixingParser | None = None
     """The output fixing parser to use."""
 
     def get_format_instructions(self) -> str:
@@ -74,8 +76,8 @@ class StructuredChatOutputParserWithRetries(AgentOutputParser):
     @classmethod
     def from_llm(
         cls,
-        llm: Optional[BaseLanguageModel] = None,
-        base_parser: Optional[StructuredChatOutputParser] = None,
+        llm: BaseLanguageModel | None = None,
+        base_parser: StructuredChatOutputParser | None = None,
     ) -> StructuredChatOutputParserWithRetries:
         if llm is not None:
             base_parser = base_parser or StructuredChatOutputParser()

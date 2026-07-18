@@ -10,7 +10,7 @@ export function SpaceNotebookIcon({ active }: { active: boolean }) {
             viewBox="0 0 16 16"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            className={`size-3.5 shrink-0 ${active ? "text-[#165DFF]" : "text-[#818181]"}`}
+            className={`size-3.5 shrink-0 ${active ? "text-blue-500" : "text-[#818181]"}`}
             aria-hidden
         >
             <g clipPath={`url(#${clipId})`}>

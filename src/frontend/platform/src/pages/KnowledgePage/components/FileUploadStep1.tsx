@@ -10,6 +10,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
     const { t } = useTranslation('knowledge')
     const { id: kid } = useParams()
     const { appConfig } = useContext(locationContext)
+    const tableExtensions = ['xlsx', 'xls', 'csv', 'et']
 
     const [fileCount, setFileCount] = useState(0)
     const [finish, setFinish] = useState(false)
@@ -21,7 +22,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
         filesRef.current = files.map(file => ({
             ...file,
             suffix: file.fileName.split('.').pop().toLowerCase() || 'txt',
-            fileType: ['xlsx', 'xls', 'csv'].includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file',
+            fileType: tableExtensions.includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file',
             fileId: 0
         }))
         failFilesRef.current = failFiles
@@ -42,8 +43,8 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
                     "slice_length": 10
                 }
             })),
-            separator: ["\n\n", "\n"],
-            separator_rule: ["after", "after"],
+            separator: ["\n\n", "\n", "。", "\\."],
+            separator_rule: ["after", "after", "after", "after"],
             chunk_size: 1000,
             chunk_overlap: 100,
             retain_images: true,
@@ -63,10 +64,10 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
 
         }
     }, [initialFiles]);
-    return <div className={`relative h-full max-w-[1200px] mx-auto flex flex-col px-10 pt-4 ${hidden ? 'hidden' : ''}`}>
+    return <div className={`relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col pb-[calc(11rem+env(safe-area-inset-bottom))] pt-6 ${hidden ? 'hidden' : ''}`}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
-            progressClassName='max-h-[460px]'
+            progressClassName='pb-2'
             knowledgeId={kid}
             onSelectFile={(count) => {
                 setFileCount(count)
@@ -75,7 +76,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             onFileChange={handleFileChange}
             initialFiles={initialFiles}
         />
-        <div className="flex justify-end gap-4 mt-8">
+        <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
             <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>{t("uploadDirectly")}</Button>
             <Button disabled={loading || !finish} onClick={() => {
                 onNext(filesRef.current)

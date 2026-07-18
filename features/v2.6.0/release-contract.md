@@ -1,0 +1,116 @@
+# Release Contract — v2.6.0
+
+> 本文件是 v2.6.0 版本级领域归属与全局约束的权威来源。
+> **所有 spec.md 在动笔前必须先阅读本文件。**
+> 每次 spec 评审时，必须对照本文件检查一致性。
+
+---
+
+## 表 1：领域对象归属
+
+每个领域对象只能有一个 Owner Feature，负责定义该对象的写入行为
+（创建、更新、删除）。其他 Feature 只能"读取"或"引用"该对象。
+
+| 领域对象 | Owner Feature | 说明 |
+|---------|--------------|------|
+| ApprovalScenario / ApprovalRouteRule / ApprovalFlowDefinition / ApprovalFlowVersion / ApprovalNodeDefinition | F025-approval-center-unification | 审批场景配置、条件分支、流程定义、流程版本与顺序节点 |
+| ApprovalInstance / ApprovalTask / ApprovalException / ApprovalOutbox / ApprovalActionLog | F025-approval-center-unification | 审批实例、审批任务、异常、业务执行队列、审批时间线 |
+| UserMenuAccess | F025-approval-center-unification | 菜单权限申请通过后的用户级菜单授权与撤回记录 |
+| ChannelAuthorizationWrite | F026-channel-active-authorization | 频道资源主动授权、撤销授权、频道 relation-model binding 写入与清理行为 |
+| SpaceChannelMember(channel relation/source fields) | F026-channel-active-authorization | `space_channel_member` 中 `business_type='channel'` 的四档关系与授权来源字段；不拥有知识空间成员关系 |
+| —（无新增） | F029-knowledge-qa-permission-filter | 仅读取/调用现有 KnowledgeSpace / Folder / KnowledgeFile / MessageCitation；不引入新领域对象 |
+| —（无新增） | F030-knowledge-resource-unified-api | v2 filelib 统一对外 API；仅经由现有 `KnowledgeService` / `KnowledgeSpaceService` 读写 Knowledge / KnowledgeFile / KnowledgeSpace，不引入新领域对象、不新增 DAO 入口 |
+| ChannelInfoSourceSubscription（`channel_info_source` 行生命周期 + 情报服务订阅副作用） | F031-channel-source-subscription-reconcile | 订阅意图唯一真相 = 租户内 `channel.source_list` 并集；`channel_info_source` 行存在 ⟺ 已订阅，行与外部订阅态同生共死；拥有订阅/退订情报服务的调用时机与每日对账写行为。仅读取 `Channel.source_list`，不拥有 `Channel` 本身，不拥有 F026 的频道授权/`space_channel_member` channel 字段 |
+| —（无新增） | F032-ofd-upload-support | 仅在现有 RAG 解析链路（`FileExtensionMap` / loader / 预览对象）上新增 `ofd` 扩展名分支：OFD 转 PDF 后复用既有 PDF 解析/预览/检索；不引入新领域对象、不新增 DAO，不改动既有扩展名的处理路径 |
+| —（无新增） | F033-department-space-member-scope | 仅在现有 ReBAC 授权链路（`resource_permission.py` 的 `grant-subjects/*` 列表 + `authorize`）上，对 `knowledge_space` 资源按 `DepartmentKnowledgeSpace` 绑定收敛授权范围（绑定部门子树 / 子树成员，禁用 user_group）；只读 `DepartmentKnowledgeSpace` / `Department` / `UserDepartment`，不拥有这些对象、不新增领域对象/表/DAO；普通知识空间授权路径零变化 |
+| LinsightSkill（`linsight_skill` 表 + SKILLS_ROOT 磁盘 SKILL.md 生命周期） | F035-linsight-task-mode | 租户自定义技能元数据（name/description/enabled/source，唯一约束 `(tenant_id,name)`）与磁盘正文的创建/编辑/删除/启停；内核 built-in skill 不入表、不经 API。同时拥有：自研 ReAct 内核与 SOP 动态生成链路的**下线**、`linsight_sop`→Skill 一次性迁移写行为；只读 `linsight_session_version`/`linsight_execute_task`（沿用既有模型，不改其归属） |
+| —（无新增） | F034-knowledge-space-file-move | 不引入新领域对象；经由 `KnowledgeSpaceService` 新增对 KnowledgeFile / KnowledgeDocument 的「移动」写行为（改 `knowledge_id` / `file_level_path` / `level`，版本链整链迁移）+ 跨空间检索数据迁移 celery 任务；§5.5 新增「文件夹上传」批量编排（按相对路径重建目录树，复用 `add_folder`/`add_file` 管线与配额校验）；不改变 F039 版本模型与 F030 对外 API 语义 |
+| —（无新增） | F038-department-tree-lazy-load | 部门树整树加载改**按层懒加载 / 服务端搜索 / 按 id 定位** + 授权部门列表移除成员数统计；仅只读 `Department`，**不新增领域对象 / 表 / DAO 类**（新增取数方法在 `DepartmentDao` 既有职责内扩展，符合 C1）；**推翻 F027 AC-16**（移除授权页部门列表 `member_count`，据 5 万实测其大 `.in_()` 计数在达梦约 66s）；只读复用 F033 子树收敛与 F026 频道授权，不改其语义 |
+| —（无新增；新增对外 API `GET /channel/manager/{id}/unread-counts`） | F040-rebac-read-path-perf-rollout | 性能优化型；不引入新领域对象/表/DAO 入口。仅改读路径"怎么算/怎么取"：频道详情拆出独立未读端点 + 上下文复用 + 文章总数 Redis 短 TTL 缓存；空间广场批量化权限检查（保持全返回）；工作台/应用列表优先 cursor，遗留 `/chat/online`·`/workstation/app/uncategorized` 在兼容窗口内保留页码但内部 keyset 有界扫描；侧边栏权限懒加载；E 组按数据版本派生 key 缓存权限"名册"。只读既有 Service/DAO，不改 F026/F031/F033/F037 的授权·订阅语义 |
+| —（无新增领域对象；在 F029 拥有的 citation 链路上叠加 `accessScope` 分级） | F041-knowledge-space-select-flow-assistant | 4 入口（助手应用、工作流助手/知识库问答/知识库检索节点）知识库选择器新增「知识空间」tab + 检索；仅读取 / 调用现有 `KnowledgeSpaceService` / `KnowledgeSpaceChatService`（多态检索）/ F029 `KnowledgeFileVisibilityService`（`view_file` 双层过滤）/ 工作流节点 / 助手检索链路；两节点仅改**显示名**；在 F029 拥有的 `MessageCitation` / citation registry 上新增 `accessScope`（`per_user` / `shared`）字段与 resolve 分支（属 INV-7 例外的协同改动，经 F029 owner 认可）；不新增领域对象 / 表 / DAO 入口 / 对外 API / 错误码 |
+
+**规则**：
+- 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
+- 新增领域对象时必须先更新本表
+
+---
+
+## 表 2：跨 Feature 不变量（INV-N）
+
+全局业务约束，任何 spec 的 AC **不得与之矛盾**。
+
+| ID | 不变量描述 | 涉及领域对象 | 来源 spec |
+|----|-----------|------------|---------|
+| INV-1 | 审批事实源统一为 `approval_instance` / `approval_task`；站内信只负责提醒和跳转，不作为审批状态真相来源 | ApprovalInstance, ApprovalTask, InboxMessage | F025 |
+| INV-2 | 审批中心所有新表都必须带 `tenant_id`，并遵守现有多租户隔离规则；申请人/审批人/管理员的数据可见性不能跨租户 | Approval* | F025 |
+| INV-3 | 审批通过不等于绕过业务安全检查；handler 执行业务动作前仍需复用原业务校验逻辑 | ApprovalOutbox, 业务资源模块 | F025 |
+| INV-4 | 菜单权限申请通过后只写用户级菜单授权，不修改角色菜单权限；用户有效菜单 = 角色菜单 ∪ 个人授权 ∪ 管理员权限 | UserMenuAccess, RoleAccess | F025 |
+| INV-5 | 流程变更采用版本快照模型；已发起实例继续使用其创建时的流程版本，新配置仅影响后续新申请 | ApprovalFlowVersion, ApprovalInstance | F025 |
+| INV-6 | 走 ReBAC 过滤的高频列表接口采用 cursor-based 分页：请求用 `cursor` 透传上一页位置，响应含 `has_more: bool` 与 `next_cursor: string\|null`，**不再返 `total` / `page_num`**；后端不得为算 total 而扫描全部 batch；cursor 编码统一走 `common/cursor.py`（schema `{"v":1, "k":[...]}`，base64url）；cursor 解析失败必须明确报错（`*InvalidCursorError`），不得静默 fallback 首页。**例外（F040 登记）**：① WHERE 列表结果集由 per-user 成员关系 / 部门子树天然有界且**无深翻语义**（如 `/space/joined`·`/space/department`），可保留全返回、不强制 cursor，但其逐项 N+1 权限检查必须批量化；② 遗留多端消费的 `/chat/online`·`/workstation/app/uncategorized` 在兼容窗口内保留 `page/limit` 裸列表，但内部必须使用 keyset 有界扫描、不得 count/fetch-all、仅扫描到目标页可见前缀；未来 cursor 化须另立契约迁移全部调用方 | 所有走 ReBAC 过滤的列表接口 | F027（例外 F040） |
+| INV-7 | 知识空间内容的"AI 问答可检索可见性"必须是"列表 UI 可见性"的子集；即对任意 `(user, space, file)`，若用户在列表 UI 中不可见该 `file`（`view_file ∉ effective_permissions`），则任何 AI 问答入口都不得让该 `file` 的 chunk / 文件名 / 来源出现在模型上下文、回答引用、角标溯源 `/api/v1/citations/resolve` 响应的结构化字段中。**例外（F041 登记）**：**工作流 / 助手应用入口**的知识空间检索由「用户知识库权限校验」开关控制（4 入口统一，默认关）——开关 OFF 时该入口按**配置者** `view_file` 过滤检索（共享配置者可见范围、**永不越过配置者本人的可见边界**），其产生的 citation 标为 `shared`，溯源解析**不整条剔除**且返回来源元数据（文件名 / 知识库名 / snippet / 可点角标），但完整文件预览 / 下载 URL 仍按**运行使用者** `view_file` 把关；开关 ON（按运行使用者 `view_file`，`per_user`）及**直接空间 AI 问答入口（F029）**维持本不变量的强制语义完全不变 | KnowledgeSpace, Folder, KnowledgeFile, MessageCitation | F029（例外 F041） |
+
+**规则**：
+- 新增不变量：先在此表追加，再写 AC
+- 修改不变量：必须列出 Impacted Specs 清单，逐一回写并重新评审
+- 冲突检测：若 AC 与不变量矛盾，spec 评审不通过
+
+---
+
+## 表 3：Feature 依赖图
+
+| Feature | 依赖（必须先完成） | 说明 |
+|---------|-----------------|------|
+| F025-approval-center-unification | F005, F011, F012, F013 | 依赖菜单审批模式、多租户、租户解析与权限隔离基线 |
+| F026-channel-active-authorization | F006, F013 | 依赖统一 ReBAC/OpenFGA 授权与多租户权限隔离基线 |
+| F027-rebac-list-perf-optim | F004, F008, F011/F012/F013 | 性能优化型；不新增领域对象，仅修改高频列表接口分页协议与部门树 member_count |
+| F028-conversation-export-import | F004, F008（ReBAC core / resource-rebac-adaptation） | 工作台会话回答级导出与导入知识空间；复用 `KnowledgeSpaceService.add_file` 链路，不新增领域对象 |
+| F029-knowledge-qa-permission-filter | — | 仅复用现有 ReBAC `list_accessible_ids` + Fine-grained `view_file` 解析；不依赖其他 v2.6.0 Feature |
+| F030-knowledge-resource-unified-api | F027, F029 | 列表/文件列表沿用 F027 cursor 协议（INV-6）；代用户检索 `user_id` 闭合 F029 遗留的 RPC 越权口子（对齐 INV-7） |
+| F031-channel-source-subscription-reconcile | F026 | 与 F026 同改 `channel_service.py` 但领域解耦（F026 拥有频道授权/`space_channel_member` channel 字段，F031 拥有 `channel_info_source` 订阅生命周期）；缺陷收敛型，不新增表、不新增对外 API、不新增错误码（沿用 190 段 19007） |
+| F032-ofd-upload-support | — | 仅在现有 RAG 解析链路新增 `ofd` 扩展名分支（OFD→PDF 后复用 PDF 解析/预览）；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API；新增 109 段错误码 `OfdConvertError`(10917) |
+| F033-department-space-member-scope | F006/F007（ReBAC 资源授权）、部门知识空间能力（`DepartmentKnowledgeSpace` 绑定） | 范围收敛型；在既有 ReBAC 授权/列表接口对部门知识空间加部门子树准入，禁用 user_group；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API/错误码（**复用 `PermissionDeniedError`**）；不改动普通知识空间授权路径 |
+| F035-linsight-task-mode | F011/F012/F013（多租户基线）、既有角色菜单体系、F029/F030（知识库检索权限过滤，INV-7） | 内核替换型（自研 ReAct → deepagents 适配层，一次性切换不并存）；新增 `linsight_skill` 表 + Alembic、新增 110 段错误码 11050–11069、新增 `/api/v1/linsight/skill` API 与「任务模式」菜单子项；保留 worker.py/Redis queue/WS 协议（`MessageEventType` 不新增枚举）；新增 Redis checkpointer（HITL park-and-release）与 MinIO `workspace/{svid}/` 工作区前缀；设计真相 = `features/v2.6.0/035-linsight-task-mode/design.md`（原《技术方案》） |
+| F034-knowledge-space-file-move | F004/F008, F027, F039 | 文件/文件夹移动（同空间 + 跨空间）+ §5.5 文件夹上传；权限走 ReBAC 细粒度 `move_file`/`move_folder`（映射 can_edit，不改 OpenFGA 模型）；列表刷新沿用 F027 cursor 协议（INV-6）；跨空间移动依赖 F039 版本链「同空间」不变式做整链迁移；新增 180 段错误码 18033（无效移动目标）/ 18025（单次批量超 1000）；新增对外 API `POST /knowledge/space/{id}/files/move` 与 `.../folders/upload`；未新增不变量 |
+| F040-rebac-read-path-perf-rollout | F004, F008, F027（cursor 协议 INV-6 + `common/cursor.py`）, F036（细粒度评估范式）, F037（频道权限上下文复用） | 性能优化型；收尾 F027/F036/F037 读路径主线。新增对外 API `GET /channel/manager/{id}/unread-counts`（未读从详情拆出）、`GET /channel/manager/{id}` 响应去 `sub_channel_unread_counts`；C 组列表复用 F027 cursor（不新增错误码）；**援引 INV-6 例外**（见表 2）保持 `/space/joined`·`/space/department` 全返回，并给遗留 `/chat/online`·`/workstation/app/uncategorized` 登记页码兼容窗口（内部 keyset、不得 count/fetch-all）；E 组按数据版本派生 key 缓存；不新增表/迁移/领域对象 |
+| F041-knowledge-space-select-flow-assistant | F029, F030 | 接盘 F029 明确排除的「工作流节点 / 运行用户身份」检索权限过滤遗留项；4 入口知识库选择器新增知识空间 tab、两节点仅改显示名；「用户知识库权限校验」开关（4 入口统一、默认关）**ON** 时按**运行使用者** `view_file` 双层过滤、**OFF** 时按**配置者** `view_file` 过滤（借用配置者可见范围、不越其边界；均复用 F029 `KnowledgeFileVisibilityService`）；复用 F030 `type=3` 同表多态 + `row.type` 分派；**登记 INV-7 例外**（工作流/助手入口开关可选、默认关，含检索侧与溯源侧 `shared` 分级）；在 F029 citation 链路新增 `accessScope` 分级 + resolve 分支；不新增领域对象 / 表 / 对外 API / 错误码 |
+
+---
+
+## 已分配模块编码（MMMEE）
+
+> 新 Feature 分配错误码时，必须检查此表避免冲突。
+
+| 模块编码 (MMM) | 模块 | Owner Feature |
+|----------------|------|---------------|
+| 181 | approval | F025（沿用现有 `common/errcode/approval.py`，扩展为统一审批中心错误码） |
+| 190 | channel / bisheng_information | F026 沿用现有 `common/errcode/channel.py`，扩展频道授权错误码时不得与既有 190xx 冲突 |
+| 120 | workstation | F028 沿用现有 `common/errcode/workstation.py`，会话导出 / 导入知识空间错误码段位 12060-12079，不得与既有 1204X / 1205X 冲突 |
+| 109 | knowledge | F030 沿用现有 `common/errcode/knowledge.py`，新增 `KnowledgeTypeNotSupportedError`(10962)；复用 10900/10901/10991。180 (knowledge_space) 复用 18001/18010/18040 |
+| 109 | knowledge | F032 沿用现有 `common/errcode/knowledge.py`，新增 `OfdConvertError`(10917)；不得与既有 10915/10916/10962 冲突 |
+| 110 | linsight | F035 沿用现有 `common/errcode/linsight.py`，Skill 管理占用段位 **11050–11069**。实际落码：**11051** 校验失败 / **11052** 超 10MB / **11053** 不存在 / **11054** 无权限 / **11055** 重名 / **11056–11058** GitHub 导入。✅ 原占用段内/邻近的存量 SOP 检索·管理错误码（11010/11011/11050/11060/11070/11100/11110/11150/11160/11170/11171，design §8.6 计划下线）已随 SOP 残留代码移除（2026-06-17，见变更历史），段位腾空；Skill 码沿用已发布编号、不回迁腾空槽位（已发布编码不重编） |
+| 180 | knowledge_space | F034 沿用现有 `common/errcode/knowledge_space.py`，新增 `SpaceMoveInvalidTargetError`(18033) / `SpaceFolderUploadCountExceededError`(18025)；复用 18011（层级）/ 18012（文件夹重名）/ 18021 / 18024（容量）/ 18040 / 18041（跨租户）；§5.5 文件夹上传租户容量超限复用 190 段 19403 |
+
+---
+
+## 变更历史
+
+| 日期 | 变更内容 | 影响范围 |
+|------|---------|---------|
+| 2026-05-18 | 初始化 v2.6.0 契约，并登记 F025 统一审批中心的领域对象、依赖与不变量 | F025 |
+| 2026-05-28 | 登记 F026 频道主动授权的领域对象归属、依赖与 190 模块错误码边界 | F026 |
+| 2026-05-28 | 登记 F027 ReBAC 列表性能优化：新增 INV-6（cursor-based 分页 + 统一 cursor 契约）；未新增领域对象；扩展现有模块错误码 109 / 105 / 180 各新增 1 个 `*InvalidCursorError` | F027 |
+| 2026-05-29 | 登记 F029 知识空间 AI 问答检索权限过滤：表 1 标注"无新增领域对象"、表 2 追加 INV-7（AI 问答可见性 ⊆ 列表 UI 可见性）、表 3 标注无依赖；未新增模块编码（沿用 180 `knowledge_space`）；不影响 F025 范围 | F029 |
+| 2026-05-30 | 登记 F028 工作台会话导出 / 导入知识空间：不新增领域对象，不新增不变量；扩展 120 (workstation) 错误码段位 12060-12079；复用 `KnowledgeSpaceService.add_file` 与 `AddToKnowledgeModal` | F028 |
+| 2026-06-02 | 登记 F030 知识资源统一对外 API（v2 filelib 改造）：表 1 标注"无新增领域对象"、表 3 追加依赖 F027/F029；新增模块 109 错误码 `KnowledgeTypeNotSupportedError`(10962)；列表/文件列表遵循 INV-6 cursor 协议（PRD 同步改造）；代用户检索 `user_id` 对齐 INV-7；个人库 type=2 对外不暴露但枚举保留（workstation/linsight 内部继续使用）；未新增不变量 | F030 |
+| 2026-06-04 | 登记 F031 频道信息源订阅状态对账：表 1 新增 `ChannelInfoSourceSubscription` 领域归属（订阅意图真相 = `channel.source_list` 并集，`channel_info_source` 为物化视图）、表 3 追加依赖 F026；订阅同步即时、退订改每日对账驱动；不新增表/对外 API/错误码（沿用 190 段 19007）；未新增不变量 | F031 |
+| 2026-06-08 | 登记 F032 全平台 OFD 上传支持：表 1 标注"无新增领域对象"（仅在 RAG 解析链路加 `ofd` 分支，OFD→PDF 后复用 PDF 解析/预览）、表 3 追加（无依赖）；新增 109 段错误码 `OfdConvertError`(10917)；未新增不变量、未新增表/对外 API | F032 |
+| 2026-06-10 | 登记 F033 部门知识空间成员授权范围收敛：表 1 标注"无新增领域对象"（仅在 ReBAC 授权/列表接口对 `knowledge_space` 按 `DepartmentKnowledgeSpace` 绑定收敛至部门子树/子树成员、禁用 user_group）、表 3 追加依赖 F006/F007 + 部门空间能力；复用 `PermissionDeniedError`，未新增错误码/表/对外 API/不变量；普通知识空间授权路径零变化 | F033 |
+| 2026-06-11 | 登记 F035 灵思任务模式（deepagents 适配层）：表 1 新增 `LinsightSkill` 领域归属（元数据 `linsight_skill` 表 + SKILLS_ROOT 磁盘正文；含旧内核下线与 SOP→Skill 迁移写行为）、表 3 追加依赖多租户基线/角色菜单/F029/F030；新增 110 段错误码 11050–11069、`linsight_skill` 表 + Alembic、`/skill` API、「任务模式」菜单子项；WS 协议 `MessageEventType` 不新增枚举；未新增不变量；设计真相在 feature 目录 design.md | F035 |
+| 2026-06-11 | 登记 F034 知识空间文件/文件夹移动（同空间 + 跨空间）+ §5.5 文件夹上传：表 1 标注"无新增领域对象"（经 `KnowledgeSpaceService` 新增移动写行为 + 跨空间检索数据迁移 celery 任务 + 文件夹上传批量编排按相对路径重建目录树）、表 3 追加依赖 F004/F008、F027、F039；新增 180 段错误码 `SpaceMoveInvalidTargetError`(18033)、`SpaceFolderUploadCountExceededError`(18025)；新增细粒度权限 id `move_file`/`move_folder`（can_edit 档，不改 OpenFGA 模型）；新增对外 API 移动接口与 `folders/upload`；未新增不变量 |
+| F038-department-tree-lazy-load | F027, F033, F026, F004/F008, F011/F012/F013 | 性能/体验优化型；部门树整树加载改按层懒加载/搜索/定位，**两端点族各自实现**（platform `/departments/*` = admin 范围；client `grant-subjects/departments` = 租户子树 + F033 范围，逻辑不同不统一）；不新增领域对象/表/对外 API 路径族之外错误码（复用 `DepartmentPermissionDeniedError`）；**推翻 F027 AC-16**（移除授权部门列表 member_count）；迁完下线旧 `/departments/tree`；未新增不变量 | F034 |
+| 2026-06-11 | F035 Track 0 落地修正：①**后端升级 Python 3.10→3.11**（deepagents 全版本要求 ≥3.11；连带 `cchardet`→`faust-cchardet`；Docker 基础镜像/dmPython 3.11 待人工跟进）；②110 段错误码实际落码 11051–11055（重名由 11050 顺延 11055，避让存量 SOP 检索码），更正原「既有 110xx ≤11040」误判。详见 `035-linsight-task-mode/tasks.md §8` D1/D2 | F035（含全后端 Python 基线） |
+| 2026-06-17 | F035 SOP 残留代码清理（deepagents 迁移后架空代码下线）：删除已架空的 SOP 生成/编排/库管理代码（`sop_manage.py`、旧自研 ReAct 内核 7 文件、平台 SOP 管理前端 17 文件、`/sop` 库 CRUD 端点）；移除随之失活的 11 个 110 段 SOP 错误码（11010/11011/11050/11060/11070/11100/11110/11150/11160/11170/11171），段位腾空，但 Skill 码 11051–11058 沿用已发布编号**不重编**；保留 `/sop/showcase/result`（client 案例分享只读）+ `LinsightSOP`/`LinsightSOPRecord` 两表（暂不 drop）；删除项均无前端/外部调用方，未改对外 API 契约、未改不变量、未改表 1 领域对象 | F035 |
+| 2026-06-26 | 登记 F040 ReBAC 读路径性能范式收尾（避让：F039 已被「版本链」语义占用，本特性用 040）：表 1 标注"无新增领域对象 + 新增对外 API `…/unread-counts`"、表 3 追加依赖 F004/F008/F027/F036/F037；**INV-6 新增例外**（per-user 有界且无深翻的列表如 `/space/joined`·`/space/department` 可全返回，但 N+1 必批量化）；频道详情拆未读独立端点 + 响应去 `sub_channel_unread_counts` + 文章总数 Redis 短 TTL 缓存；C 组列表 cursor 化复用 F027 错误码（不新增错误码）；E 组数据版本派生 key 缓存权限名册（F036 §8 背书、零写路径耦合）；不新增表/迁移/不变量。注：F036/F037/F038 因 `feat/2.6.0` 落后 `feat/2.6.0-beta4` 22 commit 尚未登记入本契约，待 beta4 合入后补齐 | F040 |
+| 2026-06-29 | 登记 F038 部门树懒加载：表1 标"无新增领域对象"（部门树整树→按层懒加载/搜索/定位 + 授权部门列表移除成员数；仅只读 `Department`，新增取数在 `DepartmentDao` 既有职责内扩展，无 DDL）、表3 追加依赖 F027/F033/F026/F004/F008/F011-13；两端点族各自 scoping（admin 范围 vs 租户子树+F033）不统一；不新增表/对外 API 路径族之外错误码（复用 `DepartmentPermissionDeniedError`）；**推翻 F027 AC-16**——据 5 万实测授权列表 member_count 的大 `.in_()` 计数在达梦约 66s（占 ~96%），移除之（已落地提交 `b8e481872`，69s→~3s）；未新增不变量 | F038 / F027 |
+| 2026-07-01 | 登记 F041 工作流 / 助手应用支持选择知识空间（首钢合入需求）：表 1 标注"无新增领域对象"（4 入口知识库选择器新增知识空间 tab、两工作流节点仅改显示名、复用 F029 双层 `view_file` 过滤 + F030 `type=3` 多态检索）、表 3 追加依赖 F029/F030；**INV-7 新增例外**——工作流 / 助手入口知识空间检索由「用户知识库权限校验」开关控制（4 入口统一、默认关，维持线上现状），开关 OFF 按**配置者** `view_file` 过滤（借用配置者可见范围、永不越其边界）、citation 标 `shared`（溯源不整条剔除、返回来源元数据，完整文件预览/下载仍按运行使用者 `view_file`），F029 直接入口 + 开关 ON（按运行使用者，`per_user`）维持强制；在 F029 拥有的 citation 链路新增 `accessScope` 分级 + resolve 分支（经 F029 owner 认可的协同改动）；不新增表 / 对外 API / 错误码 / 领域对象 | F041（含 INV-7 例外 + F029 citation 链路协同改动） |
+| 2026-07-13 | F040 增补应用列表性能兼容窗口：`/chat/online` 与 `/workstation/app/uncategorized` 保留既有 `page/limit` 裸列表契约，内部改 DM8-safe keyset 有界扫描、权限预过滤 + 精确复核、页内装饰；INV-6 例外补充“不得 count/fetch-all、仅扫描到目标页可见前缀”；无表/迁移/API/错误码变化 | F040 |

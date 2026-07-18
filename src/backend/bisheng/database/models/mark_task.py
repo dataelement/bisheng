@@ -1,13 +1,12 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
 
-# if TYPE_CHECKING:
-from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
+from sqlalchemy import Column, DateTime, Integer, and_, delete, func, or_, text
 from sqlmodel import Field, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 
 class MarkTaskStatus(Enum):
@@ -21,21 +20,26 @@ class MarkTaskBase(SQLModelSerializable):
     create_id: int = Field(index=True)
     app_id: str = Field(index=False, max_length=2048)
     process_users: str = Field(index=False)  # 23,2323
-    mark_user: Optional[str] = Field(default=None, index=True, nullable=True)
-    status: Optional[int] = Field(index=False, default=1)
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+    mark_user: str | None = Field(default=None, index=True, nullable=True)
+    status: int | None = Field(index=False, default=1)
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
+    create_time: datetime | None = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: datetime | None = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class MarkTask(MarkTaskBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
 
 class MarkTaskRead(MarkTaskBase):
-    id: Optional[int] = None
-    mark_process: Optional[List[str]] = None
+    id: int | None = None
+    mark_process: list[str] | None = None
 
 
 class MarkTaskDao(MarkTaskBase):
@@ -44,6 +48,33 @@ class MarkTaskDao(MarkTaskBase):
     def create_task(cls, task_info: MarkTask) -> MarkTask:
         with get_sync_db_session() as session:
             session.add(task_info)
+            session.commit()
+            session.refresh(task_info)
+            return task_info
+
+    @classmethod
+    def create_task_with_assignments(
+            cls,
+            task_info: MarkTask,
+            app_ids: list[str],
+            user_ids: list[int],
+    ) -> MarkTask:
+        from bisheng.database.models.mark_app_user import MarkAppUser
+
+        with get_sync_db_session() as session:
+            session.add(task_info)
+            session.flush()
+            assignments = [
+                MarkAppUser(
+                    task_id=task_info.id,
+                    create_id=task_info.create_id,
+                    app_id=app_id,
+                    user_id=user_id,
+                )
+                for app_id in app_ids
+                for user_id in user_ids
+            ]
+            session.add_all(assignments)
             session.commit()
             session.refresh(task_info)
             return task_info
@@ -64,7 +95,7 @@ class MarkTaskDao(MarkTaskBase):
     @classmethod
     def get_task(cls, user_id: int) -> MarkTask:
         with get_sync_db_session() as session:
-            statement = select(MarkTask).where(MarkTask.process_users.like('%{}%'.format(user_id)))
+            statement = select(MarkTask).where(MarkTask.process_users.like(f'%{user_id}%'))
             return session.exec(statement).first()
 
     @classmethod
@@ -98,8 +129,8 @@ class MarkTaskDao(MarkTaskBase):
     def get_task_list(
             cls,
             status: int,
-            create_id: Optional[int],
-            user_id: Optional[int],
+            create_id: int | None,
+            user_id: int | None,
             page_size: int = 10,
             page_num: int = 1,
     ):

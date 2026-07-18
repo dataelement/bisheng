@@ -114,140 +114,86 @@ export default function RuleTable({
   showPreview,
 }: RuleTableProps) {
   const { t } = useTranslation('knowledge')
+  const mediumTitleStyle = useMemo(() => ({
+    fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif',
+    fontWeight: 500
+  }), []);
 
-  console.log('rules.fileList :>> ', rules.fileList);
   const tableFils = useMemo(() => {
     return rules.fileList.filter(item => item.fileType === 'table')
   }, [rules.fileList])
+  const tableFileIds = useMemo(() => tableFils.map(file => String(file.id)), [tableFils]);
 
   return (
-    <div className="flex-1 flex flex-col relative min-w-[600px] max-w-[760px] mx-auto">
+    <div className="flex-1 flex flex-col relative min-w-0">
       <div
         className="flex flex-col gap-4"
         style={{ gridTemplateColumns: '114px 1fr' }}
       >
-        <div className="flex justify-end items-center gap-2">
-          <Checkbox checked={applyEachCell} onCheckedChange={setApplyEachCell} />
-          <Label htmlFor="setSeparately" className="text-sm text-gray-700"> {t('setSeparately')} </Label>
+        <div className="flex items-center gap-2 text-left">
+          <h3 className="text-[16px] text-[#0f172a]" style={mediumTitleStyle}>
+            {t('splitSettings')}
+          </h3>
+          <div className="flex items-center gap-2">
+            <Checkbox id="setSeparately" checked={applyEachCell} onCheckedChange={setApplyEachCell} />
+            <Label htmlFor="setSeparately" className="text-sm text-[#212121]">{t('setSeparately')}</Label>
+          </div>
         </div>
 
         {applyEachCell ? (
-          <div>
-            <div className="relative after:absolute after:inset-0 after:bg-accent/50 after:z-10 after:pointer-events-none">
-              {/* 当 showPreview 为 true 时使用垂直布局，否则保持原有水平布局 */}
-              <div className={showPreview ? "flex flex-col p-4 border rounded-lg text-sm" : "flex items-center justify-between p-4 border rounded-lg text-sm"}>
-                {/* 第一行：始终显示标题 */}
-                <h3 className="text-md font-bold shrink-0 text-gray-500">
-                  {t('splitSettings')}
-                </h3>
-
-                {/* 第二行：包含其他内容，仅在 showPreview 为 true 时添加额外样式 */}
-                <div className={showPreview ? "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2 w-full" : "flex items-center gap-1 mx-auto"}>
-                  <div className="flex items-center gap-1 w-full sm:w-auto">
-                    <span className="whitespace-nowrap text-gray-500">{t('every')}</span>
-                    <div className="relative">
-                      <Input
-                        id="split"
-                        type="number"
-                        value={cellGeneralConfig.slice_length}
-                        disabled={true}
-                        className="w-[106px] h-8"
-                      />
-                      <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-                    </div>
-                    <span className="whitespace-nowrap text-gray-500">{t('segemnt')}</span>
-                  </div>
-
-                  {cellGeneralConfig.append_header ? (
-                    <div className="flex items-center gap-1 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
-                      <span className="whitespace-nowrap text-gray-500">{t('bonly')}</span>
-                      <div className="relative">
-                        <Input
-                          id="split"
-                          type="number"
-                          value={cellGeneralConfig.header_start_row}
-                          disabled={true}
-                          className="w-24 h-8"
-                        />
-                        <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-                      </div>
-                      <span className="whitespace-nowrap text-gray-500">{t('arrive')}</span>
-                      <div className="relative">
-                        <Input
-                          id="split"
-                          type="number"
-                          value={cellGeneralConfig.header_end_row}
-                          disabled={true}
-                          className="w-24 h-8"
-                        />
-                        <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-                      </div>
-                      <span className="whitespace-nowrap text-gray-500">{t('gauge')}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                      <Checkbox disabled={true} />
-                      <Label className="text-sm"> {t("addHeader")} </Label>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            {/* splice rule */}
-            <div className="space-y-4 mt-4 p-4 border rounded-lg bg-main shadow-sm">
-              <h3 className="text-md font-bold text-foreground text-left">
-                {t('splitMethod')}
-              </h3>
-              <div className="relative mt-2 pr-2 overflow-y-auto max-h-[440px]">
-                <Accordion
-                  type="single"
-                  collapsible
-                  className="w-full mb-4"
+          <div className="text-left">
+            <Accordion
+              key={`table-separate-${tableFileIds.join('-')}`}
+              type="multiple"
+              defaultValue={tableFileIds}
+              className="space-y-3"
+            >
+              {tableFils.map((file) => (
+                <AccordionItem
+                  key={file.id}
+                  value={String(file.id)}
+                  className="overflow-hidden rounded-[10px] border border-[#e4e8ee] bg-white"
                 >
-                  {tableFils.map((file) => (
-                    <AccordionItem key={file.id} value={file.id} className="border border-gray/80 rounded-xl mb-2 hover:border-primary hover:shadow-lg">
-                      {/* 下拉触发按钮 */}
-                      <AccordionTrigger hoverable className="p-0 cursor-pointer relative overflow-hidden flex flex-row-reverse justify-between">
-                        <Tip content={file.fileName} align="start">
-                          <p className="flex gap-2 p-2 items-center relative">
-                            <FileIcon type='xls' className="size-[30px] min-w-8" />
-                            <span className="w-80 truncate text-left">{file.fileName.slice(0, 15)}{file.fileName.length > 15 ? '...' : ''}</span>
-                          </p>
-                        </Tip>
-                      </AccordionTrigger>
-                      <AccordionContent className="flex flex-col gap-4 p-4">
-                        <ItemForm data={file.excelRule} setData={(key, value) => {
-                          setRules((prev) => {
-                            return {
-                              ...prev,
-                              fileList: prev.fileList.map((item) => {
-                                return item.id === file.id ? {
-                                  ...item,
-                                  excelRule: {
-                                    ...item.excelRule,
-                                    [key]: value
-                                  }
-                                } : item
-                              })
-                            }
+                  <AccordionTrigger className="flex flex-row-reverse items-center justify-between gap-3 px-4 py-3 text-[14px] font-normal text-[#0f172a] hover:no-underline">
+                    <Tip content={file.fileName} align="start">
+                      <div className="flex min-w-0 items-center gap-2 text-left">
+                        <FileIcon type='xls' className="size-[30px] min-w-8" />
+                        <span className="min-w-0 truncate">{file.fileName}</span>
+                      </div>
+                    </Tip>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4 pt-0">
+                    <ItemForm data={file.excelRule} setData={(key, value) => {
+                      setRules((prev) => {
+                        return {
+                          ...prev,
+                          fileList: prev.fileList.map((item) => {
+                            return item.id === file.id ? {
+                              ...item,
+                              excelRule: {
+                                ...item.excelRule,
+                                [key]: value
+                              }
+                            } : item
                           })
-                        }} />
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </div>
-            </div>
+                        }
+                      })
+                    }} />
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         ) : (
           // 全局配置
-          <div className="space-y-4 p-4 border rounded-lg">
-            <h3 className="text-md font-bold text-gray-800 text-left"> {t('splitSettings')} </h3>
-            <div className="flex flex-col gap-4">
-              <ItemForm data={cellGeneralConfig} setData={(key, value) => setCellGeneralConfig(prev => ({
-                ...prev,
-                [key]: value
-              }))} />
+          <div className="space-y-4 text-left">
+            <div className="space-y-4 rounded-lg border p-4">
+              <div className="flex flex-col gap-4">
+                <ItemForm data={cellGeneralConfig} setData={(key, value) => setCellGeneralConfig(prev => ({
+                  ...prev,
+                  [key]: value
+                }))} />
+              </div>
             </div>
           </div>)}
       </div>

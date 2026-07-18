@@ -514,7 +514,6 @@ export type BsConfig = {
     enabled: boolean;
     image: string;
   };
-  sidebarSlogan: string;
   welcomeMessage: string;
   functionDescription: string;
   inputPlaceholder: string;
@@ -523,6 +522,8 @@ export type BsConfig = {
     id: string;
     name: string;
     displayName: string;
+    /** Optional admin-configured intro shown under the name in model pickers. */
+    description?: string;
   }>;
   voiceInput: {
     enabled: boolean;
@@ -543,10 +544,48 @@ export type BsConfig = {
     enabled: boolean;
     prompt: string;
   };
+  /** F035 (v2.6): gate for the task-mode 添加技能 entry. Absent on legacy
+   * deployments → treated as disabled (entry hidden). */
+  skillEntry?: {
+    enabled: boolean;
+  };
   host: '',
   linsight_invitation_code: boolean
   linsight_cache_dir: string
   waiting_list_url: string
+  /** 首钢部署专属命名空间；非首钢部署不出现该字段 */
+  shougang?: {
+    /** 派生自 prefix 是否非空；前端用于功能门控 (例如文件编码列) */
+    enabled?: boolean;
+    /** 文件编码前缀，例如 GF；为空则文件编码功能视为未启用 */
+    prefix?: string;
+    /** 部署标识，仅供 admin 阅读 YAML 时识别 */
+    deployment_label?: string;
+  };
+  /**
+   * Knowledge-space feature flags forwarded from the YAML `knowledge_space` section.
+   * When absent from the server response (legacy deployments), defaults apply.
+   */
+  knowledge_space?: {
+    /**
+     * Show the left-side directory tree inside the global space list sidebar.
+     * Default: true. Set to false in deployments that prefer the original flat layout.
+     */
+    tree_structured_directory_display?: boolean;
+    /**
+     * Custom display name for the knowledge-space AI assistant panel header.
+     * Empty/absent → fall back to the localized default ("AI 助手").
+     */
+    assistant_name?: string;
+  };
+  /**
+   * Subscription/channel AI assistant config forwarded from the workbench config.
+   * Absent on legacy deployments → name falls back to the localized default.
+   */
+  subscription?: {
+    /** Custom display name for the subscription AI assistant panel header. */
+    assistant_name?: string;
+  };
 };
 
 export const configSchema = z.object({

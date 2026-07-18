@@ -317,7 +317,7 @@ const PromptForm = () => {
               <div className="flex-1 overflow-hidden px-4">
                 <div className="mb-4 flex items-center gap-2 text-text-primary">
                   {isLoadingGroup ? (
-                    <Skeleton className="mb-1 flex h-10 w-32 font-bold sm:text-xl md:mb-0 md:h-12 md:text-2xl" />
+                    <Skeleton className="mb-1 flex h-10 w-32 font-bold sm:text-xl touch-desktop:mb-0 touch-desktop:h-12 touch-desktop:text-2xl" />
                   ) : (
                     <>
                       <PromptName

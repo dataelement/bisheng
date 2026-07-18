@@ -14,13 +14,11 @@ import {
   Label,
 } from '~/components/ui';
 import { useDeleteSharedLinkMutation, useSharedLinksQuery } from '~/hooks/queries/data-provider';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { useLocalize, useMediaQuery } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import DataTable from '~/components/ui/DataTable';
 import { NotificationSeverity } from '~/common';
-import { useToastContext } from '~/Providers';
+import { useToastContext, useConfirm } from '~/Providers';
 import { formatDate } from '~/utils';
-import { Spinner } from '~/components/svg';
 
 const PAGE_SIZE = 25;
 
@@ -35,9 +33,8 @@ const DEFAULT_PARAMS: SharedLinksListParams = {
 export default function SharedLinks() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [queryParams, setQueryParams] = useState<SharedLinksListParams>(DEFAULT_PARAMS);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch, isLoading } =
@@ -86,8 +83,6 @@ export default function SharedLinks() {
 
   const deleteMutation = useDeleteSharedLinkMutation({
     onSuccess: async () => {
-      setIsDeleteOpen(false);
-      setDeleteRow(null);
       await refetch();
     },
     onError: (error) => {
@@ -144,14 +139,22 @@ export default function SharedLinks() {
     await fetchNextPage();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  const [deleteRow, setDeleteRow] = useState<SharedLinkItem | null>(null);
-
-  const confirmDelete = useCallback(() => {
-    if (deleteRow) {
-      handleDelete([deleteRow]);
-    }
-    setIsDeleteOpen(false);
-  }, [deleteRow, handleDelete]);
+  const confirm = useConfirm();
+  const handleDeleteClick = useCallback(
+    async (row: SharedLinkItem) => {
+      const ok = await confirm({
+        variant: 'destructive',
+        title: localize('com_ui_delete_shared_link'),
+        description: `${localize('com_ui_delete_confirm')} "${row.title}"`,
+        confirmText: localize('com_ui_delete'),
+      });
+      if (!ok) {
+        return;
+      }
+      handleDelete([row]);
+    },
+    [confirm, localize, handleDelete],
+  );
 
   const columns = useMemo(
     () => [
@@ -247,10 +250,7 @@ export default function SharedLinks() {
                 <Button
                   variant="ghost"
                   className="h-8 w-8 p-0 hover:bg-surface-hover"
-                  onClick={() => {
-                    setDeleteRow(row.original);
-                    setIsDeleteOpen(true);
-                  }}
+                  onClick={() => handleDeleteClick(row.original)}
                   title={localize('com_ui_delete')}
                 >
                   <TrashIcon className="size-4" />
@@ -261,7 +261,7 @@ export default function SharedLinks() {
         ),
       },
     ],
-    [isSmallScreen, localize],
+    [isSmallScreen, localize, handleDeleteClick],
   );
 
   return (
@@ -293,31 +293,6 @@ export default function SharedLinks() {
             filterValue={queryParams.search}
           />
         </OGDialogContent>
-      </OGDialog>
-      <OGDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <OGDialogTemplate
-          showCloseButton={false}
-          title={localize('com_ui_delete_shared_link')}
-          className="max-w-[450px]"
-          main={
-            <>
-              <div className="flex w-full flex-col items-center gap-2">
-                <div className="grid w-full items-center gap-2">
-                  <Label htmlFor="dialog-confirm-delete" className="text-left text-sm font-medium">
-                    {localize('com_ui_delete_confirm')} <strong>{deleteRow?.title}</strong>
-                  </Label>
-                </div>
-              </div>
-            </>
-          }
-          selection={{
-            selectHandler: confirmDelete,
-            selectClasses: `bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white ${
-              deleteMutation.isLoading ? 'cursor-not-allowed opacity-80' : ''
-            }`,
-            selectText: deleteMutation.isLoading ? <Spinner /> : localize('com_ui_delete'),
-          }}
-        />
       </OGDialog>
     </div>
   );

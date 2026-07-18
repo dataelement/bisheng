@@ -5,9 +5,11 @@ import { atomWithLocalStorage } from './utils';
  * 推断并规范化默认语言，并清理不合法的本地存储
  */
 const defaultLang = (): string => {
-  const supported = new Set([
-    'en','ar','de','es','et','fr','it','pl','pt-BR','pt-PT','ru','ja','ka','sv','ko','vi','tr','nl','id','he','fi','zh-Hans','zh-Hant'
-  ]);
+  // APP_CONFIG.disableJa (config.js) — drop ja from the supported set so any
+  // saved/browser ja* value normalizes to null and falls back to en.
+  const jaDisabled = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);
+  const baseSupported = ['en','ar','de','es','et','fr','it','pl','pt-BR','pt-PT','ru','ja','ka','sv','ko','vi','tr','nl','id','he','fi','zh-Hans','zh-Hant'];
+  const supported = new Set(jaDisabled ? baseSupported.filter(l => l !== 'ja') : baseSupported);
   const regionMap: Record<string, string> = { 'pt-br': 'pt-BR', 'pt-pt': 'pt-PT' };
 
   const normalize = (lang?: string | null): string | null => {

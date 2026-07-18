@@ -20,6 +20,108 @@ customAxios.interceptors.request.use(function (config) {
     return Promise.reject(error);
 });
 
+// Best-effort flatten of any value into a user-readable string for a toast.
+// Required because the backend's status_message can be an array of pydantic
+// errors (e.g. validation failures), and `String([{...}])` renders as
+// "[object Object]". Picks .msg/.message/.detail/.status_message on objects,
+// recurses arrays, and JSON.stringify is the last resort.
+function coerceErrorMessage(value: any): string {
+    if (value === null || value === undefined) return ""
+    if (typeof value === "string") return value
+    if (typeof value === "number" || typeof value === "boolean") return String(value)
+    if (value instanceof Error) return value.message || String(value)
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => coerceErrorMessage(item))
+            .filter(Boolean)
+            .join("; ")
+    }
+    if (typeof value === "object") {
+        const pick = value.msg ?? value.message ?? value.detail ?? value.status_message
+        if (pick !== undefined) return coerceErrorMessage(pick)
+        try {
+            return JSON.stringify(value)
+        } catch {
+            return String(value)
+        }
+    }
+    return String(value)
+}
+
+// Backend unified envelope: { status_code, status_message, data }.
+// Picks the friendliest available message: i18n by status_code, then
+// status_message → i18n key map, finally the raw status_message.
+function decodeEnvelopeMessage(envelope: any) {
+    const statusCode = envelope?.status_code
+    const statusMessage = coerceErrorMessage(envelope?.status_message)
+    // Without defaultValue, an unregistered status_code renders as the literal
+    // key string "errors.<num>". Fall back to status_message so the user at
+    // least sees the backend's raw text instead of a debug-looking key.
+    const i18Msg = i18next.t(`errors.${statusCode}`, { ...(envelope?.data || {}), defaultValue: statusMessage })
+
+    const statusMessageKeyMap: Record<string, string> = {
+        "person id is required": "errors.21013",
+        "person id already exists": "errors.personIdAlreadyExists",
+        "person id already belongs to a deleted account. please restore the original account.": "errors.21020",
+        "department name already exists at this level": "errors.21001",
+        "department not found": "errors.21000",
+        "cannot delete department with children": "errors.21002",
+        "cannot delete department with members": "errors.21003",
+        "cannot move department to its own subtree": "errors.21004",
+        "third-party synced department is read-only": "errors.21005",
+        "root department already exists for this tenant": "errors.21006",
+        "user is already a member of this department": "errors.21007",
+        "user is not a member of this department": "errors.21008",
+        "no permission for this department operation": "errors.21009",
+        "password must be at least 8 characters and include upper, lower, digit and symbol": "errors.21010",
+        "one or more roles are not assignable in this department": "errors.21011",
+        "cannot delete user while data assets exist": "errors.21014",
+        "only local accounts may be deleted from organization management": "errors.21015",
+        "only archived departments can be permanently deleted": "errors.21016",
+        "archived departments cannot be modified": "errors.21017",
+        "cannot restore department while parent department is archived": "errors.21018",
+    }
+
+    const normalizedStatusMessage = statusMessage.trim().toLowerCase()
+    const mappedStatusMessageKey = statusMessageKeyMap[normalizedStatusMessage]
+    const i18MsgFromStatus = mappedStatusMessageKey
+        ? i18next.t(mappedStatusMessageKey, envelope?.data)
+        : null
+
+    const finalMsg = i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
+        ? i18MsgFromStatus
+        : (i18Msg !== `errors.${statusCode}` ? i18Msg : statusMessage)
+
+    // Defensive fallback: backend may leave Msg template like "{message}" or
+    // "{field_name}" unsubstituted (BaseErrorCode does not .format(**kwargs)).
+    // Surface envelope.data.message rather than the literal placeholder so the
+    // user sees a meaningful error instead of "{message}".
+    if (/^\{\w+\}$/.test(String(finalMsg).trim())) {
+        const fromData = coerceErrorMessage(envelope?.data?.message)
+        if (fromData) return fromData
+    }
+    return finalMsg
+}
+
+// Detect the unified envelope shape so we can apply the same message
+// decoding whether the backend returned HTTP 200 with status_code != 200
+// or a non-2xx HTTP status carrying the envelope (e.g. F011 mount).
+function isEnvelope(data: any): boolean {
+    return data && typeof data === "object" && typeof data.status_code === "number"
+}
+
+// License degradation (gateway returns 11001): throttle the toast so a burst of
+// failing business calls doesn't flood the user with duplicate notices.
+let lastLicenseExpiredToastAt = 0;
+function shouldToastLicenseExpired(): boolean {
+    const now = Date.now();
+    if (now - lastLicenseExpiredToastAt > 5000) {
+        lastLicenseExpiredToastAt = now;
+        return true;
+    }
+    return false;
+}
+
 customAxios.interceptors.response.use(function (response) {
     if (response.data instanceof Blob) return response.data;
     if (response.data.status_code === 200) {
@@ -28,9 +130,26 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 11010) {
         return response.data;
     }
+    // Silent mode: skip all global error handling, let the caller handle it
+    if (response.config.silent) {
+        return Promise.reject(response.data);
+    }
     const statusCode = response.data.status_code
-    const i18Msg = i18next.t(`errors.${statusCode}`, response.data.data)
-    const errorMessage = i18Msg === `errors.${statusCode}` ? response.data.status_message : i18Msg
+    const errorMessage = decodeEnvelopeMessage(response.data)
+
+    // License expired (gateway degradation): always toast (throttled) regardless of
+    // whether the caller wraps the call with captureAndAlertRequestErrorHoc, then
+    // reject(null) so the HoC doesn't double-toast. See feature 037.
+    if (statusCode === 11001) {
+        if (shouldToastLicenseExpired()) {
+            toast({
+                title: `${i18next.t('prompt')}`,
+                variant: 'error',
+                description: i18next.t('license.expired'),
+            })
+        }
+        return Promise.reject(null);
+    }
 
     // 密码过期，标记后透传给业务层处理
     if (statusCode === 10601) {
@@ -52,6 +171,11 @@ customAxios.interceptors.response.use(function (response) {
     }
     // 异地登录
     if (response.data.status_code === 10604) {
+        const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+        if (thirdPartyLoginUrl) {
+            window.location.href = thirdPartyLoginUrl;
+            return Promise.reject(errorMessage);
+        }
         requestInterceptor.remoteLoginFuc(response.data.status_message)
         return Promise.reject(errorMessage);
     }
@@ -59,20 +183,49 @@ customAxios.interceptors.response.use(function (response) {
 }, function (error) {
     console.error('application error :>> ', error);
     if (error.response?.status === 401) {
-        // cookie expires
+        // 必须在 remove 之前读取：从未持有 ws_token/UUR_INFO 时 401（如登录页拉 /user/info）不应整页跳转，否则会死循环。
+        const hadSession =
+            !!localStorage.getItem('ws_token')
+            || !!localStorage.getItem('UUR_INFO');
+        // cookie / Bearer 失效（含 token_version 失效、账号禁用）
+        localStorage.removeItem('ws_token');
         console.error('登录过期 :>> ');
-        const UUR_INFO = 'UUR_INFO'
-        const infoStr = localStorage.getItem(UUR_INFO)
-        localStorage.removeItem(UUR_INFO)
-        infoStr && location.reload()
+        const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+        if (thirdPartyLoginUrl) {
+            localStorage.removeItem('UUR_INFO');
+            window.location.href = thirdPartyLoginUrl;
+            return Promise.reject('登录过期');
+        }
+        localStorage.removeItem('UUR_INFO');
+        // 仅「曾有过登录态」时再回根路径，避免深路径 URL 上叠登录页且状态错乱。
+        if (hadSession) {
+            const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+            window.location.href = `${base}/`;
+        }
         return Promise.reject('登录过期,请重新登录');
     }
     if (error.code === "ERR_CANCELED") return Promise.reject(error);
+    // Silent mode: skip toast, let the caller handle it
+    if (error.config?.silent) return Promise.reject(error);
+    // Backend may return our unified envelope on HTTP 4xx/5xx (e.g. F011
+    // tenant mount maps TenantTreeNestingForbiddenError → HTTP 400 with a
+    // structured body). Decode the envelope before falling back to the raw
+    // axios message so users see a friendly i18n string.
+    const envelope = error.response?.data
+    if (isEnvelope(envelope)) {
+        const errorMessage = decodeEnvelopeMessage(envelope)
+        toast({
+            title: `${i18next.t('prompt')}`,
+            variant: 'error',
+            description: coerceErrorMessage(errorMessage),
+        })
+        return Promise.reject(null);
+    }
     // app 弹窗
     toast({
         title: `${i18next.t('prompt')}`,
         variant: 'error',
-        description: error.message
+        description: coerceErrorMessage(error?.message || error)
     })
     // window.errorAlerts([error.message])
     return Promise.reject(null);
@@ -96,7 +249,7 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         toast({
             title: `${i18next.t('prompt')}`,
             variant: 'error',
-            description: typeof error === 'string' ? error : JSON.stringify(error)
+            description: coerceErrorMessage(error)
         })
         console.error('逻辑异常 :>> ', error);
         return false

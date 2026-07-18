@@ -5,6 +5,12 @@ from typing_extensions import Self
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from ..models import LLMModel, LLMServer, LLMDao
+from ..share_fallback import (
+    aget_model_by_id_with_share_fallback,
+    aget_server_by_id_with_share_fallback,
+    get_model_by_id_with_share_fallback,
+    get_server_by_id_with_share_fallback,
+)
 
 
 class BishengBase(BaseModel):
@@ -38,24 +44,29 @@ class BishengBase(BaseModel):
 
     @classmethod
     async def get_model_server_info(cls, model_id: int | None) -> tuple[LLMModel | None, LLMServer | None]:
-        model_info = None
-        server_info = None
+        # Root-share fallback handles the system-default case where the
+        # model_id resolved via tenant_system_model_config points to a
+        # Root-owned row that the child's tenant filter would otherwise hide.
         if not model_id:
-            return model_info, server_info
-        model_info = await LLMDao.aget_model_by_id(model_id, cache=True)
-        if model_info:
-            server_info = await LLMDao.aget_server_by_id(model_info.server_id, cache=True)
+            return None, None
+        model_info = await aget_model_by_id_with_share_fallback(model_id, cache=True)
+        if not model_info:
+            return None, None
+        server_info = await aget_server_by_id_with_share_fallback(
+            model_info.server_id, cache=True,
+        )
         return model_info, server_info
 
     @classmethod
     def get_model_server_info_sync(cls, model_id: int | None) -> tuple[LLMModel | None, LLMServer | None]:
-        model_info = None
-        server_info = None
         if not model_id:
-            return model_info, server_info
-        model_info = LLMDao.get_model_by_id(model_id, cache=True)
-        if model_info:
-            server_info = LLMDao.get_server_by_id(model_info.server_id, cache=True)
+            return None, None
+        model_info = get_model_by_id_with_share_fallback(model_id, cache=True)
+        if not model_info:
+            return None, None
+        server_info = get_server_by_id_with_share_fallback(
+            model_info.server_id, cache=True,
+        )
         return model_info, server_info
 
     async def update_model_status(self, status: int, remark: str = ''):

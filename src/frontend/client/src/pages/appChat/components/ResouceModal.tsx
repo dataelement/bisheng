@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "~/api/apps";
 import { Dialog, DialogContent } from "~/components";
 import FileViewPanne from "~/components/PreviewFile";
+import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { downloadFile } from "~/utils";
@@ -47,7 +48,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     }, [])
 
     return <div className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto" style={{ display: fullScreen ? 'none' : 'block' }}>
-        <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
+        <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}></p>
     </div>
 }
 
@@ -149,9 +150,9 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 text-sm">
-                    {words.map((str, i) => <div key={str} className="badge rounded-md px-2 badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)] dark:text-slate-50">{str}<span className="cursor-pointer font-thin" onClick={() => onClose(i)}>x</span></div>)}
+                    {words.map((str, i) => <div key={str} className="badge rounded-md px-2 badge-info h-[auto] gap-2 text-gray-600 bg-[rgb(var(--brand-500)/0.15)] dark:text-slate-50">{str}<span className="cursor-pointer font-thin" onClick={() => onClose(i)}>x</span></div>)}
                     {
-                        editCustomKey ? <div className="badge badge-info cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
+                        editCustomKey ? <div className="badge badge-info cursor-pointer bg-[rgb(var(--brand-500)/0.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
                             onKeyDown={(event) => {
                                 if (event.key === "Enter" && !event.shiftKey) {
                                     handleAddKeyword(inputRef.current.value);
@@ -160,7 +161,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             onBlur={() => {
                                 handleAddKeyword(inputRef.current.value);
                             }}></input></div> :
-                            <div className="badge badge-info rounded-md px-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('com_source_modal_add_custom')}</span></div>
+                            <div className="badge badge-info rounded-md px-2 cursor-pointer bg-[rgb(var(--brand-500)/0.86)] text-gray-50" onClick={handleOpenInput}><span>{t('com_source_modal_add_custom')}</span></div>
                     }
                 </div>
                 {/* files */}
@@ -174,7 +175,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                     _file.parse_type === 'uns' && _file.fileUrl && <Tooltip delayDuration={200}>
                                         <TooltipTrigger >
                                             <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
-                                                <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
+                                                <Import className="text-blue-500" size={22} strokeWidth={1.5}></Import>
                                             </a>
                                         </TooltipTrigger>
 
@@ -191,7 +192,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                     _file.originUrl && <Tooltip delayDuration={200}>
                                         <TooltipTrigger >
                                             <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
-                                                <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
+                                                <Import className="text-blue-500" size={22} strokeWidth={1.5}></Import>
                                             </a>
                                         </TooltipTrigger>
 
@@ -247,7 +248,7 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     return <div className="relative">
         {
             loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <LoadingIcon />
+                <LoadingIcon className="size-20" />
             </div>
         }
         <Anwser

@@ -1,16 +1,27 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict, Any, Literal
+from typing import Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text, and_
-from sqlmodel import Field, delete, func, select, update, col
+from sqlalchemy import Column, DateTime, Integer, String, Text, or_, text
+from sqlmodel import Field, col, delete, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
+
+KNOWLEDGE_FILE_NAME_MAX_LENGTH = 500
+KNOWLEDGE_REMARK_MAX_LENGTH = 4096
+
+
+def _limit_remark(remark: str | None) -> str | None:
+    """Keep persisted knowledge remarks within the configured column length."""
+    if remark is None:
+        return None
+    return remark[:KNOWLEDGE_REMARK_MAX_LENGTH]
 
 
 class KnowledgeFileStatus(int, Enum):
@@ -20,6 +31,7 @@ class KnowledgeFileStatus(int, Enum):
     REBUILDING = 4  # Rebuilding
     WAITING = 5  # In queue:
     TIMEOUT = 6  # Super24Hour not parsed, parsing timeout
+    VIOLATION = 7  # Content safety violation
 
 
 class QAStatus(Enum):
@@ -30,20 +42,30 @@ class QAStatus(Enum):
 
 
 class ParseType(Enum):
-    LOCAL = 'local'  # Local mode resolution
-    UNS = 'uns'  # unsService resolution, all converted topdfDoc.
+    LOCAL = "local"  # Local mode resolution
+    UNS = "uns"  # unsService resolution, all converted topdfDoc.
 
     # 1.3.0After the enumeration, the previous belongs to the file parsed on the version
-    ETL4LM = 'etl4lm'  # etl4lmService Insights, includingpdfLayout Analysis for
-    UN_ETL4LM = 'un_etl4lm'  # Nonetl4lmService parsing, nobboxContent, only source files andmdDoc.
-    MINERU = 'mineru'
-    PADDLE_OCR = 'paddle_ocr'
+    ETL4LM = "etl4lm"  # etl4lmService Insights, includingpdfLayout Analysis for
+    UN_ETL4LM = "un_etl4lm"  # Nonetl4lmService parsing, nobboxContent, only source files andmdDoc.
+    MINERU = "mineru"
+    PADDLE_OCR = "paddle_ocr"
 
 
 class FileSource(Enum):
-    UPLOAD = 'upload'  # user upload
-    CHANNEL = 'channel'
-    SPACE_UPLOAD = 'space_upload'
+    UPLOAD = "upload"  # user upload
+    CHANNEL = "channel"
+    SPACE_UPLOAD = "space_upload"
+    AUDIO_TRANSCRIPT = "audio_transcript"
+    VIDEO_TRANSCRIPT = "video_transcript"
+    WEB_LINK = "web_link"
+
+
+PORTAL_USER_UPLOAD_FILE_SOURCES = (
+    FileSource.SPACE_UPLOAD.value,
+    FileSource.AUDIO_TRANSCRIPT.value,
+    FileSource.VIDEO_TRANSCRIPT.value,
+)
 
 
 class FileType(int, Enum):
@@ -52,83 +74,117 @@ class FileType(int, Enum):
 
 
 class KnowledgeFileBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(default=None, index=True)
-    user_name: Optional[str] = Field(default=None, index=True)
+    user_id: int | None = Field(default=None, index=True)
+    user_name: str | None = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
-    thumbnails: Optional[str] = Field(default=None, description='File thumbnails in Stored object name')
-    file_name: str = Field(max_length=200, index=True)
-    file_type: int = Field(default=FileType.FILE.value, description='File type. 0: dir; 1: file')
-    file_source: Optional[str] = Field(default=FileSource.UPLOAD.value, description='File source')
-    level: Optional[int] = Field(default=0)
-    file_level_path: Optional[str] = Field(default=None, index=True)
-    abstract: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    file_size: Optional[int] = Field(default=None, index=False, description='File size inbytes')
-    md5: Optional[str] = Field(default=None, index=False)
-    parse_type: Optional[str] = Field(default=ParseType.LOCAL.value, index=False,
-                                      description='Files parsed in what mode')
-    split_rule: Optional[str] = Field(default=None, sa_column=Column(Text), description='Files parsed in what mode')
-    preview_file_object_name: Optional[str] = Field(default=None, index=True, description='Preview File Object name')
-    bbox_object_name: Optional[str] = Field(default='', description='bboxFiles inminioStored object name')
-    status: Optional[int] = Field(default=KnowledgeFileStatus.WAITING.value)
-    object_name: Optional[str] = Field(default=None, index=False, description='Files in Stored object name')
-    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
-                                                    description='User-defined metadata')
-    remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
-    updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
-    updater_name: Optional[str] = Field(default=None, index=True)
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    thumbnails: str | None = Field(default=None, description="File thumbnails in Stored object name")
+    file_name: str = Field(max_length=KNOWLEDGE_FILE_NAME_MAX_LENGTH, index=True)
+    file_type: int = Field(default=FileType.FILE.value, description="File type. 0: dir; 1: file")
+    file_source: str | None = Field(default=FileSource.UPLOAD.value, description="File source")
+    level: int | None = Field(default=0)
+    file_level_path: str | None = Field(default=None, index=True)
+    abstract: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    file_size: int | None = Field(default=None, index=False, description="File size inbytes")
+    md5: str | None = Field(default=None, index=False)
+    parse_type: str | None = Field(default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode")
+    split_rule: str | None = Field(default=None, sa_column=Column(Text), description="Files parsed in what mode")
+    preview_file_object_name: str | None = Field(default=None, index=True, description="Preview File Object name")
+    bbox_object_name: str | None = Field(default="", description="bboxFiles inminioStored object name")
+    status: int | None = Field(default=KnowledgeFileStatus.WAITING.value)
+    object_name: str | None = Field(default=None, index=False, description="Files in Stored object name")
+    user_metadata: dict[str, Any] | None = Field(
+        default_factory=dict, sa_column=Column(JsonType, nullable=True), description="User-defined metadata"
+    )
+    remark: str | None = Field(default="", sa_column=Column(String(length=KNOWLEDGE_REMARK_MAX_LENGTH)))
+    file_encoding: str | None = Field(
+        default=None,
+        max_length=64,
+        sa_column=Column(String(64), nullable=True),
+        description='File encoding for shougang deployment, e.g. "GF-STD-SC-20260500000001". '
+        "NULL when shougang is disabled or encoding generation has not run yet.",
+    )
+    simhash: str | None = Field(
+        default=None,
+        max_length=16,
+        sa_column=Column(String(16), nullable=True),
+        description="64-bit SimHash hex (16 chars). Computed after parse. NULL when not yet computed.",
+    )
+    similar_status: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+        description="0=no similar / 1=pending (similar detected) / 2=resolved (associated or dismissed).",
+    )
+    updater_id: int | None = Field(default=None, index=True, description="Last updated by userID")
+    updater_name: str | None = Field(default=None, index=True)
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class QAKnowledgeBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(default=None, index=True)
+    user_id: int | None = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
-    questions: List[str] = Field(index=False)
+    questions: list[str] = Field(index=False)
     answers: str = Field(index=False)
-    source: Optional[int] = Field(default=0, index=False,
-                                  description='0: Unknown 1: Manual2: Audit, 3: api, 4: Batch import')
-    status: Optional[int] = Field(default=1, index=False,
-                                  description='1: Activate0: Close, the user manually closes;2: Sedang diproses3Failed to insert')
-    extra_meta: Optional[str] = Field(default=None, index=False)
-    remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    source: int | None = Field(
+        default=0, index=False, description="0: Unknown 1: Manual2: Audit, 3: api, 4: Batch import"
+    )
+    status: int | None = Field(
+        default=1,
+        index=False,
+        description="1: Activate0: Close, the user manually closes;2: Sedang diproses3Failed to insert",
+    )
+    extra_meta: str | None = Field(default=None, index=False)
+    remark: str | None = Field(default="", sa_column=Column(String(length=KNOWLEDGE_REMARK_MAX_LENGTH)))
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
-    @field_validator('questions')
+    @field_validator("questions")
     @classmethod
     def validate_json(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
-        if not isinstance(v, List):
-            raise ValueError('question must be a valid JSON')
+        if not isinstance(v, list):
+            raise ValueError("question must be a valid JSON")
 
         return v
 
-    @field_validator('answers')
+    @field_validator("answers")
     @classmethod
     def validate_answer(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
-        if isinstance(v, List):
+        if isinstance(v, list):
             return json.dumps(v, ensure_ascii=False)
 
         return v
 
 
 class KnowledgeFile(KnowledgeFileBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
 
 class QAKnowledge(QAKnowledgeBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
-    answers: Optional[str] = Field(default=None, sa_column=Column(Text))
+    id: int | None = Field(default=None, primary_key=True)
+    questions: list[str] | None = Field(default=None, sa_column=Column(JsonType))
+    answers: str | None = Field(default=None, sa_column=Column(Text))
 
 
 class KnowledgeFileRead(KnowledgeFileBase):
@@ -141,20 +197,20 @@ class KnowledgeFileCreate(KnowledgeFileBase):
 
 class QAKnowledgeUpsert(QAKnowledgeBase):
     """Support modification"""
-    id: Optional[int] = None
-    answers: Optional[List[str] | str] = None
+
+    id: int | None = None
+    answers: list[str] | str | None = None
 
 
 class KnowledgeFileDao(KnowledgeFileBase):
-
     @classmethod
-    async def query_by_id(cls, file_id: int) -> Optional[KnowledgeFile]:
+    async def query_by_id(cls, file_id: int) -> KnowledgeFile | None:
         async with get_async_db_session() as session:
             result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))
             return result.scalars().first()
 
     @classmethod
-    def query_by_id_sync(cls, file_id: int) -> Optional[KnowledgeFile]:
+    def query_by_id_sync(cls, file_id: int) -> KnowledgeFile | None:
         with get_sync_db_session() as session:
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id == file_id)).first()
 
@@ -162,29 +218,36 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
         offset = (page - 1) * page_size
         with get_sync_db_session() as session:
-            return session.query(KnowledgeFile.id, KnowledgeFile.object_name,
-                                 KnowledgeFile.preview_file_object_name,
-                                 KnowledgeFile.bbox_object_name,
-                                 KnowledgeFile.thumbnails).filter(
-                KnowledgeFile.knowledge_id == knowledge_id).order_by(
-                KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
+            return (
+                session.query(
+                    KnowledgeFile.id,
+                    KnowledgeFile.object_name,
+                    KnowledgeFile.preview_file_object_name,
+                    KnowledgeFile.bbox_object_name,
+                    KnowledgeFile.thumbnails,
+                )
+                .filter(KnowledgeFile.knowledge_id == knowledge_id)
+                .order_by(KnowledgeFile.id.asc())
+                .offset(offset)
+                .limit(page_size)
+                .all()
+            )
 
     @classmethod
     def count_file_by_knowledge_id(cls, knowledge_id: int):
         with get_sync_db_session() as session:
-            return session.query(func.count(
-                KnowledgeFile.id)).filter(KnowledgeFile.knowledge_id == knowledge_id).scalar()
+            return (
+                session.query(func.count(KnowledgeFile.id)).filter(KnowledgeFile.knowledge_id == knowledge_id).scalar()
+            )
 
     @classmethod
     async def async_count_file_by_knowledge_id(cls, knowledge_id: int):
-        statement = select(func.count()).where(
-            KnowledgeFile.knowledge_id == knowledge_id
-        )
+        statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
-    async def async_count_success_files_batch(cls, knowledge_ids: List[int]) -> dict:
+    async def async_count_success_files_batch(cls, knowledge_ids: list[int]) -> dict:
         """Async: Batch count SUCCESS files for multiple knowledge spaces.
 
         Returns a dict mapping knowledge_id (int) -> success file count.
@@ -192,7 +255,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if not knowledge_ids:
             return {}
         statement = (
-            select(KnowledgeFile.knowledge_id, func.count().label('cnt'))
+            select(KnowledgeFile.knowledge_id, func.count().label("cnt"))
             .where(
                 KnowledgeFile.knowledge_id.in_(knowledge_ids),
                 KnowledgeFile.file_type == 1,
@@ -205,14 +268,44 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return {row[0]: row[1] for row in rows}
 
     @classmethod
-    def delete_batch(cls, file_ids: List[int]) -> bool:
+    async def async_count_root_files_batch(cls, knowledge_ids: list[int]) -> dict:
+        """Async: Batch count root-directory files for multiple knowledge spaces.
+
+        Counts files (file_type == 1) sitting directly in the space root —
+        file_level_path is "" or NULL — across all statuses, grouped by
+        knowledge_id. Folders and nested (sub-folder) files are excluded.
+        This is a raw count: it intentionally skips per-file ReBAC filtering,
+        matching the count semantics already used by the in-space folder badges.
+
+        Returns a dict mapping knowledge_id (int) -> root file count.
+        """
+        if not knowledge_ids:
+            return {}
+        statement = (
+            select(KnowledgeFile.knowledge_id, func.count().label("cnt"))
+            .where(
+                KnowledgeFile.knowledge_id.in_(knowledge_ids),
+                KnowledgeFile.file_type == 1,
+                or_(
+                    KnowledgeFile.file_level_path == "",
+                    KnowledgeFile.file_level_path.is_(None),
+                ),
+            )
+            .group_by(KnowledgeFile.knowledge_id)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {row[0]: row[1] for row in rows}
+
+    @classmethod
+    def delete_batch(cls, file_ids: list[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
             session.commit()
             return True
 
     @classmethod
-    async def adelete_batch(cls, file_ids: List[int]) -> bool:
+    async def adelete_batch(cls, file_ids: list[int]) -> bool:
         async with get_async_db_session() as session:
             await session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
             await session.commit()
@@ -220,6 +313,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def add_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         with get_sync_db_session() as session:
             session.add(knowledge_file)
             session.commit()
@@ -227,7 +321,42 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_file
 
     @classmethod
+    def get_user_upload_total_file_size(cls, user_id: int) -> int:
+        """Total bytes for active files uploaded by a user."""
+        statement = select(func.sum(KnowledgeFile.file_size)).where(
+            KnowledgeFile.user_id == user_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status.in_(
+                [
+                    KnowledgeFileStatus.PROCESSING.value,
+                    KnowledgeFileStatus.SUCCESS.value,
+                    KnowledgeFileStatus.WAITING.value,
+                ]
+            ),
+        )
+        with get_sync_db_session() as session:
+            return session.scalar(statement) or 0
+
+    @classmethod
+    async def aget_user_upload_total_file_size(cls, user_id: int) -> int:
+        """Async total bytes for active files uploaded by a user."""
+        statement = select(func.sum(KnowledgeFile.file_size)).where(
+            KnowledgeFile.user_id == user_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status.in_(
+                [
+                    KnowledgeFileStatus.PROCESSING.value,
+                    KnowledgeFileStatus.SUCCESS.value,
+                    KnowledgeFileStatus.WAITING.value,
+                ]
+            ),
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement) or 0
+
+    @classmethod
     async def aadd_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         async with get_async_db_session() as session:
             session.add(knowledge_file)
             await session.commit()
@@ -236,6 +365,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def update(cls, knowledge_file):
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         with get_sync_db_session() as session:
             session.add(knowledge_file)
             session.commit()
@@ -244,6 +374,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_update(cls, knowledge_file):
+        knowledge_file.remark = _limit_remark(knowledge_file.remark)
         async with get_async_db_session() as session:
             session.add(knowledge_file)
             await session.commit()
@@ -251,52 +382,85 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_file
 
     @classmethod
-    async def async_update_batch(cls, knowledge_files: List[KnowledgeFile]) -> bool:
+    async def async_update_batch(cls, knowledge_files: list[KnowledgeFile]) -> bool:
         if not knowledge_files:
             return False
+        for knowledge_file in knowledge_files:
+            knowledge_file.remark = _limit_remark(knowledge_file.remark)
         async with get_async_db_session() as session:
             session.add_all(knowledge_files)
             await session.commit()
             return True
 
     @classmethod
-    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
-        """ Batch update file status """
-        statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
-                                                                                       remark=reason)
+    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str | None = None):
+        """Batch update file status"""
+        statement = (
+            update(KnowledgeFile)
+            .where(KnowledgeFile.id.in_(file_ids))
+            .values(status=status.value, remark=_limit_remark(reason))
+        )
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
-    async def aupdate_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
-        """ Batch update file status """
-        statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
-                                                                                       remark=reason)
+    async def aupdate_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str | None = None):
+        """Batch update file status"""
+        statement = (
+            update(KnowledgeFile)
+            .where(KnowledgeFile.id.in_(file_ids))
+            .values(status=status.value, remark=_limit_remark(reason))
+        )
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
 
     @classmethod
-    def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    def get_file_by_condition(cls, knowledge_id: int, md5_: str | None = None, file_name: str | None = None):
         with get_sync_db_session() as session:
             sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-            if md5_:
+            if md5_ and file_name:
+                sql = sql.where(or_(KnowledgeFile.md5 == md5_, KnowledgeFile.file_name == file_name))
+            elif md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
-            if file_name:
+            elif file_name:
                 sql = sql.where(KnowledgeFile.file_name == file_name)
             return session.exec(sql).all()
 
     @classmethod
-    async def get_repeat_file(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    async def get_repeat_file(cls, knowledge_id: int, md5_: str | None = None, file_name: str | None = None):
+        # Mirror the list-rendering rule: hide files that are no longer the
+        # primary version of any chain. Legacy files (no version row at all)
+        # still count as visible. Otherwise an orphaned non-primary leftover
+        # from a botched set_primary / link flow would invisibly block uploads
+        # of the same md5 because the UI says "nothing here" but the dup
+        # checker can still see it.
+        from sqlalchemy import exists
+
+        from bisheng.knowledge.domain.models.knowledge_document_version import (
+            KnowledgeDocumentVersion,
+        )
+
+        primary_version = (
+            select(KnowledgeDocumentVersion.id)
+            .where(KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id)
+            .where(KnowledgeDocumentVersion.is_primary == True)  # noqa: E712
+        )
+        any_version = select(KnowledgeDocumentVersion.id).where(
+            KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id
+        )
+
         sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-        if md5_ and file_name:
-            sql = sql.where(
-                or_(
-                    KnowledgeFile.md5 == md5_,
-                    KnowledgeFile.file_name == file_name
-                )
+        sql = sql.where(
+            or_(
+                ~exists(any_version),  # legacy file outside the version system
+                exists(primary_version),  # current primary of its chain
             )
+        )
+
+        if md5_ and file_name:
+            sql = sql.where(or_(KnowledgeFile.md5 == md5_, KnowledgeFile.file_name == file_name))
         elif md5_:
             sql = sql.where(KnowledgeFile.md5 == md5_)
         elif file_name:
@@ -306,25 +470,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return result.first()
 
     @classmethod
-    def select_list(cls, file_ids: List[int]):
+    def select_list(cls, file_ids: list[int]):
         if not file_ids:
             return []
         with get_sync_db_session() as session:
-            knowledge_files = session.exec(
-                select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+            knowledge_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
         if not knowledge_files:
-            raise ValueError('Doc.IDDoes not exist')
+            raise ValueError("Doc.IDDoes not exist")
         return knowledge_files
 
     @classmethod
-    def get_file_by_ids(cls, file_ids: List[int]) -> List[KnowledgeFile]:
+    def get_file_by_ids(cls, file_ids: list[int]) -> list[KnowledgeFile]:
         if not file_ids:
             return []
         with get_sync_db_session() as session:
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     @classmethod
-    async def aget_file_by_ids(cls, file_ids: List[int]) -> List[KnowledgeFile]:
+    async def aget_file_by_ids(cls, file_ids: list[int]) -> list[KnowledgeFile]:
         if not file_ids:
             return []
         stat = select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))
@@ -332,26 +495,46 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return (await session.exec(stat)).all()
 
     @classmethod
-    def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
-                                      file_ids: List[int] = None, file_level_path: str = None,
-                                      extra_file_ids: List[int] = None,
-                                      *, order_by: str = None, order_field: str = None, order_sort: str = "desc"):
+    def _build_file_filters_statement(
+        cls,
+        statement,
+        file_name: str = None,
+        status: list[int] = None,
+        file_ids: list[int] = None,
+        file_level_path: str = None,
+        extra_file_ids: list[int] = None,
+        *,
+        order_by: str = None,
+        order_field: str = None,
+        order_sort: str = "desc",
+    ):
         and_statement = []
-        if file_name:
-            and_statement.append(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status:
             and_statement.append(KnowledgeFile.status.in_(status))
         if file_ids:
             and_statement.append(KnowledgeFile.id.in_(file_ids))
         if file_level_path:
             and_statement.append(KnowledgeFile.file_level_path.like(f"{file_level_path}%"))
-        if extra_file_ids:
-            statement = statement.where(or_(KnowledgeFile.id.in_(extra_file_ids), and_(*and_statement)))
-        else:
-            statement = statement.where(*and_statement)
+
+        keyword_statement = None
+        if file_name and extra_file_ids:
+            keyword_statement = or_(
+                KnowledgeFile.file_name.like(f"%{file_name}%"),
+                KnowledgeFile.id.in_(extra_file_ids),
+            )
+        elif file_name:
+            keyword_statement = KnowledgeFile.file_name.like(f"%{file_name}%")
+        elif extra_file_ids:
+            keyword_statement = KnowledgeFile.id.in_(extra_file_ids)
+
+        if keyword_statement is not None:
+            and_statement.append(keyword_statement)
+
+        statement = statement.where(*and_statement)
 
         if order_field and order_sort:
             from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+
             statement = statement.order_by(text(SpaceFileDao.order_field_text(order_field, order_sort)))
         elif order_by == "file_type":
             statement = statement.order_by(col(KnowledgeFile.file_type).asc())
@@ -360,13 +543,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return statement
 
     @classmethod
-    def get_file_by_filters(cls,
-                            knowledge_id: int,
-                            file_name: str = None,
-                            status: List[int] = None,
-                            page: int = 0,
-                            page_size: int = 0,
-                            file_ids: List[int] = None) -> List[KnowledgeFile]:
+    def get_file_by_filters(
+        cls,
+        knowledge_id: int,
+        file_name: str = None,
+        status: list[int] = None,
+        page: int = 0,
+        page_size: int = 0,
+        file_ids: list[int] = None,
+    ) -> list[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
         if page and page_size:
@@ -375,60 +560,96 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
-                                   file_ids: List[int] = None, extra_file_ids: List[int] = None,
-                                   file_level_path: str = None, order_by: str = None,
-                                   order_field: str = None, order_sort: str = "desc",
-                                   *, page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
+    async def aget_file_by_filters(
+        cls,
+        knowledge_id: int,
+        file_name: str = None,
+        status: list[int] = None,
+        file_ids: list[int] = None,
+        extra_file_ids: list[int] = None,
+        file_level_path: str = None,
+        order_by: str = None,
+        order_field: str = None,
+        order_sort: str = "desc",
+        *,
+        page: int = 0,
+        page_size: int = 0,
+        exclude_file_ids: list[int] | None = None,
+        id_tiebreaker: bool = False,
+    ) -> list[KnowledgeFile]:
+        """Offset-paginated file filter query.
+
+        ``id_tiebreaker``: append ``, id ASC`` to the ORDER BY so the row order is
+        fully deterministic. F040 space-search batch-scans this query in
+        successive OFFSET windows; without a unique tie-breaker, rows sharing the
+        same sort key (file_type / ext_rank / update_time) could be re-ordered
+        across batches, causing duplicates or skips. Off by default so existing
+        callers keep their current ordering.
+        """
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
-                                                      extra_file_ids=extra_file_ids, order_by=order_by,
-                                                      order_field=order_field, order_sort=order_sort)
+        statement = cls._build_file_filters_statement(
+            statement,
+            file_name,
+            status,
+            file_ids,
+            file_level_path,
+            extra_file_ids=extra_file_ids,
+            order_by=order_by,
+            order_field=order_field,
+            order_sort=order_sort,
+        )
+        if id_tiebreaker:
+            statement = statement.order_by(col(KnowledgeFile.id).asc())
+        if exclude_file_ids:
+            statement = statement.where(col(KnowledgeFile.id).notin_(exclude_file_ids))
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
     @classmethod
-    async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
-                                     file_ids: List[int] = None, extra_file_ids: List[int] = None,
-                                     file_level_path: str = None) -> int:
+    async def acount_file_by_filters(
+        cls,
+        knowledge_id: int,
+        file_name: str = None,
+        status: list[int] = None,
+        file_ids: list[int] = None,
+        extra_file_ids: list[int] = None,
+        file_level_path: str = None,
+    ) -> int:
         statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
-        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
-                                                      extra_file_ids=extra_file_ids)
+        statement = cls._build_file_filters_statement(
+            statement, file_name, status, file_ids, file_level_path, extra_file_ids=extra_file_ids
+        )
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
-    def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
+    def get_files_by_multiple_status(cls, knowledge_id: int, status_list: list[int]) -> list[KnowledgeFile]:
         """
         Based on Knowledge BaseIDand status list query file
-        
+
         Args:
             knowledge_id: The knowledge base uponID
             status_list: List of status values
-            
+
         Returns:
             List[KnowledgeFile]: Matching Files List
         """
         statement = select(KnowledgeFile).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.status.in_(status_list)
+            KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.status.in_(status_list)
         )
 
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
-    def count_file_by_filters(cls,
-                              knowledge_id: int,
-                              file_name: str = None,
-                              status: List[int] = None,
-                              file_ids: List[int] = None) -> int:
-        statement = select(func.count(
-            KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
+    def count_file_by_filters(
+        cls, knowledge_id: int, file_name: str = None, status: list[int] = None, file_ids: list[int] = None
+    ) -> int:
+        statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
-            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+            statement = statement.where(KnowledgeFile.file_name.like(f"%{file_name}%"))
         if status:
             statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
@@ -437,15 +658,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.scalar(statement)
 
     @classmethod
-    async def async_count_file_by_filters(cls,
-                                          knowledge_id: int,
-                                          file_name: str = None,
-                                          status: List[int] = None,
-                                          file_ids: List[int] = None) -> int:
-        statement = select(func.count(
-            KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
+    async def async_count_file_by_filters(
+        cls, knowledge_id: int, file_name: str = None, status: list[int] = None, file_ids: list[int] = None
+    ) -> int:
+        statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
-            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+            statement = statement.where(KnowledgeFile.file_name.like(f"%{file_name}%"))
         if status:
             statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
@@ -455,14 +673,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return result.scalar_one()
 
     @classmethod
-    def get_knowledge_ids_by_name(cls, file_name: str) -> List[int]:
-        statement = select(KnowledgeFile.knowledge_id).where(KnowledgeFile.file_name.like(f'%{file_name}%')).group_by(
-            KnowledgeFile.knowledge_id)
+    def get_knowledge_ids_by_name(cls, file_name: str) -> list[int]:
+        statement = (
+            select(KnowledgeFile.knowledge_id)
+            .where(KnowledgeFile.file_name.like(f"%{file_name}%"))
+            .group_by(KnowledgeFile.knowledge_id)
+        )
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
-    def update_status_bulk(cls, file_ids: List[int], status: KnowledgeFileStatus, remark: str = "") -> None:
+    def update_status_bulk(cls, file_ids: list[int], status: KnowledgeFileStatus, remark: str = "") -> None:
         """
         Batch update file status
 
@@ -476,53 +697,48 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if not file_ids:
             return
 
-        statement = (
-            update(KnowledgeFile)
-            .where(col(KnowledgeFile.id).in_(file_ids))
-        )
+        statement = update(KnowledgeFile).where(col(KnowledgeFile.id).in_(file_ids))
 
         statement = statement.values(status=status.value)
 
         if remark:
-            statement = statement.values(remark=remark)
+            statement = statement.values(remark=_limit_remark(remark))
 
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
-    def filter_file_by_metadata_fields(cls, knowledge_id: int, logical: Literal["and", "or"],
-                                       metadata_filters: List[Dict[str, Dict[str, Any]]]) -> List[int]:
-        """
-        Filter knowledge files based on user-defined metadata fields
-        :param knowledge_id: The knowledge base uponID
-        :param logical: Logical operators, supporting "AND" OR "OR"
-        :param metadata_filters: User-defined metadata fields and their corresponding values
-          [{
-            field_a: {
-                'comparison': '=',
-                'value': 'some_value',
-                'extra_filter': [
-                    {
-                        'comparison': '!=',
-                        'value': 'other_value'
-                    }
-                ]
-            }
-          }]
-        :return: Eligible Knowledge FilesIDVertical
-        """
+    def filter_file_by_metadata_fields(
+        cls, knowledge_id: int, logical: Literal["and", "or"], metadata_filters: list[dict[str, dict[str, Any]]]
+    ) -> list[int]:
+        """Filter knowledge files based on user-defined metadata fields.
 
+        MySQL: builds a raw SQL WHERE clause using the sql_key from each filter,
+        which may contain MySQL JSON path expressions like JSON_UNQUOTE(JSON_EXTRACT(...)).
+
+        DaMeng/others: fetches all files for the knowledge and filters in Python
+        using the py_field tuple stored alongside each filter entry.
+        """
+        with get_sync_db_session() as session:
+            dialect = session.bind.dialect.name if session.bind else "mysql"
+
+            if dialect == "mysql":
+                return cls._filter_sql(session, knowledge_id, logical, metadata_filters)
+            return cls._filter_python(session, knowledge_id, logical, metadata_filters)
+
+    @classmethod
+    def _filter_sql(cls, session, knowledge_id: int, logical: str, metadata_filters: list[dict]) -> list[int]:
+        """MySQL path: inject SQL expressions directly into the WHERE clause."""
         statement = "select id from knowledgefile where knowledge_id = :knowledge_id and "
         params = {"knowledge_id": knowledge_id}
-
         params_index = 1
         field_statement = []
         for metadata_filter in metadata_filters:
             for key, key_info in metadata_filter.items():
-                key_comparison = key_info['comparison']
-                key_value = key_info['value']
-                extra_filter = key_info.get('extra_filter')
+                key_comparison = key_info["comparison"]
+                key_value = key_info["value"]
+                extra_filter = key_info.get("extra_filter")
                 if key_value is not None:
                     params_key = f"tmp_params_{params_index}"
                     params[params_key] = key_value
@@ -533,20 +749,114 @@ class KnowledgeFileDao(KnowledgeFileBase):
                     for sub_info in extra_filter:
                         params_index += 1
                         params_key = f"tmp_params_{params_index}"
-                        params[params_key] = sub_info['value']
+                        params[params_key] = sub_info["value"]
                         sub_statement += f" AND {key} {sub_info['comparison']} :{params_key}"
                     sub_statement = f"({sub_statement})"
                 field_statement.append(sub_statement)
                 params_index += 1
         field_statement = f" {logical} ".join(field_statement)
         statement += f"({field_statement})"
+        file_ids = []
+        result = session.execute(text(statement), params)
+        for one in result:
+            file_ids.append(one[0])
+        return file_ids
 
-        with get_sync_db_session() as session:
-            file_ids = []
-            result = session.execute(text(statement), params)
-            for one in result:
-                file_ids.append(one[0])
-            return file_ids
+    @classmethod
+    def _filter_python(cls, session, knowledge_id: int, logical: str, metadata_filters: list[dict]) -> list[int]:
+        """DaMeng/others: fetch all files and apply filters in Python.
+
+        Each filter entry must have a 'py_field' key in its value dict that
+        specifies how to retrieve the value from the file object:
+          - str: attribute name on KnowledgeFileDao (preset fields)
+          - tuple ('user_metadata', field_name): nested JSON lookup
+        """
+        from sqlmodel import select as _select
+
+        rows = session.exec(_select(KnowledgeFileDao).where(KnowledgeFileDao.knowledge_id == knowledge_id)).all()
+
+        file_ids = []
+        for file in rows:
+            results = []
+            for metadata_filter in metadata_filters:
+                for key, key_info in metadata_filter.items():
+                    py_field = key_info.get("py_field", key)
+                    target_value = key_info["value"]
+                    comparison = key_info["comparison"]
+                    extra_filter = key_info.get("extra_filter")
+
+                    # Resolve actual value from file
+                    if isinstance(py_field, tuple) and py_field[0] == "user_metadata":
+                        field_name = py_field[1]
+                        meta = file.user_metadata or {}
+                        field_data = meta.get(field_name, {})
+                        actual = field_data.get("field_value") if isinstance(field_data, dict) else None
+                    else:
+                        actual = getattr(file, py_field, None)
+                        if actual is not None:
+                            actual = str(actual)
+
+                    match = cls._compare(actual, comparison, target_value)
+                    if match and extra_filter:
+                        for sub_info in extra_filter:
+                            if not cls._compare(actual, sub_info["comparison"], sub_info["value"]):
+                                match = False
+                                break
+                    results.append(match)
+
+            matched = all(results) if logical.lower() == "and" else any(results)
+            if matched:
+                file_ids.append(file.id)
+        return file_ids
+
+    @staticmethod
+    def _compare(actual, op: str, target) -> bool:
+        if actual is None:
+            return op in ("!=", "<>") and target is not None
+        try:
+            a, t = float(actual), float(target)
+            if op == "=":
+                return a == t
+            if op == "!=":
+                return a != t
+            if op == "<>":
+                return a != t
+            if op == ">":
+                return a > t
+            if op == "<":
+                return a < t
+            if op == ">=":
+                return a >= t
+            if op == "<=":
+                return a <= t
+        except (TypeError, ValueError):
+            pass
+        s_actual, s_target = str(actual), str(target) if target is not None else ""
+        if op == "=":
+            return s_actual == s_target
+        if op in ("!=", "<>"):
+            return s_actual != s_target
+        return False
+
+    @classmethod
+    async def aget_files_by_similar_status(
+        cls,
+        knowledge_id: int,
+        similar_status: int,
+    ) -> list["KnowledgeFile"]:
+        """Files in a space whose similar_status equals the given value.
+
+        Only parsed-SUCCESS files are returned — pending similar UI shouldn't surface
+        files that aren't yet usable.
+        """
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.similar_status == similar_status,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+        )
+        async with get_async_db_session() as session:
+            result = await session.execute(statement)
+            return list(result.scalars().all())
 
     @classmethod
     def update_file_updater(cls, file_id: int, updater_id: int, updater_name: str) -> None:
@@ -567,26 +877,29 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
 
 class QAKnoweldgeDao(QAKnowledgeBase):
-
     @classmethod
     def get_qa_knowledge_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
         offset = (page - 1) * page_size
-        state = select(QAKnowledge).where(
-            QAKnowledge.knowledge_id == knowledge_id, ).offset(offset).limit(page_size)
+        state = (
+            select(QAKnowledge)
+            .where(
+                QAKnowledge.knowledge_id == knowledge_id,
+            )
+            .offset(offset)
+            .limit(page_size)
+        )
         with get_sync_db_session() as session:
             return session.exec(state).all()
 
     @classmethod
-    def get_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
+    def get_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: list[int]) -> list[QAKnowledge]:
         with get_sync_db_session() as session:
-            return session.exec(
-                select(QAKnowledge).where(QAKnowledge.knowledge_id.in_(knowledge_ids))).all()
+            return session.exec(select(QAKnowledge).where(QAKnowledge.knowledge_id.in_(knowledge_ids))).all()
 
     @classmethod
-    async def aget_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
+    async def aget_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: list[int]) -> list[QAKnowledge]:
         async with get_async_db_session() as session:
-            result = await session.exec(
-                select(QAKnowledge).where(col(QAKnowledge.knowledge_id).in_(knowledge_ids)))
+            result = await session.exec(select(QAKnowledge).where(col(QAKnowledge.knowledge_id).in_(knowledge_ids)))
             return result.all()
 
     @classmethod
@@ -595,13 +908,15 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
-    def get_qa_knowledge_by_name(cls, question: List[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
+    def get_qa_knowledge_by_name(cls, question: list[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
+        from bisheng.core.database.dialect_helpers import json_array_contains
+
         with get_sync_db_session() as session:
+            dialect = session.bind.dialect.name if session.bind else "mysql"
             group_filters = []
             for one in question:
-                group_filters.append(func.json_contains(QAKnowledge.questions, json.dumps(one)))
-            statement = select(QAKnowledge).where(
-                or_(*group_filters)).where(QAKnowledge.knowledge_id == knowledge_id)
+                group_filters.append(json_array_contains(QAKnowledge.questions, json.dumps(one), dialect))
+            statement = select(QAKnowledge).where(or_(*group_filters)).where(QAKnowledge.knowledge_id == knowledge_id)
             if exclude_id:
                 statement = statement.where(QAKnowledge.id != exclude_id)
             return session.exec(statement).first()
@@ -609,7 +924,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     @classmethod
     def update(cls, qa_knowledge: QAKnowledge):
         if qa_knowledge.id is None:
-            raise ValueError('idTidak boleh kosong.')
+            raise ValueError("idTidak boleh kosong.")
         with get_sync_db_session() as session:
             session.add(qa_knowledge)
             session.commit()
@@ -617,18 +932,18 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         return qa_knowledge
 
     @classmethod
-    def delete_batch(cls, qa_ids: List[int]) -> bool:
+    def delete_batch(cls, qa_ids: list[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(QAKnowledge).where(QAKnowledge.id.in_(qa_ids)))
             session.commit()
             return True
 
     @classmethod
-    def select_list(cls, ids: List[int]) -> List[QAKnowledge]:
+    def select_list(cls, ids: list[int]) -> list[QAKnowledge]:
         with get_sync_db_session() as session:
             QAKnowledges = session.exec(select(QAKnowledge).where(QAKnowledge.id.in_(ids))).all()
         if not QAKnowledges:
-            raise ValueError('Knowledge base does not exist')
+            raise ValueError("Knowledge base does not exist")
         return QAKnowledges
 
     @classmethod
@@ -641,7 +956,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         return qa
 
     @classmethod
-    def batch_insert_qa(cls, qa_knowledges: List[QAKnowledgeUpsert]) -> List[QAKnowledge]:
+    def batch_insert_qa(cls, qa_knowledges: list[QAKnowledgeUpsert]) -> list[QAKnowledge]:
         with get_sync_db_session() as session:
             qas = []
             for qa_knowledge in qa_knowledges:
@@ -665,10 +980,13 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return result.all()
 
     @classmethod
-    def query_by_condition_v1(cls, source: List[int], create_start: str, create_end: str):
+    def query_by_condition_v1(cls, source: list[int], create_start: str, create_end: str):
         with get_sync_db_session() as session:
-            sql = select(QAKnowledge).where(QAKnowledge.source.in_(source)).where(
-                QAKnowledge.create_time.between(create_start, create_end))
+            sql = (
+                select(QAKnowledge)
+                .where(QAKnowledge.source.in_(source))
+                .where(QAKnowledge.create_time.between(create_start, create_end))
+            )
 
             return session.exec(sql).all()
 
@@ -686,9 +1004,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return get_count(session, statement)
 
     @classmethod
-    def batch_update_status_by_ids(cls, qa_ids: List[int],
-                                   status: QAStatus,
-                                   remark: str = "") -> None:
+    def batch_update_status_by_ids(cls, qa_ids: list[int], status: QAStatus, remark: str = "") -> None:
         """
         accordingQAkey learning pointsIDBulk Update Status
         :param qa_ids: QAkey learning pointsIDVertical
@@ -697,11 +1013,9 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         :return:
         """
 
-        statement = (
-            update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
-        )
+        statement = update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
 
-        statement = statement.values(status=status.value).values(remark=remark)
+        statement = statement.values(status=status.value).values(remark=_limit_remark(remark))
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
@@ -717,13 +1031,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         :return:
         """
 
-        statement = (
-            update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
-        )
+        statement = update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
 
-        statement = statement.values(status=status.value).values(remark=remark)
+        statement = statement.values(status=status.value).values(remark=_limit_remark(remark))
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
 
 # ─── Space Folder / File helpers (Space-scoped operations on KnowledgeFile) ──

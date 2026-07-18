@@ -42,7 +42,7 @@ export function CrawlQueuePanel({
             >
                 <span>{localize("com_subscription.website_crawl_queue")}</span>
                 {inProgressCount > 0 ? (
-                    <Loader2 className="size-3 animate-spin text-[#165DFF]" />
+                    <Loader2 className="size-3 animate-spin text-blue-500" />
                 ) : panelOpen ? (
                     <ChevronUp className="size-3" />
                 ) : (
@@ -72,7 +72,7 @@ export function CrawlQueuePanel({
                                     </button>
                                     {item.status === "crawling" && (
                                         <div className="pointer-events-none absolute inset-x-[12px] bottom-0 h-[1px] overflow-hidden">
-                                            <div className="h-full w-1/4 animate-crawl-slide bg-gradient-to-r from-transparent via-[#165DFF] to-transparent" />
+                                            <div className="h-full w-1/4 animate-crawl-slide bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
                                         </div>
                                     )}
                                 </div>
@@ -91,7 +91,7 @@ export function CrawlQueuePanel({
                                     <button
                                         type="button"
                                         onClick={() => onOpenPreview(item.id)}
-                                        className="shrink-0 p-1 text-[#165DFF] hover:text-[#4080FF]"
+                                        className="shrink-0 p-1 text-blue-500 hover:text-blue-400"
                                         aria-label={localize("com_subscription.crawled_content_preview")}
                                     >
                                         <ArrowRight className="size-4" />

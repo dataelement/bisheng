@@ -2,12 +2,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, Integer, text, delete
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
+
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 class ResourceTypeEnum(Enum):
     KNOWLEDGE = 1
@@ -17,16 +19,22 @@ class ResourceTypeEnum(Enum):
     DASHBOARD = 6  # KANBAN
     WORKSTATION = 7  # Workstation
     SPACE_FILE = 8  # Knowledge Space File
+    KNOWLEDGE_FILE = 9  # Knowledge Base File
 
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False, description='Resource categories for knowledge, assistant, tools, workflow, dashboard and workstation')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class GroupResource(GroupResourceBase, table=True):

@@ -168,23 +168,52 @@ export async function readFlowsFromDatabase(page: number = 1, pageSize: number =
     return { data, total };
 }
 
-/* app list */
-export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type, managed }) {
+/* app list — F027 cursor-based pagination.
+ *   request:  { cursor?, pageSize, keyword, tag_id, type, managed, status, permissionId }
+ *   response: { data, page_size, has_more, next_cursor }
+ *   The legacy `page_num` / `total` fields are gone (spec AC-02).
+ */
+export async function getAppsApi(
+    {
+        cursor,
+        pageSize = 20,
+        keyword,
+        tag_id = -1,
+        type,
+        managed,
+        status,
+        permissionId = 'use_app',
+    }: {
+        cursor?: string | null;
+        pageSize?: number;
+        keyword?: string;
+        tag_id?: number;
+        type?: 'assistant' | 'skill' | 'flow';
+        managed?: any;
+        status?: number;
+        permissionId?: string;
+    },
+): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
     const map = { assistant: 5, skill: 1, flow: 10 }
     const flowType = map[type] ? `&flow_type=${map[type]}` : ''
     const managedStr = (managed !== undefined && managed !== null && managed !== '')
         ? `&managed=${managed}`
         : '';
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/workflow/list?page_num=${page}&page_size=${pageSize}&name=${keyword}${tagIdStr}${flowType}${managedStr}`);
-    const newData = data.map(item => {
+    const statusStr = (status === 1 || status === 2) ? `&status=${status}` : ''
+    const cursorStr = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+    const res = await axios.get(
+        `/api/v1/workflow/list?page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}&permission_id=${permissionId}${cursorStr}`,
+    )
+    const envelope = res as any as { data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }
+    const newData = envelope.data.map((item: any) => {
         if (item.flow_type !== 5) return item
         return {
             ...item,
             version_list: item.version_list || [],
         }
     })
-    return { data: newData, total };
+    return { ...envelope, data: newData }
 }
 
 /**
@@ -291,7 +320,7 @@ export async function reloadCustom(code): Promise<any> {
  * @throws .
  */
 export async function getFlowVersions(flow_id): Promise<{ data: FlowVersionItem[], total: number }> {
-    return await axios.get(`/api/v1/flows/versions`, {
+    return await axios.get(`/api/v1/workflow/versions`, {
         params: { flow_id }
     });
 }
@@ -304,7 +333,7 @@ export async function getFlowVersions(flow_id): Promise<{ data: FlowVersionItem[
  * @throws .
  */
 export async function createFlowVersion(flow_id, versionData: { name: string, description: string, original_version_id: number, data: any }) {
-    return await axios.post(`/api/v1/flows/versions?flow_id=${flow_id}`, versionData);
+    return await axios.post(`/api/v1/workflow/versions?flow_id=${flow_id}`, versionData);
 }
 
 /**
@@ -315,7 +344,7 @@ export async function createFlowVersion(flow_id, versionData: { name: string, de
  * @throws .
  */
 export async function getVersionDetails(versionId: string) {
-    return await axios.get(`/api/v1/flows/versions/${versionId}`);
+    return await axios.get(`/api/v1/workflow/versions/${versionId}`);
 }
 
 /**
@@ -327,7 +356,7 @@ export async function getVersionDetails(versionId: string) {
  * @throws .
  */
 export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }) {
-    return await axios.put(`/api/v1/flows/versions/${versionId}`, versionData);
+    return await axios.put(`/api/v1/workflow/versions/${versionId}`, versionData);
 }
 
 /**
@@ -338,7 +367,7 @@ export async function updateVersion(versionId: string, versionData: { name: stri
  * @throws .
  */
 export async function deleteVersion(versionId: string) {
-    return await axios.delete(`/api/v1/flows/versions/${versionId}`);
+    return await axios.delete(`/api/v1/workflow/versions/${versionId}`);
 }
 
 /**
@@ -349,7 +378,7 @@ export async function deleteVersion(versionId: string) {
  * @throws .
  */
 export async function changeCurrentVersion({ flow_id, version_id }: { flow_id: string, version_id: number }) {
-    return await axios.post(`/api/v1/flows/change_version?flow_id=${flow_id}&version_id=${version_id}`);
+    return await axios.post(`/api/v1/workflow/change_version?flow_id=${flow_id}&version_id=${version_id}`);
 }
 
 /**

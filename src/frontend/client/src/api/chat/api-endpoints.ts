@@ -47,7 +47,8 @@ export const conversations = (pageNumber: string, isArchived?: boolean, tags?: s
 
 export const conversationById = (id: string) => `${conversationsRoot}/${id}`;
 
-export const genTitle = () => `/api/v1/workstation/gen_title`;
+export const genTitle = (version: 'v1' | 'v2' = 'v1') =>
+  version === 'v2' ? `/api/v2/chat/gen_title` : `/api/v1/workstation/gen_title`;
 
 export const updateConversation = () => `/api/v1/chat/conversation/rename`;
 

@@ -96,9 +96,13 @@ class BaseClient(ABC):
         return msg
 
     async def send_response(self, category: str, msg_type: str, message: str | dict, intermediate_steps: str = '',
-                            message_id: int = None):
+                            message_id: int = None,
+                            citations=None,
+                            citation_registry_items=None):
         """ Send a response message to the client """
         is_bot = 0 if msg_type == 'human' else 1
+        if citations is None:
+            citations = citation_registry_items
         await self.send_json(ChatResponse(
             message_id=message_id,
             category=category,
@@ -110,6 +114,8 @@ class BaseClient(ABC):
             chat_id=self.chat_id,
             extra=json.dumps({'client_key': self.client_key}, ensure_ascii=False),
             intermediate_steps=intermediate_steps,
+            citations=citations,
+            citation_registry_items=citation_registry_items or citations,
         ))
 
     async def stop_handle_message(self, message: Dict[any, any]):

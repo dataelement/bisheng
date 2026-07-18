@@ -1,6 +1,8 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { MoveOneIcon } from "@/components/bs-icons/moveOne";
@@ -8,19 +10,20 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import LoadMore from "@/components/bs-comp/loadMore";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { readTempsDatabase } from "@/controllers/API";
 import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
-import { deleteFlowFromDatabase, getAppsApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
-import { onlineWorkflow } from "@/controllers/API/workflow";
+import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { deleteFlowFromDatabase, getAppsApi, getFlowApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
+import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
-import { useTable } from "@/util/hook";
+import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +32,27 @@ import CreateApp from "./CreateApp";
 import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
+
+/** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
+export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
+    const [value, setValue] = useState(defaultValue)
+    const { t } = useTranslation()
+
+    return (
+        <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
+            <SelectTrigger className="max-w-36 min-w-[9rem]">
+                <SelectValue placeholder={t('build.allAppStatus')} />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectGroup>
+                    <SelectItem value="all">{t('build.allAppStatus')}</SelectItem>
+                    <SelectItem value="2">{t('build.online')}</SelectItem>
+                    <SelectItem value="1">{t('build.offline')}</SelectItem>
+                </SelectGroup>
+            </SelectContent>
+        </Select>
+    )
+}
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -64,6 +88,18 @@ const TypeNames = {
     1: AppType.SKILL,
     10: AppType.FLOW
 }
+
+const APP_PERMISSION_IDS = [
+    'view_app',
+    'edit_app',
+    'publish_app',
+    'unpublish_app',
+    'delete_app',
+    'manage_app_owner',
+    'manage_app_manager',
+    'manage_app_viewer',
+]
+
 export default function apps() {
     const { t, i18n } = useTranslation()
     // useErrorPrompt();
@@ -75,14 +111,144 @@ export default function apps() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
-        getAppsApi(param)
+    // Build page lists apps the user can manage. Backend treats managed=true
+    // as "filter by edit_app" (admins still see everything via the admin
+    // short-circuit). permission_id is unused server-side when managed=true.
+    // F027: cursor-based infinite scroll; `total` / `page` / `setPage` are gone.
+    // `managed: true` is seeded via initial param so it flows through every
+    // request automatically; `filterData({tag_id|type|status: ...})` then
+    // mutates paramsRef and triggers a fresh first-page load.
+    const { data: dataSource, loading, hasMore, search, reload, loadMore, filterData, refreshData } = useInfiniteCursorTable<FlowType>(
+        { pageSize: 14, cancelLoadingWhenReload: true, managed: true },
+        (param) => getAppsApi({
+            cursor: param.cursor,
+            pageSize: param.pageSize,
+            keyword: param.keyword,
+            tag_id: param.tag_id,
+            type: param.type,
+            status: param.status,
+            managed: param.managed,
+        }),
     )
+
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
+    const workflowResourceIds = dataSource
+        .filter((item: any) => item.flow_type !== AppNumType.ASSISTANT)
+        .map((item: any) => String(item.id));
+    const assistantResourceIds = dataSource
+        .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
+        .map((item: any) => String(item.id));
+    const { permissions: workflowPermIds } = usePermissionIds('workflow', workflowResourceIds, APP_PERMISSION_IDS);
+    const { permissions: assistantPermIds } = usePermissionIds('assistant', assistantResourceIds, APP_PERMISSION_IDS);
+    const permIds = { ...workflowPermIds, ...assistantPermIds };
+    const listedAppIds = new Set(dataSource.map((item: any) => String(item.id)));
+    const canRead = (id: string | number) =>
+        user.role === 'admin' ||
+        hasPermissionId(permIds, id, 'view_app') ||
+        listedAppIds.has(String(id));
+    const canEdit = (id: string | number) => hasPermissionId(permIds, id, 'edit_app');
+    const canPublish = (id: string | number) => hasPermissionId(permIds, id, 'publish_app');
+    const canUnpublish = (id: string | number) => hasPermissionId(permIds, id, 'unpublish_app');
+    const canManage = (id: string | number) =>
+        hasPermissionId(permIds, id, 'manage_app_owner') ||
+        hasPermissionId(permIds, id, 'manage_app_manager') ||
+        hasPermissionId(permIds, id, 'manage_app_viewer');
+    const canDelete = (id: string | number) => hasPermissionId(permIds, id, 'delete_app');
+    const visibleApps = dataSource;
+
+    // 角色菜单权限：`create_app` 控制"新建应用/管理应用模板"入口是否可见。
+    // 超管：始终可见。组织上的部门管理员（is_department_admin）：与 PRD 一致默认可见（与 MainLayout 全量子壳一致）。
+    // 其余用户：依赖 web_menu 中的 create_app（角色里「创建应用」开关）。
+    const canCreateApp =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_app');
+
+    const [copyingId, setCopyingId] = useState<string | number | null>(null);
+
+    const handleCopyApp = async (item: any) => {
+        if (!canCreateApp || !canRead(item.id) || copyingId) return;
+        setCopyingId(item.id);
+        try {
+            if (item.flow_type === AppNumType.ASSISTANT) {
+                const detail = await captureAndAlertRequestErrorHoc(getAssistantDetailApi(String(item.id), 'v1'));
+                if (!detail) return;
+                const newName = `${detail.name}-${generateUUID(5)}`;
+                const created = await captureAndAlertRequestErrorHoc(
+                    createAssistantsApi(newName, detail.prompt || '', detail.logo || '')
+                );
+                if (!created?.id) return;
+                await captureAndAlertRequestErrorHoc(
+                    saveAssistanttApi({
+                        ...detail,
+                        id: created.id,
+                        name: newName,
+                        flow_list: (detail.flow_list || []).map((f: { id: string }) => f.id),
+                        tool_list: (detail.tool_list || []).map((tool: { id: number }) => tool.id),
+                        knowledge_list: (detail.knowledge_list || []).map((k: { id: number }) => k.id),
+                        guide_question: (detail.guide_question || []).filter(Boolean),
+                        logo: detail.logo || '',
+                    })
+                );
+                reload();
+                return;
+            }
+            const flow = await captureAndAlertRequestErrorHoc(getFlowApi(String(item.id)));
+            if (!flow) return;
+            if (item.flow_type === AppNumType.FLOW) {
+                const payload = JSON.parse(JSON.stringify(flow)) as typeof flow;
+                payload.name = `${flow.name}-${generateUUID(5)}`;
+                if (payload.data?.source) delete payload.data.source;
+                if (payload.data?.nodes?.length) {
+                    for (const node of payload.data.nodes) {
+                        await copyReportTemplate(node.data);
+                    }
+                }
+                delete (payload as any).id;
+                const res = await captureAndAlertRequestErrorHoc(
+                    createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload)
+                );
+                if (res?.id) {
+                    reload();
+                    navigate(`/flow/${res.id}`);
+                }
+                return;
+            }
+            if (item.flow_type === AppNumType.SKILL) {
+                const newName = `${flow.name}-${generateUUID(5)}`;
+                const res: any = await captureAndAlertRequestErrorHoc(
+                    saveFlowToDatabase({
+                        name: newName,
+                        id: '' as any,
+                        data: flow.data,
+                        description: flow.description,
+                    })
+                );
+                if (res?.id) {
+                    reload();
+                    const vid = res.version_id ?? res.version_list?.find((v: any) => v.is_current === 1)?.id;
+                    if (vid) navigate(`/build/skill/${res.id}/${vid}`, { state: { flow: res } });
+                }
+            }
+        } finally {
+            setCopyingId(null);
+        }
+    };
+
+    const handleOpenPermission = (item: any) => {
+        const typeMap = { 5: 'assistant', 1: 'workflow', 10: 'workflow' };
+        setPermTarget({ id: String(item.id), name: item.name, type: typeMap[item.flow_type] || 'workflow' });
+        setPermDialogOpen(true);
+    };
 
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
     // on/off line
     const handleCheckedChange = (checked, data) => {
+        if (checked && !canPublish(data.id)) return;
+        if (!checked && !canUnpublish(data.id)) return;
         if (data.flow_type === 1) {
             return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
                 if (res) {
@@ -188,6 +354,11 @@ export default function apps() {
                     tempTypeRef.current = v
                     filterData({ type: v })
                 }} />
+                <SelectAppStatus
+                    onChange={(v) => {
+                        filterData({ status: v === 'all' ? undefined : Number(v) })
+                    }}
+                />
                 <SelectSearch
                     value={!selectLabel.value ? '' : selectLabel.value}
                     options={allOptions}
@@ -198,11 +369,13 @@ export default function apps() {
                     onChange={(e) => setSearchKey(e.target.value)}
                     onValueChange={handleLabelSearch}>
                 </SelectSearch>
-                {user.role === 'admin' && <Button
-                    variant="ghost"
-                    className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
-                    onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
-                ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>}
+                {canCreateApp && (
+                    <Button
+                        variant="ghost"
+                        className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
+                        onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
+                    ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
+                )}
             </div>
             {/* list */}
             {
@@ -210,26 +383,28 @@ export default function apps() {
                     ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                         <LoadingIcon />
                     </div>
-                    : <div className="mt-6 flex gap-2 flex-wrap pb-20 min-w-[980px]">
-                        <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
-                            <CardComponent<FlowType>
-                                data={null}
-                                type='assist'
-                                title={t('log.createBuild')}
-                                description={(<>
-                                    <p><p>{t('build.provideSceneTemplates')}</p></p>
-                                </>)}
-                            ></CardComponent>
-                        </AppTempSheet>
+                    : <div className="mt-6 flex gap-2 flex-wrap pb-20">
+                        {canCreateApp && (
+                            <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
+                                <CardComponent<FlowType>
+                                    data={null}
+                                    type='assist'
+                                    title={t('log.createBuild')}
+                                    description={(<>
+                                        <p><p>{t('build.provideSceneTemplates')}</p></p>
+                                    </>)}
+                                ></CardComponent>
+                            </AppTempSheet>
+                        )}
                         {
-                            dataSource.map((item: any, i) => (
+                            visibleApps.map((item: any, i) => (
                                 <CardComponent<FlowType>
                                     key={item.id}
                                     data={item}
                                     id={item.id}
                                     logo={<AppAvator id={item.name} flowType={item.flow_type} url={item.logo} />}
                                     type={TypeNames[item.flow_type]}
-                                    edit
+                                    edit={canEdit(item.id)}
                                     // edit={item.write}
                                     title={item.name}
                                     isAdmin={user.role === 'admin'}
@@ -237,7 +412,7 @@ export default function apps() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    onClick={() => handleSetting(item)}
+                                    onClick={() => canEdit(item.id) && handleSetting(item)}
                                     // onSwitchClick={() => {
                                     //     !item.write && item.status !== 2 && message({
                                     //         description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
@@ -246,14 +421,18 @@ export default function apps() {
                                     // }}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
-                                    onDelete={handleDelete}
+                                    onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
+                                    onPermission={canManage(item.id) ? handleOpenPermission : undefined}
+                                    showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
+                                    canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
+                                    showCopy={canCreateApp && canRead(item.id)}
+                                    onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
                                     headSelecter={(
-                                        // skills
-                                        item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
+                                        item.version_list?.length ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
-                                        ></CardSelectVersion> : null)}
+                                        /> : null)}
                                     labelPannel={
                                         <LabelShow
                                             data={item}
@@ -273,15 +452,34 @@ export default function apps() {
                         }
                     </div>
             }
+            {/* F027: infinite-scroll trigger lives INSIDE the scroll container
+                (the `overflow-y-scroll` div above). Placing it outside the
+                scroll parent makes IntersectionObserver miss in-container
+                scroll events and the cursor pagination stalls after page 2. */}
+            {hasMore && <LoadMore onScrollLoad={loadMore} />}
         </div>
         {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
-            <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
-            <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
+        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10 z-20">
+            <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
+            </div>
+            {/* F027: legacy AutoPagination slot — infinite scroll trigger
+                moved INSIDE the scroll container above; this bar now only
+                holds the "manage your applications" caption. */}
         </div>
         {/* create flow&assistant */}
         <CreateApp ref={createAppModalRef} />
+        {/* Permission management dialog */}
+        {permTarget && (
+            <PermissionDialog
+                open={permDialogOpen}
+                onOpenChange={setPermDialogOpen}
+                resourceType={permTarget.type as any}
+                resourceId={permTarget.id}
+                resourceName={permTarget.name}
+            />
+        )}
     </div>
 };

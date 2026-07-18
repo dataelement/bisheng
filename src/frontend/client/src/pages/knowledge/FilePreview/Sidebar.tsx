@@ -29,7 +29,7 @@ export function Sidebar({ open, pdfDoc, currentPage, onPageClick }: SidebarProps
 
     return (
         <div
-            className="w-[160px] h-full border-r border-[#e5e6eb] bg-[#f7f8fa] overflow-y-auto flex-shrink-0 py-2 px-2 flex flex-col gap-2"
+            className="scrollbar-os w-[160px] h-full border-r border-[#e5e6eb] bg-[#f7f8fa] overflow-y-auto flex-shrink-0 py-2 px-2 flex flex-col gap-2"
             ref={containerRef}
         >
             {pdfDoc &&
@@ -108,7 +108,7 @@ function ThumbnailItem({
             className={cn(
                 "cursor-pointer rounded-md overflow-hidden border-2 transition-colors flex flex-col items-center justify-center relative shrink-0",
                 isActive
-                    ? "border-[#165dff] shadow-sm"
+                    ? "border-blue-500 shadow-sm"
                     : "border-transparent hover:border-[#c9cdd4]"
             )}
             style={{ height: itemHeight }}
@@ -119,7 +119,7 @@ function ThumbnailItem({
             )}
             <span className={cn(
                 "text-xs py-0.5",
-                isActive ? "text-[#165dff] font-medium" : "text-[#86909c]"
+                isActive ? "text-blue-500 font-medium" : "text-[#86909c]"
             )}>
                 {pageNumber}
             </span>

@@ -1,14 +1,18 @@
-import { useLocalize } from "~/hooks";
-import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { EmptyStateIllustration } from "~/components/illustrations";
+import useMediaQuery from "~/hooks/useMediaQuery";
+import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { NotificationSeverity } from "~/common";
 import { Input } from "~/components";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
-import { generateUUID, getFullWidthLength } from "~/utils";
+import { cn, generateUUID, getFullWidthLength } from "~/utils";
 import {
     getManagedSpacesApi,
+    getMineSpacesApi,
     getSpaceChildrenApi,
     createFolderApi,
     addArticleToKnowledgeApi,
@@ -33,11 +37,44 @@ export interface KnowledgeNode {
     childrenLoading?: boolean;
 }
 
+export interface AddToKnowledgeSelection {
+    knowledgeSpaceId: string;
+    knowledgeSpaceName: string;
+    folderId: string | null;
+    folderPath: string | null;
+}
+
+/** Minimal space record consumed by the picker tree. */
+export interface AddToKnowledgeSpaceSummary {
+    id: string;
+    name: string;
+}
+
 interface AddToKnowledgeModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    /** Article ID to add to the selected knowledge space/folder */
+    /** Article ID to add to the selected knowledge space/folder (article mode). */
     articleId?: string | number;
+    /**
+     * v2.5 Module D: when set to "channel_sync", the modal becomes a generic
+     * space/folder picker — confirm returns selection info via onSyncSelect
+     * instead of calling addArticleToKnowledgeApi.
+     */
+    mode?: "article" | "channel_sync";
+    /** Receives the chosen knowledge space / folder; only fires in channel_sync mode. */
+    onSyncSelect?: (selection: AddToKnowledgeSelection) => void;
+    /**
+     * 创建/编辑频道抽屉传入：H5 下将选择器 portal 到该节点内，与「创建频道」形成下钻层级，而非再叠一层全屏 Dialog。
+     */
+    channelSyncPortalHostRef?: RefObject<HTMLDivElement | null>;
+    /**
+     * F028: optional custom space-list loader. When provided, overrides the
+     * mode-based default (getMineSpacesApi / getManagedSpacesApi). Used by
+     * the workstation conversation-export flow to feed in the user's
+     * upload_file-eligible spaces. Original article / channel_sync callers
+     * leave this undefined and keep their existing behavior.
+     */
+    dataSourceApi?: () => Promise<AddToKnowledgeSpaceSummary[]>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -169,10 +206,10 @@ function TreeNode({
     const { showToast } = useToastContext();
 
     return (
-        <div>
+        <div className="w-full min-w-0 max-w-full">
             <div
-                className={`group flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none
-                    ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
+                className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
+                    ${isSelected ? "bg-blue-50 text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
                     transitionProperty: 'background-color',
@@ -196,7 +233,7 @@ function TreeNode({
                 {/* Icon */}
                 {node.type === "space"
                     ?
-                    <ChannelNotebookOneIcon className="size-[14px] object-contain opacity-90" />
+                    <ChannelNotebookOneIcon className="size-[14px] shrink-0 object-contain opacity-90" />
                     : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
                 }
 
@@ -215,14 +252,16 @@ function TreeNode({
                         onCancel={onCancelEdit}
                     />
                 ) : (
-                    <span className="flex-1 truncate">{node.name}</span>
+                    <span className="min-w-0 flex-1 overflow-hidden pr-0 transition-[padding-right] duration-150 fine-pointer:group-hover:pr-8 coarse-pointer:pr-8">
+                        <span className="block truncate" title={node.name}>{node.name}</span>
+                    </span>
                 )}
 
                 {/* Add folder button (hover) */}
                 {!isEditing && (
                     <button
                         type="button"
-                        className="shrink-0 opacity-0 group-hover:opacity-100 h-8 w-8 flex items-center justify-center rounded text-[#86909c] hover:text-primary transition-colors duration-150"
+                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[#86909c] opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
@@ -233,7 +272,7 @@ function TreeNode({
 
             {/* Children */}
             {isExpanded && node.children && node.children.length > 0 && (
-                <div>
+                <div className="w-full min-w-0 max-w-full">
                     {node.children.map(child => (
                         <TreeNode
                             key={child.id}
@@ -258,8 +297,117 @@ function TreeNode({
 
 // ─── Main Modal ──────────────────────────────────────────────────────────
 
-export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnowledgeModalProps) {
+export function AddToKnowledgeModal({
+    open,
+    onOpenChange,
+    articleId,
+    mode = "article",
+    onSyncSelect,
+    channelSyncPortalHostRef,
+    dataSourceApi,
+}: AddToKnowledgeModalProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
+    const treeScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const duplicateListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const isMax576 = useMediaQuery("(max-width: 576px)");
+    const isModalMobile768 = useMediaQuery("(max-width: 768px)");
+    const [viewportWidth, setViewportWidth] = useState<number>(() =>
+        typeof window !== "undefined" ? window.innerWidth : 9999
+    );
+    const [viewportHeight, setViewportHeight] = useState<number>(() =>
+        typeof window !== "undefined" ? window.innerHeight : 9999
+    );
+    useEffect(() => {
+        const update = () => {
+            setViewportWidth(window.innerWidth);
+            setViewportHeight(window.innerHeight);
+        };
+        update();
+        window.addEventListener("resize", update);
+        return () => window.removeEventListener("resize", update);
+    }, []);
+    const forceMobile768 = viewportWidth <= 768;
+    /**
+     * channel_sync:
+     * <768px：全屏弹窗
+     * >=768px：桌面样式居中弹窗（768-1024 与 >1024 一致）
+     */
+    const embedInChannelSheet = false;
+    /** 频道同步且非下钻、仍属移动端宽：居中模态 + 统一宽高规则 */
+    const isChannelSyncCenteredMobile =
+        mode === "channel_sync" && (isModalMobile768 || forceMobile768);
+    const shouldUseDesktopChannelSyncDialog =
+        mode === "channel_sync" && !(isModalMobile768 || forceMobile768);
+    const isArticleMobileFullScreen =
+        mode === "article" && (isModalMobile768 || forceMobile768);
+    const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+    useEffect(() => {
+        if (!open) return;
+        const runtimeWidth = typeof window !== "undefined" ? window.innerWidth : viewportWidth;
+        const runtimeHeight = typeof window !== "undefined" ? window.innerHeight : viewportHeight;
+        console.info("[AddToKnowledgeModal][debug]", {
+            mode,
+            runtimeWidth,
+            runtimeHeight,
+            viewportWidth,
+            viewportHeight,
+            isH5,
+            isMax576,
+            isModalMobile768,
+            forceMobile768,
+            embedInChannelSheet,
+            isChannelSyncCenteredMobile,
+            shouldUseDesktopChannelSyncDialog,
+        });
+    }, [
+        open,
+        mode,
+        viewportWidth,
+        viewportHeight,
+        isH5,
+        isMax576,
+        isModalMobile768,
+        forceMobile768,
+        embedInChannelSheet,
+        isChannelSyncCenteredMobile,
+        shouldUseDesktopChannelSyncDialog,
+    ]);
+    useEffect(() => {
+        if (!open || mode !== "article") return;
+        const logFooterLayout = () => {
+            const contentRect = articleDialogContentRef.current?.getBoundingClientRect();
+            const footerRect = actionFooterRef.current?.getBoundingClientRect();
+            console.info("[AddToKnowledgeModal][footer-debug]", {
+                runtimeWidth: window.innerWidth,
+                runtimeHeight: window.innerHeight,
+                isModalMobile768,
+                forceMobile768,
+                isArticleMobileFullScreen,
+                contentRect: contentRect
+                    ? { top: contentRect.top, bottom: contentRect.bottom, height: contentRect.height }
+                    : null,
+                footerRect: footerRect
+                    ? { top: footerRect.top, bottom: footerRect.bottom, height: footerRect.height }
+                    : null,
+                footerInViewport: footerRect ? footerRect.bottom <= window.innerHeight && footerRect.top >= 0 : false,
+            });
+        };
+        const rafId = requestAnimationFrame(logFooterLayout);
+        window.addEventListener("resize", logFooterLayout);
+        return () => {
+            cancelAnimationFrame(rafId);
+            window.removeEventListener("resize", logFooterLayout);
+        };
+    }, [open, mode, isModalMobile768, forceMobile768, isArticleMobileFullScreen]);
+
+    useLayoutEffect(() => {
+        if (!open || !embedInChannelSheet) {
+            setPortalHost(null);
+            return;
+        }
+        setPortalHost(channelSyncPortalHostRef?.current ?? null);
+    }, [open, embedInChannelSheet, channelSyncPortalHostRef]);
     const { showToast } = useToastContext();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
     const [search, setSearch] = useState("");
@@ -272,6 +420,8 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     const [duplicateFiles, setDuplicateFiles] = useState<Array<{ name: string; path: string }>>([]);
     const [showDuplicate, setShowDuplicate] = useState(false);
     const [pendingConfirm, setPendingConfirm] = useState<{ spaceId: string; parentFolderId: string | null } | null>(null);
+    const articleDialogContentRef = useRef<HTMLDivElement | null>(null);
+    const actionFooterRef = useRef<HTMLDivElement | null>(null);
 
     // Filtered tree by search
     const displayTree = search.trim() ? filterTree(tree, search) : tree;
@@ -281,7 +431,17 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        getManagedSpacesApi()
+        // F028: dataSourceApi (if provided by the workstation conversation-
+        // export flow) takes precedence. Otherwise fall back to the mode-
+        // based default — channel_sync uses "我创建的" (TC-015/TC-037,
+        // order_by=update_time per TC-017); article keeps managed scope so
+        // existing callers are untouched.
+        const loader = dataSourceApi
+            ? dataSourceApi()
+            : mode === "channel_sync"
+                ? getMineSpacesApi({ order_by: "update_time" })
+                : getManagedSpacesApi();
+        loader
             .then((spaces) => {
                 const nodes: KnowledgeNode[] = spaces.map(s => ({
                     id: s.id,
@@ -463,6 +623,34 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     /** Confirm — add article to selected space/folder */
     const handleConfirm = async (forceReplace = false) => {
+        // v2.5 Module D — channel-sync mode: report selection back to caller,
+        // no article upload.
+        if (mode === "channel_sync") {
+            if (!selectedId) return;
+            const node = findNode(tree, selectedId);
+            if (!node) return;
+            const spaceNode = findNode(tree, node.spaceId) || node;
+            // Compose folder path from ancestors (excluding the space root).
+            const buildPath = (): string | null => {
+                if (node.type === "space") return null;
+                const chain: string[] = [];
+                let cur: KnowledgeNode | null = node;
+                while (cur && cur.id !== node.spaceId) {
+                    chain.unshift(cur.name);
+                    cur = cur.parentId ? (findNode(tree, cur.parentId) ?? null) : null;
+                }
+                return chain.length ? chain.join("/") : null;
+            };
+            onSyncSelect?.({
+                knowledgeSpaceId: node.spaceId,
+                knowledgeSpaceName: spaceNode.name || "",
+                folderId: node.type === "space" ? null : selectedId,
+                folderPath: buildPath(),
+            });
+            onOpenChange(false);
+            return;
+        }
+
         if (!articleId) return;
 
         // If forcing replace from the duplicate dialog, use pending params
@@ -531,106 +719,273 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     const isEmpty = !spacesLoading && tree.length === 0;
 
+    const titleLabel =
+        mode === "channel_sync"
+            ? localize("com_subscription.select_knowledge_space")
+            : localize("com_subscription.add_to_knowledge_space");
+
+    const goBackToChannelForm = () => handleOpenChange(false);
+
+    // Desktop centered dialogs (article + channel-sync) share the same fixed
+    // h-[80vh]/max-h-[600px] shell. On short viewports a fixed-height tree pushed
+    // the footer flush against the bottom edge; letting the tree flex lets it
+    // shrink so the footer keeps its normal padding.
+    const isArticleDesktop = mode === "article" && !(isModalMobile768 || forceMobile768);
+    const useFlexTree =
+        embedInChannelSheet ||
+        isChannelSyncCenteredMobile ||
+        isArticleMobileFullScreen ||
+        isArticleDesktop ||
+        shouldUseDesktopChannelSyncDialog;
+    const isChannelSyncMobileFooter =
+        mode === "channel_sync" && (embedInChannelSheet || isChannelSyncCenteredMobile);
+
+    const pickerBody = (
+        <>
+            {embedInChannelSheet ? (
+                <div className="flex shrink-0 flex-row items-center gap-2 px-4 pb-4 pt-4 sm:px-6">
+                    <button
+                        type="button"
+                        onClick={goBackToChannelForm}
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA]"
+                        aria-label={localize("com_ui_go_back")}
+                    >
+                        <ChevronLeft className="size-5" />
+                    </button>
+                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-[#212121]">
+                        {titleLabel}
+                    </h2>
+                </div>
+            ) : (
+                <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-6 pb-4 pt-4 text-left touch-mobile:px-4">
+                    <DialogTitle className="min-w-0 flex-1 text-[16px] font-medium leading-7 text-[#212121]">
+                        {titleLabel}
+                    </DialogTitle>
+                    <button
+                        type="button"
+                        onClick={() => handleOpenChange(false)}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                        aria-label={localize("com_ui_close")}
+                    >
+                        <X className="size-5" />
+                    </button>
+                </DialogHeader>
+            )}
+
+            <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-6 pt-4 touch-mobile:px-4"}>
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
+                    <Input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
+                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-[6px] border border-[#ECECEC] focus:outline-none"
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                            onClick={() => setSearch("")}
+                        >
+                            <X className="size-3.5 text-[#818181]" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div
+                className={
+                    embedInChannelSheet
+                        ? "flex min-h-0 flex-1 flex-col px-4 pt-4 sm:px-6"
+                        : isChannelSyncCenteredMobile
+                            ? "mb-4 flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
+                            : isArticleMobileFullScreen
+                                ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[84px]"
+                            : "flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
+                }
+            >
+                <div
+                    ref={treeScrollRevealRef}
+                    className={
+                        useFlexTree
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-scroll"
+                            : cn(
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-scroll",
+                                mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
+                            )
+                    }
+                >
+                    {spacesLoading ? (
+                        <div className="flex items-center justify-center h-full min-h-[200px] text-[#86909c]">
+                            <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
+                        </div>
+                    ) : isEmpty ? (
+                        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
+                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_selectable_knowledge_space")}</p>
+                        </div>
+                    ) : displayTree.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
+                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_matching_knowledge_space")}</p>
+                        </div>
+                    ) : (
+                        <div className="w-full min-w-0 max-w-full py-1">
+                            {displayTree.map(node => (
+                                <TreeNode
+                                    key={node.id}
+                                    node={node}
+                                    nodes={displayTree}
+                                    selectedId={selectedId}
+                                    expandedIds={expandedIds}
+                                    editingId={editingId}
+                                    onSelect={handleSelect}
+                                    onToggle={toggleExpand}
+                                    onAddFolder={handleAddFolder}
+                                    onSaveEdit={handleSaveEdit}
+                                    onCancelEdit={handleCancelEdit}
+                                    searchMode={isSearchMode}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div
+                ref={actionFooterRef}
+                className={
+                    embedInChannelSheet
+                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-5 sm:py-3.5"
+                        : isChannelSyncCenteredMobile
+                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-0"
+                            : isArticleMobileFullScreen
+                                ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
+                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-4 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
+                }
+            >
+                <div
+                    className={cn(
+                        "min-w-0",
+                        !isChannelSyncMobileFooter && "ml-auto",
+                        embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen
+                            ? "flex w-full items-center gap-2"
+                            : "flex w-auto shrink-0 items-center gap-2",
+                    )}
+                >
+                    <Button
+                        variant="outline"
+                        onClick={goBackToChannelForm}
+                        className={cn(
+                            "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
+                            isChannelSyncMobileFooter &&
+                            "min-h-[32px] h-8 rounded-lg border-[#E5E6EB] text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]",
+                            isChannelSyncMobileFooter && "flex-1",
+                            embedInChannelSheet && "flex-1",
+                            mode === "article" && isH5 && "touch-mobile:flex-1",
+                        )}
+                    >{localize("com_subscription.cancel")}</Button>
+                    <Button
+                        onClick={() => void handleConfirm()}
+                        disabled={!selectedId || isConfirming}
+                        className={cn(
+                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal btn-brand-primary",
+                            isChannelSyncMobileFooter &&
+                            "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
+                            isChannelSyncMobileFooter && "flex-1",
+                            embedInChannelSheet && "flex-1",
+                            mode === "article" && isH5 && "touch-mobile:flex-1",
+                        )}
+                    >
+                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
+                    </Button>
+                </div>
+            </div>
+        </>
+    );
+
+    const embeddedShell = (
+        <div className="fixed inset-0 z-[100] flex min-h-0 flex-col bg-white">
+            {pickerBody}
+        </div>
+    );
+
     return (
         <>
-            <Dialog open={open} onOpenChange={handleOpenChange}>
-                <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
-                    {/* Header */}
-                    <DialogHeader className="px-6 pt-3 pb-3">
-                        <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>
-                    </DialogHeader>
-
-                    {/* Search */}
-                    <div className="px-6 pt-3">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-gray-400 pointer-events-none" />
-                            <Input
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                                placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                                className="w-full h-8 pl-8 pr-8 text-sm rounded-md border border-gray-100 focus:outline-none"
-                            />
-                            {search && (
-                                <button
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                                    onClick={() => setSearch("")}
-                                >
-                                    <X className="size-3.5 text-gray-400" />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Tree / Empty state */}
-                    <div className="px-6 pt-4">
-                        <div
-                            className="p-3 w-[552px] max-w-full overflow-y-auto overflow-x-hidden border rounded-md scrollbar-on-hover"
-                            style={{ height: 340 }}
-                        >
-                            {spacesLoading ? (
-                                <div className="flex items-center justify-center h-full text-[#86909c]">
-                                    <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
-                                </div>
-                            ) : isEmpty ? (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                    <img
-                                        className="size-[120px] mb-4 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
-                                </div>
-                            ) : displayTree.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                    <img
-                                        className="size-[120px] mb-4 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
-                                </div>
-                            ) : (
-                                <div className="py-1">
-                                    {displayTree.map(node => (
-                                        <TreeNode
-                                            key={node.id}
-                                            node={node}
-                                            nodes={displayTree}
-                                            selectedId={selectedId}
-                                            expandedIds={expandedIds}
-                                            editingId={editingId}
-                                            onSelect={handleSelect}
-                                            onToggle={toggleExpand}
-                                            onAddFolder={handleAddFolder}
-                                            onSaveEdit={handleSaveEdit}
-                                            onCancelEdit={handleCancelEdit}
-                                            searchMode={isSearchMode}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <DialogFooter className="px-5 py-3.5 mt-3 flex flex-row justify-end gap-1">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenChange(false)}
-                            className="h-8 px-4 text-sm rounded-md font-normal"
-                        >{localize("com_subscription.cancel")}</Button>
-                        <Button
-                            size="sm"
-                            onClick={() => void handleConfirm()}
-                            disabled={!selectedId || isConfirming}
-                            className="h-8 px-4 text-sm rounded-md font-normal"
-                        >
-                            {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {open &&
+                embedInChannelSheet &&
+                (portalHost
+                    ? createPortal(embeddedShell, portalHost)
+                    : (
+                        <Dialog open={open} onOpenChange={handleOpenChange}>
+                            <DialogContent
+                                close={false}
+                                className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !p-0 !shadow-none"
+                            >
+                                {pickerBody}
+                            </DialogContent>
+                        </Dialog>
+                    ))}
+            {open && isChannelSyncCenteredMobile && (
+                <Dialog open={open} onOpenChange={handleOpenChange}>
+                    <DialogContent
+                        close={false}
+                        className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !p-0 !animate-none"
+                        style={{
+                            position: "fixed",
+                            inset: 0,
+                            left: 0,
+                            top: 0,
+                            width: "100vw",
+                            height: "100dvh",
+                            maxWidth: "none",
+                            transform: "none",
+                            borderRadius: 0,
+                            padding: 0,
+                        }}
+                    >
+                        {pickerBody}
+                    </DialogContent>
+                </Dialog>
+            )}
+            {open && shouldUseDesktopChannelSyncDialog && (
+                <Dialog open={open} onOpenChange={handleOpenChange}>
+                    <DialogContent
+                        close={false}
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0"
+                    >
+                        {pickerBody}
+                    </DialogContent>
+                </Dialog>
+            )}
+            {open && mode === "article" && (
+                <Dialog open={open} onOpenChange={handleOpenChange}>
+                    <DialogContent
+                        close={false}
+                        ref={articleDialogContentRef}
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[100dvh] max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
+                        style={
+                            (isModalMobile768 || forceMobile768)
+                                ? {
+                                    position: "fixed",
+                                    inset: 0,
+                                    left: 0,
+                                    top: 0,
+                                    width: "100vw",
+                                    height: "100dvh",
+                                    maxWidth: "none",
+                                    maxHeight: "none",
+                                    transform: "none",
+                                    borderRadius: 0,
+                                    padding: 0,
+                                }
+                                : undefined
+                        }
+                    >
+                        {pickerBody}
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* Duplicate File Confirmation Dialog */}
             <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>
@@ -640,7 +995,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                             {localize("com_subscription.duplicate_files_title")}
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="px-6 pb-2 max-h-[200px] overflow-y-auto scrollbar-on-hover">
+                    <div ref={duplicateListScrollRevealRef} className="px-6 pb-2 max-h-[200px] overflow-y-auto scrollbar-on-scroll">
                         {duplicateFiles.map((file, idx) => {
                             // Truncate file name > 10 chars with ellipsis
                             const displayName = file.name.length > 10
@@ -660,7 +1015,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                             );
                         })}
                     </div>
-                    <DialogFooter className="px-5 py-3.5 flex flex-row justify-end gap-1">
+                    <DialogFooter className="px-4 py-3.5 flex flex-row justify-end gap-1">
                         <Button
                             variant="outline"
                             size="sm"

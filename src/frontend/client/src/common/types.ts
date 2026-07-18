@@ -485,6 +485,11 @@ export interface ExtendedFile {
   embedded?: boolean;
   tool_resource?: string;
   abortController?: AbortController;
+  // Task-mode ingestion result (see TFile): 'failed' when the attachment could
+  // not be parsed into the workspace, so the chip can render a failed state.
+  parsing_status?: string;
+  valid?: boolean;
+  error_message?: string;
 }
 
 export type ContextType = { navVisible: boolean; setNavVisible: (visible: boolean) => void };

@@ -5,37 +5,47 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/Table";
-import {
-    Download,
-    Edit,
-    FileImageIcon,
-    FileUserIcon,
-    MoreVertical,
-    PencilLineIcon,
-    RefreshCw,
-    Tag, Trash2
-} from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { GitBranch, History, FileSearch } from "lucide-react";
 import {
     Checkbox,
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "~/components";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
+import { EditEncodingModal } from "./EditEncodingModal";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
+import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, isKnowledgeItemPreviewable } from "../knowledgeUtils";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
-import { useLocalize } from "~/hooks";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
+import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
+import { useToastContext } from "~/Providers";
+import { NotificationSeverity } from "~/common";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
-/** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Highlight case-insensitive matches of `keyword` inside `text` (Figma 11814:70449). */
+const renderHighlightedName = (text: string, keyword?: string) => {
+    const kw = keyword?.trim();
+    if (!kw) return text;
+    const parts = text.split(new RegExp(`(${escapeRegExp(kw)})`, "gi"));
+    const lowerKw = kw.toLowerCase();
+    return parts.map((part, i) =>
+        part.toLowerCase() === lowerKw
+            ? <span key={i} className="text-blue-500">{part}</span>
+            : part
+    );
+};
+
+/** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-[4px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-[8px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -43,9 +53,10 @@ const FILE_ROW_ACTION_BTN_CLASS =
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
-    fileType: { minWidth: 100, initialWidth: 120 },
-    size: { minWidth: 80, initialWidth: 120 },
+    fileType: { minWidth: 140, initialWidth: 140 },
+    size: { minWidth: 140, initialWidth: 140 },
     tags: { minWidth: 140, initialWidth: 200 },
+    fileEncoding: { minWidth: 160, initialWidth: 204 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
@@ -53,7 +64,13 @@ const COLUMN_CONFIG = {
 type ColumnKey = keyof typeof COLUMN_CONFIG;
 
 // 不参与拖拽调整的列
-const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox"];
+// Resize handles use `translate-x-1/2` to straddle the column edge for a nicer
+// hit area. The trade-off: the last resizable column's handle pokes 4px past
+// the table's right edge, which counts toward scrollWidth and produces a
+// permanent 4px horizontal scroll. Excluding `updateTime` (the last data
+// column in every mode) removes its handle and the 4px overflow.
+// fileType / size are pinned to a fixed 100px and not user-resizable.
+const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "updateTime", "fileType", "size"];
 // 左侧固定列
 const STICKY_COLUMNS: ColumnKey[] = ["checkbox", "name"];
 
@@ -155,28 +172,67 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 // 辅助组件：状态标签渲染
 // ============================================================
-const StatusBadge = ({ status }: { status: FileStatus }) => {
+// Status pill — matches the card-view tag (Figma 11671:34506). Neutral grey for
+// in-progress states (parsing / queueing / rebuilding / uploading), red for errors,
+// blue for pending approval, green for success.
+const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFile }) => {
     const localize = useLocalize();
-    const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-        [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
-        [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-        [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+    const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
+    const statusReason = file?.approvalReason?.trim() || file?.errorMessage?.trim() || null;
+
+    type Tone = { bg: string; text: string; dot: string };
+    const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
+    const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
+    const infoTone: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
+    const successTone: Tone = { bg: "bg-[#e8ffea]", text: "text-[#00b42a]", dot: "bg-[#00b42a]" };
+
+    const wrapWithReason = (node: React.ReactNode) => {
+        // Skip tooltip for queueing status
+        if (!statusReason || status === FileStatus.WAITING) return node;
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <div className="inline-flex max-w-full">{node}</div>
+                </TooltipTrigger>
+                <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
+                    {statusReason}
+                </TooltipContent>
+            </Tooltip>
+        );
     };
-    const item = config[status] || config[FileStatus.WAITING];
-    return (
+
+    let label: string;
+    let tone: Tone;
+
+    if (approvalStatusLabel) {
+        label = approvalStatusLabel;
+        tone = (file && isKnowledgeApprovalRejected(file)) ? errorTone : infoTone;
+    } else {
+        const config: Record<string, { label: string; tone: Tone }> = {
+            [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), tone: successTone },
+            [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: neutralTone },
+            [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: neutralTone },
+            [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: neutralTone },
+            [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: neutralTone },
+            [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: errorTone },
+            [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: errorTone },
+            [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: errorTone },
+        };
+        const item = config[status] || config[FileStatus.WAITING];
+        label = item.label;
+        tone = item.tone;
+    }
+
+    return wrapWithReason(
         <div
             className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                item.bg,
-                item.color
+                "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[4px] px-2 text-xs leading-5",
+                tone.bg,
+                tone.text,
             )}
         >
-            <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />
-            {item.label}
+            <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
+            {label}
         </div>
     );
 };
@@ -191,7 +247,7 @@ function ResizeHandle({ columnKey, onResizeStart }: { columnKey: ColumnKey; onRe
             onMouseDown={(e) => onResizeStart(columnKey, e)}
         >
             {/* 高亮线与列分界线对齐：手柄跨在相邻两列边界上，避免命中区偏在分割线左侧 */}
-            <div className="h-full w-0.5 bg-transparent group-hover/handle:bg-[#165dff] transition-colors" />
+            <div className="h-full w-0.5 bg-transparent group-hover/handle:bg-[#999] transition-colors" />
         </div>
     );
 }
@@ -207,6 +263,25 @@ function StickyColumnShadow({ show }: { show: boolean }) {
             className="pointer-events-none absolute top-0 right-[-12px] h-full w-[12px] z-10"
             style={{
                 background: "linear-gradient(to right, rgba(0,0,0,0.08), transparent)",
+            }}
+        />
+    );
+}
+
+/**
+ * Right-side counterpart of StickyColumnShadow. Renders inside the zero-width
+ * sticky right-0 cell at the end of each row/header, so the shadow's vertical
+ * extent matches that cell (i.e. covers only header + row, never the empty
+ * area below the last row).
+ */
+function StickyColumnShadowRight({ show }: { show: boolean }) {
+    if (!show) return null;
+    return (
+        <div
+            aria-hidden
+            className="pointer-events-none absolute top-0 left-[-12px] h-full w-[12px] z-10"
+            style={{
+                background: "linear-gradient(to left, rgba(0,0,0,0.08), transparent)",
             }}
         />
     );
@@ -247,14 +322,14 @@ const SortableHeader = ({
     const direction = isActive ? currentSort.direction : "asc";
     const isSticky = stickyLeft !== undefined;
     const isResizable = !NON_RESIZABLE_COLUMNS.includes(columnKey);
-    const arrowDir = direction === "asc" ? "up" : "down";
-    const sortIconSrc = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${isActive ? "-blue" : ""}.svg`;
+    const ArrowIcon = direction === "asc" ? Outlined.SortAmountUp : Outlined.SortAmountDown;
     const sortIcon = (
-        <img
-            className={`size-4 shrink-0 transition-opacity ${isActive ? "opacity-100" : "opacity-0"
-                } group-hover:opacity-100`}
-            src={sortIconSrc}
-            alt=""
+        <ArrowIcon
+            className={cn(
+                "size-4 shrink-0 transition-opacity",
+                isActive ? "text-[#212121] opacity-100" : "text-[#999] opacity-0",
+                "group-hover:opacity-100",
+            )}
         />
     );
     const title = (
@@ -313,9 +388,11 @@ function FileTableHeader({
     sortDirection,
     onSort,
     isAdmin,
+    showStatusColumn,
     isAllSelected,
     isIndeterminate,
     onSelectAll,
+    shougangEnabled,
 }: {
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
@@ -325,9 +402,11 @@ function FileTableHeader({
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
     isAdmin: boolean;
+    showStatusColumn: boolean;
     isAllSelected: boolean;
     isIndeterminate: boolean;
     onSelectAll: () => void;
+    shougangEnabled: boolean;
 }) {
     const localize = useLocalize();
     const currentSort = { key: sortBy, direction: sortDirection };
@@ -337,7 +416,7 @@ function FileTableHeader({
     };
 
     return (
-        <TableHeader className="border-b border-[#e5e6eb] bg-[rgb(251,251,251)]">
+        <TableHeader className="sticky top-0 z-30 bg-[rgb(251,251,251)] [&_th]:border-b [&_th]:border-[#e5e6eb]">
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
@@ -401,6 +480,23 @@ function FileTableHeader({
                     <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
                 </TableHead>
 
+                {/* 文件编码 — 仅 shougang 模式显示 */}
+                {shougangEnabled && (
+                    <TableHead
+                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                        style={{
+                            width: columnWidths.fileEncoding,
+                            minWidth: columnWidths.fileEncoding,
+                            maxWidth: columnWidths.fileEncoding,
+                        }}
+                    >
+                        <div className="flex items-center gap-1.5 border-l pl-3">
+                            {localize("com_knowledge.file_encoding")}
+                        </div>
+                        <ResizeHandle columnKey="fileEncoding" onResizeStart={onResizeStart} />
+                    </TableHead>
+                )}
+
                 {/* 更新时间 */}
                 <SortableHeader
                     sortKey={SortType.UPDATE_TIME}
@@ -412,23 +508,16 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* 状态 — 不排序, only visible to admins */}
-                {isAdmin && (
-                    <TableHead
-                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
-                        style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-                    >
-                        <div className="flex items-center gap-1.5 border-l pl-3">
-                            {localize("com_knowledge.status")}</div>
-                        <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
-                    </TableHead>
-                )}
+                {/* Status column removed — non-success status pills now render inline
+                    next to the file name (see row cell). */}
 
-                {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
+                {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致 + 承载右侧 sticky 阴影 */}
                 <TableHead
-                    className="border-none bg-[rgb(251,251,251)] p-0"
+                    className="sticky right-0 z-[31] overflow-visible border-none bg-[rgb(251,251,251)] p-0"
                     style={{ width: 0, minWidth: 0, maxWidth: 0 }}
-                />
+                >
+                    <StickyColumnShadowRight show={showRightShadow} />
+                </TableHead>
 
             </TableRow>
         </TableHeader>
@@ -441,10 +530,14 @@ function FileTableHeader({
 
 interface FileTableProps {
     files: KnowledgeFile[];
+    /** F040: lazily resolve a file's action permissions when its row menu opens. */
+    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     selectedFiles: Set<string>;
     handleSelectAll: (isAllSelected: boolean) => void;
     handleSelectFile: (id: string, selected: boolean) => void;
     isAdmin: boolean;
+    /** The current user's role within this specific space. Used to gate encoding edits. */
+    currentUserRole?: SpaceRole | null;
     onDownload: (id: string) => void;
     onEditTags: (id: string) => void;
     onRename: (id: string, newName: string) => void;
@@ -454,28 +547,121 @@ interface FileTableProps {
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
+    permissionEntryIds?: Set<string>;
+    renameEntryIds?: Set<string>;
+    deleteEntryIds?: Set<string>;
+    downloadEntryIds?: Set<string>;
+    onManagePermission?: (id: string) => void;
+    /** F034: open the move dialog for a file/folder. Shown when provided. */
+    onMove?: (file: KnowledgeFile) => void;
+    /** F034: move permission for files / folders (move_file / move_folder). A
+     *  role may grant one without the other, so they're probed separately. */
+    canMoveFile?: boolean;
+    canMoveFolder?: boolean;
+    /** F034 drag-move: drop dragged items into a same-space folder. */
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
+    /** Version management gating for per-row version actions / badges. */
+    versionManagementEnabled?: boolean;
+    /** Open the version-management (similar-document linking) dialog for a file. */
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    /** Open the version-history sheet for a file. */
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    /** Whether the current user can manage members (gates the "similar" pill). */
+    canManageMembers?: boolean;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
+    /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
+    highlightedTagIds?: number[];
+    /** Keyword hit by the active search; matching substring in the file name is highlighted. */
+    highlightKeyword?: string;
+    /** Scroll handler attached to the table's internal scroll container (for infinite scroll). */
+    onScroll?: React.UIEventHandler<HTMLDivElement>;
+    /** Extra spacing reserved below the last row (e.g. to clear a floating bottom dock). */
+    bottomSpacing?: number;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
+    const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+    const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
+    const localize = useLocalize();
 
-    const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
-    const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
+    // Shougang feature gate
+    const { data: bsConfig } = useGetBsConfig();
+    const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
+    const { showToast } = useToastContext();
+
+    const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
+
+    // Encoding edits are restricted to the space creator or space admin.
+    // currentUserRole carries the user's role within this specific space (not platform-admin).
+    const canEditEncoding =
+        currentUserRole === SpaceRole.CREATOR ||
+        currentUserRole === SpaceRole.ADMIN;
+
+    const handleOpenEditEncoding = (file: KnowledgeFile) => {
+        if (!canEditEncoding) return;
+        setEditingEncodingFile(file);
+    };
+
+    // F034 same-space drag-move: rows are drag sources, folder rows are drop targets.
+    const {
+        enabled: dragMoveEnabled,
+        dragOverFolderId,
+        handleDragStart: handleRowDragStart,
+        handleFolderDragOver,
+        handleFolderDragLeave,
+        handleFolderDrop,
+    } = useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder });
+
+    const handleSubmitEncoding = async (newEncoding: string) => {
+        if (!editingEncodingFile) return;
+        try {
+            await updateFileEncoding(
+                String(editingEncodingFile.spaceId),
+                String(editingEncodingFile.id),
+                newEncoding,
+            );
+            // Trigger file list reload via the existing custom event mechanism
+            window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
+                detail: { spaceId: editingEncodingFile.spaceId },
+            }));
+            showToast?.({
+                message: localize("com_knowledge.file_encoding_update_success"),
+                severity: NotificationSeverity.SUCCESS,
+            });
+        } catch (e) {
+            showToast?.({
+                message: localize("com_knowledge.file_encoding_update_failed"),
+                severity: NotificationSeverity.ERROR,
+            });
+            throw e;
+        }
+    };
+
+    // Uploading folder placeholders aren't selectable — exclude them so the header
+    // checkbox can still reach the "all selected" state and select-all skips them.
+    const selectableFiles = files.filter((f) => !(f.type === FileType.FOLDER && isKnowledgeItemUploading(f)));
+    const isAllSelected = selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
+    const isIndeterminate = !isAllSelected && selectableFiles.some((f) => selectedFiles.has(f.id));
 
     return (
-        <div className="relative max-w-full min-w-0 overflow-hidden">
-            {/* 横向滚动限制在容器内，不撑开整页 */}
+        <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
+            {/* Single scroll container — both axes here so the sticky <thead> tracks
+                vertical scroll without being trapped by an inner-only x-scroll wrapper. */}
             <div
-                ref={scrollRef}
-                className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-hover"
+                ref={(el) => {
+                    scrollRef.current = el;
+                    hScrollRevealRef(el);
+                }}
+                onScroll={onScroll}
+                className="min-h-0 max-w-full flex-1 overflow-auto scrollbar-on-scroll"
             >
                 <table
-                    className="w-full caption-bottom text-sm border-collapse"
+                    className="w-full caption-bottom border-separate border-spacing-0 text-sm"
                     style={{
                         tableLayout: "fixed",
                         width: totalWidth,
@@ -491,9 +677,11 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         sortDirection={sortDirection}
                         onSort={onSort}
                         isAdmin={isAdmin}
+                        showStatusColumn={showStatusColumn}
                         isAllSelected={isAllSelected}
                         isIndeterminate={isIndeterminate}
                         onSelectAll={() => handleSelectAll(isAllSelected)}
+                        shougangEnabled={shougangEnabled}
                     />
                     <TableBody>
                         {files.map((file) => (
@@ -501,6 +689,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 key={file.id}
                                 file={file}
                                 isAdmin={isAdmin}
+                                onEnsureFilePermissions={onEnsureFilePermissions}
                                 isSelected={selectedFiles.has(file.id)}
                                 onSelect={(val) => handleSelectFile(file.id, val)}
                                 onDownload={() => onDownload(file.id)}
@@ -512,22 +701,48 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
+                                onManagePermission={
+                                    onManagePermission && permissionEntryIds?.has(file.id)
+                                        ? () => onManagePermission(file.id)
+                                        : undefined
+                                }
+                                onMove={onMove ? () => onMove(file) : undefined}
+                                canMove={file.type === FileType.FOLDER ? canMoveFolder : canMoveFile}
+                                versionManagementEnabled={versionManagementEnabled}
+                                onOpenVersionManagement={onOpenVersionManagement}
+                                onOpenVersionHistory={onOpenVersionHistory}
+                                canManageMembers={canManageMembers}
+                                canRename={Boolean(renameEntryIds?.has(file.id))}
+                                canDelete={Boolean(deleteEntryIds?.has(file.id))}
+                                canDownload={Boolean(downloadEntryIds?.has(file.id))}
                                 columnWidths={columnWidths}
+                                showStatusColumn={showStatusColumn}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
+                                shougangEnabled={shougangEnabled}
+                                canEditEncoding={canEditEncoding}
+                                onEditEncoding={handleOpenEditEncoding}
+                                highlightedTagIds={highlightedTagIds}
+                                highlightKeyword={highlightKeyword}
+                                rowDraggable={dragMoveEnabled}
+                                onRowDragStart={handleRowDragStart(file)}
+                                isFolderDragOver={dragOverFolderId === file.id}
+                                onFolderDragOver={handleFolderDragOver(file)}
+                                onFolderDragLeave={handleFolderDragLeave(file)}
+                                onFolderDrop={handleFolderDrop(file)}
                             />
                         ))}
                     </TableBody>
                 </table>
+                {bottomSpacing > 0 && <div style={{ height: bottomSpacing }} aria-hidden />}
             </div>
 
-            {/* 右侧溢出阴影 */}
-            {showRightShadow && (
-                <div
-                    className="absolute top-0 right-0 bottom-0 w-4 pointer-events-none z-20"
-                    style={{
-                        background: "linear-gradient(to left, rgba(0,0,0,0.06), transparent)",
-                    }}
+            {shougangEnabled && (
+                <EditEncodingModal
+                    file={editingEncodingFile}
+                    open={!!editingEncodingFile}
+                    onClose={() => setEditingEncodingFile(null)}
+                    onSubmit={handleSubmitEncoding}
                 />
             )}
         </div>
@@ -539,6 +754,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 // ============================================================
 function FileRow({
     file,
+    onEnsureFilePermissions,
     isSelected,
     onSelect,
     isAdmin,
@@ -551,11 +767,34 @@ function FileRow({
     onPreview,
     onValidateName,
     onCancelCreate,
+    onManagePermission,
+    onMove,
+    canMove = false,
+    versionManagementEnabled = false,
+    onOpenVersionManagement,
+    onOpenVersionHistory,
+    canManageMembers = false,
+    canRename = false,
+    canDelete = false,
+    canDownload = false,
     columnWidths,
+    showStatusColumn,
     showLeftShadow,
     showRightShadow,
+    shougangEnabled = false,
+    canEditEncoding = false,
+    onEditEncoding,
+    highlightedTagIds,
+    highlightKeyword,
+    rowDraggable = false,
+    onRowDragStart,
+    isFolderDragOver = false,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
 }: {
     file: KnowledgeFile;
+    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     isSelected: boolean;
     onSelect: (val: boolean) => void;
     isAdmin: boolean;
@@ -568,19 +807,57 @@ function FileRow({
     onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
+    onManagePermission?: () => void;
+    onMove?: () => void;
+    canMove?: boolean;
+    versionManagementEnabled?: boolean;
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    canManageMembers?: boolean;
+    canRename?: boolean;
+    canDelete?: boolean;
+    canDownload?: boolean;
     columnWidths: Record<ColumnKey, number>;
+    showStatusColumn: boolean;
     showLeftShadow: boolean;
     showRightShadow: boolean;
+    shougangEnabled?: boolean;
+    canEditEncoding?: boolean;
+    onEditEncoding?: (file: KnowledgeFile) => void;
+    highlightedTagIds?: number[];
+    highlightKeyword?: string;
+    // F034 drag-move: row is a drag source; folder rows are drop targets.
+    rowDraggable?: boolean;
+    onRowDragStart?: (e: React.DragEvent) => void;
+    isFolderDragOver?: boolean;
+    onFolderDragOver?: (e: React.DragEvent) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (e: React.DragEvent) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    // F040: resolve this file's action permissions lazily, only when the menu opens.
+    const handleMoreMenuOpenChange = (open: boolean) => {
+        setMoreMenuOpen(open);
+        if (open) onEnsureFilePermissions?.(file);
+    };
+    // Right-click context menu mirrors the row "..." action menu, positioned at the cursor.
+    const [contextMenuOpen, setContextMenuOpen] = useState(false);
+    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
+    // Uploading placeholder rows have no backend identity yet — not movable.
+    const isUploading = isKnowledgeItemUploading(file);
+    // A folder still uploading its batch: masked (50% faded content), shows an
+    // "uploading" tag, not clickable, checkbox greyed-out — mirrors the card view.
+    const isUploadingFolderPlaceholder = isFolder && isUploading;
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
-    const rowBg = isSelected
-        ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
-        : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
-
+    // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
+    const rowBg = isFolderDragOver
+        ? "bg-blue-100 transition-colors duration-150"
+        : isSelected
+            ? "bg-blue-500/[0.07] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
         renameValue,
@@ -601,81 +878,140 @@ function FileRow({
     const hasRetryOption = Boolean(
         (
             file.status === FileStatus.FAILED ||
-            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
+            file.status === FileStatus.VIOLATION ||
+            (isFolder && file.hasFailedFiles === true)
         )
     );
-    const showMoreMenu = isAdmin;
+    const showMoveItem = Boolean(onMove) && !isCreating;
+    const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
+    const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
+    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
-    const showRowActions = rowHovered || moreMenuOpen;
+    const showRowActions = (rowHovered || moreMenuOpen) && !isUploadingFolderPlaceholder;
+    // Shared action-menu items, reused by the row "..." dropdown and the right-click menu.
+    const moreMenuItems = (
+        <>
+            {isAdmin && !isFolder && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onEditTags();
+                    }}
+                    icon={<Outlined.Tag />}
+                    label={localize("com_knowledge.edit_tags")}
+                />
+            )}
+            {canRename && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        startRenaming();
+                    }}
+                    icon={<Outlined.Edit />}
+                    label={localize("com_knowledge.rename")}
+                />
+            )}
+            {showMoveItem && (
+                <ActionMenuItem
+                    disabled={!canMove || isUploading}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onMove?.();
+                    }}
+                    icon={<Outlined.MoveToFolder />}
+                    label={localize("com_knowledge.move")}
+                />
+            )}
+            {isAdmin && hasRetryOption && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRetry?.();
+                    }}
+                    icon={<Outlined.Refresh />}
+                    label={localize("com_knowledge.retry")}
+                />
+            )}
+            {onManagePermission && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onManagePermission();
+                    }}
+                    icon={<Outlined.PeopleSafe />}
+                    label={localize("com_permission.manage_permission")}
+                />
+            )}
+            {showVersionManagement && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenVersionManagement?.(file);
+                    }}
+                    icon={<GitBranch />}
+                    label={localize("com_knowledge.version.menu_version_management")}
+                />
+            )}
+            {showVersionHistory && (
+                <ActionMenuItem
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenVersionHistory?.(file);
+                    }}
+                    icon={<History />}
+                    label={localize("com_knowledge.version.menu_version_history")}
+                />
+            )}
+            {canDelete && (
+                <ActionMenuItem
+                    danger
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete();
+                    }}
+                    icon={<Outlined.Delete />}
+                    label={localize("com_knowledge.delete")}
+                />
+            )}
+        </>
+    );
+
+    const handleRowContextMenu = (e: React.MouseEvent<HTMLTableRowElement>) => {
+        if (!showMoreMenu) return;
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuOpen(true);
+    };
+
     const rowActions = (
         <div
             className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
         >
-            <button
-                type="button"
-                className={FILE_ROW_ACTION_BTN_CLASS}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onDownload();
-                }}
-                title={localize("com_knowledge.download")}
-            >
-                <Download className="size-4" />
-            </button>
+            {canDownload && (
+                <button
+                    type="button"
+                    className={FILE_ROW_ACTION_BTN_CLASS}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDownload();
+                    }}
+                    title={localize("com_knowledge.download")}
+                >
+                    <Outlined.Download className="size-4" />
+                </button>
+            )}
             {showMoreMenu && (
-                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                     <DropdownMenuTrigger asChild>
                         <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
-                            <MoreVertical className="size-4" />
+                            <Outlined.More className="size-4" />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="end"
-                        className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
-                    >
-                        {!isFolder && (
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEditTags();
-                                }}
-                            >
-                                <Tag className="mr-2 size-4" />
-                                {localize("com_knowledge.edit_tags")}
-                            </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                startRenaming();
-                            }}
-                        >
-                            <Edit className="mr-2 size-4" />
-                            {localize("com_knowledge.rename")}
-                        </DropdownMenuItem>
-                        {hasRetryOption && (
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onRetry?.();
-                                }}
-                            >
-                                <RefreshCw className="mr-2 size-4" />
-                                {localize("com_knowledge.retry")}
-                            </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                            className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDelete();
-                            }}
-                        >
-                            <Trash2 className="mr-2 size-4" />
-                            {localize("com_knowledge.delete")}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
+                    <ActionMenuContent align="end">
+                        {moreMenuItems}
+                    </ActionMenuContent>
                 </DropdownMenu>
             )}
         </div>
@@ -684,13 +1020,21 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
+            draggable={rowDraggable && !isCreating && !isRenaming && !isUploading}
+            onDragStart={rowDraggable ? onRowDragStart : undefined}
+            onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
+            onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
             className={cn(
-                "group border-b border-b-[#e5e6eb]",
+                // border-separate on the table means <tr>.border-b doesn't paint —
+                // push the row separator onto each direct <td> instead.
+                "group [&>td]:border-b [&>td]:border-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent"
             )}
             onMouseEnter={() => setRowHovered(true)}
             onMouseLeave={() => setRowHovered(false)}
+            onContextMenu={handleRowContextMenu}
         >
             {/* 复选框 — 左侧固定 */}
             <TableCell
@@ -701,7 +1045,12 @@ function FileRow({
                     <Checkbox
                         checked={isSelected}
                         onCheckedChange={onSelect}
-                        className={`size-4 border-gray-400 ${isSelected ? "border-primary" : ""}`}
+                        disabled={isUploadingFolderPlaceholder}
+                        className={cn(
+                            "size-4 border-gray-400",
+                            isSelected && "border-primary",
+                            isUploadingFolderPlaceholder && "cursor-not-allowed opacity-50",
+                        )}
                     />
                 </div>
             </TableCell>
@@ -717,18 +1066,16 @@ function FileRow({
                 }}
             >
                 <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
-                    <div className="flex size-[14px] shrink-0 items-center justify-center rounded-sm bg-white">
+                    <div className={cn(
+                        "flex size-4 shrink-0 items-center justify-center",
+                        namePreviewable ? "text-[#212121]" : "text-[#999]",
+                        isUploadingFolderPlaceholder && "opacity-50",
+                    )}>
                         {isFolder
-                            ? (
-                                <img
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/folder-close.svg`}
-                                    alt=""
-                                    className="size-[14px] object-contain"
-                                />
-                            )
+                            ? <Outlined.FolderClose className="size-[14px]" />
                             : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
-                                ? <FileImageIcon className="size-[14px]" />
-                                : <FileUserIcon className="size-[14px]" />)
+                                ? <Outlined.FileImage className="size-[14px]" />
+                                : <Outlined.File className="size-[14px]" />)
                         }
                     </div>
                     {isRenaming ? (
@@ -740,28 +1087,58 @@ function FileRow({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex-1 h-7 px-2 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal text-[#1d2129]"
+                            className="flex-1 h-7 px-2 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal text-[#1d2129]"
                         />
                     ) : (
-                        <span
-                            className={cn(
-                                "text-sm truncate flex-1",
-                                namePreviewable
-                                    ? "cursor-pointer text-[#165dff] hover:text-[#4080FF]"
-                                    : "cursor-default text-[#4e5969]"
+                        <>
+                            {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
+                                <span className="flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
+                                    {`V${file.version_no}`}
+                                </span>
                             )}
+                            <span
+                                className={cn(
+                                    "text-sm truncate flex-1",
+                                    namePreviewable && !isUploadingFolderPlaceholder
+                                        ? "cursor-pointer text-[#212121] hover:text-blue-400"
+                                        : "cursor-default text-[#999]",
+                                    isUploadingFolderPlaceholder && "opacity-50",
+                                )}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isUploadingFolderPlaceholder) return;
+                                    if (isFolder) {
+                                        onNavigateFolder?.();
+                                        return;
+                                    }
+                                    if (!namePreviewable) return;
+                                    onPreview?.();
+                                }}
+                            >
+                                <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
+                            </span>
+                        </>
+                    )}
+                    {/* Inline status tag — non-folder files in any non-success state,
+                        plus the uploading-folder placeholder ("上传中"). */}
+                    {file.status && ((!isFolder && file.status !== FileStatus.SUCCESS) || isUploadingFolderPlaceholder) && (
+                        <StatusBadge status={file.status} file={file} />
+                    )}
+                    {/* Similar-document tag — occupies the same slot as the status tag
+                        (mutually exclusive: it only shows on SUCCESS files, the status tag
+                        only on non-success). */}
+                    {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && file.status === FileStatus.SUCCESS && (
+                        <button
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (isFolder) {
-                                    onNavigateFolder?.();
-                                    return;
-                                }
-                                // if (!namePreviewable) return;
-                                onPreview?.();
+                                onOpenVersionManagement?.(file);
                             }}
+                            className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
                         >
-                            {file.name}
-                        </span>
+                            <FileSearch className="size-3" />
+                            {localize("com_knowledge.version.pill_similar")}
+                        </button>
                     )}
                 </div>
                 {/* 固定列右侧阴影 */}
@@ -773,7 +1150,7 @@ function FileRow({
                 className={cn("py-3 text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
             >
-                <span className="truncate block">
+                <span className={cn("truncate block", isUploadingFolderPlaceholder && "opacity-50")}>
                     {isFolder ? localize("com_knowledge.folder") : (file.name.split('.').pop()?.toLowerCase() || "--")}
                 </span>
             </TableCell>
@@ -783,7 +1160,7 @@ function FileRow({
                 className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
             >
-                <span className="block truncate">
+                <span className={cn("block truncate", isUploadingFolderPlaceholder && "opacity-50")}>
                     {isFolder ? "--" : (file.size ? formatBytes(file.size, 2, true) : "--")}
                 </span>
             </TableCell>
@@ -797,6 +1174,7 @@ function FileRow({
                     {!isFolder && (
                         <TagGroup
                             tags={file.tags}
+                            highlightedTagIds={highlightedTagIds}
                             actionButton={
                                 isAdmin ? (
                                     <button
@@ -806,9 +1184,9 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditTags();
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#165dff] transition-colors hover:text-[#165dff]/80 group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-blue-400 group-hover:flex"
                                     >
-                                        <PencilLineIcon className="size-3.5" />
+                                        <Outlined.Edit className="size-3.5" />
                                     </button>
                                 ) : undefined
                             }
@@ -817,36 +1195,80 @@ function FileRow({
                 </div>
             </TableCell>
 
+            {/* 文件编码 — 仅 shougang 模式显示 */}
+            {shougangEnabled && (
+                <TableCell
+                    style={{
+                        width: columnWidths.fileEncoding,
+                        minWidth: columnWidths.fileEncoding,
+                        maxWidth: columnWidths.fileEncoding,
+                    }}
+                    className={cn("py-3", rowBg)}
+                >
+                    <div className="flex h-full w-full items-center gap-1.5 overflow-hidden">
+                        {file.status === FileStatus.PROCESSING && !file.fileEncoding ? (
+                            <span className="text-muted-foreground italic text-sm">
+                                {localize("com_knowledge.file_encoding_generating")}
+                            </span>
+                        ) : file.fileEncoding ? (
+                            <>
+                                <span className="truncate text-sm text-[#86909c]" title={file.fileEncoding}>
+                                    {file.fileEncoding}
+                                </span>
+                                {canEditEncoding && (
+                                    <button
+                                        type="button"
+                                        title={localize("com_knowledge.file_encoding_edit_title")}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEditEncoding?.(file);
+                                        }}
+                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-blue-400 group-hover:flex"
+                                    >
+                                        <Outlined.Edit className="size-3.5" />
+                                    </button>
+                                )}
+                            </>
+                        ) : (
+                            <span className="text-muted-foreground">—</span>
+                        )}
+                    </div>
+                </TableCell>
+            )}
+
             {/* 更新时间 — 操作按钮改到行末占位列，避免盖住文字 */}
             <TableCell
                 className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
-                <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
+                <span className={cn("block truncate whitespace-nowrap", isUploadingFolderPlaceholder && "opacity-50")}>{formatTime(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态（管理员） */}
-            {isAdmin && (
-                <TableCell
-                    className={cn("relative overflow-visible py-3 align-middle", rowBg)}
-                    style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-                >
-                    {isFolder ? (
-                        <span className="whitespace-nowrap text-sm">
-                            <span className="text-[#00b42a]">{file.successFileNum ?? 0}</span>
-                            <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
-                        </span>
-                    ) : (
-                        <StatusBadge status={file.status ?? FileStatus.WAITING} />
-                    )}
-                </TableCell>
-            )}
+            {/* Status column removed; non-success pills now render inline next to the file name. */}
             {/* 行末锚点：固定在可视区最右侧，按钮距右侧 12px，不受横向滚动影响 */}
             <TableCell
                 className="sticky right-0 z-[34] overflow-visible border-none bg-transparent p-0"
                 style={{ width: 0, minWidth: 0, maxWidth: 0 }}
             >
+                <StickyColumnShadowRight show={showRightShadow} />
                 {showRowActions && rowActions}
+                {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
+                {showMoreMenu && (
+                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-hidden="true"
+                                tabIndex={-1}
+                                className="fixed size-0 opacity-0"
+                                style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                            />
+                        </DropdownMenuTrigger>
+                        <ActionMenuContent align="start">
+                            {moreMenuItems}
+                        </ActionMenuContent>
+                    </DropdownMenu>
+                )}
             </TableCell>
         </TableRow>
     );

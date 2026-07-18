@@ -1,36 +1,37 @@
 // src/features/chat-config/ChatConfig.tsx
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { getDailyConfigApi, setDailyConfigApi } from "@/controllers/API";
+import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
+import { getDailyConfigApi, getLinsiConfigApi, setDailyConfigApi, setLinsiConfigApi } from "@/controllers/API";
+import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { t } from "i18next";
-import { Settings } from "lucide-react";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
-import { Model, ModelManagement } from "./ModelManagement";
+import { Model } from "./ModelManagement";
+import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
-import { WebSearchConfig } from "./WebSearchConfig";
-
+import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
+import RecommendedAppsConfig from "./RecommendedAppsConfig";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     tabDisplayName: string;
+    taskModeName: string;
     inputPlaceholder: string;
     modelNames: string[] | string[][];
-    webSearch?: Record<string, string>;
     systemPrompt: string;
     model: string;
     kownledgeBase: string;
@@ -51,7 +52,6 @@ export interface ChatConfigForm {
         image: string;
         relative_path: string;
     };
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -63,43 +63,6 @@ export interface ChatConfigForm {
         enabled: boolean;
         model: string;
     };
-    webSearch: {
-        enabled: boolean;
-        tool: string;
-        bing: {
-            type: string;
-            config: {
-                api_key: string;
-                base_url: string;
-            };
-        };
-        bocha: {
-            type: string;
-            config: {
-                api_key: string;
-            };
-        };
-        jina: {
-            type: string;
-            config: {
-                api_key: string;
-            };
-        };
-        serp: {
-            type: string;
-            config: {
-                api_key: string;
-                engine: string;
-            };
-        };
-        tavily: {
-            type: string;
-            config: {
-                api_key: string;
-            };
-        };
-        prompt: string;
-    };
     knowledgeBase: {
         enabled: boolean;
         prompt: string;
@@ -108,21 +71,35 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
+    /** F035 (v2.6): gate for the client 添加技能 entry. Default off — only when
+     * enabled does the task-mode input surface the Add-Skill submenu. */
+    skillEntry: {
+        enabled: boolean;
+    };
+    recommendedApps: string[];
     /** 日常模式 Tab 名称，对应接口 tabDisplayName */
     tabDisplayName?: string;
+    // v2.5 Agent-mode additions
+    tools: ToolConfigType[];
+    orgKbs: OrgKbConfigType[];
+    /** F035 (PRD §4.8): legacy 灵思 tab merged into 日常. Only display name and
+     * input placeholder stay user-editable; linsight_entry / tools are kept
+     * untouched on save so the workstation/config/linsight payload round-trips. */
+    linsightConfig: {
+        linsight_entry: boolean;
+        input_placeholder: string;
+        tools: unknown[];
+        tab_display_name: string;
+    };
 }
-export default function index() {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
+export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
-    const tabDisplayNameRef = useRef<HTMLDivElement>(null);
+    const taskModeNameRef = useRef<HTMLDivElement>(null);
     const knowledgeBaseRef = useRef<HTMLDivElement>(null);
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
-    const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
-    const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
-    const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     // New: ref for model management container
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
 
@@ -130,37 +107,34 @@ export default function index() {
     const {
         formData,
         errors,
+        configMeta,
         setFormData,
         handleInputChange,
+        handleLinsightChange,
         toggleFeature,
         handleSave
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
-        tabDisplayNameRef,
+        taskModeNameRef,
         knowledgeBaseRef,
         modelRefs,
-        webSearchRef,
         systemPromptRef,
-        appCenterWelcomeRef,
-        appCenterDescriptionRef,
         modelManagementContainerRef, // Pass in the new ref
-    });
+    }, scopeVersion);
 
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
     }, [formData.models]);
-    const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
-    // Redirect non-admin users
+    // Redirect users who cannot manage workstation settings
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
+        if (user.user_id && !canManageWorkbenchConfig(user)) {
             navigate('/build/apps')
         }
-    }, [user])
+    }, [user, navigate])
 
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
@@ -186,23 +160,6 @@ export default function index() {
             models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }]
         }));
     };
-    const handleOpenWebSearchSettings = () => {
-        setWebSearchDialogOpen(true);
-    };
-    // Add this method in the parent component
-    const handleWebSearchChange = useCallback((field: string, value: any) => {
-        console.log('Updating field:', field, 'New value:', value);
-
-        // Update local state
-        setFormData(prev => ({
-            ...prev,
-            webSearch: {
-                ...prev.webSearch,
-                [field]: value
-            }
-        }));
-
-    }, [setFormData]);
     const handleVisualToggle = (index: number, enabled: boolean) => {
         const newModels = [...formData.models];
         newModels[index] = {
@@ -212,10 +169,11 @@ export default function index() {
         setFormData(prev => ({ ...prev, models: newModels }));
     };
     return (
-        <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
+        <div className="daily-page h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
-                <CardContent className="pt-4 relative  ">
-                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                <CardContent className="pt-4 pb-0 relative  ">
+                    <div className="w-full  max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide pb-10">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         {/* <ToggleSection
                             title={t('chatConfig.workstationEntry')}
                             enabled={formData.menuShow}
@@ -239,17 +197,6 @@ export default function index() {
                                 onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'assistant', relativePath)}
                             />
                         </div>
-                        <div ref={sidebarSloganRef}>
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.sidebarSlogan')}</Label>}
-                                value={formData.sidebarSlogan}
-                                error={errors.sidebarSlogan}
-                                placeholder=""
-                                maxLength={15}
-                                onChange={(v) => handleInputChange('sidebarSlogan', v, 15)}
-                            />
-                        </div>
-
                         <div ref={welcomeMessageRef}>
                             <FormInput
                                 label={t('chatConfig.welcomeMessage')}
@@ -270,16 +217,6 @@ export default function index() {
                                 onChange={(v) => handleInputChange('functionDescription', v, 1000)}
                             />
                         </div>
-                        <div ref={tabDisplayNameRef}>
-                            <FormInput
-                                label={t('chatConfig.dailyModeName')}
-                                value={formData.tabDisplayName}
-                                error={errors.tabDisplayName}
-                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
-                                maxLength={20}
-                                onChange={(v) => handleInputChange('tabDisplayName', v, 20)}
-                            />
-                        </div>
                         <div ref={inputPlaceholderRef}>
                             <FormInput
                                 label={t('chatConfig.inputPlaceholder')}
@@ -290,48 +227,28 @@ export default function index() {
                                 onChange={(v) => handleInputChange('inputPlaceholder', v, 1000)}
                             />
                         </div>
-                        <div ref={appCenterWelcomeRef}>
+                        {/* F035 (PRD §4.8): task-mode fields merged from the legacy 灵思 tab */}
+                        <div ref={taskModeNameRef}>
                             <FormInput
-                                label={t('chatConfig.appCenterWelcome')}
-                                value={formData.applicationCenterWelcomeMessage}
-                                error={errors.applicationCenterWelcomeMessage}
-                                placeholder={t('chatConfig.appCenterWelcomePlaceholder')}
-                                onChange={(v) => handleInputChange('applicationCenterWelcomeMessage', v, 1000)}
+                                label={t('chatConfig.taskModeName')}
+                                value={formData.linsightConfig.tab_display_name}
+                                error={errors.taskModeName}
+                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
+                                maxLength={20}
+                                onChange={(v) => handleLinsightChange('tab_display_name', v)}
                             />
                         </div>
-
-                        {/* New application center description input */}
-                        <div ref={appCenterDescriptionRef}>
-                            <FormInput
-                                label={t('chatConfig.appCenterDescription')}
-                                value={formData.applicationCenterDescription}
-                                error={errors.applicationCenterDescription}
-                                placeholder={t('chatConfig.appCenterDescriptionPlaceholder')}
-                                onChange={(v) => handleInputChange('applicationCenterDescription', v, 1000)}
-                            />
-                        </div>
-
-                        {/* Model Management */}
-                        {/* Bind model management container ref */}
+                        <FormInput
+                            label={t('chatConfig.taskModeInputPlaceholder')}
+                            value={formData.linsightConfig.input_placeholder}
+                            error={''}
+                            placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
+                            maxLength={100}
+                            onChange={(v) => handleLinsightChange('input_placeholder', v)}
+                        />
+                        {/* F035: 应用中心欢迎语/描述 moved to the 应用 tab (AppCenter.tsx);
+                            their values still round-trip through dataToSave below. */}
                         <div className="mb-6" ref={modelManagementContainerRef}>
-                            <p className="text-lg font-bold mb-2">{t('chatConfig.modelManagement')}</p>
-                            <div className="mb-6">
-                                <ModelManagement
-                                    ref={modelRefs}
-                                    models={formData.models}
-                                    errors={errors.modelNames}
-                                    error={errors.model}
-                                    onAdd={addModel}
-                                    onRemove={(index) => {
-                                        const newModels = [...formData.models];
-                                        newModels.splice(index, 1);
-                                        setFormData(prev => ({ ...prev, models: newModels }));
-                                    }}
-                                    onModelChange={handleModelChange}
-                                    onNameChange={handleModelNameChange}
-                                    onVisualToggle={handleVisualToggle}
-                                />
-                            </div>
                             <FormInput
                                 label={<Label className="bisheng-label block pt-2">{t('chatConfig.maxTokens')}</Label>}
                                 type="number"
@@ -375,42 +292,20 @@ export default function index() {
                                 </Select>
                             </div>
                         </ToggleSection> */}
-                        <ToggleSection
-                            title={t('chatConfig.webSea')}
-                            enabled={formData.webSearch.enabled}
-                            onToggle={(enabled) => toggleFeature('webSearch', enabled)}
-                            extra={
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleOpenWebSearchSettings}
-                                    className="p-1 h-auto"
-                                >
-                                    <Settings className="-ml-2 h-4 w-4" />
-                                </Button>
-                            }
-                        >
-                            <WebSearchConfig
-                                config={formData.webSearch.prompt}
-                                onChange={handleWebSearchChange}
-                            />
-                        </ToggleSection>
+                        {/* v2.5 Agent-mode: available tools configuration (replaces 联网搜索 toggle) */}
+                        <ToolsConfig
+                            tools={formData.tools}
+                            onChange={(tools) => setFormData(prev => ({ ...prev, tools }))}
+                        />
+
                         <ToggleSection
                             title={t('chatConfig.knowledgeBase')}
                             enabled={formData.knowledgeBase.enabled}
                             onToggle={(enabled) => toggleFeature('knowledgeBase', enabled)}
                         >
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.knowledgeBasePrompt')}</Label>}
-                                isTextarea
-                                value={formData.knowledgeBase.prompt}
-                                error={errors.kownledgeBase}
-                                placeholder=""
-                                maxLength={30000}
-                                onChange={(val) => setFormData(prev => ({
-                                    ...prev,
-                                    knowledgeBase: { ...prev.knowledgeBase, prompt: val }
-                                }))}
+                            <OrgKbConfig
+                                orgKbs={formData.orgKbs}
+                                onChange={(orgKbs) => setFormData(prev => ({ ...prev, orgKbs }))}
                             />
                         </ToggleSection>
 
@@ -419,19 +314,24 @@ export default function index() {
                             enabled={formData.fileUpload.enabled}
                             onToggle={(enabled) => toggleFeature('fileUpload', enabled)}
                         >
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.fileUploadPrompt')}</Label>}
-                                isTextarea
-                                value={formData.fileUpload.prompt}
-                                error={''}
-                                maxLength={9999}
-                                onChange={(val) => setFormData(prev => ({
-                                    ...prev,
-                                    fileUpload: { ...prev.fileUpload, prompt: val }
-                                }))}
-                            />
+                            {null}
                         </ToggleSection>
 
+                        {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library.
+                            The header toggle (default off) gates the client 添加技能 entry. */}
+                        <SkillManagement
+                            scopeVersion={scopeVersion}
+                            entryEnabled={formData.skillEntry.enabled}
+                            onEntryToggle={(enabled) => toggleFeature('skillEntry', enabled)}
+                        />
+
+                        {/* Recommended Apps */}
+                        <RecommendedAppsConfig
+                            selectedAppIds={formData.recommendedApps || []}
+                            onSelectedAppsChange={(ids) =>
+                                setFormData((prev) => ({ ...prev, recommendedApps: ids }))
+                            }
+                        />
                     </div>
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
@@ -440,43 +340,31 @@ export default function index() {
                     </div>
                 </CardContent>
             </div>
-            <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
-                <DialogContent className="sm:max-w-[625px] bg-background-login">
-                    <DialogHeader>
-                        <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
-                    </DialogHeader>
-                    <WebSearchForm isApi={true} />
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
-    tabDisplayNameRef: React.RefObject<HTMLDivElement>;
+    taskModeNameRef: React.RefObject<HTMLDivElement>;
     knowledgeBaseRef: React.RefObject<HTMLDivElement>;
     modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
-    webSearchRef: React.RefObject<HTMLDivElement>;
     systemPromptRef: React.RefObject<HTMLDivElement>;
-    appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
-    appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
     modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
-const useChatConfig = (refs: UseChatConfigProps) => {
+const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
     const { t } = useTranslation()
 
     const [formData, setFormData] = useState<ChatConfigForm>({
         // menuShow: true,
+        // Fresh-deployment default — overwritten by API value when present.
         systemPrompt: t('chatConfig.systemPrompt2'),
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -485,15 +373,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         models: [{ key: generateUUID(4), id: null, name: '', displayName: '', visual: false }],
         maxTokens: 15000,
         voiceInput: { enabled: false, model: '' },
-        webSearch: {
-            enabled: true,
-            tool: 'bing',
-            params: {
-                api_key: '',
-                base_url: 'https://api.bing.microsoft.com/v7.0/search'
-            },
-            prompt: t('chatConfig.webSearchPrompt'),
-        },
         knowledgeBase: {
             enabled: true,
             prompt: t('chatConfig.internationalization')
@@ -503,8 +382,21 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             prompt: `{file_content}
 {question}`,
         },
+        // F035 (v2.6): Add-Skill entry defaults off until admin opts in.
+        skillEntry: {
+            enabled: false,
+        },
         // 默认展示名称：接口为空时展示默认文案
         tabDisplayName: t('dailyFullName'),
+        tools: [],
+        orgKbs: [],
+        recommendedApps: [],
+        linsightConfig: {
+            linsight_entry: true,
+            input_placeholder: '',
+            tools: [],
+            tab_display_name: t('chatConfig.taskModeFullName'),
+        },
     });
 
     // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
@@ -519,67 +411,134 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
 
     useEffect(() => {
-        getDailyConfigApi().then((res) => {
-            const cfg = (res && (res as any).data) || res;
-            if (cfg) {
-                const defaultSystemPrompt = t('chatConfig.systemPrompt2');
-                setFormData((prev) => {
-                    const mergeObj = (a: any, b: any) =>
-                        b != null && typeof b === 'object' ? { ...a, ...b } : a;
+        // Preset-tool list is fetched alongside config so fresh deployments can
+        // seed the built-in "联网搜索" tool as default-checked. The preset list
+        // is authoritative (t_gpts_tools* tables), so tool_key is looked up at
+        // runtime rather than hardcoded.
+        setConfigMeta(null);
+        Promise.all([
+            getDailyConfigApi(),
+            getToolsApi('default').catch(() => []),
+            // F035: 灵思 tab merged here — load its config alongside the daily one.
+            getLinsiConfigApi().catch(() => null),
+        ]).then(([res, toolsRes, linsightRes]) => {
+            const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
+            setConfigMeta(meta);
+            const linsightCfg = linsightRes ? (resolveConfigEnvelope<any>(linsightRes).data || {}) : {};
+            setFormData(prev => ({
+                ...prev,
+                linsightConfig: {
+                    linsight_entry: linsightCfg.linsight_entry ?? prev.linsightConfig.linsight_entry,
+                    input_placeholder: linsightCfg.input_placeholder ?? prev.linsightConfig.input_placeholder,
+                    tools: Array.isArray(linsightCfg.tools) ? linsightCfg.tools : prev.linsightConfig.tools,
+                    tab_display_name: (typeof linsightCfg.tab_display_name === 'string' && linsightCfg.tab_display_name.trim())
+                        ? linsightCfg.tab_display_name.trim()
+                        : prev.linsightConfig.tab_display_name,
+                },
+            }));
+            const presetTools: any[] = Array.isArray(toolsRes) ? toolsRes : [];
 
+            const buildDefaultTools = (): ToolConfigType[] => {
+                for (const parent of presetTools) {
+                    const child = (parent.children || []).find(
+                        (c: any) => c.tool_key === 'web_search',
+                    );
+                    if (child) {
+                        return [{
+                            id: parent.id,
+                            name: parent.name,
+                            is_preset: parent.is_preset,
+                            description: parent.description,
+                            default_checked: true,
+                            children: [{
+                                id: child.id,
+                                name: child.name,
+                                tool_key: child.tool_key,
+                                desc: child.desc,
+                            }],
+                        }];
+                    }
+                }
+                return [];
+            };
+
+            setFormData((prev) => {
+                const mergeObj = (a: any, b: any) =>
+                    b != null && typeof b === 'object' ? { ...a, ...b } : a;
+
+                // Fresh deployment: no WORKSTATION config row yet. Seed both
+                // systemPrompt and web_search from defaults; leave other fields
+                // at their initial-state values.
+                if (!cfg) {
                     return {
                         ...prev,
-                        // 基本文案配置
-                        sidebarSlogan: cfg.sidebarSlogan ?? prev.sidebarSlogan,
-                        welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
-                        functionDescription: cfg.functionDescription ?? prev.functionDescription,
-                        inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
-                        applicationCenterWelcomeMessage:
-                            cfg.applicationCenterWelcomeMessage ?? prev.applicationCenterWelcomeMessage,
-                        applicationCenterDescription:
-                            cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
-                        // 模型与 token
-                        models:
-                            Array.isArray(cfg.models) && cfg.models.length > 0
-                                ? cfg.models
-                                : prev.models,
-                        maxTokens:
-                            typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
-                        // 系统提示词
-                        systemPrompt: cfg.systemPrompt || defaultSystemPrompt,
-                        // 图标与其他嵌套配置合并
-                        sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
-                        assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
-                        webSearch: mergeObj(prev.webSearch, cfg.webSearch),
-                        knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
-                        fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
-                        tabDisplayName: (() => {
-                            // Treat empty string / whitespace as "API empty" and don't override defaults.
-                            const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
-                            if (typeof raw !== 'string') return prev.tabDisplayName;
-                            const trimmed = raw.trim();
-                            return trimmed ? trimmed : prev.tabDisplayName;
-                        })()
+                        systemPrompt: t('chatConfig.systemPrompt2'),
+                        tools: buildDefaultTools(),
                     };
-                });
-            }
+                }
+
+                // Legacy upgrade path: missing `tools` field → seed web_search.
+                // Explicit [] (admin cleared) is preserved.
+                const toolsFromCfg: ToolConfigType[] = Array.isArray(cfg.tools)
+                    ? cfg.tools
+                    : cfg.tools === undefined
+                        ? buildDefaultTools()
+                        : prev.tools;
+
+                // Treat empty string as "not configured" so the default prompt
+                // fills in instead of an empty textarea.
+                const cfgSystemPrompt = typeof cfg.systemPrompt === 'string'
+                    && cfg.systemPrompt.trim()
+                    ? cfg.systemPrompt
+                    : t('chatConfig.systemPrompt2');
+
+                return {
+                    ...prev,
+                    welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
+                    functionDescription: cfg.functionDescription ?? prev.functionDescription,
+                    inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
+                    applicationCenterWelcomeMessage:
+                        cfg.applicationCenterWelcomeMessage ?? prev.applicationCenterWelcomeMessage,
+                    applicationCenterDescription:
+                        cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
+                    maxTokens:
+                        typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
+                    systemPrompt: cfgSystemPrompt,
+                    sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
+                    assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
+                    knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
+                    fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
+                    // Absent skillEntry (legacy configs) keeps the default-off state.
+                    skillEntry: mergeObj(prev.skillEntry, cfg.skillEntry),
+                    tabDisplayName: (() => {
+                        // Treat empty string / whitespace as "API empty" and don't override defaults.
+                        const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
+                        if (typeof raw !== 'string') return prev.tabDisplayName;
+                        const trimmed = raw.trim();
+                        return trimmed ? trimmed : prev.tabDisplayName;
+                    })(),
+                    tools: toolsFromCfg,
+                    orgKbs: Array.isArray(cfg.orgKbs) ? cfg.orgKbs : prev.orgKbs,
+                    recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
+                };
+            });
         });
-    }, [t]);
+    }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         tabDisplayName: '',
+        taskModeName: '',
         inputPlaceholder: '',
         kownledgeBase: '',
         model: '',
         modelNames: [],
-        webSearch: undefined,
         systemPrompt: '',
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
 
     const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -591,6 +550,17 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         }
     };
 
+    // F035: edits to the merged task-mode fields (legacy linsight config).
+    const handleLinsightChange = (field: 'tab_display_name' | 'input_placeholder', value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            linsightConfig: { ...prev.linsightConfig, [field]: value },
+        }));
+        if (field === 'tab_display_name') {
+            setErrors(prev => ({ ...prev, taskModeName: '' }));
+        }
+    };
+
     const toggleFeature = (feature: keyof ChatConfigForm, enabled: boolean) => {
         setFormData(prev => ({
             ...prev,
@@ -598,38 +568,40 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         }));
     };
 
-    const validateForm = (): { isValid: boolean, firstErrorRef: React.RefObject<HTMLDivElement> | null } => {
+    const validateForm = (): {
+        isValid: boolean,
+        firstErrorRef: React.RefObject<HTMLDivElement> | null,
+        modelErrorMessages: string[],
+    } => {
         let isValid = true;
         let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
+        const modelErrorMessages: string[] = [];
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             tabDisplayName: '',
+            taskModeName: '',
             inputPlaceholder: '',
             kownledgeBase: '',
             model: '',
             modelNames: [],
-            webSearch: undefined,
             applicationCenterWelcomeMessage: '',
             applicationCenterDescription: '',
             systemPrompt: '',
         };
 
-        if (formData.sidebarSlogan.length > 15) {
-            newErrors.sidebarSlogan = t('chatConfig.errors.maxCharacters', { count: 15 });
-            if (!firstErrorRef) firstErrorRef = refs.sidebarSloganRef;
-            isValid = false;
-        }
+        // F035: 日常模式展示名称 was removed from the UI (the value still
+        // round-trips through dataToSave) — no validation for it anymore.
 
-        const tabName = (formData.tabDisplayName || '').trim();
-        if (!tabName) {
-            newErrors.tabDisplayName = t('chatConfig.errors.dailyModeNameRequired');
-            if (!firstErrorRef) firstErrorRef = refs.tabDisplayNameRef;
+        // F035: task-mode display name (merged from the legacy 灵思 tab) is required.
+        const taskModeName = (formData.linsightConfig.tab_display_name || '').trim();
+        if (!taskModeName) {
+            newErrors.taskModeName = t('chatConfig.errors.taskModeNameRequired');
+            if (!firstErrorRef) firstErrorRef = refs.taskModeNameRef;
             isValid = false;
-        } else if (tabName.length > 20) {
-            newErrors.tabDisplayName = t('chatConfig.errors.maxCharacters', { count: 20 });
-            if (!firstErrorRef) firstErrorRef = refs.tabDisplayNameRef;
+        } else if (taskModeName.length > 20) {
+            newErrors.taskModeName = t('chatConfig.errors.maxCharacters', { count: 20 });
+            if (!firstErrorRef) firstErrorRef = refs.taskModeNameRef;
             isValid = false;
         }
 
@@ -665,142 +637,32 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
         }
-        if (formData.applicationCenterWelcomeMessage.length > 1000) {
-            newErrors.applicationCenterWelcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
-            if (!firstErrorRef) firstErrorRef = refs.appCenterWelcomeRef;
-            isValid = false;
-        }
-
-        // Validate application center description
-        if (formData.applicationCenterDescription.length > 1000) {
-            newErrors.applicationCenterDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
-            if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
-            isValid = false;
-        }
-        // Validate models
-        if (formData.models.length === 0) {
-            newErrors.model = t('chatConfig.errors.atLeastOneModel');
-            if (!firstErrorRef) {
-                // Modified: Use model management container ref as priority scroll target
-                firstErrorRef = refs.modelManagementContainerRef.current
-                    ? { current: refs.modelManagementContainerRef.current }
-                    : refs.sidebarSloganRef; // Keep default fallback
-            }
-            isValid = false;
-        }
-
-        const modelNameErrors: string[][] = [];
-        formData.models.forEach((model, index) => {
-            const displayName = model.displayName.trim();
-            let error = [];
-
-            if (!displayName) {
-                error = ['', t('chatConfig.errors.modelNameRequired')];
-                if (!firstErrorRef && refs.modelRefs.current[index]) {
-                    firstErrorRef = { current: refs.modelRefs.current[index] };
-                }
-            } else if (!model.id) {
-                error = [t('chatConfig.errors.modelRequired'), ''];
-                if (!firstErrorRef && refs.modelRefs.current[index]) {
-                    firstErrorRef = { current: refs.modelRefs.current[index] };
-                }
-            } else if (displayName.length > 30) {
-                error = ['', t('chatConfig.errors.maxCharacters', { count: 30 })];
-                if (!firstErrorRef && refs.modelRefs.current[index]) {
-                    firstErrorRef = { current: refs.modelRefs.current[index] };
-                }
-            } else {
-                formData.models.some((m, i) => {
-                    if (i !== index) {
-                        error = ['', ''];
-                        if (m.id === model.id) {
-                            error[0] = t('chatConfig.errors.modelDuplicate')
-                        }
-                        if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
-                            error[1] = t('chatConfig.errors.modelNameDuplicate')
-                        }
-                        if (error[0] || error[1]) {
-                            if (!firstErrorRef && refs.modelRefs.current[index]) {
-                                firstErrorRef = { current: refs.modelRefs.current[index] };
-                            }
-                            return true;
-                        }
-                    }
-                });
-            }
-
-            if (error[0] || error[1]) {
-                modelNameErrors[model.key] = error;
-                isValid = false;
-            }
-        });
-
-        // Validate web search
-        if (formData.webSearch.enabled) {
-            const webSearchErrors: any = {};
-            let hasWebSearchError = false;
-
-            switch (formData.webSearch.tool) {
-                case 'bing':
-                    if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    if (!formData.webSearch.params.base_url?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, base_url: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    break;
-                case 'bocha':
-                case 'jina':
-                case 'tavily':
-                    if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    break;
-                case 'serp':
-                    if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    if (!formData.webSearch.params.engine?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, engine: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    break;
-            }
-
-            if (hasWebSearchError && !firstErrorRef && refs.webSearchRef.current) {
-                firstErrorRef = refs.webSearchRef;
-            }
-            if (Object.keys(webSearchErrors).length) {
-                newErrors.webSearch = webSearchErrors;
-            }
-        }
-
-        newErrors.modelNames = modelNameErrors;
+        // F035: app-center copy moved to the 应用 tab (AppCenter.tsx) — validated there.
+        newErrors.modelNames = [];
         setErrors(newErrors);
 
-        return { isValid, firstErrorRef };
+        return {
+            isValid,
+            firstErrorRef,
+            modelErrorMessages: Array.from(new Set(modelErrorMessages)),
+        };
     };
 
     const { toast } = useToast()
     const { reloadConfig } = useContext(locationContext)
     const handleSave = async () => {
-        const { isValid, firstErrorRef } = validateForm();
+        const { isValid, firstErrorRef, modelErrorMessages } = validateForm();
         if (!isValid) {
-            const tabName = (formData.tabDisplayName || '').trim();
-            if (!tabName) {
+            if (modelErrorMessages.length > 0) {
                 toast({
                     variant: 'error',
-                    description: '日常模式展示名称不能为空',
+                    description: modelErrorMessages.join('; '),
                 });
             }
             if (firstErrorRef?.current) {
                 firstErrorRef.current.scrollIntoView({
                     behavior: 'smooth',
-                    block: 'end',
+                    block: 'center',
                     inline: 'nearest'
                 });
 
@@ -815,25 +677,41 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         const dataToSave = {
             sidebarIcon: formData.sidebarIcon,
             assistantIcon: formData.assistantIcon,
-            sidebarSlogan: formData.sidebarSlogan.trim(),
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
             applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
             applicationCenterDescription: formData.applicationCenterDescription.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
-            models: formData.models,
             maxTokens: formData.maxTokens || 15000,
             systemPrompt: formData.systemPrompt,
-            webSearch: formData.webSearch,
             knowledgeBase: formData.knowledgeBase,
             fileUpload: formData.fileUpload,
+            skillEntry: formData.skillEntry,
             tabDisplayName: formData.tabDisplayName ?? '',
+            // v2.5 Agent-mode fields
+            tools: formData.tools,
+            orgKbs: formData.orgKbs,
+            recommendedApps: formData.recommendedApps || [],
         };
 
-        console.log('Saving data:', dataToSave);
+        // F035: the merged task-mode fields persist to the legacy linsight
+        // config endpoint; linsight_entry / tools round-trip untouched (the
+        // entry toggle moved to role menus, tools share the daily pool).
+        const linsightToSave = {
+            linsight_entry: formData.linsightConfig.linsight_entry ?? true,
+            input_placeholder: formData.linsightConfig.input_placeholder?.trim() || '',
+            tools: formData.linsightConfig.tools || [],
+            tab_display_name: (formData.linsightConfig.tab_display_name || '').trim(),
+        };
 
-        captureAndAlertRequestErrorHoc(setDailyConfigApi(dataToSave)).then((res) => {
+        captureAndAlertRequestErrorHoc(
+            Promise.all([setDailyConfigApi(dataToSave), setLinsiConfigApi(linsightToSave)])
+        ).then((res) => {
             if (res) {
+                setConfigMeta({
+                    inherited_from_root: false,
+                    has_override: true,
+                });
                 toast({
                     variant: 'success',
                     description: t('chatConfig.saveSuccess'),
@@ -850,7 +728,9 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         errors,
         setFormData,
         setErrors,
+        configMeta,
         handleInputChange,
+        handleLinsightChange,
         toggleFeature,
         handleSave
     };

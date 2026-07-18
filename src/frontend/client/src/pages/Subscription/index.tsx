@@ -1,6 +1,7 @@
-import { useLocalize } from "~/hooks";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyStateIllustration } from "~/components/illustrations";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
 import { useAuthContext } from "~/hooks/AuthContext";
@@ -12,14 +13,16 @@ import {
     createManagerChannelApi,
     updateChannelApi,
     getChannelDetailApi,
+    getChannelsApi,
 } from "~/api/channels";
-import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
-import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
-import { ChannelMemberDialog } from "~/components/ChannelMemberDialog";
+import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
+import { ChannelDiscoveryHome } from "./ChannelDiscoveryHome";
+import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
@@ -27,18 +30,31 @@ import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
 import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
-
-const MAX_USER_CHANNELS = 10;
+import { Outlined } from "bisheng-icons";
+import { useSetRecoilState, useRecoilValue } from "recoil";
+import store from "~/store";
+import { subscriptionDetailPaneWidthState, subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
+import { ChannelShareDialog } from "./ChannelShareDialog";
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
 const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
     const matched = pathname.match(/\/channel\/share\/([^/?#]+)/);
     return matched?.[1];
 };
 
+// Detail-route channel id, parsed from the pathname (NOT useParams).
+// Must stay consistent with `isShareRoute` (also pathname-derived): under react-activation
+// KeepAlive, useParams() can return a stale channelId (e.g. a previously previewed share
+// channel) after the tab is cached and restored, while location.pathname is already fresh.
+// Reading both from the same source prevents that desync from synthesizing a bogus active channel.
+const extractDetailChannelIdFromPath = (pathname: string): string | undefined => {
+    const matched = pathname.match(/\/channel\/(?!share\/)([^/?#]+)/);
+    return matched?.[1];
+};
+
 export default function Subscription() {
     const localize = useLocalize();
     const { user, isUserLoading } = useAuthContext();
-    const { channelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const location = useLocation();
     const isShareRoute = location.pathname.includes("/channel/share/");
@@ -46,9 +62,11 @@ export default function Subscription() {
         extractShareChannelIdFromPath(location.pathname)
     );
     const [manualPreviewChannelId, setManualPreviewChannelId] = useState<string | undefined>(undefined);
-    const routePreviewChannelId = shareChannelIdFromPath || (isShareRoute ? channelId : undefined);
+    // Derive route ids from location.pathname only (never useParams): under react-activation
+    // KeepAlive, useParams() can lag behind location after the tab is cached/restored.
+    const routePreviewChannelId = shareChannelIdFromPath || (isShareRoute ? extractShareChannelIdFromPath(location.pathname) : undefined);
     const previewChannelId = routePreviewChannelId || manualPreviewChannelId;
-    const detailChannelId = !isShareRoute ? channelId : undefined;
+    const detailChannelId = !isShareRoute ? extractDetailChannelIdFromPath(location.pathname) : undefined;
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [channelRefreshToken, setChannelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
@@ -64,13 +82,26 @@ export default function Subscription() {
     const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
     /** Bumped on KeepAlive re-activation so share-preview effect re-runs (deps may be unchanged vs cached instance). */
     const [channelTabActivateEpoch, setChannelTabActivateEpoch] = useState(0);
-    const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-    const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
-    const [channelMemberOpen, setChannelMemberOpen] = useState(false);
-    const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
+    const [channelPermissionDialogOpen, setChannelPermissionDialogOpen] = useState(false);
+    const [channelPermissionDialogChannel, setChannelPermissionDialogChannel] = useState<Channel | null>(null);
+    const isH5 = usePrefersMobileLayout();
+    const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
+    const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
+    // Right-area width (detail panel + splitter) published by ChannelLayout; offsets
+    // the persistent 频道/广场 tab so it tracks the article-list column's right edge.
+    const detailPaneWidth = useRecoilValue(subscriptionDetailPaneWidthState);
+    // True while the H5 channel-switcher dropdown is open — greys out the persistent
+    // 频道/广场 tab, matching the header's left/right action buttons.
+    const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
+
+    const openChannelPermissionDialog = (channel: Channel) => {
+        setChannelPermissionDialogChannel(channel);
+        setChannelPermissionDialogOpen(true);
+    };
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
         if (isUserLoading) return "loading";
@@ -313,18 +344,85 @@ export default function Subscription() {
 
     const bumpChannelSquareList = () => setChannelSquareRefreshKey((k) => k + 1);
 
-    // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
+    // Stable callbacks for the memo'd ChannelSquare — prevents the card list
+    // from re-rendering (flashing) when navigate() re-renders Subscription on
+    // card click.
+    const handleSquareBack = useCallback(() => {
+        setShowChannelSquare(false);
+        navigate("/channel", { replace: true });
+    }, [navigate]);
+
+    const handleSquarePreview = useCallback((id: string) => {
+        // Open the preview drawer purely from React state — do NOT navigate to
+        // /channel/share/:id. That path is a SEPARATE route entry, so routing
+        // to it unmounts/remounts the whole Subscription page (showChannelSquare
+        // resets to false then back to true), producing a visible flash. The
+        // drawer opens from manualPreviewChannelId; the URL stays at
+        // /channel?square=1. Share links are still generated by the drawer's
+        // own share button, which targets /channel/share/:id directly.
+        setManualPreviewChannelId(id);
+        userClosedSharePreviewRef.current = false;
+        setPreviewDrawerOpen(true);
+    }, []);
+
+    // Channel count is reported by ChannelSidebar (H5 drawer) via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
+    const { isOverQuota } = useEffectiveQuota();
+
+    // Page owns channel list + auto-select on both PC and H5 so the page lands on a real channel
+    // by default. Channel switching UI is route-driven (system menu reveal on H5).
+    const channelPluginEnabled = channelPluginGate === "enabled";
+    const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
+        queryKey: ["channels", "created", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
+        enabled: channelPluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+    const { data: subscribedChannelsForAuto = [], isFetched: subscribedAutoFetched } = useQuery({
+        queryKey: ["channels", "subscribed", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
+        enabled: channelPluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+
+    // True while we still can't tell whether the user has channels: the plugin
+    // gate is resolving, or the channel lists haven't finished their first fetch.
+    // Drives a loading view so the "no channels, create one" empty state never
+    // flashes before auto-select can land on a real channel.
+    const channelsResolving =
+        channelPluginGate === "loading" ||
+        (channelPluginEnabled && (!createdAutoFetched || !subscribedAutoFetched));
+
+    useEffect(() => {
+        createdChannelCountRef.current = createdChannelsForAuto.length;
+    }, [createdChannelsForAuto.length]);
+
+    // Auto-select first channel when nothing is active (skip while a share/preview is resolving).
+    useEffect(() => {
+        if (!channelPluginEnabled) return;
+        if (activeChannel || previewChannelId || showChannelSquare) return;
+        if (!createdAutoFetched || !subscribedAutoFetched) return;
+        if (createdChannelsForAuto.length > 0) {
+            setActiveChannel(createdChannelsForAuto[0]);
+        } else if (subscribedChannelsForAuto.length > 0) {
+            setActiveChannel(subscribedChannelsForAuto[0]);
+        }
+    }, [channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
+
+    useEffect(() => {
+        if (!isH5) setChannelListDrawerOpen(false);
+    }, [isH5]);
 
     // Handle channel selection
     const handleChannelSelect = (channel: Channel | null) => {
         setActiveChannel(channel);
+        if (isH5) setChannelListDrawerOpen(false);
     };
 
     // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
         setEditingChannel(null);
-        if (createdChannelCountRef.current >= MAX_USER_CHANNELS) {
+        if (isOverQuota("channel", createdChannelCountRef.current)) {
             showToast({
                 message: localize("com_subscription.channel_limit_reached"),
                 severity: NotificationSeverity.WARNING
@@ -392,78 +490,168 @@ export default function Subscription() {
     }
 
     return (
-        <div className="relative h-full flex">
+        <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
+            {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
+                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。
+                覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
+                加载中（channelsResolving 且非广场）暂不显示。 */}
+            {!isH5 && (showChannelSquare || !channelsResolving) ? (
+                <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
+                    <ChannelSquareTabs
+                        active={showChannelSquare ? "square" : "channel"}
+                        onChannelClick={handleSquareBack}
+                        onSquareClick={handleChannelSquare}
+                    />
+                </div>
+            ) : null}
+            {/* H5：同一个切换器常驻在两个视图之上（不随 showChannelSquare 卸载），
+                所以频道⇄广场切换时蓝色下划线平滑滑动。各视图头部不再各自渲染切换器，
+                中间留空给它。屏幕居中，与各视图头部行（pt+h-11）垂直对齐；
+                外层 pointer-events-none 让两侧的侧栏/搜索按钮仍可点击，仅切换器本体接收点击。 */}
+            {isH5 && (showChannelSquare || !channelsResolving) ? (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                    <div className="pointer-events-auto flex h-11 items-center">
+                        <ChannelSquareTabs
+                            variant="underline"
+                            active={showChannelSquare ? "square" : "channel"}
+                            onChannelClick={handleSquareBack}
+                            onSquareClick={handleChannelSquare}
+                            disabled={mobileChannelDropdownOpen}
+                        />
+                    </div>
+                </div>
+            ) : null}
             {showChannelSquare ? (
-                <ChannelSquare
-                    refreshKey={channelSquareRefreshKey}
-                    onBack={() => {
-                        setShowChannelSquare(false);
-                        navigate("/channel", { replace: true });
-                    }}
-                    onPreviewChannel={(id) => {
-                        setManualPreviewChannelId(id);
-                        userClosedSharePreviewRef.current = false;
-                        setPreviewDrawerOpen(true);
-                        navigate(`/channel/share/${id}?square=1`);
-                    }}
-                />
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <ChannelSquare
+                        refreshKey={channelSquareRefreshKey}
+                        onPreviewChannel={handleSquarePreview}
+                        isH5={isH5}
+                        onOpenMobileNav={() => setSystemMenuOpen(true)}
+                    />
+                </div>
             ) : (
                 <>
-                    {/* left sidebar */}
-                    <ChannelSidebar
-                        activeChannelId={activeChannel?.id}
-                        suppressAutoSelect={!!previewChannelId}
-                        onChannelSelect={handleChannelSelect}
-                        onCreateChannel={handleCreateChannel}
-                        onChannelSquare={handleChannelSquare}
-                        onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
-                        onManageMembers={(channel) => {
-                            setChannelMemberChannel(channel);
-                            setChannelMemberOpen(true);
-                        }}
-                        onChannelSettings={(channel) => {
-                            // 用详情接口回显后再打开抽屉，避免抽屉先打开、详情后到导致表单被二次 init 覆盖用户刚输入的内容
-                            setEditingChannel(null);
-                            (async () => {
-                                try {
-                                    const detail = await getChannelDetailApi(channel.id);
-                                    // 以 /my_channels 的列表项为基础，叠加详情字段（description / visibility / is_released / source_list 等）
-                                    setEditingChannel({ ...channel, ...detail });
-                                } catch {
-                                    // 如果详情接口失败，至少保证能用列表里的基础字段编辑名称
-                                    setEditingChannel(channel);
-                                } finally {
-                                    setShowCreateChannelDrawer(true);
-                                }
-                            })();
-                        }}
-                    />
-
-                    {activeChannel ? (
-                        <ChannelLayout
-                            key={`${activeChannel.id}-${channelRefreshToken}`}
-                            channel={activeChannel}
-                            onFullScreen={(article, ai) => {
-                                enteredFullscreenViaAiRef.current = !!ai;
-                                setFullScreenArticle(article);
-                                setShowAiAssistant(ai || false);
-                                setShowFullScreenBtn(!!ai);
-                            }}
-                        />
-                    ) : (
-                        <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                            <img
-                                className="size-[120px] mb-4 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
+                    {/* PC：频道列表已移至顶部标题下拉（ChannelSwitcher）；H5：改抽屉叠在主内容之上（见下方 fixed） */}
+                    {isH5 && channelListDrawerOpen ? (
+                        <div
+                            className="fixed inset-0 z-[70] flex"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label={localize("com_subscription.subscribe")}
+                        >
+                            <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
+                                <ChannelSidebar
+                                    mobileDrawerMode
+                                    onDrawerClose={() => setChannelListDrawerOpen(false)}
+                                    activeChannelId={activeChannel?.id}
+                                    suppressAutoSelect={!!previewChannelId}
+                                    onChannelSelect={handleChannelSelect}
+                                    onCreateChannel={handleCreateChannel}
+                                    onChannelSquare={handleChannelSquare}
+                                    onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
+                                    onManageMembers={(channel) => {
+                                        setChannelListDrawerOpen(false);
+                                        openChannelPermissionDialog(channel);
+                                    }}
+                                    onChannelSettings={(channel) => {
+                                        setChannelListDrawerOpen(false);
+                                        setEditingChannel(null);
+                                        (async () => {
+                                            try {
+                                                const detail = await getChannelDetailApi(channel.id);
+                                                setEditingChannel({ ...channel, ...detail });
+                                            } catch {
+                                                setEditingChannel(channel);
+                                            } finally {
+                                                setShowCreateChannelDrawer(true);
+                                            }
+                                        })();
+                                    }}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
+                                aria-label={localize("com_nav_close_sidebar")}
+                                onClick={() => setChannelListDrawerOpen(false)}
                             />
-                            <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
-                                className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
-                                onClick={handleCreateChannel}
-                            >{localize("com_subscription.create_channel")}</span>
-                            </p>
                         </div>
-                    )}
+                    ) : null}
+
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        {activeChannel ? (
+                            <ChannelLayout
+                                key={`${activeChannel.id}-${channelRefreshToken}`}
+                                channel={activeChannel}
+                                onChannelSelect={handleChannelSelect}
+                                onManageMembers={(channel) => openChannelPermissionDialog(channel)}
+                                onChannelSettings={(channel) => {
+                                    setEditingChannel(null);
+                                    (async () => {
+                                        try {
+                                            const detail = await getChannelDetailApi(channel.id);
+                                            setEditingChannel({ ...channel, ...detail });
+                                        } catch {
+                                            setEditingChannel(channel);
+                                        } finally {
+                                            setShowCreateChannelDrawer(true);
+                                        }
+                                    })();
+                                }}
+                                onOpenChannelNav={isH5 ? () => setSystemMenuOpen(true) : undefined}
+                                onGoChannelSquare={handleChannelSquare}
+                                onCreateChannel={handleCreateChannel}
+                                onFullScreen={(article, ai) => {
+                                    // 全屏 button (ai === false): open the standalone article page in a new tab.
+                                    // AI assistant button (ai === true): keep the existing in-app fullscreen overlay
+                                    // so the assistant panel can dock alongside the article.
+                                    if (!ai) {
+                                        const url = buildClientShareUrl(`/channel/${article.channelId}/article/${article.id}`);
+                                        window.open(url, "_blank", "noopener,noreferrer");
+                                        return;
+                                    }
+                                    enteredFullscreenViaAiRef.current = true;
+                                    setFullScreenArticle(article);
+                                    setShowAiAssistant(true);
+                                    setShowFullScreenBtn(true);
+                                }}
+                            />
+                        ) : channelsResolving ? (
+                            <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
+                                {isH5 ? (
+                                    <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                        {/* Match the loaded ArticleList header: safe-area+8px top
+                                            padding on the wrapper, a separate h-11 row, size-5 icon. */}
+                                        <div className="relative flex h-11 items-center px-4">
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_nav_open_sidebar")}
+                                                onClick={() => setSystemMenuOpen(true)}
+                                                className={mobileHeadIconBtnClassName}
+                                            >
+                                                <Outlined.SidebarMenu className="size-5" />
+                                            </button>
+                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
+                                                {localize("com_subscription.subscribe")}
+                                            </h1>
+                                        </div>
+                                    </div>
+                                ) : null}
+                                <LoadingIcon className="size-20 text-primary" />
+                            </div>
+                        ) : (
+                            <ChannelDiscoveryHome
+                                enabled
+                                isH5={isH5}
+                                previewOpen={previewDrawerOpen}
+                                onOpenMobileNav={() => setSystemMenuOpen(true)}
+                                onPreviewChannel={handleSquarePreview}
+                                onGoSquare={handleChannelSquare}
+                                onCreateChannel={handleCreateChannel}
+                            />
+                        )}
+                    </div>
                 </>
             )}
 
@@ -489,7 +677,7 @@ export default function Subscription() {
                     }
                 }}
                 onManageMembers={(channelId) => {
-                    setChannelMemberChannel({
+                    openChannelPermissionDialog({
                         id: channelId,
                         name: "",
                         creator: "",
@@ -503,21 +691,13 @@ export default function Subscription() {
                         updatedAt: "",
                         subChannels: []
                     });
-                    setChannelMemberOpen(true);
                 }}
             />
 
-            <KnowledgeSpaceMemberDialog
-                open={memberDialogOpen}
-                onOpenChange={setMemberDialogOpen}
-                space={memberDialogSpace}
-            />
-
-            <ChannelMemberDialog
-                open={channelMemberOpen}
-                onOpenChange={setChannelMemberOpen}
-                channelId={channelMemberChannel?.id || null}
-                currentUserRole={channelMemberChannel?.role || null}
+            <ChannelShareDialog
+                open={channelPermissionDialogOpen}
+                onOpenChange={setChannelPermissionDialogOpen}
+                channel={channelPermissionDialogChannel}
             />
 
             {/* Full-screen overlay — absolute inset-0 covers the entire Subscription (including the channel sidebar), but doesn't affect MainLayout's primary navigation */}
@@ -541,7 +721,11 @@ export default function Subscription() {
                         setShowAiAssistant={setShowAiAssistant}
                         onCloseAiAssistant={() => {
                             if (enteredFullscreenViaAiRef.current) {
-                                // Entered fullscreen via AI button → exit fullscreen entirely
+                                // H5：从 AI 返回正文全屏层，不直接关回列表；大屏：经 AI 进入则整页退出
+                                if (isH5) {
+                                    setShowAiAssistant(false);
+                                    return;
+                                }
                                 setFullScreenArticle(null);
                                 setShowAiAssistant(false);
                                 enteredFullscreenViaAiRef.current = false;

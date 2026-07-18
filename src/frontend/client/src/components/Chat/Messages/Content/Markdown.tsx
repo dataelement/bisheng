@@ -1,10 +1,14 @@
-import React, { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
+import { Outlined } from 'bisheng-icons';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
+import rehypeSlug from 'rehype-slug';
 import remarkDirective from 'remark-directive';
 import remarkGfm from 'remark-gfm';
+import { rehypeBr } from '~/utils/rehypeBr';
 import remarkMath from 'remark-math';
 import supersub from 'remark-supersub';
 import type { Pluggable } from 'unified';
@@ -17,14 +21,32 @@ import {
 import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
 import { remarkCitationPlugin } from '~/components/Artifacts/remarkCitationPlugin';
 import CodeBlock from '~/components/Messages/Content/CodeBlock';
-import { TooltipAnchor } from '~/components/ui';
 import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
-import { WebItem } from './SearchWebUrls';
+import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
+import {
+  buildCitationPreview,
+  createCitationDetailMap,
+  getCitationClassName,
+  getCitationDocumentUrl,
+  getCitationSourceLabel,
+  getLegacyCitationPreview,
+  isRagCitation,
+  normalizeCitationType,
+  transformPrivateCitations,
+  type CitationDetailLoader,
+  type CitationDisplayData,
+  type CitationPreview,
+} from './citationUtils';
+import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
+import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
+import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
 import Echarts from './Echarts'
 
@@ -70,7 +92,7 @@ export const code: React.ElementType = memo(({ className, children }: TCodeProps
       </code>
     );
   } else {
-    if (lang === 'echarts') return <Echarts option={children} />
+    if (lang === 'echarts') return <Echarts option={String(children)} />
     if (lang === 'mermaid') return <MermaidBlock>{String(children).trim()}</MermaidBlock>
     return <CodeBlock
       lang={lang ?? 'text'}
@@ -127,6 +149,36 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
 
   const { refetch: downloadFile } = useFileDownload(user?.id ?? '', file_id);
   const props: { target?: string; onClick?: React.MouseEventHandler } = { target: '_new' };
+
+  // In-page anchor (e.g. a generated table-of-contents `#heading`, or a gfm
+  // footnote ref). The default `target="_new"` would spawn a blank tab; instead
+  // scroll the matching element into view within the current markdown panel.
+  if (href?.startsWith('#')) {
+    const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      const raw = href.slice(1);
+      // href may arrive percent-encoded or as raw CJK; tolerate malformed `%`.
+      let id = raw;
+      try {
+        id = decodeURIComponent(raw);
+      } catch {
+        id = raw;
+      }
+      if (!id) {
+        return;
+      }
+      const scope = event.currentTarget.closest('.bs-mkdown') ?? document;
+      const target =
+        (scope.querySelector(`[id="${CSS.escape(id)}"]`) as HTMLElement | null) ??
+        document.getElementById(id);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    return (
+      <a href={href} onClick={handleAnchorClick}>
+        {children}
+      </a>
+    );
+  }
 
   if (!file_id || !filename) {
     return (
@@ -187,31 +239,570 @@ type TContentProps = {
   content: string;
   showCursor?: boolean;
   isLatestMessage: boolean;
+  citations?: ChatCitation[] | null;
+  messageId?: string;
+  onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
 };
 
-const Citation = ({ data, children }) => {
-
-  if (!data) return null;
-
-  return <TooltipAnchor
-    role="button"
-    description={
-      <div className="p-2">
-        <WebItem {...data} />
+function CitationPreviewCard({
+  preview,
+  detail,
+  isLoading,
+  error,
+  notPermitted,
+  onCardClick,
+  onOpenDocumentPreview,
+}: {
+  preview: CitationPreview | null;
+  detail?: ChatCitation | null;
+  isLoading: boolean;
+  error: boolean;
+  notPermitted?: boolean;
+  onCardClick?: () => void;
+  onOpenDocumentPreview?: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+        <Outlined.Loading className="mr-2 size-4 animate-spin" />
+        加载溯源详情...
       </div>
+    );
+  }
+
+  // Backend returned 404: the viewer has no permission for this source (or it no
+  // longer exists). Product decision: show "no permission", not "no source detail".
+  if (notPermitted) {
+    return (
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+        暂无权限
+      </div>
+    );
+  }
+
+  if (error || !preview) {
+    return (
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+        暂无溯源详情
+      </div>
+    );
+  }
+
+  const isWeb = preview.type === 'web';
+  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
+  const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
+  const titleContainerClassName = 'bg-white p-3';
+  // Web link titles hover to a fixed blue (matches the web hover arrow #1B61E6),
+  // not the blue⇄green brand theme — they're generic external links, not a brand action.
+  const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#1B61E6]`;
+  const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]';
+  const formatSourceMeta = (value?: string) => {
+    if (!value) {
+      return '';
     }
-    className="bg-gray-100 dark:bg-gray-600 inline-flex size-5 items-center justify-center rounded-full transition-colors duration-200 hover:bg-surface-hover"
-    onClick={() => {
-      window.open(data.url, '_blank')
-    }}
-  >
-    <span className='text-xs'>{children}</span>
-  </TooltipAnchor>
+
+    const normalizedValue = value.trim();
+    const matched = normalizedValue.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/);
+    if (matched) {
+      return `${matched[1]} ${matched[2]}`;
+    }
+
+    return normalizedValue;
+  };
+  const splitRagTitle = (value?: string) => {
+    const normalizedValue = String(value || '').trim();
+    const matched = normalizedValue.match(/^(.*?)(\.[a-zA-Z0-9]+)$/);
+
+    if (!matched) {
+      return {
+        name: normalizedValue,
+        extension: '',
+      };
+    }
+
+    return {
+      name: matched[1],
+      extension: matched[2],
+    };
+  };
+  const renderWebHoverIcon = () => (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="hidden shrink-0 group-hover:block"
+      aria-hidden="true"
+    >
+      <g clipPath="url(#citation-web-hover-icon-clip)">
+        <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+        <path d="M5.33398 10.6667L11.0007 5" stroke="#1B61E6" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 5H11V11" stroke="#1B61E6" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+      <defs>
+        <clipPath id="citation-web-hover-icon-clip">
+          <rect width="16" height="16" fill="white" />
+        </clipPath>
+      </defs>
+    </svg>
+  );
+
+  const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
+  const ragTitleParts = splitRagTitle(preview.title);
+  // RAG snippets come from Markdown. Strip Markdown image syntax (![alt](url))
+  // and raw HTML tags (e.g. <div><img src=...>) — both render as link/markup
+  // noise in this plain-text snippet — then drop whitespace-only lines so the
+  // line-clamp budget is spent on real text.
+  const ragSnippetText = String(preview.snippet || '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .join('\n');
+
+  const renderWebTitle = () => {
+    const titleContent = (
+      <>
+        <span className="min-w-0 flex-1 truncate">{preview.title}</span>
+        {preview.link && renderWebHoverIcon()}
+      </>
+    );
+
+    return (
+      <div className={`flex items-center gap-2 ${preview.link ? interactiveTitleClassName : titleClassName}`}>
+        {titleContent}
+      </div>
+    );
+  };
+
+  const renderRagTitle = () => (
+    <div className="flex items-center gap-2 bg-white p-3">
+      <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <span
+          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-blue-600` : ragTitleClassName} min-w-0 truncate`}
+          title={preview.title}
+        >
+          {ragTitleParts.name || preview.title}
+        </span>
+        {ragTitleParts.extension && (
+          <span className={`${onOpenDocumentPreview ? 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129] transition-colors duration-200 group-hover:text-blue-600' : 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]'}`}>
+            {ragTitleParts.extension}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderWebPreview = () => (
+    <>
+      <div className={titleContainerClassName}>
+        {renderWebTitle()}
+      </div>
+      <div className="px-4 pb-0">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
+          <div className="line-clamp-4 whitespace-pre-wrap break-words">
+            {preview.snippet || '暂无内容摘要'}
+          </div>
+        </div>
+        <div className="mt-3 min-h-6 text-[#999999]">
+          <div className="flex min-w-0 items-center gap-2 pb-0">
+            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
+            <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
+            {formattedSourceMeta && <span className="ml-auto shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  const renderRagPreview = () => (
+    <>
+      {renderRagTitle()}
+      <div className="px-4 pb-0">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
+          <div className="line-clamp-4 whitespace-pre-wrap break-words">
+            {ragSnippetText || '暂无内容摘要'}
+          </div>
+        </div>
+        <div className="mt-3 min-h-6 text-[#999999]">
+          <div className="flex min-w-0 items-center gap-2 pb-0">
+            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" clipAsCircle={false} />
+            <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
+            {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className={cardClassName} onClick={onCardClick}>
+      {isWeb ? renderWebPreview() : renderRagPreview()}
+    </div>
+  );
+}
+
+const Citation = ({
+  data: rawData,
+  children,
+  initialDetail,
+  initialNotPermitted,
+  webContent,
+  loadCitationDetail,
+  popoverKey,
+  activePopoverKey,
+  onActivePopoverKeyChange,
+  onClosePopover,
+  onOpenDocumentPreview,
+  citationPreviewUsesHover,
+}: {
+  data: Partial<CitationDisplayData>;
+  children: React.ReactNode;
+  initialDetail?: ChatCitation | null;
+  /** Pre-resolved on load: the batch /citations/resolve omitted this citation,
+      i.e. the viewer has no permission. Renders "no permission" + un-clickable
+      from the start, without waiting for a per-marker 404. */
+  initialNotPermitted?: boolean;
+  webContent?: any;
+  loadCitationDetail: CitationDetailLoader;
+  popoverKey: string;
+  activePopoverKey: string | null;
+  onActivePopoverKeyChange: (key: string | null) => void;
+  onClosePopover: (key: string) => void;
+  onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
+  /** False：先点角标出溯源卡片，再点卡片进全文。True：鼠标悬停出卡片，点角标直接进全文。 */
+  citationPreviewUsesHover: boolean;
+}) => {
+  const data = rawData ?? ({} as Partial<CitationDisplayData>);
+  const hasData = !!rawData;
+
+  const isOpen = activePopoverKey === popoverKey;
+  const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+  // Backend 404 → viewer lacks permission for this source. Renders "no permission"
+  // and makes the marker un-clickable (product decision). Seeded from the batch
+  // pre-resolve (initialNotPermitted) so the hint shows up-front; the per-marker
+  // 404 path still sets it for citations the batch didn't cover.
+  const [notPermitted, setNotPermitted] = useState(!!initialNotPermitted);
+  const closeTimerRef = useRef<number | null>(null);
+  const citationClassName = getCitationClassName(data.type);
+  const legacyPreview = data.ref?.startsWith('citation:')
+    ? getLegacyCitationPreview(webContent, data.label)
+    : null;
+  const preview = legacyPreview ?? buildCitationPreview(detail, data);
+
+  const fetchDetail = async () => {
+    if (detail || notPermitted || legacyPreview || !data.citationId || data.citationId.startsWith('citation:')) {
+      return detail;
+    }
+
+    setIsLoading(true);
+    setError(false);
+    try {
+      const nextDetail = await loadCitationDetail(data.citationId);
+      setDetail(nextDetail);
+      return nextDetail;
+    } catch (err: any) {
+      if (err?.citationForbidden) {
+        setNotPermitted(true);
+      } else {
+        console.error('Failed to load citation detail:', err);
+        setError(true);
+      }
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openWebCitation = (url?: string, targetWindow?: Window | null) => {
+    if (!url) {
+      targetWindow?.close();
+      return;
+    }
+    if (targetWindow) {
+      targetWindow.opener = null;
+      targetWindow.location.href = url;
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    onActivePopoverKeyChange(nextOpen ? popoverKey : null);
+    if (nextOpen) {
+      void fetchDetail();
+    }
+  };
+
+  const scheduleClose = () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      onClosePopover(popoverKey);
+    }, 120);
+  };
+
+  const handleCitationClick = async (
+    event?: React.MouseEvent,
+    options?: { forceDocument?: boolean },
+  ) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    // No permission for this source — keep the marker inert: only toggle the hover
+    // card (so the "no permission" hint can show) and never open the viewer/link.
+    if (notPermitted) {
+      handleOpenChange(!isOpen);
+      return;
+    }
+
+    const isWebCitation = normalizeCitationType(preview?.type || data.type) === 'web';
+    if (isWebCitation && preview?.link) {
+      openWebCitation(preview.link);
+      return;
+    }
+
+    // H5 / coarse primary input: tap the badge toggles the floating preview card; opening the full viewer is only via the card (forceDocument).
+    if (!citationPreviewUsesHover && !options?.forceDocument) {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      handleOpenChange(!isOpen);
+      return;
+    }
+
+    const pendingWebWindow = isWebCitation ? window.open('about:blank', '_blank') : null;
+    const nextDetail = detail ?? await fetchDetail();
+    const nextPreview = legacyPreview ?? buildCitationPreview(nextDetail, data);
+    if (normalizeCitationType(nextPreview?.type || nextDetail?.type || data.type) === 'web') {
+      openWebCitation(nextPreview?.link, pendingWebWindow);
+      return;
+    }
+    pendingWebWindow?.close();
+
+    if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
+      return;
+    }
+
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    // Clicking the hover card itself (forceDocument) should keep the popover
+    // visible — only dismiss it when the citation marker is what was clicked.
+    // Mouse-leave still closes it via scheduleClose.
+    if (!options?.forceDocument) {
+      onActivePopoverKeyChange(null);
+    }
+    onOpenDocumentPreview(nextDetail, data.itemId, true);
+  };
+
+  useEffect(() => {
+    if (initialDetail) {
+      setDetail(initialDetail);
+    }
+  }, [initialDetail]);
+
+  // The batch pre-resolve resolves AFTER mount, so initialNotPermitted flips from
+  // false → true asynchronously; reflect it (never flip back to clickable).
+  useEffect(() => {
+    if (initialNotPermitted) {
+      setNotPermitted(true);
+    }
+  }, [initialNotPermitted]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
+
+  if (!hasData) {
+    return null;
+  }
+
+  return (
+    <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          data-citation-trigger="true"
+          data-citation-ref={data.ref}
+          data-citation-id={data.citationId}
+          data-citation-item-id={data.itemId}
+          data-citation-type={data.type}
+          data-citation-group-key={data.groupKey}
+          data-citation-chunk-id={data.chunkId}
+          aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ''}`}
+          onClick={handleCitationClick}
+          onMouseEnter={() => {
+            if (!citationPreviewUsesHover) return;
+            handleOpenChange(true);
+          }}
+          onMouseLeave={() => {
+            if (!citationPreviewUsesHover) return;
+            scheduleClose();
+          }}
+          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] ${notPermitted ? 'cursor-default' : 'cursor-pointer'} select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-blue-600/25 focus-visible:ring-2 ${citationClassName}`}
+        >
+          <span className="flex items-center justify-center">{children}</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={8}
+          avoidCollisions
+          collisionPadding={16}
+          // Mark as a citation popover surface so the document-preview /
+          // references-panel outside-click handlers treat clicks here as
+          // "inside" — clicking the hover card must NOT collapse the preview
+          // (same as clicking the citation marker itself).
+          data-citation-popover-surface
+          data-citation-trigger="true"
+          onMouseEnter={() => {
+            if (!citationPreviewUsesHover) return;
+            handleOpenChange(true);
+          }}
+          onMouseLeave={() => {
+            if (!citationPreviewUsesHover) return;
+            scheduleClose();
+          }}
+          className="z-50 outline-none"
+        >
+          <CitationPreviewCard
+            preview={preview}
+            detail={detail}
+            isLoading={isLoading}
+            error={error}
+            notPermitted={notPermitted}
+            onCardClick={() => void handleCitationClick(undefined, { forceDocument: true })}
+            onOpenDocumentPreview={() => void handleCitationClick(undefined, { forceDocument: true })}
+          />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 };
 
-const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }: TContentProps & { webContent: any }) => {
+// Absolute / already-loadable image src (http(s), protocol-relative, data:/blob:,
+// root-relative). Anything else is a bare relative ref that must be resolved.
+const ABSOLUTE_IMAGE_SRC_RE = /^(https?:)?\/\/|^(data|blob):|^\//i;
+
+/**
+ * Image renderer for markdown deliverables whose figures are authored as relative
+ * refs (`![alt](charts/x.png)`). The client pipeline resolves relative refs via an
+ * injected async `resolveImageSrc` (workspace file-list → presigned URL); absolute
+ * srcs render straight through. Used ONLY when `resolveImageSrc` is provided (the
+ * Linsight artifact preview); chat bubbles pass no resolver and keep the default
+ * react-markdown <img>, so their behaviour is unchanged.
+ */
+function MarkdownImage({
+  src,
+  alt,
+  title,
+  resolveImageSrc,
+}: {
+  src?: string;
+  alt?: string;
+  title?: string;
+  resolveImageSrc: (src: string) => Promise<string | null>;
+}) {
+  const isAbsolute = !!src && ABSOLUTE_IMAGE_SRC_RE.test(src);
+  const [resolved, setResolved] = useState<string | null>(isAbsolute ? (src as string) : null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!src) {
+      setResolved(null);
+      setFailed(true);
+      return undefined;
+    }
+    if (isAbsolute) {
+      setResolved(src);
+      setFailed(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setResolved(null);
+    setFailed(false);
+    resolveImageSrc(src)
+      .then((url) => {
+        if (cancelled) return;
+        if (url) setResolved(url);
+        else setFailed(true);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [src, isAbsolute, resolveImageSrc]);
+
+  if (failed) {
+    // Unresolvable relative ref → show the caption text instead of a broken icon.
+    return <span className="text-xs text-gray-400">{alt || src}</span>;
+  }
+  if (!resolved) {
+    // Resolving → small pulse placeholder to avoid a layout jump.
+    return (
+      <span
+        className="my-1 inline-block h-4 w-28 animate-pulse rounded bg-gray-100 align-middle"
+        aria-hidden
+      />
+    );
+  }
+  return <img src={resolved} alt={alt} title={title} className="max-w-full rounded" loading="lazy" />;
+}
+
+const Markdown = memo(({
+  content = '',
+  showCursor,
+  isLatestMessage,
+  webContent,
+  citations,
+  messageId,
+  onOpenCitationPanel,
+  resolveImageSrc,
+}: TContentProps & {
+  webContent: any;
+  /**
+   * Optional async resolver for relative image refs inside the markdown. When
+   * provided, a custom <img> renderer resolves `![](charts/x.png)` to a real URL
+   * (Linsight artifact preview); when absent, images fall back to react-markdown's
+   * default <img> (chat bubbles — unchanged).
+   */
+  resolveImageSrc?: (src: string) => Promise<string | null>;
+}) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
+  const isMobileLayout = usePrefersMobileLayout();
+  /**
+   * 可精确指向且具备 hover 时用悬停打开溯源卡片、点击角标进全文；否则（触控为主）用点击切换卡片。
+   * 不按视口宽度区分，避免 PC 小窗或分屏宽度不足 1024px 时被误判为触控交互。
+   */
+  const citationPreviewUsesHover = useMediaQuery(
+    '(hover: hover) and (pointer: fine)',
+  );
   const isInitializing = content === '';
+  const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
+  const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
+  const handleCloseCitationPopover = useCallback((popoverKey: string) => {
+    setActiveCitationPopoverKey((currentKey) => currentKey === popoverKey ? null : currentKey);
+  }, []);
 
   function filterMermaidBlocks(input) {
     const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
@@ -225,9 +816,9 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
     return input;
   }
 
-  const currentContent = useMemo(() => {
+  const { currentContent, citationMap } = useMemo(() => {
     if (isInitializing) {
-      return '';
+      return { currentContent: '', citationMap: {} as Record<string, CitationDisplayData> };
     }
     const message = LaTeXParsing ? preprocessLaTeX(content) : content;
     //         return `\`\`\`mermaid
@@ -240,15 +831,27 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
     //     return `\`\`\`echarts
     //     {"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},"yAxis":{"type":"value"},"series":[{"data":[120,200,150,80,70,110,130],"type":"bar"}]}
     // \`\`\``
-    return filterMermaidBlocks(message)
+    const normalizedContent = filterMermaidBlocks(message)
       // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
       .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello | There\nFriend
+    const { transformedContent, citationMap } = transformPrivateCitations(normalizedContent);
+
+    return {
+      currentContent: transformedContent,
+      citationMap,
+    };
     // .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理
     // .replace(/\\[\[\]]/g, '$$') // 处理`\[...\]`包裹的公式
   }, [content, LaTeXParsing, isInitializing]);
 
   const rehypePlugins = useMemo(
     () => [
+      // Add stable `id`s to headings so generated table-of-contents `#anchor`
+      // links have a target to scroll to (github-slugger convention matches the
+      // anchors LLMs emit).
+      rehypeSlug,
+      // Turn literal <br> into real line breaks (e.g. inside table cells).
+      rehypeBr,
       [rehypeKatex, { output: 'mathml' }],
       [
         rehypeHighlight,
@@ -274,6 +877,155 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
     [],
   );
 
+  const initialCitationDetailMap = useMemo(() => createCitationDetailMap(citations), [citations]);
+  const [citationDetailMap, setCitationDetailMap] = useState<Record<string, ChatCitation>>(() => initialCitationDetailMap);
+  // Citations the batch /citations/resolve was asked for but did NOT return =
+  // the viewer has no permission (the endpoint omits forbidden ones). Markers in
+  // this set render "no permission" + un-clickable from the start.
+  const [forbiddenCitationIds, setForbiddenCitationIds] = useState<Set<string>>(() => new Set());
+  const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
+  const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
+  const citationBatchRequestKeyRef = useRef<string>('');
+
+  const shouldResolveCitationDetail = useCallback((citationId?: string, detail?: ChatCitation | null) => {
+    if (!citationId || citationId.startsWith('citation:')) {
+      return false;
+    }
+    if (!detail) {
+      return true;
+    }
+    return isRagCitation(detail) && !getCitationDocumentUrl(detail);
+  }, []);
+
+  useEffect(() => {
+    Object.entries(initialCitationDetailMap).forEach(([citationId, detail]) => {
+      citationDetailCacheRef.current[citationId] = detail;
+    });
+    setCitationDetailMap((current) => ({
+      ...current,
+      ...initialCitationDetailMap,
+    }));
+  }, [initialCitationDetailMap]);
+
+  useEffect(() => {
+    const citationIdsFromContent = Object.values(citationMap).map((item) => item.citationId);
+    const citationIdsFromDetails = (citations ?? []).map((item) => item?.citationId);
+    const citationIds = Array.from(new Set(
+      [...citationIdsFromContent, ...citationIdsFromDetails]
+        .filter((citationId): citationId is string => !!citationId)
+        .filter((citationId) => shouldResolveCitationDetail(citationId, citationDetailCacheRef.current[citationId])),
+    ));
+
+    if (!citationIds.length) {
+      return;
+    }
+
+    const requestKey = citationIds.sort().join('|');
+    if (citationBatchRequestKeyRef.current === requestKey) {
+      return;
+    }
+    citationBatchRequestKeyRef.current = requestKey;
+
+    void resolveCitationDetails(citationIds)
+      .then((items) => {
+        const nextMap: Record<string, ChatCitation> = {};
+        items.forEach((detail) => {
+          if (detail?.citationId) {
+            citationDetailCacheRef.current[detail.citationId] = detail;
+            nextMap[detail.citationId] = detail;
+          }
+        });
+        if (Object.keys(nextMap).length) {
+          setCitationDetailMap((current) => ({
+            ...current,
+            ...nextMap,
+          }));
+        }
+        // Requested but unresolved = the backend omitted them (no permission).
+        const forbidden = citationIds.filter((id) => !citationDetailCacheRef.current[id]);
+        if (forbidden.length) {
+          setForbiddenCitationIds((prev) => {
+            const next = new Set(prev);
+            forbidden.forEach((id) => next.add(id));
+            return next;
+          });
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to resolve citation details:', error);
+        citationBatchRequestKeyRef.current = '';
+      });
+  }, [citationMap, citations, shouldResolveCitationDetail]);
+
+  const loadCitationDetail = useCallback<CitationDetailLoader>(async (citationId) => {
+    const cachedDetail = citationDetailCacheRef.current[citationId];
+    if (cachedDetail && !shouldResolveCitationDetail(citationId, cachedDetail)) {
+      return cachedDetail;
+    }
+
+    const pendingRequest = citationRequestCacheRef.current[citationId];
+    if (pendingRequest) {
+      return pendingRequest;
+    }
+
+    const request = getCitationDetail(citationId)
+      .then((detail) => {
+        if (detail?.citationId) {
+          citationDetailCacheRef.current[detail.citationId] = detail;
+        }
+        citationDetailCacheRef.current[citationId] = detail;
+        return detail;
+      })
+      .finally(() => {
+        delete citationRequestCacheRef.current[citationId];
+      });
+
+    citationRequestCacheRef.current[citationId] = request;
+    return request;
+  }, [shouldResolveCitationDetail]);
+
+  const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
+    const nextPreview = {
+      detail,
+      itemId,
+      locateChunk,
+    };
+
+    if (!isMobileLayout && onOpenCitationPanel) {
+      onOpenCitationPanel({
+        messageId,
+        content,
+        webContent,
+        citations,
+        referenceItems: [],
+        initialDocumentPreview: nextPreview,
+      });
+      return;
+    }
+
+    setDocumentPreview({
+      detail,
+      itemId,
+      locateChunk,
+    });
+  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
+
+  useEffect(() => {
+    if (!documentPreview || isMobileLayout || !onOpenCitationPanel) {
+      return;
+    }
+
+    onOpenCitationPanel({
+      messageId,
+      content,
+      webContent,
+      citations,
+      referenceItems: [],
+      initialDocumentPreview: documentPreview,
+    });
+    setDocumentPreview(null);
+  }, [citations, content, documentPreview, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
+
   // Cursor
   if (isInitializing) {
     return (
@@ -284,6 +1036,12 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
       </div>
     );
   }
+
+  // The same chunk ref is reused across markers, and matchIndex is only unique
+  // within a single text node — so two markers can collide on the same
+  // popoverKey. A render-scoped sequence guarantees a globally-unique key per
+  // marker (the single activeCitationPopoverKey can then track each one).
+  let citationKeySeq = 0;
 
   return (
     <ArtifactProvider>
@@ -299,18 +1057,126 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
               a,
               p,
               artifact: Artifact,
+              // Resolve relative image refs (Linsight deliverable preview) only when
+              // a resolver is injected; chat bubbles keep the default <img>.
+              ...(resolveImageSrc
+                ? {
+                    img: ({ src, alt, title }: { src?: string; alt?: string; title?: string }) => (
+                      <MarkdownImage src={src} alt={alt} title={title} resolveImageSrc={resolveImageSrc} />
+                    ),
+                  }
+                : {}),
               citation: ({ children }: { children: React.ReactNode }) => {
                 if (typeof children === 'string') {
-                  const parts = children.split(/\[citation:(\d+)\]/g);
+                  const citationPattern = /\[citation:(\d+)\]|\[citationref:([^\]]+)\]/g;
+                  const nodes: React.ReactNode[] = [];
+                  let lastIndex = 0;
+
+                  for (const match of children.matchAll(citationPattern)) {
+                    const matchText = match[0];
+                    const matchIndex = match.index ?? 0;
+                    const citationKeyId = citationKeySeq++;
+
+                    if (matchIndex > lastIndex) {
+                      nodes.push(children.slice(lastIndex, matchIndex));
+                    }
+
+                    const legacyIndexValue = match[1];
+                    const privateRef = match[2];
+
+                    if (legacyIndexValue) {
+                      const legacyIndex = Number(legacyIndexValue);
+                      if (webContent?.[legacyIndex - 1]) {
+                        nodes.push(
+                          <Citation
+                            key={`legacy-${legacyIndexValue}-${matchIndex}-${citationKeyId}`}
+                            webContent={webContent}
+                            loadCitationDetail={loadCitationDetail}
+                            popoverKey={`legacy-${legacyIndexValue}-${matchIndex}-${citationKeyId}`}
+                            activePopoverKey={activeCitationPopoverKey}
+                            onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                            onClosePopover={handleCloseCitationPopover}
+                            onOpenDocumentPreview={handleOpenDocumentPreview}
+                            citationPreviewUsesHover={citationPreviewUsesHover}
+                            data={{
+                              label: legacyIndex,
+                              ref: `citation:${legacyIndexValue}`,
+                              type: 'web',
+                              groupKey: legacyIndexValue,
+                              chunkId: legacyIndexValue,
+                              citationId: `citation:${legacyIndexValue}`,
+                              itemId: legacyIndexValue,
+                            }}
+                          >
+                            {legacyIndexValue}
+                          </Citation>
+                        );
+                      } else {
+                        const citationDetail = citations?.[legacyIndex - 1] ?? null;
+                        const citationData = citationDetail
+                          ? {
+                            label: legacyIndex,
+                            ref: `citation:${legacyIndexValue}`,
+                            type: citationDetail.type || 'knowledgeSearch',
+                            groupKey: citationDetail.citationId,
+                            chunkId: String(citationDetail.itemId || citationDetail.sourcePayload?.items?.[0]?.itemId || legacyIndexValue),
+                            citationId: citationDetail.citationId,
+                            itemId: String(citationDetail.itemId || citationDetail.sourcePayload?.items?.[0]?.itemId || legacyIndexValue),
+                          }
+                          : null;
+                        if (citationData) {
+                          nodes.push(
+                            <Citation
+                              key={`rag-legacy-${citationData.ref}-${matchIndex}-${citationKeyId}`}
+                              data={citationData}
+                              initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
+                              initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
+                              loadCitationDetail={loadCitationDetail}
+                              popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}-${citationKeyId}`}
+                              activePopoverKey={activeCitationPopoverKey}
+                              onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                              onClosePopover={handleCloseCitationPopover}
+                              onOpenDocumentPreview={handleOpenDocumentPreview}
+                              citationPreviewUsesHover={citationPreviewUsesHover}
+                            >
+                              {legacyIndexValue}
+                            </Citation>
+                          );
+                        }
+                      }
+                    } else if (privateRef) {
+                      const citationData = citationMap[privateRef];
+                      if (citationData) {
+                        nodes.push(
+                          <Citation
+                            key={`private-${privateRef}-${matchIndex}-${citationKeyId}`}
+                            data={citationData}
+                            initialDetail={citationDetailMap[citationData.citationId]}
+                            initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
+                            loadCitationDetail={loadCitationDetail}
+                            popoverKey={`private-${privateRef}-${matchIndex}-${citationKeyId}`}
+                            activePopoverKey={activeCitationPopoverKey}
+                            onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                            onClosePopover={handleCloseCitationPopover}
+                            onOpenDocumentPreview={handleOpenDocumentPreview}
+                            citationPreviewUsesHover={citationPreviewUsesHover}
+                          >
+                            {citationData.label}
+                          </Citation>
+                        );
+                      }
+                    }
+
+                    lastIndex = matchIndex + matchText.length;
+                  }
+
+                  if (lastIndex < children.length) {
+                    nodes.push(children.slice(lastIndex));
+                  }
+
                   return (
                     <>
-                      {parts.map((part, index) => {
-                        if (index % 2 === 0) {
-                          return part;
-                        } else {
-                          return webContent?.[Number(part) - 1] ? <Citation key={index} data={webContent[Number(part) - 1]}>{part}</Citation> : null;
-                        }
-                      })}
+                      {nodes}
                     </>
                   );
                 }
@@ -324,6 +1190,10 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
         >
           {isLatestMessage && (showCursor ?? false) ? currentContent + cursor : currentContent}
         </ReactMarkdown>
+        <CitationDocumentPreviewDrawer
+          preview={documentPreview}
+          onClose={() => setDocumentPreview(null)}
+        />
       </CodeBlockProvider>
     </ArtifactProvider>
   );

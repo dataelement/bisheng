@@ -1,0 +1,333 @@
+import request from "./request";
+
+export type ResourceType =
+  | "knowledge_space"
+  | "knowledge_library"
+  | "folder"
+  | "knowledge_file"
+  | "workflow"
+  | "assistant"
+  | "tool"
+  | "channel"
+  | "dashboard";
+
+export type RelationLevel = "owner" | "manager" | "editor" | "viewer";
+export type SubjectType = "user" | "department" | "user_group";
+
+export interface PermissionEntry {
+  subject_type: SubjectType;
+  subject_id: number;
+  subject_name: string | null;
+  subject_group_names?: string[];
+  subject_member_names?: string[];
+  relation: RelationLevel;
+  model_id?: string;
+  model_name?: string;
+  include_children?: boolean;
+  /** Channel creator: permission level is permanent and not editable. */
+  is_creator?: boolean;
+}
+
+export interface GrantItem {
+  subject_type: SubjectType;
+  subject_id: number;
+  relation: RelationLevel;
+  model_id?: string;
+  include_children?: boolean;
+}
+
+export type RevokeItem = Omit<GrantItem, "model_id">;
+
+export interface RelationModel {
+  id: string;
+  name: string;
+  relation: RelationLevel;
+  grant_tier?: "owner" | "manager" | "usage";
+  permissions: string[];
+  permissions_explicit?: boolean;
+  is_system: boolean;
+}
+
+export interface SelectedSubject {
+  type: SubjectType;
+  id: number;
+  name: string;
+  include_children?: boolean;
+}
+
+interface PermissionRequestConfig {
+  signal?: AbortSignal;
+}
+
+// ── Helpers ──────────────────────────────────────────
+// Client request layer returns the full backend envelope {status_code, status_message, data}.
+// All functions below unwrap .data so callers get the payload directly.
+
+function assertSuccess(res: any) {
+  if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
+    throw new Error(res.status_message || `Permission request failed: ${res.status_code}`);
+  }
+}
+
+function unwrap<T>(res: any): T {
+  assertSuccess(res);
+  return res?.data ?? res;
+}
+
+function unwrapArray<T = any>(res: any): T[] {
+  const data = unwrap<any>(res);
+  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+  return Array.isArray(rows) ? rows : [];
+}
+
+function withPermissionRequestOptions(config?: PermissionRequestConfig) {
+  return {
+    skip403Redirect: true,
+    ...config,
+  };
+}
+
+// ── Permission APIs ──────────────────────────────────
+
+export async function getResourcePermissions(
+  resourceType: string,
+  resourceId: string,
+  config?: PermissionRequestConfig
+): Promise<PermissionEntry[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrapArray<PermissionEntry>(res);
+}
+
+export async function authorizeResource(
+  resourceType: string,
+  resourceId: string,
+  grants: GrantItem[],
+  revokes: RevokeItem[],
+  config?: PermissionRequestConfig
+): Promise<null> {
+  const res = await request.post(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/authorize`,
+    { grants, revokes },
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function checkPermission(
+  objectType: string,
+  objectId: string,
+  relation: string,
+  permissionIdOrConfig?: string | PermissionRequestConfig,
+  config?: PermissionRequestConfig
+): Promise<{ allowed: boolean }> {
+  const permissionId =
+    typeof permissionIdOrConfig === "string" ? permissionIdOrConfig : undefined;
+  const requestConfig =
+    typeof permissionIdOrConfig === "string" ? config : permissionIdOrConfig;
+  const res = await request.post(`/api/v1/permissions/check`, {
+    object_type: objectType,
+    object_id: objectId,
+    relation,
+    permission_id: permissionId,
+  }, withPermissionRequestOptions(requestConfig));
+  return unwrap(res);
+}
+
+export async function getGrantableRelationModels(
+  objectType: string,
+  objectId: string,
+  config?: PermissionRequestConfig
+): Promise<RelationModel[]> {
+  const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
+    params: { object_type: objectType, object_id: objectId },
+    ...withPermissionRequestOptions(config),
+  });
+  return unwrapArray<RelationModel>(res);
+}
+
+export async function canOpenPermissionDialog(
+  objectType: ResourceType,
+  objectId: string,
+  config?: PermissionRequestConfig
+): Promise<boolean> {
+  const models = await getGrantableRelationModels(
+    objectType,
+    objectId,
+    config
+  );
+  return Array.isArray(models) && models.length > 0;
+}
+
+// ── Subject search APIs ──────────────────────────────
+
+/**
+ * A grantable user candidate. The backend `grant-subjects/users` endpoint
+ * (shared by knowledge spaces and channels) also returns the person id and
+ * the user's primary department path, surfaced under the username in the picker.
+ */
+export interface GrantUser {
+  user_id: number;
+  user_name: string;
+  external_id?: string | null;
+  primary_department_path?: string | null;
+}
+
+export async function searchUsers(
+  name: string,
+  params?: { page?: number; pageSize?: number },
+  config?: { signal?: AbortSignal }
+): Promise<{ data: { user_id: number; user_name: string }[]; total: number }> {
+  const res = await request.get(`/api/v1/user/list`, {
+    params: {
+      name,
+      page_num: params?.page ?? 1,
+      page_size: params?.pageSize ?? 50,
+    },
+    ...withPermissionRequestOptions(config),
+  });
+  const data = unwrap<any>(res);
+  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+  const list = Array.isArray(rows) ? rows : [];
+  return {
+    data: list,
+    total: Number(data?.total ?? list.length),
+  };
+}
+
+export async function getResourceGrantUsers(
+  resourceType: ResourceType,
+  resourceId: string,
+  params?: { keyword?: string; page?: number; page_size?: number },
+  config?: { signal?: AbortSignal }
+): Promise<GrantUser[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`,
+    {
+      params: {
+        keyword: params?.keyword ?? "",
+        page: params?.page ?? 1,
+        page_size: params?.page_size ?? 2000,
+      },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray(res);
+}
+
+export async function getKnowledgeSpaceGrantUsers(
+  resourceId: string,
+  params?: { keyword?: string; page?: number; page_size?: number },
+  config?: { signal?: AbortSignal }
+): Promise<GrantUser[]> {
+  return getResourceGrantUsers("knowledge_space", resourceId, params, config);
+}
+
+// ── Lazy grant-department tree (F038) ────────────────
+// Browse one visible layer / server search / locate-by-id, so a large org tree
+// is never loaded at once. Same authorization scope as the full-tree endpoint
+// above (tenant subtree minus child-tenant mounts). `path` is the materialized
+// ancestor path (`/1/21/106/`, ending with the node's own id); `has_children`
+// drives the expand arrow; `matched` flags search hits.
+
+export interface GrantDepartmentNode {
+  id: number;
+  dept_id: string;
+  name: string;
+  parent_id: number | null;
+  path: string;
+  sort_order?: number;
+  source?: string;
+  status?: string;
+  is_tenant_root?: boolean;
+  mounted_tenant_id?: number | null;
+  has_children?: boolean;
+  matched?: boolean;
+  children?: GrantDepartmentNode[];
+}
+
+export interface GrantDepartmentSearchResult {
+  roots: GrantDepartmentNode[];
+  total_matches: number;
+  truncated: boolean;
+}
+
+const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
+  roots: [],
+  total_matches: 0,
+  truncated: false,
+};
+
+export async function getResourceGrantDepartmentChildren(
+  resourceType: ResourceType,
+  resourceId: string,
+  parentId: number | null,
+  config?: { signal?: AbortSignal }
+): Promise<GrantDepartmentNode[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/children`,
+    {
+      params: { parent_id: parentId ?? undefined },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray<GrantDepartmentNode>(res);
+}
+
+export async function searchResourceGrantDepartments(
+  resourceType: ResourceType,
+  resourceId: string,
+  keyword: string,
+  limit = 50,
+  config?: { signal?: AbortSignal }
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+}
+
+// (no client consumer needs locate/path-tree: the picker browses+searches only,
+// and the permission list reads the backend-resolved full-path subject_name.)
+
+export async function getUserGroups(
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  const res = await request.get(
+    `/api/v1/group/list`,
+    withPermissionRequestOptions(config)
+  );
+  const data = unwrap<any>(res);
+  const rows = data?.records ?? data;
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function getResourceGrantUserGroups(
+  resourceType: ResourceType,
+  resourceId: string,
+  params?: { keyword?: string },
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`,
+    {
+      params: { keyword: params?.keyword ?? "" },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray(res);
+}
+
+export async function getKnowledgeSpaceGrantUserGroups(
+  resourceId: string,
+  params?: { keyword?: string },
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  return getResourceGrantUserGroups("knowledge_space", resourceId, params, config);
+}

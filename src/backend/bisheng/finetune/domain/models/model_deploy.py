@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, delete, text
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 
+
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 class ModelDeployBase(SQLModelSerializable):
     endpoint: str = Field(index=False, unique=False)
@@ -15,11 +17,16 @@ class ModelDeployBase(SQLModelSerializable):
     config: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
     status: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class ModelDeploy(ModelDeployBase, table=True):

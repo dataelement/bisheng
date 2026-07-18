@@ -48,6 +48,8 @@ export const LangSelector = ({
 }) => {
   const localize = useLocalize();
 
+  // APP_CONFIG.disableJa (config.js) hides the Japanese option.
+  const jaDisabled = !!(window as any).APP_CONFIG?.disableJa;
   const languageOptions = [
     { value: 'auto', label: localize('com_nav_lang_auto') },
     { value: 'en-US', label: localize('com_nav_lang_english') },
@@ -63,7 +65,7 @@ export const LangSelector = ({
     { value: 'pt-BR', label: localize('com_nav_lang_brazilian_portuguese') },
     { value: 'pt-PT', label: localize('com_nav_lang_portuguese') },
     { value: 'ru-RU', label: localize('com_nav_lang_russian') },
-    { value: 'ja-JP', label: localize('com_nav_lang_japanese') },
+    ...(jaDisabled ? [] : [{ value: 'ja-JP', label: localize('com_nav_lang_japanese') }]),
     { value: 'ka-GE', label: localize('com_nav_lang_georgian') },
     { value: 'sv-SE', label: localize('com_nav_lang_swedish') },
     { value: 'ko-KR', label: localize('com_nav_lang_korean') },

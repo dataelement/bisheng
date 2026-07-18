@@ -6,7 +6,31 @@ import { Copy, DownloadIcon, ZoomIn, ZoomOut } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button, Separator } from "~/components/ui"
 import { copyText, formatDate } from "~/utils"
-import { useLocalize } from "~/hooks"
+import { useLocalize, useScrollRevealRef } from "~/hooks"
+
+// Mermaid mindmap is sensitive to two things LLM output / our markdown
+// pre-processor commonly violate:
+//   1. Blank lines anywhere in the mindmap source — Markdown.tsx normalizes
+//      single `\n` into `\n\n` for soft breaks, but doesn't exempt fenced
+//      blocks, so `mindmap\n  root(..)` becomes `mindmap\n\n  root(..)` and
+//      the parser bails with `SPACELINE` errors.
+//   2. The root node missing indentation — mindmap uses indentation as the
+//      parent/child grammar.
+// Both fixes only run when the source is actually mindmap.
+function normalizeMindmapIndent(src: string): string {
+    const lines = src.split("\n")
+    const directiveIdx = lines.findIndex((l) => l.trim() === "mindmap")
+    if (directiveIdx === -1) return src
+    const head = lines.slice(0, directiveIdx + 1)
+    const body = lines.slice(directiveIdx + 1).filter((l) => l.trim().length > 0)
+    if (body.length === 0) return src
+    if (!body[0].startsWith(" ") && !body[0].startsWith("\t")) {
+        for (let i = 0; i < body.length; i++) {
+            body[i] = "  " + body[i]
+        }
+    }
+    return [...head, ...body].join("\n")
+}
 
 // 动态加载 mermaid
 export const loadScript = async (fileName) => {
@@ -46,13 +70,14 @@ export default function MermaidBlock({ children }: { children: string }) {
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
     const [copySuccess, setCopySuccess] = useState(false)
     const codeRef = useRef<HTMLElement>(null)
+    const codeScrollRevealRef = useScrollRevealRef<HTMLPreElement>()
 
     useEffect(() => {
         loadScript('mermaid').then((mermaid) => {
             mermaid.initialize({ startOnLoad: false, theme: "default" })
             mermaidRef.current = mermaid
             if (ref.current) {
-                ref.current.innerHTML = children
+                ref.current.innerHTML = normalizeMindmapIndent(children)
                 mermaidRef.current.run({ nodes: [ref.current] })
             }
         })
@@ -255,7 +280,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                         onMouseLeave={handleMouseLeave}
                     />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
-                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scrollbar-on-hover">
+                        <pre ref={codeScrollRevealRef} className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scrollbar-on-scroll">
                             <code ref={codeRef} className="text-slate-500 text-foreground font-mono whitespace-pre-wrap break-words">{children}</code>
                         </pre>
                     </div>

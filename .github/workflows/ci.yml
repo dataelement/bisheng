@@ -52,7 +52,20 @@ jobs:
         id: docker_build_backend
         run: |
           docker buildx build --file ./src/backend/Dockerfile --platform linux/amd64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64 --push ./src/backend/
-      
+
+      - name: Login to CR
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+
+      - name: Sync backend amd64 to CR
+        run: |
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+
   build_backend_arm:
     runs-on: ubuntu-22.04-arm
     steps:
@@ -94,6 +107,19 @@ jobs:
         run: |
           docker buildx build --file ./src/backend/Dockerfile --platform linux/arm64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 --push ./src/backend/
 
+      - name: Login to CR
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+
+      - name: Sync backend arm64 to CR
+        run: |
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64
+
   build_bisheng_frontend:
     runs-on: ubuntu-latest
     steps:
@@ -122,6 +148,19 @@ jobs:
         id: docker_build_frontend
         run: |
           docker buildx build --file ./src/frontend/Dockerfile --platform linux/amd64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64 --push ./src/frontend/
+
+      - name: Login to CR
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+
+      - name: Sync frontend amd64 to CR
+        run: |
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
 
   build_frontend_arm:
     runs-on: ubuntu-22.04-arm
@@ -157,6 +196,19 @@ jobs:
         id: docker_build_frontend
         run: |
           docker buildx build --file ./src/frontend/Dockerfile --platform linux/arm64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 --push ./src/frontend/
+
+      - name: Login to CR
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+
+      - name: Sync frontend arm64 to CR
+        run: |
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
 
   notify_feishu:
     needs:

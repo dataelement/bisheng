@@ -52,6 +52,16 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
 
         membership.status = MembershipStatusEnum.ACTIVE
         await self.space_channel_member_repository.update(membership)
+        # Mirror the activated membership into an explicit ReBAC viewer grant so the
+        # member surfaces in the channel authorization list, matching direct subscribe.
+        from bisheng.channel.domain.services.channel_service import ChannelService
+
+        await ChannelService.sync_direct_channel_user_permissions(
+            channel_id,
+            membership.user_id,
+            membership.user_role,
+            is_active=True,
+        )
         operator_user_info = await UserDao.aget_user(operator_user_id)
         await self.notify_sender(
             operator_user_id,
@@ -120,9 +130,14 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
         )
 
     async def _get_membership(self, channel_id: str, applicant_user_id: int):
-        """Load the applicant membership for the target channel."""
+        """Load the applicant membership for the target channel.
+
+        Includes inactive rows: the applicant's membership is PENDING while awaiting
+        approval, and this handler must find it to flip it to ACTIVE/REJECTED.
+        """
         return await self.space_channel_member_repository.find_membership(
             business_id=channel_id,
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=applicant_user_id,
+            include_inactive=True,
         )

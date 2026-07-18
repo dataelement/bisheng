@@ -29,11 +29,8 @@ export default function LabelShow({ data, user, all, type, onChange }) {
   const isOperator = useMemo(() => {
     if (data && user) {
       if (user.role === 'admin') return true
-      data.group_ids.forEach(element => {
-        if (user.admin_groups.includes(element)) return true
-      })
       if (data.user_id === user.user_id) return true
-      if(data.write) return true
+      if (data.write) return true
     }
     return false
   }, [data, user])

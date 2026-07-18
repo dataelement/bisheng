@@ -1,0 +1,84 @@
+export interface DepartmentTreeNode {
+  id: number
+  dept_id: string
+  name: string
+  parent_id: number | null
+  path: string
+  sort_order: number
+  source: string
+  status: string
+  // F027 AC-14: `member_count` removed from the tree node response. The
+  // single-department detail (DepartmentDetail) still carries it (AC-15).
+  /** True iff the department is currently a Child Tenant mount point. */
+  is_tenant_root: boolean
+  /** Tenant.id this department mounts; null when is_tenant_root is false. */
+  mounted_tenant_id: number | null
+  // F038 lazy tree: has_children drives the expand affordance without loading the
+  // child layer; matched flags a search/locate hit. Both optional so legacy
+  // full-tree consumers are unaffected; the lazy endpoints always populate them.
+  has_children?: boolean
+  matched?: boolean
+  children: DepartmentTreeNode[]
+}
+
+/** F038 search / path-tree (locate) response: a pruned tree of hits + ancestors. */
+export interface DepartmentSearchResult {
+  roots: DepartmentTreeNode[]
+  total_matches: number
+  truncated: boolean
+}
+
+export interface DepartmentAdmin {
+  user_id: number
+  user_name: string
+}
+
+export interface DepartmentDetail {
+  id: number
+  dept_id: string
+  name: string
+  parent_id: number | null
+  path: string
+  sort_order: number
+  source: string
+  status: string
+  default_role_ids: number[] | null
+  member_count: number
+}
+
+export interface DepartmentMember {
+  user_id: number
+  user_name: string
+  /** 本地人员 ID（external_id），用于重名展示；非展示字段 */
+  person_id?: string | null
+  department_id: number
+  is_primary: number
+  source: string
+  create_time: string
+  update_time?: string
+  enabled: boolean
+  /** Non-empty when the account was disabled by an SSO/HR sync; only super admin may re-enable. */
+  disable_source?: string | null
+  user_groups: { id: number; group_name: string }[]
+  roles: { id: number; role_name: string }[]
+  /** 当前部门 OpenFGA admin；用于在角色列最前展示「部门管理员」 */
+  is_department_admin?: boolean
+}
+
+export interface DepartmentCreateForm {
+  name: string
+  parent_id: number
+  sort_order?: number
+  default_role_ids?: number[]
+  admin_user_ids?: number[]
+}
+
+export interface DepartmentUpdateForm {
+  name?: string
+  sort_order?: number
+  default_role_ids?: number[]
+  /** 与名称、默认角色一并提交时全量替换部门管理员；不传则不改 */
+  admin_user_ids?: number[]
+  /** 为 true 时将当前默认角色（可与 default_role_ids 同次提交）授予本部门现存全部成员 */
+  apply_default_roles_to_existing_members?: boolean
+}

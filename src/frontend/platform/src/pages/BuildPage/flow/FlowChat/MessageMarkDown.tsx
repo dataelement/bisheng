@@ -3,15 +3,436 @@ import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import Echarts from "@/workspace/markdown/Echarts";
 import MermaidBlock from "@/workspace/markdown/Mermaid";
-import React, { useMemo } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { getCitationDetail, resolveCitationDetails, type ChatCitation } from "@/controllers/API";
+import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from "@/components/bs-comp/chatComponent/CitationDocumentPreviewDrawer";
+import { CitationSourceIcon } from "@/components/bs-comp/chatComponent/CitationSourceIcon";
+import {
+    buildCitationPreview,
+    createCitationDetailMap,
+    getCitationClassName,
+    getCitationSourceLabel,
+    getLegacyCitationPreview,
+    isRagCitation,
+    isRagCitationMissingPreviewUrl,
+    normalizeCitationType,
+    transformPrivateCitations,
+    type CitationDetailLoader,
+    type CitationDisplayData,
+    type CitationPreview,
+} from "@/components/bs-comp/chatComponent/citationUtils";
+import { Loader2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+// @ts-ignore rehype-mathjax has no local type declaration in platform.
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { visit } from "unist-util-visit";
 
-const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, chat, flowType }) {
+const remarkCitationPlugin = () => {
+    return (tree) => {
+        visit(tree, "text", (node: any) => {
+            if (typeof node.value === "string") {
+                const regex = /(\[citation:(\d+)\]|\[citationref:([^\]]+)\])/g;
+                if (regex.test(node.value)) {
+                    node.name = "citation";
+                    node.data = {
+                        hName: node.name,
+                        hProperties: node.attributes,
+                        ...node.data,
+                    };
+                    return node;
+                }
+            }
+        });
+    };
+};
+
+function CitationPreviewCard({
+    preview,
+    detail,
+    isLoading,
+    error,
+    onCardClick,
+    onOpenDocumentPreview,
+}: {
+    preview: CitationPreview | null;
+    detail?: ChatCitation | null;
+    isLoading: boolean;
+    error: boolean;
+    onCardClick?: () => void;
+    onOpenDocumentPreview?: () => void;
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                加载溯源详情...
+            </div>
+        );
+    }
+
+    if (error || !preview) {
+        return (
+            <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+                暂无溯源详情
+            </div>
+        );
+    }
+
+    const isWeb = preview.type === "web";
+    const cardClassName = "group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border border-[#ECECEC] bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]";
+    const titleClassName = "min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]";
+    const titleContainerClassName = "border-b border-[#F2F3F5] bg-[#F7F7F7] px-4 py-3";
+    const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#024DE3]`;
+    const ragTitleClassName = "min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]";
+    const formatSourceMeta = (value?: string) => {
+        if (!value) {
+            return "";
+        }
+
+        const normalizedValue = value.trim();
+        const matched = normalizedValue.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/);
+        if (matched) {
+            return `${matched[1]} ${matched[2]}`;
+        }
+
+        return normalizedValue;
+    };
+    const splitRagTitle = (value?: string) => {
+        const normalizedValue = String(value || "").trim();
+        const matched = normalizedValue.match(/^(.*?)(\.[a-zA-Z0-9]+)$/);
+
+        if (!matched) {
+            return {
+                name: normalizedValue,
+                extension: "",
+            };
+        }
+
+        return {
+            name: matched[1],
+            extension: matched[2],
+        };
+    };
+    const renderWebHoverIcon = () => (
+        <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="hidden shrink-0 group-hover:block"
+            aria-hidden="true"
+        >
+            <g clipPath="url(#citation-web-hover-icon-clip)">
+                <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+                <path d="M5.33398 10.6667L11.0007 5" stroke="#1B61E6" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 5H11V11" stroke="#1B61E6" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+            <defs>
+                <clipPath id="citation-web-hover-icon-clip">
+                    <rect width="16" height="16" fill="white" />
+                </clipPath>
+            </defs>
+        </svg>
+    );
+
+    const renderLabelTag = () => (
+        <div
+            className={`absolute bottom-0 right-0 z-[1] flex h-6 whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
+                ? "min-w-[79px] bg-[#F7F3FF] text-[#8537F5]"
+                : "min-w-[76px] bg-[#F5F8FF] text-[#024DE3]"
+                }`}
+        >
+            {isWeb ? "网页" : "文档"}
+        </div>
+    );
+    const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : "";
+    const ragTitleParts = splitRagTitle(preview.title);
+
+    const renderWebTitle = () => {
+        const titleContent = (
+            <>
+                <span className="min-w-0 flex-1 truncate">{preview.title}</span>
+                {preview.link && renderWebHoverIcon()}
+            </>
+        );
+
+        return (
+            <div className={`flex items-center gap-2 ${preview.link ? interactiveTitleClassName : titleClassName}`}>
+                {titleContent}
+            </div>
+        );
+    };
+
+    const renderRagTitle = () => (
+        <div className="flex h-[38px] items-center gap-2 bg-[#F7F7F7] px-3 py-2">
+            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+                <span
+                    className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} flex-1`}
+                    title={preview.title}
+                >
+                    {ragTitleParts.name || preview.title}
+                </span>
+                {ragTitleParts.extension && (
+                    <span className={`${onOpenDocumentPreview ? "shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129] transition-colors duration-200 group-hover:text-[#024DE3]" : "shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]"}`}>
+                        {ragTitleParts.extension}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+
+    const renderWebPreview = () => (
+        <>
+            <div className={titleContainerClassName}>
+                {renderWebTitle()}
+            </div>
+            <div className="px-4 py-3 pb-0">
+                <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-6 text-[#1D2129]">
+                    <div className="line-clamp-4 whitespace-pre-wrap break-words">
+                        {preview.snippet || "暂无内容摘要"}
+                    </div>
+                </div>
+                <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+                    <div className="flex min-w-0 items-center gap-2 pb-0">
+                        <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
+                        <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
+                        {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+
+    const renderRagPreview = () => (
+        <>
+            {renderRagTitle()}
+            <div className="px-4 py-3 pb-0">
+                <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-6 text-[#1D2129]">
+                    <div className="line-clamp-4 whitespace-pre-wrap break-words">
+                        {preview.snippet || "暂无内容摘要"}
+                    </div>
+                </div>
+                <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+                    <div className="flex min-w-0 items-center gap-2 pb-0">
+                        <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
+                        <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
+                        {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+
+    return (
+        <div className={cardClassName} onClick={onCardClick}>
+            {isWeb ? renderWebPreview() : renderRagPreview()}
+            {renderLabelTag()}
+        </div>
+    );
+}
+
+const Citation = ({
+    data: rawData,
+    children,
+    initialDetail,
+    webContent,
+    loadCitationDetail,
+    popoverKey,
+    activePopoverKey,
+    onActivePopoverKeyChange,
+    onClosePopover,
+    onOpenDocumentPreview,
+}: {
+    data: Partial<CitationDisplayData>;
+    children: React.ReactNode;
+    initialDetail?: ChatCitation | null;
+    webContent?: any;
+    loadCitationDetail: CitationDetailLoader;
+    popoverKey: string;
+    activePopoverKey: string | null;
+    onActivePopoverKeyChange: (key: string | null) => void;
+    onClosePopover: (key: string) => void;
+    onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
+}) => {
+    const data = rawData ?? ({} as Partial<CitationDisplayData>);
+    const hasData = !!rawData;
+    const isOpen = activePopoverKey === popoverKey;
+    const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(false);
+    const closeTimerRef = useRef<number | null>(null);
+    const citationClassName = getCitationClassName(data.type);
+    const legacyPreview = data.ref?.startsWith("citation:")
+        ? getLegacyCitationPreview(webContent, data.label)
+        : null;
+    const preview = legacyPreview ?? buildCitationPreview(detail, data);
+
+    const fetchDetail = async () => {
+        if (detail || legacyPreview || !data.citationId || data.citationId.startsWith("citation:")) {
+            return detail;
+        }
+
+        setIsLoading(true);
+        setError(false);
+        try {
+            const nextDetail = await loadCitationDetail(data.citationId);
+            setDetail(nextDetail);
+            return nextDetail;
+        } catch (err) {
+            console.error("Failed to load citation detail:", err);
+            setError(true);
+            return null;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const openWebCitation = (url?: string, targetWindow?: Window | null) => {
+        if (!url) {
+            targetWindow?.close();
+            return;
+        }
+        if (targetWindow) {
+            targetWindow.opener = null;
+            targetWindow.location.href = url;
+            return;
+        }
+        window.open(url, "_blank", "noopener,noreferrer");
+    };
+
+    const handleCitationClick = async (event?: React.MouseEvent) => {
+        event?.preventDefault();
+        event?.stopPropagation();
+
+        const isWebCitation = normalizeCitationType(preview?.type || data.type) === "web";
+        if (isWebCitation && preview?.link) {
+            openWebCitation(preview.link);
+            return;
+        }
+
+        const pendingWebWindow = isWebCitation ? window.open("about:blank", "_blank") : null;
+        const nextDetail = detail ?? await fetchDetail();
+        const nextPreview = legacyPreview ?? buildCitationPreview(nextDetail, data);
+        if (normalizeCitationType(nextPreview?.type || nextDetail?.type || data.type) === "web") {
+            openWebCitation(nextPreview?.link, pendingWebWindow);
+            return;
+        }
+        pendingWebWindow?.close();
+
+        if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
+            return;
+        }
+
+        if (closeTimerRef.current) {
+            window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
+        onActivePopoverKeyChange(null);
+        onOpenDocumentPreview(nextDetail, data.itemId, true);
+    };
+
+    useEffect(() => {
+        if (initialDetail) {
+            setDetail(initialDetail);
+        }
+    }, [initialDetail]);
+
+    useEffect(() => {
+        return () => {
+            if (closeTimerRef.current) {
+                window.clearTimeout(closeTimerRef.current);
+            }
+        };
+    }, []);
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (closeTimerRef.current) {
+            window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
+        onActivePopoverKeyChange(nextOpen ? popoverKey : null);
+        if (nextOpen) {
+            void fetchDetail();
+        }
+    };
+
+    const scheduleClose = () => {
+        if (closeTimerRef.current) {
+            window.clearTimeout(closeTimerRef.current);
+        }
+        closeTimerRef.current = window.setTimeout(() => {
+            onClosePopover(popoverKey);
+        }, 120);
+    };
+
+    if (!hasData) {
+        return null;
+    }
+
+    return (
+        <Popover open={isOpen} onOpenChange={handleOpenChange}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    data-citation-trigger="true"
+                    data-citation-ref={data.ref}
+                    data-citation-id={data.citationId}
+                    data-citation-item-id={data.itemId}
+                    data-citation-type={data.type}
+                    data-citation-group-key={data.groupKey}
+                    data-citation-chunk-id={data.chunkId}
+                    aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ""}`}
+                    onClick={handleCitationClick}
+                    onMouseEnter={() => handleOpenChange(true)}
+                    onMouseLeave={scheduleClose}
+                    className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
+                >
+                    <span className="flex h-[18px] items-center">{children}</span>
+                </button>
+            </PopoverTrigger>
+            <PopoverContent
+                side="top"
+                align="start"
+                sideOffset={8}
+                onMouseEnter={() => handleOpenChange(true)}
+                onMouseLeave={scheduleClose}
+                className="z-50 w-auto border-none bg-transparent p-0 shadow-none outline-none"
+            >
+                <CitationPreviewCard
+                    preview={preview}
+                    detail={detail}
+                    isLoading={isLoading}
+                    error={error}
+                    onCardClick={() => void handleCitationClick()}
+                    onOpenDocumentPreview={() => void handleCitationClick()}
+                />
+            </PopoverContent>
+        </Popover>
+    );
+};
+
+const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, chat, flowType, citations, webContent, allowRemoteCitationResolve = true }: {
+    message: string;
+    version?: string;
+    chat?: any;
+    flowType?: number;
+    citations?: ChatCitation[] | null;
+    webContent?: any;
+    allowRemoteCitationResolve?: boolean;
+}) {
 
     const { data: linsightConfig } = useLinsightConfig();
+    const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
+    const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
+    const handleCloseCitationPopover = useCallback((popoverKey: string) => {
+        setActiveCitationPopoverKey((currentKey) => currentKey === popoverKey ? null : currentKey);
+    }, []);
+
     function filterMermaidBlocks(input) {
         const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
         const openMermaidPattern = /```mermaid[\s\S]*$/g;
@@ -24,20 +445,130 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
         return input;
     }
 
-    const processedMessage = useMemo(() => {
-        return filterMermaidBlocks(message)
+    const { processedMessage, citationMap } = useMemo(() => {
+        const normalizedMessage = filterMermaidBlocks(String(message || ""))
             // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
             .replaceAll(/(^\n\s{4,})/g, '\n   ') // ^只处理开头情况，否则影响代码无法缩进
             .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello|There\nFriend
             .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理
             .replace(/\\[\[\]]/g, '$$$$') // 处理`\[...\]`包裹的公式（四个$会被解释为两个$$）
+        const { transformedContent, citationMap } = transformPrivateCitations(normalizedMessage);
+        return {
+            processedMessage: transformedContent,
+            citationMap,
+        };
     }, [message]);
+
+    const initialCitationDetailMap = useMemo(() => createCitationDetailMap(citations), [citations]);
+    const [citationDetailMap, setCitationDetailMap] = useState<Record<string, ChatCitation>>(() => initialCitationDetailMap);
+    const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
+    const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
+    const citationBatchRequestKeyRef = useRef<string>("");
+    const citationResolvedIdsRef = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        Object.entries(initialCitationDetailMap).forEach(([citationId, detail]) => {
+            citationDetailCacheRef.current[citationId] = detail;
+        });
+        setCitationDetailMap((current) => ({
+            ...current,
+            ...initialCitationDetailMap,
+        }));
+    }, [initialCitationDetailMap]);
+
+    useEffect(() => {
+        if (!allowRemoteCitationResolve) {
+            return;
+        }
+
+        const citationIds = Array.from(new Set(
+            Object.values(citationMap)
+                .map((item) => item.citationId)
+                .filter((citationId) => {
+                    if (!citationId || citationId.startsWith("citation:")) return false;
+                    if (citationResolvedIdsRef.current.has(citationId)) return false;
+                    const cached = citationDetailCacheRef.current[citationId];
+                    return !cached || isRagCitationMissingPreviewUrl(cached);
+                }),
+        ));
+
+        if (!citationIds.length) {
+            return;
+        }
+
+        const requestKey = citationIds.sort().join("|");
+        if (citationBatchRequestKeyRef.current === requestKey) {
+            return;
+        }
+        citationBatchRequestKeyRef.current = requestKey;
+
+        void resolveCitationDetails(citationIds)
+            .then((items) => {
+                const nextMap: Record<string, ChatCitation> = {};
+                items.forEach((detail) => {
+                    if (detail?.citationId) {
+                        citationResolvedIdsRef.current.add(detail.citationId);
+                        citationDetailCacheRef.current[detail.citationId] = detail;
+                        nextMap[detail.citationId] = detail;
+                    }
+                });
+                if (Object.keys(nextMap).length) {
+                    setCitationDetailMap((current) => ({
+                        ...current,
+                        ...nextMap,
+                    }));
+                }
+            })
+            .catch((error) => {
+                console.error("Failed to resolve citation details:", error);
+                citationBatchRequestKeyRef.current = "";
+            });
+    }, [allowRemoteCitationResolve, citationMap]);
+
+    const loadCitationDetail = useCallback<CitationDetailLoader>(async (citationId) => {
+        const cachedDetail = citationDetailCacheRef.current[citationId];
+        if (cachedDetail) {
+            return cachedDetail;
+        }
+
+        if (!allowRemoteCitationResolve) {
+            return null;
+        }
+
+        const pendingRequest = citationRequestCacheRef.current[citationId];
+        if (pendingRequest) {
+            return pendingRequest;
+        }
+
+        const request = getCitationDetail(citationId)
+            .then((detail) => {
+                if (detail?.citationId) {
+                    citationDetailCacheRef.current[detail.citationId] = detail;
+                }
+                citationDetailCacheRef.current[citationId] = detail;
+                return detail;
+            })
+            .finally(() => {
+                delete citationRequestCacheRef.current[citationId];
+            });
+
+        citationRequestCacheRef.current[citationId] = request;
+        return request;
+    }, [allowRemoteCitationResolve]);
+
+    const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
+        setDocumentPreview({
+            detail,
+            itemId,
+            locateChunk,
+        });
+    }, []);
 
     return (
         <>
             <div className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer">
                 <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
+                    remarkPlugins={[remarkGfm, remarkMath, remarkCitationPlugin]}
                     rehypePlugins={[rehypeMathjax]}
                     components={{
                         a: ({ node, href, children }) => {
@@ -47,7 +578,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                             const match = /language-(\w+)/.exec(className ?? '');
                             const lang = match && match[1];
 
-                            if (lang === 'echarts') return <Echarts option={children} />
+                            if (lang === 'echarts') return <Echarts option={String(children)} />
                             if (lang === 'mermaid') return <MermaidBlock>{String(children).trim()}</MermaidBlock>
 
                             return <CodeBlock
@@ -56,7 +587,84 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                                 value={String(children).replace(/\n$/, "")}
                             />
                         },
-                    }}
+                        citation: ({ children }: { children: React.ReactNode }) => {
+                            if (typeof children === "string") {
+                                const citationPattern = /\[citation:(\d+)\]|\[citationref:([^\]]+)\]/g;
+                                const nodes: React.ReactNode[] = [];
+                                let lastIndex = 0;
+
+                                let match: RegExpExecArray | null;
+                                while ((match = citationPattern.exec(children)) !== null) {
+                                    const matchText = match[0];
+                                    const matchIndex = match.index ?? 0;
+                                    if (matchIndex > lastIndex) {
+                                        nodes.push(children.slice(lastIndex, matchIndex));
+                                    }
+
+                                    const legacyIndexValue = match[1];
+                                    const privateRef = match[2];
+
+                                    if (legacyIndexValue) {
+                                        const legacyIndex = Number(legacyIndexValue);
+                                        if (webContent?.[legacyIndex - 1]) {
+                                            nodes.push(
+                                                <Citation
+                                                    key={`legacy-${matchIndex}`}
+                                                    webContent={webContent}
+                                                    loadCitationDetail={loadCitationDetail}
+                                                    popoverKey={`legacy-${matchIndex}`}
+                                                    activePopoverKey={activeCitationPopoverKey}
+                                                    onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                                                    onClosePopover={handleCloseCitationPopover}
+                                                    onOpenDocumentPreview={handleOpenDocumentPreview}
+                                                    data={{
+                                                        label: legacyIndex,
+                                                        ref: `citation:${legacyIndexValue}`,
+                                                        type: "web",
+                                                        groupKey: legacyIndexValue,
+                                                        chunkId: legacyIndexValue,
+                                                        citationId: `citation:${legacyIndexValue}`,
+                                                        itemId: legacyIndexValue,
+                                                    }}
+                                                >
+                                                    {legacyIndexValue}
+                                                </Citation>
+                                            );
+                                        }
+                                    } else if (privateRef) {
+                                        const citationData = citationMap[privateRef];
+                                        if (citationData) {
+                                            nodes.push(
+                                                <Citation
+                                                    key={`private-${matchIndex}`}
+                                                    data={citationData}
+                                                    initialDetail={citationDetailMap[citationData.citationId]}
+                                                    loadCitationDetail={loadCitationDetail}
+                                                    popoverKey={`private-${matchIndex}`}
+                                                    activePopoverKey={activeCitationPopoverKey}
+                                                    onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                                                    onClosePopover={handleCloseCitationPopover}
+                                                    onOpenDocumentPreview={handleOpenDocumentPreview}
+                                                >
+                                                    {citationData.label}
+                                                </Citation>
+                                            );
+                                        }
+                                    }
+
+                                    lastIndex = matchIndex + matchText.length;
+                                }
+
+                                if (lastIndex < children.length) {
+                                    nodes.push(children.slice(lastIndex));
+                                }
+
+                                return <>{nodes}</>;
+                            }
+
+                            return <>{children}</>;
+                        },
+                    } as any}
                 >
                     {processedMessage}
                 </ReactMarkdown>
@@ -69,6 +677,10 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                     )}
                 </div>}
             </div>
+            <CitationDocumentPreviewDrawer
+                preview={documentPreview}
+                onClose={() => setDocumentPreview(null)}
+            />
         </>
 
     );

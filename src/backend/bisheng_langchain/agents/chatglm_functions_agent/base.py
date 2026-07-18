@@ -5,17 +5,17 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from pydantic import model_validator, Field
 
 from bisheng_langchain.chat_models.host_llm import HostChatGLM
-from langchain.agents.agent import Agent, AgentOutputParser, BaseSingleActionAgent
-from langchain.agents.structured_chat.output_parser import StructuredChatOutputParserWithRetries
-from langchain.agents.structured_chat.prompt import FORMAT_INSTRUCTIONS, PREFIX, SUFFIX
-from langchain.callbacks.base import BaseCallbackManager
-from langchain.callbacks.manager import Callbacks
-from langchain.prompts.chat import (ChatPromptTemplate, HumanMessagePromptTemplate,
+from langchain_classic.agents.agent import Agent, AgentOutputParser, BaseSingleActionAgent
+from langchain_classic.agents.structured_chat.output_parser import StructuredChatOutputParserWithRetries
+from langchain_classic.agents.structured_chat.prompt import FORMAT_INSTRUCTIONS, PREFIX, SUFFIX
+from langchain_classic.callbacks.base import BaseCallbackManager
+from langchain_classic.callbacks.manager import Callbacks
+from langchain_classic.prompts.chat import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
-from langchain.schema import AgentAction, AgentFinish, BasePromptTemplate
-from langchain.schema.language_model import BaseLanguageModel
-from langchain.schema.messages import ChatMessage
-from langchain.tools import BaseTool, StructuredTool
+from langchain_classic.schema import AgentAction, AgentFinish, BasePromptTemplate
+from langchain_classic.schema.language_model import BaseLanguageModel
+from langchain_classic.schema.messages import ChatMessage
+from langchain_classic.tools import BaseTool, StructuredTool
 
 HUMAN_MESSAGE_TEMPLATE = '{input}\n\n{agent_scratchpad}'
 

@@ -46,8 +46,8 @@ export default function Config() {
 
     const codeRef = useRef('')
     const validataRef = useRef([])
-    return <div className=" max-w-[80%] mx-auto">
-        <p className="font-bold mt-8 mb-2">{t('system.parameterConfig')}</p>
+    return <div className="flex h-full max-w-[80%] mx-auto flex-col pt-6 pb-4">
+        <p className="font-bold mb-2 shrink-0">{t('system.parameterConfig')}</p>
         <AceEditor
             value={config || ''}
             mode="yaml"
@@ -60,9 +60,9 @@ export default function Config() {
             name="CodeEditor"
             onChange={(value) => codeRef.current = value}
             onValidate={(e) => validataRef.current = e}
-            className="h-[70vh] w-full rounded-lg border-[1px] border-border custom-scroll"
+            className="min-h-0 w-full flex-1 rounded-lg border-[1px] border-border custom-scroll"
         />
-        <div className="flex justify-center mt-8">
+        <div className="flex justify-center mt-4 shrink-0">
             <Button className=" h-10 w-[120px] px-24 text-[#fff]" onClick={handleSave}>{t('save')}</Button>
         </div>
     </div>

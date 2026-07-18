@@ -2,16 +2,19 @@ import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getLinsightModelConfig, updateLinsightModelConfig } from "@/controllers/API/finetune";
+import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
+import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { generateUUID } from "@/components/bs-ui/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
 import { useModel } from "..";
+import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
+import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
     const defaultValue = useMemo(() => {
@@ -55,15 +58,16 @@ export default function WorkbenchModel({ onBack }) {
     const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
     const { t } = useTranslation('model')
     const { message } = useToast()
+    const modelRefs = useRef<(HTMLDivElement | null)[]>([])
 
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<any>({
         sourceModelId: null,
-        extractModelId: null,
-        executionMode: 'ReAct',
+        linsightDefaultModelId: null,
         asrModelId: null,
         ttsModelId: null,
         knowledgeSpaceLlmId: null,
         chatTitleLlmId: null,
+        models: [],
     });
 
     useEffect(() => {
@@ -73,16 +77,28 @@ export default function WorkbenchModel({ onBack }) {
 
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
-    const handleSave = async () => {
-        const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId, chatTitleLlmId } = form;
-        const errors = [];
-        if (errors.length) return message({ variant: 'error', description: errors });
+    // Look up the model's own name from the cascader options by id, used as
+    // the default displayName when the admin leaves it empty.
+    const findModelLabel = (id) => {
+        if (!id) return '';
+        for (const group of llmOptions) {
+            const hit = group.children?.find((el) => el.value == id);
+            if (hit) return hit.label;
+        }
+        return '';
+    };
+
+    const submitConfig = async () => {
+        const { linsightDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
         setSaveLoad(true);
         try {
             const data = {
-                task_model: { id: String(extractModelId) },
+                // Empty displayName falls back to the model's own name so the
+                // workspace model picker never renders a blank option.
+                models: models.map((m) => m.displayName ? m : { ...m, displayName: findModelLabel(m.id) }),
                 embedding_model: { id: String(sourceModelId) },
-                linsight_executor_mode: executionMode,
+                // Linsight default executor model: one of the workbench chat models' id.
+                linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
                 asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
                 tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
                 // “应用会话标题生成模型”
@@ -97,23 +113,23 @@ export default function WorkbenchModel({ onBack }) {
             const newConfig = updatedConfig.data;
             setForm({
                 sourceModelId: newConfig?.embedding_model?.id || null,
-                extractModelId: newConfig?.task_model?.id || null,
-                executionMode: newConfig?.linsight_executor_mode || 'ReAct',
+                linsightDefaultModelId: newConfig?.linsight_default_model_id || null,
                 asrModelId: newConfig?.asr_model?.id || null,
                 ttsModelId: newConfig?.tts_model?.id || null,
                 chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
-                knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null
+                knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
+                models: newConfig?.models || [],
             });
 
             lastSaveFormDataRef.current = {
-                task_model: { id: newConfig?.task_model?.id },
                 embedding_model: { id: newConfig?.embedding_model?.id },
-                linsight_executor_mode: newConfig?.linsight_executor_mode || 'ReAct',
+                linsight_default_model_id: newConfig?.linsight_default_model_id || null,
                 abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
                 asr_model: { id: newConfig?.asr_model?.id },
                 tts_model: { id: newConfig?.tts_model?.id },
                 chat_title_llm: { id: newConfig?.chat_title_llm?.id },
                 knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
+                models: newConfig?.models || [],
             };
             if (response !== false) {
                 message({ variant: 'success', description: t('model.saveSuccess') });
@@ -132,7 +148,26 @@ export default function WorkbenchModel({ onBack }) {
         return lastEmbeddingId !== currentEmbeddingId;
     };
 
-    const handleSaveWithConfirm = () => {
+    const handleSave = () => {
+        const errors = [];
+        if (!form.models.length) {
+            errors.push('请至少配置一个对话模型');
+        }
+        // Reject blank rows: a model without an id serializes to `{ id: '' }`,
+        // which reaches the client model picker as <SelectItem value="">
+        // (empty string) and crashes the whole page in Radix. Force the admin
+        // to pick a model or remove the empty row before saving.
+        if (form.models.some((model) => !model.id)) {
+            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
+        }
+        if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
+            errors.push(t('model.workVectorModel') + t('bs:required'));
+        }
+        if (errors.length) {
+            message({ variant: 'error', description: errors });
+            return;
+        }
+
         if (checkEmbeddingModified()) {
             bsConfirm({
                 title: t('model.tip'),
@@ -141,12 +176,12 @@ export default function WorkbenchModel({ onBack }) {
                 okTxt: t('model.confirm'),
                 canelTxt: t('model.cancel'),
                 onOk(next) {
-                    handleSave().then(next);
+                    submitConfig().then(next);
                 },
                 onCancel() { }
             });
         } else {
-            handleSave();
+            submitConfig();
         }
     };
 
@@ -160,23 +195,23 @@ export default function WorkbenchModel({ onBack }) {
         if (linsightConfig) {
             setForm({
                 sourceModelId: linsightConfig.embedding_model?.id || null,
-                extractModelId: linsightConfig.task_model?.id || null,
-                executionMode: linsightConfig.linsight_executor_mode || 'ReAct',
+                linsightDefaultModelId: linsightConfig.linsight_default_model_id || null,
                 asrModelId: linsightConfig.asr_model?.id || null,
                 ttsModelId: linsightConfig.tts_model?.id || null,
                 chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
-                knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null
+                knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
+                models: linsightConfig.models || [],
             });
 
             lastSaveFormDataRef.current = {
-                task_model: { id: linsightConfig.task_model?.id },
                 embedding_model: { id: linsightConfig.embedding_model?.id },
-                linsight_executor_mode: linsightConfig.linsight_executor_mode || 'ReAct',
+                linsight_default_model_id: linsightConfig.linsight_default_model_id || null,
                 abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
                 asr_model: { id: linsightConfig.asr_model?.id },
                 tts_model: { id: linsightConfig.tts_model?.id },
                 chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
-                knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id }
+                knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
+                models: linsightConfig.models || [],
             };
         }
     }, [linsightConfig, error, message, defalutPrompt, t]);
@@ -188,8 +223,59 @@ export default function WorkbenchModel({ onBack }) {
     );
     // console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
     console.log('TTS Model Options structure:', JSON.stringify(embeddings, null, 2));
+    const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
+    const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
-        <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+        <div className="max-w-[720px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+            <FallbackBlockedBanner visible={fallbackBlocked} />
+            {inheritedFromRoot && (
+                <div className="-mb-2 text-xs text-muted-foreground flex items-center">
+                    <InheritedBadge visible={true} />
+                </div>
+            )}
+            <div>
+                <h3 className="bisheng-label mb-2">日常模式/知识空间/订阅对话模型</h3>
+                <ModelManagement
+                    ref={modelRefs}
+                    models={form.models}
+                    errors={[]}
+                    error={''}
+                    linsightDefaultModelId={form.linsightDefaultModelId}
+                    onLinsightDefaultChange={(id) => setForm((prev) => ({ ...prev, linsightDefaultModelId: id }))}
+                    onAdd={() => setForm((prev) => ({
+                        ...prev,
+                        models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', description: '', visual: false }],
+                    }))}
+                    onRemove={(index) => setForm((prev) => {
+                        const removed = prev.models[index];
+                        // If the removed model was the Linsight default, clear the selection.
+                        const linsightDefaultModelId = removed?.id && removed.id === prev.linsightDefaultModelId
+                            ? null
+                            : prev.linsightDefaultModelId;
+                        return {
+                            ...prev,
+                            models: prev.models.filter((_, i) => i !== index),
+                            linsightDefaultModelId,
+                        };
+                    })}
+                    onModelChange={(index, id) => setForm((prev) => ({
+                        ...prev,
+                        models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
+                    }))}
+                    onNameChange={(index, displayName) => setForm((prev) => ({
+                        ...prev,
+                        models: prev.models.map((item, i) => i === index ? { ...item, displayName } : item),
+                    }))}
+                    onDescriptionChange={(index, description) => setForm((prev) => ({
+                        ...prev,
+                        models: prev.models.map((item, i) => i === index ? { ...item, description } : item),
+                    }))}
+                    onVisualToggle={(index, visual) => setForm((prev) => ({
+                        ...prev,
+                        models: prev.models.map((item, i) => i === index ? { ...item, visual } : item),
+                    }))}
+                />
+            </div>
             <ModelSelect
                 close
                 label={t('model.workVectorModel')}
@@ -199,40 +285,6 @@ export default function WorkbenchModel({ onBack }) {
                 onChange={(val) => setForm({ ...form, sourceModelId: val })}
                 required
             />
-            <h3 className="bisheng-label">{t('model.lingsiTaskModel')}</h3>
-            <div className="border rounded-lg p-4 -mt-3">
-                <div className="flex gap-4">
-                    <div className="flex-1">
-                        <ModelSelect
-                            close
-                            label={t('model.model')}
-                            tooltipText={t('model.lingsiTaskModelTooltip')}
-                            value={form.extractModelId}
-                            options={llmOptions}
-                            onChange={(val) => setForm({ ...form, extractModelId: val })}
-                            required
-                        />
-                    </div>
-                    <div className="flex-1">
-                        <Label className="bisheng-label">
-                            <span>{t('model.executionMode')}</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.executionModeTooltip')}></QuestionTooltip>
-                        </Label>
-                        <Select
-                            value={form.executionMode}
-                            onValueChange={(val) => setForm({ ...form, executionMode: val })}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder={t('model.selectExecutionMode')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="func_call">{t('model.functionCall')}</SelectItem>
-                                <SelectItem value="react">{t('model.react')}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-            </div>
             <h3 className="bisheng-label">{t('model.workbenchVoiceModel')}</h3>
             <div className="border rounded-lg p-4 -mt-3 space-y-4">
                 <ModelSelect
@@ -264,7 +316,7 @@ export default function WorkbenchModel({ onBack }) {
                 <Button
                     className="px-10"
                     disabled={saveload}
-                    onClick={handleSaveWithConfirm}
+                    onClick={handleSave}
                 >
                     {saveload && <LoadIcon className="mr-2" />}
                     {t('model.save')}
@@ -276,20 +328,27 @@ export default function WorkbenchModel({ onBack }) {
 
 export function useLinsightConfig() {
     return useQuery({
-        queryKey: ["linsightModelConfig"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelConfig()),
-        select: (data) => {
-            const safeConfig = data || {
-                task_model: null,
+        queryKey: ["linsightModelEnvelope"],
+        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()),
+        select: (env) => {
+            // F022: backend returns {data, inherited_from_root, fallback_blocked}.
+            // Hand the destructured shape back so the component can render the
+            // Badge / Banner without re-fetching.
+            const cfg = env?.data || {
+                models: [],
                 embedding_model: null,
                 abstract_prompt: defalutPrompt,
-                linsight_executor_mode: "ReAct",
+                linsight_default_model_id: null,
                 asr_model: null,
                 tts_model: null,
                 knowledge_space_llm: null,
                 chat_title_llm: null,
             };
-            return safeConfig;
+            return {
+                ...cfg,
+                inherited_from_root: !!env?.inherited_from_root,
+                fallback_blocked: !!env?.fallback_blocked,
+            };
         },
         retry: 1,
     });
@@ -309,5 +368,5 @@ export const defalutPrompt = `# role
 2. 使用2～3句话概括文档的核心内容和关键结论，强调信息的准确性、完整性与清晰度。
 
 # result example
-【文档类型】：会议纪要  
+【文档类型】：会议纪要
 【摘要】：本文档为公司季度业务会议纪要，会议围绕本季度销售目标的达成情况展开，最终决定下一季度加强市场推广投入，并设立专门团队负责新产品上市工作，以改善销售表现。`;

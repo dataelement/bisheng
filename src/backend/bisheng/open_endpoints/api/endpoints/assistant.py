@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
-from fastapi.responses import ORJSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, AIMessageChunk
 from loguru import logger
 
@@ -22,6 +22,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
+from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
@@ -49,12 +50,12 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         # Get the default user information configured in the system configuration
         login_user = get_default_operator()
     except Exception as e:
-        return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
+        return JSONResponse(status_code=500, content=str(e), media_type='application/json')
     # Find Assistant Information
     try:
         assistant_info = await AssistantService.get_assistant_info(assistant_id, login_user)
     except Exception as e:
-        return ORJSONResponse(status_code=500,
+        return JSONResponse(status_code=500,
                               content=str(e),
                               media_type='application/json')
 
@@ -141,7 +142,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                         latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
                         if not isinstance(latest_message, AIMessageChunk):
                             continue
-                        reasoning_content = latest_message.additional_kwargs.get("reasoning_content", "")
+                        reasoning_content = extract_reasoning_content(latest_message)
                         content = latest_message.content
 
                         chunk_data = {
@@ -202,7 +203,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                                      media_type='text/event-stream')
         except Exception as exc:
             logger.error(f'StreamingResponse creation error: {exc}')
-            return ORJSONResponse(status_code=500, content=str(exc))
+            return JSONResponse(status_code=500, content=str(exc))
     finally:
         end_time = time.time()
         await telemetry_service.log_event(user_id=login_user.user_id,

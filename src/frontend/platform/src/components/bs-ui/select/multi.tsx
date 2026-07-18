@@ -258,7 +258,7 @@ const MultiSelect = ({
             }
             footerNode={children}
         >
-            <div className="mt-2 max-w-96">
+            <div className="mt-2 w-full min-w-[var(--radix-select-trigger-width)]">
                 {
                     optionFilter.map((item) => (
                         <MultiItem

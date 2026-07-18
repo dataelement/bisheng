@@ -22,6 +22,7 @@ from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.utils import generate_uuid
 from bisheng.utils.util import get_cache_key
 
@@ -185,6 +186,20 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
+    async def _has_use_app_permission(
+            self,
+            login_user: UserPayload,
+            work_type: WorkType,
+            client_id: str,
+    ) -> bool:
+        object_type = 'assistant' if work_type == WorkType.GPTS else 'workflow'
+        return await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            object_type,
+            str(client_id),
+            ['use_app'],
+        )
+
     async def dispatch_client(
             self,
             request: Request | WebSocket,  # Raw request body
@@ -231,6 +246,19 @@ class ChatManager:
                     payload = json_payload_receive
                 # clientHandle your own business logic internally
                 # TODO zgq: Here you can increase the thread pool to prevent blocking
+                if not await self._has_use_app_permission(login_user, work_type, client_id):
+                    logger.warning(
+                        'close_client permission_revoked client_key={} client_id={} user_id={}',
+                        client_key,
+                        client_id,
+                        login_user.user_id,
+                    )
+                    await self.close_client(
+                        client_key,
+                        code=status.WS_1008_POLICY_VIOLATION,
+                        reason='No permission to use this app',
+                    )
+                    break
                 await chat_client.handle_message(payload)
         except WebSocketDisconnect as e:
             logger.info('act=rcv_client_disconnect {}', str(e))

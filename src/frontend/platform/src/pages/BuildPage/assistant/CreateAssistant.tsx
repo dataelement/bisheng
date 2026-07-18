@@ -15,8 +15,11 @@ export default function CreateAssistant() {
 
     const { t } = useTranslation()
 
-    // State for form fields
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{
+        url: string;
+        name: string;
+        roleAndTasks: string;
+    }>({
         url: '',
         name: '',
         roleAndTasks: `${t('build.example')}：
@@ -24,7 +27,7 @@ ${t('build.exampleOne')}
 ${t('build.exampleTwo')}
 1. XX
 2. XX
-3. …`
+3. …`,
     });
 
     const [loading, setLoading] = useState(false);
@@ -81,7 +84,11 @@ ${t('build.exampleTwo')}
         if (isValid) {
             console.log('Form data:', formData);
             setLoading(true)
-            const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks, formData.url))
+            const res = await captureAndAlertRequestErrorHoc(
+                createAssistantsApi(
+                    formData.name, formData.roleAndTasks, formData.url,
+                ),
+            )
             if (res) {
                 //@ts-ignore
                 window.assistantCreate = true // Mark as creating new assistant
@@ -128,7 +135,7 @@ ${t('build.exampleTwo')}
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', roleAndTasks: '' })}>{t('cancle')}</Button>
+                <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ url: '', name: '', roleAndTasks: '' })}>{t('cancle')}</Button>
             </DialogClose>
             <Button disabled={loading} type="submit" className="px-11" onClick={handleSubmit}>
                 {loading && <LoadIcon className="mr-2" />}

@@ -1,22 +1,29 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, Integer, text, delete
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class ServerBase(SQLModelSerializable):
     endpoint: str = Field(index=False)
     sft_endpoint: str = Field(default='', index=False, description='FinetuneService Address')
     server: str = Field(index=True)
     remark: Optional[str] = Field(default=None, index=False)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class Server(ServerBase, table=True):

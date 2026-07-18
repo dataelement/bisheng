@@ -22,6 +22,7 @@ import {
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import useTimeout from './useTimeout';
 import store from '~/store';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 
 const AuthContext = createContext<TAuthContext | undefined>(undefined);
 
@@ -92,15 +93,29 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
+      // Drop the auth-state sentinel so the next /api/user/me success is
+      // detected as a fresh login and wipes cached chat preferences.
+      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
+      const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
+      if (thirdPartyLogoutUrl) {
+        window.location.href = thirdPartyLogoutUrl;
+        return;
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,
         // user: undefined,
-        redirect: `${location.origin}${__APP_ENV__.BISHENG_HOST}` // data.redirect ?? bsConfig?.host,
+        redirect: getPlatformAdminPanelUrl(),
       });
     },
     onError: (error) => {
+      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
       doSetError((error as Error).message);
+      const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
+      if (thirdPartyLogoutUrl) {
+        window.location.href = thirdPartyLogoutUrl;
+        return;
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,
@@ -150,6 +165,30 @@ const AuthContextProvider = ({
   useEffect(() => {
     if (userQuery.data) {
       setUser(userQuery.data);
+      setIsAuthenticated(true);
+      // Auth-state sentinel: stored in localStorage (shared across tabs)
+      // so refresh and new-tab don't trigger a wipe. Cleared on logout and
+      // on 401 in the response interceptor; SSO landing leaves it absent
+      // until the first /api/user/me succeeds. Mismatch (absent or different
+      // uid — including a leftover bs:* set from a prior user) is treated
+      // as "fresh login" → wipe cached chat preferences and legacy global
+      // keys so admin-configured defaults re-apply.
+      try {
+        const uid = String(userQuery.data.id ?? '');
+        if (uid && localStorage.getItem('bs:auth-state') !== uid) {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('bs:')) localStorage.removeItem(k);
+          }
+          // One-time cleanup of legacy global keys that used to be persisted
+          // via atomWithLocalStorage. Their atoms no longer write to these
+          // keys; remove any stale values so the keys don't linger forever.
+          ['chatModel', 'modelType', 'searchType', 'isSearch'].forEach((k) => {
+            localStorage.removeItem(k);
+          });
+          localStorage.setItem('bs:auth-state', uid);
+        }
+      } catch { /* ignore storage errors */ }
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
       // navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });

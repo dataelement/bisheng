@@ -1,71 +1,22 @@
-import { ArrowLeft, Loader2 } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { ArrowLeft } from "lucide-react"
+import { LoadingIcon } from "~/components/ui/icon/Loading"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
+import { NotificationSeverity } from "~/common"
+import { Button } from "~/components/ui/Button"
+import { EmptyStateIllustration } from "~/components/illustrations"
+import { useLocalize, useMediaQuery } from "~/hooks"
+import { useGetBsConfig } from "~/hooks/queries/data-provider"
 import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
-import AppAvator from '~/components/Avator'
+import { AgentCard } from './components/AgentCard'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
-import { useToastContext } from "~/Providers";
-import { Button } from "~/components/ui/Button";
-import { useLocalize } from "~/hooks";
-import { NotificationSeverity } from "~/common";
 
-const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
-
-// --- 组件：智能体卡片 (广场版 Horizontal) ---
-const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
-    const localize = useLocalize();
-    return (
-        <div
-            onClick={() => onClick(agent)}
-            className={cn(
-                "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
-                "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
-                "hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover:after:opacity-100",
-                "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
-            )}
-        >
-            {/* 左侧图标 */}
-            <AppAvator
-                url={agent.logo} id={agent.id as any}
-                flowType={String(agent.flow_type || agent.type)}
-                className="size-[48px] min-w-[48px] min-h-[48px] shrink-0 rounded-[4px]"
-                iconClassName="w-6 h-6"
-            />
-
-            {/* 右侧内容 */}
-            <div className="flex flex-[1_0_0] flex-col h-full items-start min-w-px relative">
-                <p className="font-['PingFang_SC'] font-medium leading-[20px] text-[#212121] text-[14px] truncate w-full">
-                    {agent.name}
-                </p>
-
-                {/* 描述区域：平时显示，hover时隐藏 */}
-                <p className="mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2 group-hover:hidden">
-                    {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
-                </p>
-
-                {/* 按纽区域：平时隐藏，hover时显示 */}
-                <div className="hidden group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                        className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
-                    >
-                        {localize('com_app_share_app')}
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                        className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
-                    >
-                        {localize('com_app_start_chat')}
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
+const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+const appLastOriginKey = 'app-last-origin';
 
 export default function ExplorePlaza() {
     const [activeTabId, setActiveTabId] = useState<number | string>(-1)
@@ -85,6 +36,18 @@ export default function ExplorePlaza() {
     const navigate = useNavigate()
     const { showToast } = useToastContext()
     const localize = useLocalize()
+    const { data: bsConfig } = useGetBsConfig()
+    const isAtLeast768 = useMediaQuery('(min-width: 768px)')
+    const isAtLeast1024 = useMediaQuery('(min-width: 1024px)')
+    const bannerTitle = bsConfig?.applicationCenterWelcomeMessage?.trim() || localize('com_app_center_welcome')
+    const bannerDescription = bsConfig?.applicationCenterDescription?.trim() || localize('com_app_center_description')
+
+    const exploreCols = useMemo(() => {
+        // md: 2 列（与应用中心一致）；lg+: 3 列（应用中心 4 列减 1）
+        if (isAtLeast1024) return 3;
+        if (isAtLeast768) return 2;
+        return 1;
+    }, [isAtLeast768, isAtLeast1024]);
 
     // Modify Fetch Function
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
@@ -100,7 +63,9 @@ export default function ExplorePlaza() {
 
             const formattedResults = pageData.map((item: any) => ({
                 ...item,
-                id: item.id || item.agentId || item.flowId
+                id: item.id || item.agentId || item.flowId,
+                // Normalize so the shared AgentCard (which reads flow_type) renders correctly.
+                flow_type: item.flow_type ?? item.type,
             }));
 
             setAgents(prev => isAppend ? [...prev, ...formattedResults] : formattedResults);
@@ -158,12 +123,21 @@ export default function ExplorePlaza() {
     const handleCardClick = (agent: any) => {
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
+        try {
+            sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
+            sessionStorage.setItem(appLastOriginKey, 'explore');
+        } catch {
+            // ignore storage failures
+        }
         // Enter without chatId — AppChatEntry will resolve to most recent conversation,
         // or create a new one if the user has no conversations for this app yet.
-        navigate(`/app/${flowId}/${flowType}?from=explore`);
+        navigate(`/app/${flowId}/${flowType}?from=explore&returnTo=%2Fapps%2Fexplore`, {
+            state: { appSurfaceReturn: '/apps/explore' as const },
+        });
     }
 
     const handleShare = async (agent: any) => {
+        if (agent.can_share !== true) return;
         const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
         try {
             await copyText(shareUrl);
@@ -180,65 +154,117 @@ export default function ExplorePlaza() {
     }
 
     return (
-        <div className="flex w-full flex-col items-center bg-white pb-16">
-            {/* 顶部横幅：背景图尺寸与知识广场（KnowledgeSquare tabbg）相同 — bg-cover + center */}
+        <div
+            className={cn(
+                'flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
+                // Mobile explore is not innerScrollShell in MainLayout (h-auto shell) and
+                // html/body scrolling is globally disabled (WebView bottom-strip fix in
+                // index.html), so h-full/flex-1 collapse to content height and nothing can
+                // scroll. Pin the page to one viewport tall on mobile so <main>'s
+                // overflow-y-auto becomes the scroller (also gives empty/loading states a
+                // real height to center against).
+                'max-[767px]:h-[100dvh]',
+            )}
+        >
+            {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
             <div
-                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: `url(${APP_TAB_BANNER})` }}
+                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
             >
+                {/* Decorative scattered icons — kept from the original banner art, recolored
+                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-blue-200"
+                    style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
+                        WebkitMaskSize: "cover",
+                        maskSize: "cover",
+                        WebkitMaskPosition: "center",
+                        maskPosition: "center",
+                        WebkitMaskRepeat: "no-repeat",
+                        maskRepeat: "no-repeat",
+                    }}
+                />
                 <div className="absolute left-4 top-4 z-10">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-7 w-7 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335CFF]"
+                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>
                 </div>
-                <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-5 pt-7 text-center">
-                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-[#335CFF]">
-                        {localize('com_app_center_welcome')}
+                <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
+                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">
+                        {bannerTitle}
                     </h1>
                     <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
-                        {localize('com_app_center_description')}
+                        {bannerDescription}
                     </p>
                 </div>
             </div>
 
-            {/* 过滤栏 */}
-            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-6 xl:px-0 py-6">
-                <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
-                <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+            {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
+            <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
+                <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0">
+                    <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+                </div>
+                <div className="order-1 max-[576px]:order-2 w-full min-w-0">
+                    <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
+                </div>
             </div>
 
-            {/* 智能体网格 */}
-            <main className="w-full max-w-[1000px] px-6 xl:px-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[12px]">
+            {/* 智能体网格：滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
+            <main className="flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scrollbar-os">
+                <div className="flex w-full max-w-[1000px] flex-1 flex-col px-5 pb-5">
+                <div
+                    className="grid w-full items-start gap-4"
+                    style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
+                >
                     {agents.map((agent, idx) => (
-                        <ExploreCard key={`${agent.id}-${idx}`} agent={agent} onClick={handleCardClick} onShare={handleShare} />
+                        <AgentCard
+                            key={`${agent.id}-${idx}`}
+                            agent={agent}
+                            onStartChat={handleCardClick}
+                            onShare={handleShare}
+                        />
                     ))}
                 </div>
 
                 {/* 滚动触发器 & 加载状态显示 */}
-                <div ref={loaderRef} className="flex justify-center py-10 w-full">
-                    {loading && (
-                        <div className="flex items-center gap-2 text-[#335cff]">
-                            <Loader2 className="animate-spin" size={24} />
-                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
-                        </div>
+                <div
+                    ref={loaderRef}
+                    className={cn(
+                        'flex w-full flex-col items-center',
+                        // Empty/loading: fill the region and place content via flex spacers at a
+                        // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
+                        (loading || agents.length === 0) ? 'flex-1' : 'py-10',
                     )}
-                    {!loading && loadingMore && (
-                        <div className="flex items-center gap-2 text-[#335cff]">
-                            <Loader2 className="animate-spin" size={20} />
-                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
+                >
+                    {(loading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
+                    {loading ? (
+                        <div className="flex flex-col items-center gap-3 text-blue-500">
+                            <LoadingIcon className="size-20 text-primary" />
+                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
                         </div>
-                    )}
+                    ) : loadingMore ? (
+                        <div className="flex items-center gap-2 text-blue-500">
+                            <LoadingIcon className="size-6 text-primary" />
+                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
+                        </div>
+                    ) : null}
                     {!hasMore && agents.length > 0 && (
                         <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_end_of_list')}</p>
                     )}
                     {!loading && agents.length === 0 && (
-                        <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4 py-10">{localize('com_app_explore_no_agents')}</p>
+                        <div className="flex flex-col items-center">
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
+                            <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">{localize('com_app_explore_no_agents')}</p>
+                        </div>
                     )}
+                    {(loading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
+                </div>
                 </div>
             </main>
         </div>

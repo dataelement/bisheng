@@ -1,0 +1,49 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="2.2 管理员：Skill 管理与存量迁移">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="MIG" value="系统升级 · 存量 SOP 一次性迁移（US-4）" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="160" y="40" width="540" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="S" value="存量 SOP&lt;br&gt;linsight_sop" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="MIG">
+          <mxGeometry x="170" y="40" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="SKILL.md" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="MIG">
+          <mxGeometry x="170" y="130" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="RP" value="对账报告&lt;br&gt;成功 / 失败 / 跳过 · 异常可人工处理&lt;br&gt;AC-4" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="MIG">
+          <mxGeometry x="120" y="210" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="eSK" value="转换脚本" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="MIG" source="S" target="K">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eKRP" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="MIG" source="K" target="RP">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="MGMT" value="Skills 管理页" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="120" y="420" width="620" height="270" as="geometry"/>
+        </mxCell>
+        <mxCell id="TA" value="租户管理员 · US-3" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="MGMT">
+          <mxGeometry x="30" y="40" width="180" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="TS" value="租户自定义 Skill&lt;br&gt;按租户隔离" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="MGMT">
+          <mxGeometry x="210" y="180" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="SA" value="系统管理员 · US-5" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="MGMT">
+          <mxGeometry x="400" y="40" width="180" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="eTATS" value="新建/导入/编辑/删除/启停" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="MGMT" source="TA" target="TS">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eSATS" value="admin-scope 切入该租户后维护" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="MGMT" source="SA" target="TS">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eRPMGMT" value="迁移产物进入管理页" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="RP" target="MGMT">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

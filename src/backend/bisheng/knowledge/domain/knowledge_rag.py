@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
@@ -12,8 +12,85 @@ from bisheng.knowledge.rag.milvus_factory import MilvusFactory
 from bisheng.llm.domain import LLMService
 
 
+ROOT_TENANT_ID = 1
+
+
 class KnowledgeRag:
     """ initialize knowledge rag components """
+
+    # ── F017 AC-06: Milvus / ES fallback helpers ──────────────────
+
+    @classmethod
+    async def aexpand_with_root_shared(
+        cls,
+        knowledge_ids: Sequence[int],
+        *,
+        leaf_tenant_id: Optional[int] = None,
+    ) -> List[int]:
+        """Return ``knowledge_ids`` plus every Root-shared knowledge id the
+        caller can see (``tenant_id=1 AND is_shared=1``).
+
+        Used at the retrieval layer so a Child-tenant conversation can
+        cross-search its own collections + the Root-shared knowledge the
+        tenant has been granted via F017 FGA tuples. Call this *before*
+        ``get_multi_knowledge_vectorstore_sync`` when the caller needs
+        the "Child + Root-shared" union (spec §5.3 Milvus fallback).
+
+        No-ops (returns the input unchanged) when:
+          - ``leaf_tenant_id`` is Root (already sees every Root knowledge)
+          - multi_tenant is disabled
+          - there are no Root-shared knowledge rows matching
+
+        Dedups by id; preserves the caller's order for the original ids
+        and appends the new Root-shared ids at the tail.
+        """
+        base_ids = list(dict.fromkeys(int(k) for k in knowledge_ids))
+        if leaf_tenant_id is None:
+            try:
+                from bisheng.core.context.tenant import get_current_tenant_id
+                leaf_tenant_id = get_current_tenant_id()
+            except Exception:
+                leaf_tenant_id = None
+        if leaf_tenant_id is None or leaf_tenant_id == ROOT_TENANT_ID:
+            return base_ids
+
+        try:
+            from bisheng.common.services.config_service import settings
+            if not getattr(getattr(settings, 'multi_tenant', None), 'enabled', False):
+                return base_ids
+        except Exception:
+            return base_ids
+
+        root_shared = await cls._afetch_root_shared_knowledge_ids()
+        if not root_shared:
+            return base_ids
+        seen = set(base_ids)
+        for kid in root_shared:
+            if kid not in seen:
+                seen.add(kid)
+                base_ids.append(kid)
+        return base_ids
+
+    @classmethod
+    async def _afetch_root_shared_knowledge_ids(cls) -> List[int]:
+        """Fetch all Root knowledge ids that are currently shared
+        (``is_shared=1``). Query the ``knowledge`` table directly with a
+        bypass_tenant_filter so the ORM's auto-inject does not filter them
+        out for a Child caller.
+        """
+        from sqlalchemy import text as sa_text
+
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.core.database import get_async_db_session
+
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(sa_text(
+                    'SELECT id FROM knowledge '
+                    'WHERE tenant_id = :t AND is_shared = 1'
+                ).bindparams(t=ROOT_TENANT_ID))
+                rows = result.all()
+        return [int(r[0]) if isinstance(r, tuple) else int(r) for r in rows]
 
     @classmethod
     async def _get_knowledge(cls, knowledge: Knowledge = None, knowledge_id: int = None) -> Knowledge:

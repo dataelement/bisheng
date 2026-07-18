@@ -29,11 +29,17 @@ export function useSelectionPath(
         queries: selectedArray.map((id) => ({
             queryKey: ["folderParentPath", spaceId, id] as const,
             queryFn: async () => {
-                const parents = await getFolderParentPathApi(spaceId, id);
-                // Append the item itself to the end of the path
-                const item = files.find((f) => f.id === id);
-                const selfNode: PathItem = { id, name: item?.name || id };
-                return [...parents, selfNode];
+                // The API now returns the full path including the item itself
+                // as the leaf (with its authoritative name), so no manual append.
+                const path = await getFolderParentPathApi(spaceId, id);
+                // Defensive: if the backend leaf name fell back to the bare id,
+                // patch it from the local list when we happen to have it.
+                const leaf = path[path.length - 1];
+                if (leaf && leaf.id === id && leaf.name === id) {
+                    const item = files.find((f) => f.id === id);
+                    if (item?.name) return [...path.slice(0, -1), { id, name: item.name }];
+                }
+                return path as PathItem[];
             },
             enabled: !!spaceId && selectedIds.size > 0,
             staleTime: 5 * 60 * 1000, // 5 min cache

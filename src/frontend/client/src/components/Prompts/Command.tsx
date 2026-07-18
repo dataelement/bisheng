@@ -57,7 +57,7 @@ const Command = ({
           className="border-none"
         />
         {disabled !== true && (
-          <span className="mr-4 w-10 text-xs text-text-secondary md:text-sm">{`${charCount}/${Constants.COMMANDS_MAX_LENGTH}`}</span>
+          <span className="mr-4 w-10 text-xs text-text-secondary touch-desktop:text-sm">{`${charCount}/${Constants.COMMANDS_MAX_LENGTH}`}</span>
         )}
       </h3>
     </div>

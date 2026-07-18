@@ -56,10 +56,11 @@ export const getAssistantDetailApi = async (
     id: string,
     shareToken?: string,
     skip403Redirect?: boolean,
+    apiVersion: string = 'v1',
 ): Promise<any> => {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/v1/assistant/info/${id}`, {
+    return await request.get(`/api/${apiVersion}/assistant/info/${id}`, {
         headers,
         skip403Redirect,
     } as any)
@@ -112,8 +113,8 @@ export const trackingApi = (data: { message_id: string, operation_type: 'dislike
 /**
  * 技能 工作流详情
  */
-export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken }
-    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string }): Promise<any> {
+export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken, apiVersion = 'v1' }
+    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string, apiVersion?: string }): Promise<any> {
     const filterFlowMsg = (data) => {
         return data.filter(item =>
             ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
@@ -128,7 +129,7 @@ export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareTok
 
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
+    return await request.get(`/api/${apiVersion}/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
         headers
     }).then(res => {
         if (res.status_code !== 200) return []
@@ -197,7 +198,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         });
 
         return Object.keys(fileMap).map(fileId => {
-            const { file_id: id, source: fileName, source_url, original_url: originUrl, ...other } = fileMap[fileId][0]
+            const { file_id: id, source: fileName, preview_url: previewUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
 
             const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
                 .map(chunk => ({
@@ -211,12 +212,12 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
             let suffix = fileName.split('.').pop().toLowerCase()
             let isNew = false
             if (['uns', 'local'].includes(other.parse_type)) {
-                fileUrl = other.chunk_bboxes ? source_url : originUrl;
+                fileUrl = other.chunk_bboxes ? previewUrl : originUrl;
                 if (other.chunk_bboxes) {
                     suffix = 'pdf'
                 }
             } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
-                fileUrl = source_url || originUrl
+                fileUrl = previewUrl || originUrl
                 isNew = true
             }
             return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
@@ -399,11 +400,12 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) => {
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8, permissionId = 'view_app') => {
     const params = {
         page,
         keyword,
-        limit: disableLimit
+        limit: disableLimit,
+        permission_id: permissionId
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id
@@ -412,6 +414,10 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
     return await request.get(`/api/v1/chat/online`, { params })
 }
 
+// Get recommended apps configured by admin
+export const getRecommendedAppsApi = async () => {
+    return await request.get('/api/v1/workstation/app/recommended')
+}
 /**
  * Pin/unpin an app in the used apps list.
  */

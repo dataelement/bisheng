@@ -29,6 +29,9 @@ import { CrawlPreviewDialog } from "./CrawlPreviewDialog";
 import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
 import { CrawlQueuePanel } from "./CrawlQueuePanel";
 import { CreateChannelSuccessContent } from "./CreateChannelSuccess";
+import KnowledgeSyncSection, {
+    type KnowledgeSyncDraft,
+} from "./KnowledgeSyncSection";
 import { useCrawlQueue } from "../hooks/useCrawlQueue";
 import { normalizeUrlForSearch } from "../urlNormalize";
 import { SubChannelBlock, type SubChannelData } from "./SubChannelBlock";
@@ -37,15 +40,16 @@ import {
     type FilterGroup,
 } from "./FilterConditionEditor";
 import { validateCreateChannelForm } from "../channelUtils";
+import { extractApiStatusCode } from "../errorUtils";
 import type { Channel, InformationSource } from "~/api/channels";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { useLocalize } from "~/hooks";
+import useMediaQuery from "~/hooks/useMediaQuery";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
-import { extractApiStatusCode } from "../errorUtils";
 
-const MAX_CHANNEL_NAME = 10;
+const MAX_CHANNEL_NAME = 50;
 const MAX_CHANNEL_DESC = 100;
-const MAX_SUB_CHANNELS = 6;
+const MAX_SUB_CHANNELS = 10;
 
 /** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
 const PERMISSION_OPTION_TEXT_CLASS =
@@ -69,6 +73,9 @@ export interface CreateChannelFormData {
     topFilterRelation: "and" | "or";
     createSubChannel: boolean;
     subChannels: SubChannelData[];
+    /** v2.5 Module D — flows through to the `knowledge_sync` field on the
+     * Channel create/update payload. */
+    knowledgeSync: KnowledgeSyncDraft;
 }
 
 interface CreateChannelDrawerProps {
@@ -93,6 +100,7 @@ export function CreateChannelDrawer({
     const { showToast } = useToastContext();
     const localize = useLocalize();
     const form = useCreateChannelForm();
+    const isH5 = useMediaQuery("(max-width: 576px)");
     const crawlQueue = useCrawlQueue({
         onSourceAdded: (source) => {
             form.setSources((prev) => {
@@ -113,6 +121,21 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
+    // Re-entrancy guard for the close flow. The unsaved-changes confirm is a
+    // separate Radix overlay stacked over this Sheet; on touch, the tap that
+    // dismisses the confirm can fall through (or both overlays' onOpenChange
+    // can fire) and run handleClose a second time. In edit mode the form is
+    // never "pristine", so that second pass would re-open the confirm — the
+    // visible flash. This flag swallows the duplicate close while one is in flight.
+    const closingRef = useRef(false);
+    /** H5：「选择知识空间」下钻层挂载在此容器内，避免与抽屉叠加第二层全屏 Dialog */
+    const knowledgePickerHostRef = useRef<HTMLDivElement>(null);
+    // v2.5 Module D — owned here so the draft survives across renders of the
+    // section and travels with the channel create/update payload on submit.
+    const [syncDraft, setSyncDraft] = useState<KnowledgeSyncDraft>({
+        main: { enabled: false, spaces: [] },
+        subs: [],
+    });
 
     const isCreateFormPristine = () => {
         // 仅用于“创建频道”场景：未做任何修改时，关闭不需要二次确认
@@ -133,6 +156,18 @@ export function CreateChannelDrawer({
     const [isBodyScrolling, setIsBodyScrolling] = useState(false);
     const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Reset the sync draft only on close. Kept in a standalone effect keyed
+    // on `open` alone so it does not re-fire when unstable form hook refs
+    // change — the main init effect below has a heavier dep list that can
+    // flip every render under some localize/query-client setups.
+    useEffect(() => {
+        if (!open) {
+            setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+            // Release the close guard so a freshly reopened drawer can close again.
+            closingRef.current = false;
+        }
+    }, [open]);
+
     useEffect(() => {
         if (!open) {
             initedChannelIdRef.current = null;
@@ -145,6 +180,22 @@ export function CreateChannelDrawer({
 
             // 使用统一表单初始化逻辑（名称 / 简介 / 权限 / 是否发布 / filter_rules）
             form.initFromChannel(editingChannel);
+
+            // v2.5 Module D — hydrate sync draft from channel detail if present.
+            const existingSync = (editingChannel as any).knowledge_sync;
+            if (existingSync && (existingSync.main || existingSync.subs)) {
+                setSyncDraft({
+                    main: {
+                        enabled: !!existingSync.main?.enabled,
+                        spaces: Array.isArray(existingSync.main?.spaces)
+                            ? existingSync.main.spaces
+                            : [],
+                    },
+                    subs: Array.isArray(existingSync.subs) ? existingSync.subs : [],
+                });
+            } else {
+                setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+            }
 
             // 信息源回显：
             const sourceInfos = (editingChannel as any).source_infos as
@@ -183,6 +234,9 @@ export function CreateChannelDrawer({
 
     const handleClose = async (nextOpen: boolean) => {
         if (!nextOpen) {
+            // A close is already being handled (e.g. confirm dialog is open) —
+            // ignore the duplicate trigger so the confirm can't flash back open.
+            if (closingRef.current) return;
             if (crawlQueue.inProgressCount > 0) {
                 showToast({
                     message: localize("com_subscription.wait_for_crawl_completion"),
@@ -201,12 +255,20 @@ export function CreateChannelDrawer({
                 onOpenChange(false);
                 return;
             }
+            closingRef.current = true;
             const confirmed = await confirm({
+                variant: "destructive",
+                icon: <XIcon className="size-5 shrink-0 text-[#f53f3f]" strokeWidth={2.5} />,
+                title: localize("com_subscription.operation_confirm"),
                 description: localize("com_subscription.unsaved_tab_confirm_close"),
                 cancelText: localize("com_subscription.continue_editing"),
                 confirmText: localize("com_subscription.confirm_close"),
             });
-            if (!confirmed) return;
+            if (!confirmed) {
+                // User chose to keep editing — release the guard for the next close.
+                closingRef.current = false;
+                return;
+            }
             crawlQueue.clear();
             form.resetForm();
             onOpenChange(false);
@@ -229,506 +291,518 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    className="w-full max-w-[900px] sm:max-w-[1000px] overflow-y-auto scroll-on-scroll bg-white pl-20 pr-20 flex flex-col"
-                    onScroll={handleBodyScroll}
-                    data-scrolling={isBodyScrolling ? "true" : "false"}
+                    className={cn(
+                        "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
+                    )}
                 >
-                    <button
-                        type="button"
-                        onClick={() => handleClose(false)}
-                        className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary fixed top-4 right-4 z-[60] rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
+                    <div
+                        ref={knowledgePickerHostRef}
+                        className="relative flex min-h-0 flex-1 flex-col"
                     >
-                        <XIcon className="size-4" />
-                        <span className="sr-only">Close</span>
-                    </button>
-                    <SheetHeader className="sticky top-0 z-10 ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB] bg-white">
-                        <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
-                            {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
-                        </SheetTitle>
-                    </SheetHeader>
+                        <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
+                            <div className="flex items-center justify-between gap-3">
+                                <SheetTitle className="text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                                    {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
+                                </SheetTitle>
+                                <button
+                                    type="button"
+                                    onClick={() => handleClose(false)}
+                                    className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary shrink-0 rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
+                                >
+                                    <XIcon className="size-4" />
+                                    <span className="sr-only">Close</span>
+                                </button>
+                            </div>
+                        </SheetHeader>
 
-                    {form.showSuccess && !isEditMode ? (
-                        <CreateChannelSuccessContent
-                            onViewChannel={() => {
-                                if (form.createdChannelId) {
-                                    onViewChannel?.(form.createdChannelId);
-                                }
-                                form.resetForm();
-                            }}
-                            onManageMembers={() => {
-                                if (form.createdChannelId) {
-                                    onManageMembers?.(form.createdChannelId);
-                                    onViewChannel?.(form.createdChannelId);
-
-                                }
-                                form.resetForm();
-                                onOpenChange(false);
-                            }}
-                        />
-                    ) : (
                         <div
-                            className={cn(
-                                "overflow-visible px-6 py-5 space-y-5"
-                            )}
+                            onScroll={handleBodyScroll}
+                            data-scrolling={isBodyScrolling ? "true" : "false"}
+                            className="scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
                         >
-                            {/* 添加信息源 */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-[14px] text-[#1D2129]">
-                                        <span className="text-[#F53F3F] mr-1">*</span>
-                                        {localize("com_subscription.add_information_source")}
-                                    </Label>
-                                    <CrawlQueuePanel
-                                        queue={crawlQueue.queue}
-                                        inProgressCount={crawlQueue.inProgressCount}
-                                        panelOpen={crawlQueue.panelOpen}
-                                        onPanelOpenChange={crawlQueue.setPanelOpen}
-                                        onAbort={crawlQueue.abort}
-                                        onOpenPreview={(id) => setPreviewItemId(id)}
-                                        onOpenFeedback={() => setFeedbackDialogOpen(true)}
+                            {form.showSuccess && !isEditMode ? (
+                                <CreateChannelSuccessContent
+                                    onViewChannel={() => {
+                                        if (form.createdChannelId) {
+                                            onViewChannel?.(form.createdChannelId);
+                                        }
+                                        form.resetForm();
+                                    }}
+                                    onManageMembers={() => {
+                                        if (form.createdChannelId) {
+                                            onManageMembers?.(form.createdChannelId);
+                                            onViewChannel?.(form.createdChannelId);
+
+                                        }
+                                        form.resetForm();
+                                        onOpenChange(false);
+                                    }}
+                                />
+                            ) : (
+                                <div
+                                    className={cn(
+                                        "space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0"
+                                    )}
+                                >
+                                    {/* 添加信息源 */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-[14px] text-[#1D2129]">
+                                                <span className="text-[#F53F3F] mr-1">*</span>
+                                                {localize("com_subscription.add_information_source")}
+                                            </Label>
+                                            <CrawlQueuePanel
+                                                queue={crawlQueue.queue}
+                                                inProgressCount={crawlQueue.inProgressCount}
+                                                panelOpen={crawlQueue.panelOpen}
+                                                onPanelOpenChange={crawlQueue.setPanelOpen}
+                                                onAbort={crawlQueue.abort}
+                                                onOpenPreview={(id) => setPreviewItemId(id)}
+                                                onOpenFeedback={() => setFeedbackDialogOpen(true)}
+                                            />
+                                        </div>
+                                        <AddSourceDropdown
+                                            sources={form.sources}
+                                            onSourcesChange={form.setSources}
+                                            expanded={form.showAddSourcePanel}
+                                            onExpandChange={form.setShowAddSourcePanel}
+                                            resetToken={form.sourceSearchResetToken}
+                                            onEnqueueCrawl={(url) => {
+                                                const norm = normalizeUrlForSearch(url);
+                                                if (!norm) return;
+                                                const dupInQueue = crawlQueue.queue.some((it) => normalizeUrlForSearch(it.url) === norm);
+                                                const dupInSources = form.sources.some((s) => s.url && normalizeUrlForSearch(s.url) === norm);
+                                                if (dupInQueue || dupInSources) {
+                                                    showToast({
+                                                        message: localize("com_subscription.url_already_in_queue"),
+                                                        severity: NotificationSeverity.WARNING,
+                                                    });
+                                                    return;
+                                                }
+                                                crawlQueue.enqueue(url);
+                                                crawlQueue.setPanelOpen(true);
+                                            }}
+                                            queueInProgressCount={crawlQueue.inProgressCount}
+                                        />
+                                    </div>
+
+                                    {/* 频道名称 */}
+                                    <div className="space-y-2">
+                                        <Label className="text-[14px] text-[#1D2129]">
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            {localize("com_subscription.channel_name")}
+                                        </Label>
+                                        <div className="relative flex gap-2 items-center">
+                                            <Input
+                                                value={form.channelName}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    if (isComposingName) {
+                                                        form.setChannelName(v);
+                                                        return;
+                                                    }
+                                                    if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
+                                                        showToast({
+                                                            message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
+                                                            severity: NotificationSeverity.WARNING
+                                                        });
+                                                        form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
+                                                    } else {
+                                                        form.setChannelName(v);
+                                                    }
+                                                }}
+                                                onCompositionStart={() => setIsComposingName(true)}
+                                                onCompositionEnd={(e) => {
+                                                    setIsComposingName(false);
+                                                    const v = e.currentTarget.value || "";
+                                                    if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
+                                                        showToast({
+                                                            message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
+                                                            severity: NotificationSeverity.WARNING
+                                                        });
+                                                        form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
+                                                    } else {
+                                                        form.setChannelName(v);
+                                                    }
+                                                }}
+                                                placeholder={localize("com_subscription.enter_channel_name")}
+                                                className="flex-1 h-8 text-[14px] border-[#E5E6EB]"
+                                            />
+                                            <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
+                                                {Math.ceil(getFullWidthLength(form.channelName))}/{MAX_CHANNEL_NAME}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* 频道简介 */}
+                                    <div className="space-y-2">
+                                        <Label className="text-[14px] text-[#1D2129]">
+                                            {localize("com_subscription.channel_description")}
+                                        </Label>
+                                        <div className="relative">
+                                            <Textarea
+                                                value={form.channelDesc}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    if (isComposingDesc) {
+                                                        form.setChannelDesc(v);
+                                                        return;
+                                                    }
+                                                    if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
+                                                        showToast({
+                                                            message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
+                                                            severity: NotificationSeverity.WARNING
+                                                        });
+                                                        form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
+                                                    } else {
+                                                        form.setChannelDesc(v);
+                                                    }
+                                                }}
+                                                onCompositionStart={() => setIsComposingDesc(true)}
+                                                onCompositionEnd={(e) => {
+                                                    setIsComposingDesc(false);
+                                                    const v = e.currentTarget.value || "";
+                                                    if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
+                                                        showToast({
+                                                            message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
+                                                            severity: NotificationSeverity.WARNING
+                                                        });
+                                                        form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
+                                                    } else {
+                                                        form.setChannelDesc(v);
+                                                    }
+                                                }}
+                                                placeholder={localize("com_subscription.enter_channel_description")}
+                                                className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14 shadow-none"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* 可见方式 */}
+                                    <div className="space-y-3">
+                                        <Label className="text-[14px] text-[#1D2129]">
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            {localize("com_subscription.premission_settings")}
+                                        </Label>
+                                        <RadioGroup.Root
+                                            value={form.visibility}
+                                            onValueChange={async (v) => {
+                                                // In edit mode, show confirmation when switching to private
+                                                if (isEditMode && v === "private" && form.visibility !== "private") {
+                                                    const confirmed = await confirm({
+                                                        description: localize("com_subscription.confirm_change_to_private"),
+                                                        confirmText: localize("com_subscription.change_to_private"),
+                                                        cancelText: localize("com_subscription.cancel"),
+                                                    });
+                                                    if (!confirmed) return;
+                                                }
+                                                form.setVisibility(v as any);
+                                            }}
+                                            className="flex flex-col gap-3"
+                                        >
+                                            {[
+                                                {
+                                                    value: "private",
+                                                    label: localize("com_subscription.private"),
+                                                    desc: localize("com_subscription.cannot_subscribe")
+                                                },
+                                                {
+                                                    value: "review",
+                                                    label: localize("com_subscription.approval_required"),
+                                                    desc: localize("com_subscription.require_approval")
+                                                },
+                                                {
+                                                    value: "public",
+                                                    label: localize("com_subscription.publice"),
+                                                    desc: localize("com_subscription.anyone_can_subscribe")
+                                                }
+                                            ].map((opt) => (
+                                                <label
+                                                    key={opt.value}
+                                                    className="flex items-start gap-2 cursor-pointer"
+                                                >
+
+                                                    <RadioGroup.Item
+                                                        value={opt.value}
+                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                                                    >
+                                                        <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                                    </RadioGroup.Item>
+                                                    <div className="flex flex-wrap items-baseline gap-x-2">
+                                                        <span
+                                                            className={PERMISSION_OPTION_TEXT_CLASS}
+                                                            style={PERMISSION_OPTION_FONT}
+                                                        >
+                                                            {opt.label}
+                                                        </span>
+                                                        <span className={FORM_HINT_TEXT_CLASS}>
+                                                            {opt.desc}
+                                                        </span>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </RadioGroup.Root>
+                                    </div>
+
+                                    {/* 是否发布到广场（仅在非私有时展示） */}
+                                    {form.visibility !== "private" && (
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0 pr-2">
+                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                                    <span>{localize("com_subscription.is_publish_plaza")}</span>
+                                                    <span className={FORM_HINT_TEXT_CLASS}>
+                                                        {localize("com_subscription.publish_to_square_description")}
+                                                    </span>
+                                                </Label>
+                                            </div>
+                                            <Switch
+                                                checked={form.publishToSquare === "yes"}
+                                                onCheckedChange={(checked) => form.setPublishToSquare(checked ? "yes" : "no")}
+                                                variant="tool"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* 频道内容筛选 */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0 pr-2">
+                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                                    <span>{localize("com_subscription.channel_content_filter")}</span>
+                                                    <span className={FORM_HINT_TEXT_CLASS}>
+                                                        {localize("com_subscription.only_filter_criteria")}
+                                                    </span>
+                                                </Label>
+                                            </div>
+                                            <Switch
+                                                checked={form.contentFilter}
+                                                onCheckedChange={form.handleContentFilterToggle}
+                                                variant="tool"
+                                            />
+                                        </div>
+                                        {form.contentFilter && (
+                                            <FilterConditionEditor
+                                                groups={form.filterGroups}
+                                                topRelation={form.topFilterRelation}
+                                                onGroupsChange={form.setFilterGroups}
+                                                onTopRelationChange={form.setTopFilterRelation}
+                                                disableFirstConditionDelete
+                                            />
+                                        )}
+                                    </div>
+
+                                    {/* 创建子频道 */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0 pr-2">
+                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                                    <span>{localize("com_subscription.create_sub_channel")}</span>
+                                                    <span className={FORM_HINT_TEXT_CLASS}>
+                                                        {localize("com_subscription.subscribe_same_filters")}
+                                                    </span>
+                                                </Label>
+                                            </div>
+                                            <Switch
+                                                checked={form.createSubChannel}
+                                                onCheckedChange={form.handleCreateSubChannelToggle}
+                                                variant="tool"
+                                            />
+                                        </div>
+                                        {form.createSubChannel && (
+                                            <div className="overflow-hidden rounded-[6px] border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
+                                                {form.subChannels.map((sub) => (
+                                                    <SubChannelBlock
+                                                        key={sub.id}
+                                                        data={sub}
+                                                        openInEditMode={sub.id === form.lastAddedSubChannelId}
+                                                        onEditModeOpened={() => form.setLastAddedSubChannelId(null)}
+                                                        onNameChange={(n) =>
+                                                            form.handleSubChannelNameChange(sub.id, n)
+                                                        }
+                                                        onNameCommitted={(n) => {
+                                                            const normalized = n.trim().toLowerCase();
+                                                            if (!normalized) return;
+                                                            const duplicate = form.subChannels.some(
+                                                                (s) =>
+                                                                    s.id !== sub.id &&
+                                                                    s.name.trim().toLowerCase() === normalized
+                                                            );
+                                                            if (!duplicate) return;
+                                                            showToast({
+                                                                message:
+                                                                    localize(
+                                                                        "com_subscription.sub_channel_name_duplicate"
+                                                                    ) || "子频道名称已存在，请更换",
+                                                                severity: NotificationSeverity.WARNING
+                                                            });
+                                                        }}
+                                                        onRemove={() => form.handleRemoveSubChannel(sub.id)}
+                                                        onToggleCollapse={() =>
+                                                            form.handleSubChannelToggleCollapse(sub.id)
+                                                        }
+                                                        onGroupsChange={(groups) =>
+                                                            form.handleSubChannelGroupsChange(sub.id, groups)
+                                                        }
+                                                        onTopRelationChange={(topRelation) =>
+                                                            form.setSubChannels((prev) =>
+                                                                prev.map((s) =>
+                                                                    s.id === sub.id ? { ...s, topRelation } : s
+                                                                )
+                                                            )
+                                                        }
+                                                        onOverLimit={() =>
+                                                            showToast({
+                                                                message: localize("com_subscription.max_10_characters"),
+                                                                severity: NotificationSeverity.WARNING
+                                                            })
+                                                        }
+                                                        onEmptyName={() =>
+                                                            showToast({
+                                                                message:
+                                                                    localize(
+                                                                        "com_subscription.sub_channel_name_cannot_be_empty"
+                                                                    ),
+                                                                severity: NotificationSeverity.WARNING
+                                                            })
+                                                        }
+                                                    />
+                                                ))}
+                                                {form.subChannels.length < MAX_SUB_CHANNELS && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={form.handleAddSubChannel}
+                                                        className="flex h-12 w-full items-center gap-3 rounded-none bg-[#F8F8F8] px-4 text-left text-[14px] leading-none transition-colors hover:bg-[#F2F3F5]"
+                                                    >
+                                                        <PlusSquare className="size-4 shrink-0 text-[#86909C]" />
+                                                        <span>{localize("com_subscription.add_sub_channel")}</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* v2.5 Module D — 频道同步至知识空间配置 */}
+                                    <KnowledgeSyncSection
+                                        value={syncDraft}
+                                        onChange={setSyncDraft}
+                                        mainChannelName={form.channelName.trim()}
+                                        subChannelNames={
+                                            form.createSubChannel
+                                                ? form.subChannels
+                                                    .map((s) => s.name?.trim())
+                                                    .filter((n): n is string => !!n)
+                                                : []
+                                        }
+                                        // In create mode the current user is always the creator.
+                                        // In edit mode, honour the backend's role assignment.
+                                        isCreator={
+                                            !isEditMode ||
+                                            String(editingChannel?.role) === "creator"
+                                        }
+                                        knowledgePickerHostRef={knowledgePickerHostRef}
                                     />
                                 </div>
-                                <AddSourceDropdown
-                                    sources={form.sources}
-                                    onSourcesChange={form.setSources}
-                                    expanded={form.showAddSourcePanel}
-                                    onExpandChange={form.setShowAddSourcePanel}
-                                    resetToken={form.sourceSearchResetToken}
-                                    onEnqueueCrawl={(url) => {
-                                        const norm = normalizeUrlForSearch(url);
-                                        if (!norm) return;
-                                        const dupInQueue = crawlQueue.queue.some((it) => normalizeUrlForSearch(it.url) === norm);
-                                        const dupInSources = form.sources.some((s) => s.url && normalizeUrlForSearch(s.url) === norm);
-                                        if (dupInQueue || dupInSources) {
+                            )}
+                        </div>
+
+
+
+                        {/* 底部操作按钮 */}
+                        {(!form.showSuccess || isEditMode) && (
+                            <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => handleClose(false)}
+                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
+                                >
+                                    {localize("cancel")}
+                                </Button>
+                                <Button
+                                    disabled={form.submitting || crawlQueue.inProgressCount > 0}
+                                    onClick={async () => {
+                                        if (crawlQueue.inProgressCount > 0) {
                                             showToast({
-                                                message: localize("com_subscription.url_already_in_queue"),
+                                                message: localize("com_subscription.wait_for_crawl_completion"),
                                                 severity: NotificationSeverity.WARNING,
                                             });
                                             return;
                                         }
-                                        crawlQueue.enqueue(url);
-                                        crawlQueue.setPanelOpen(true);
-                                    }}
-                                    queueInProgressCount={crawlQueue.inProgressCount}
-                                />
-                            </div>
+                                        const data: CreateChannelFormData = {
+                                            sources: form.sources,
+                                            channelName: form.channelName.trim(),
+                                            channelDesc: form.channelDesc.trim(),
+                                            visibility: form.visibility,
+                                            publishToSquare: form.publishToSquare,
+                                            contentFilter: form.contentFilter,
+                                            filterGroups: form.filterGroups,
+                                            topFilterRelation: form.topFilterRelation,
+                                            createSubChannel: form.createSubChannel,
+                                            subChannels: form.subChannels,
+                                            knowledgeSync: syncDraft,
+                                        };
 
-                            {/* 频道名称 */}
-                            <div className="space-y-2">
-                                <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F] mr-1">*</span>
-                                    {localize("com_subscription.channel_name")}
-                                </Label>
-                                <div className="relative flex gap-2 items-center">
-                                    <Input
-                                        value={form.channelName}
-                                        onChange={(e) => {
-                                            const v = e.target.value;
-                                            if (isComposingName) {
-                                                form.setChannelName(v);
-                                                return;
-                                            }
-                                            if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
-                                                showToast({
-                                                    message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
-                                                    severity: NotificationSeverity.WARNING
-                                                });
-                                                form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
-                                            } else {
-                                                form.setChannelName(v);
-                                            }
-                                        }}
-                                        onCompositionStart={() => setIsComposingName(true)}
-                                        onCompositionEnd={(e) => {
-                                            setIsComposingName(false);
-                                            const v = e.currentTarget.value || "";
-                                            if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
-                                                showToast({
-                                                    message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
-                                                    severity: NotificationSeverity.WARNING
-                                                });
-                                                form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
-                                            } else {
-                                                form.setChannelName(v);
-                                            }
-                                        }}
-                                        placeholder={localize("com_subscription.enter_channel_name")}
-                                        className="flex-1 h-8 text-[14px] border-[#E5E6EB]"
-                                    />
-                                    <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
-                                        {Math.ceil(getFullWidthLength(form.channelName))}/{MAX_CHANNEL_NAME}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* 频道简介 */}
-                            <div className="space-y-2">
-                                <Label className="text-[14px] text-[#1D2129]">
-                                    {localize("com_subscription.channel_description")}
-                                </Label>
-                                <div className="relative">
-                                    <Textarea
-                                        value={form.channelDesc}
-                                        onChange={(e) => {
-                                            const v = e.target.value;
-                                            if (isComposingDesc) {
-                                                form.setChannelDesc(v);
-                                                return;
-                                            }
-                                            if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
-                                                showToast({
-                                                    message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
-                                                    severity: NotificationSeverity.WARNING
-                                                });
-                                                form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
-                                            } else {
-                                                form.setChannelDesc(v);
-                                            }
-                                        }}
-                                        onCompositionStart={() => setIsComposingDesc(true)}
-                                        onCompositionEnd={(e) => {
-                                            setIsComposingDesc(false);
-                                            const v = e.currentTarget.value || "";
-                                            if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
-                                                showToast({
-                                                    message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
-                                                    severity: NotificationSeverity.WARNING
-                                                });
-                                                form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
-                                            } else {
-                                                form.setChannelDesc(v);
-                                            }
-                                        }}
-                                        placeholder={localize("com_subscription.enter_channel_description")}
-                                        className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* 可见方式 */}
-                            <div className="space-y-3">
-                                <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F] mr-1">*</span>
-                                    {localize("com_subscription.premission_settings")}
-                                </Label>
-                                <RadioGroup.Root
-                                    value={form.visibility}
-                                    onValueChange={async (v) => {
-                                        // In edit mode, show confirmation when switching to private
-                                        if (isEditMode && v === "private" && form.visibility !== "private") {
-                                            const confirmed = await confirm({
-                                                description: localize("com_subscription.confirm_change_to_private"),
-                                                confirmText: localize("com_subscription.change_to_private"),
-                                                cancelText: localize("com_subscription.cancel"),
-                                            });
-                                            if (!confirmed) return;
-                                        }
-                                        form.setVisibility(v as any);
-                                    }}
-                                    className="flex flex-col gap-3"
-                                >
-                                    {[
-                                        {
-                                            value: "private",
-                                            label: localize("com_subscription.private"),
-                                            desc: localize("com_subscription.cannot_subscribe")
-                                        },
-                                        {
-                                            value: "review",
-                                            label: localize("com_subscription.approval_required"),
-                                            desc: localize("com_subscription.require_approval")
-                                        },
-                                        {
-                                            value: "public",
-                                            label: localize("com_subscription.publice"),
-                                            desc: localize("com_subscription.anyone_can_subscribe")
-                                        }
-                                    ].map((opt) => (
-                                        <label
-                                            key={opt.value}
-                                            className="flex items-start gap-2 cursor-pointer"
-                                        >
-
-                                            <RadioGroup.Item
-                                                value={opt.value}
-                                                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <div className="flex flex-wrap items-baseline gap-x-2">
-                                                <span
-                                                    className={PERMISSION_OPTION_TEXT_CLASS}
-                                                    style={PERMISSION_OPTION_FONT}
-                                                >
-                                                    {opt.label}
-                                                </span>
-                                                <span className={FORM_HINT_TEXT_CLASS}>
-                                                    {opt.desc}
-                                                </span>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </RadioGroup.Root>
-                            </div>
-
-                            {/* 是否发布到广场（仅在非私有时展示） */}
-                            {form.visibility !== "private" && (
-                                <div className="space-y-3">
-                                    <Label className="text-[14px] text-[#1D2129]">
-                                        <span className="text-[#F53F3F] mr-1">*</span>
-                                        {localize("com_subscription.is_publish_plaza")}
-                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>{localize("com_subscription.publish_to_square_description")}</span>
-                                    </Label>
-                                    <RadioGroup.Root
-                                        value={form.publishToSquare}
-                                        onValueChange={(v) => form.setPublishToSquare(v as any)}
-                                        className="flex gap-6"
-                                    >
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="yes"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_subscription.yes")}</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="no"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_subscription.no")}</span>
-                                        </label>
-                                    </RadioGroup.Root>
-                                </div>
-                            )}
-
-                            {/* 频道内容筛选 */}
-                            <div className="space-y-3">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <Label className="text-[14px] flex text-[#1D2129]">
-                                            {localize("com_subscription.channel_content_filter")}
-                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
-                                                {localize("com_subscription.only_filter_criteria")}
-                                            </p>
-                                        </Label>
-                                    </div>
-                                    <Switch
-                                        checked={form.contentFilter}
-                                        onCheckedChange={form.handleContentFilterToggle}
-                                        className={cn(
-                                            "data-[state=checked]:bg-[#165DFF]",
-                                            "data-[state=unchecked]:bg-[#E5E6EB]"
-                                        )}
-                                    />
-                                </div>
-                                {form.contentFilter && (
-                                    <FilterConditionEditor
-                                        groups={form.filterGroups}
-                                        topRelation={form.topFilterRelation}
-                                        onGroupsChange={form.setFilterGroups}
-                                        onTopRelationChange={form.setTopFilterRelation}
-                                        disableFirstConditionDelete
-                                    />
-                                )}
-                            </div>
-
-                            {/* 创建子频道 */}
-                            <div className="space-y-3">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <Label className="text-[14px] flex text-[#1D2129]">
-                                            {localize("com_subscription.create_sub_channel")}
-                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
-                                                {localize("com_subscription.subscribe_same_filters")}
-                                            </p>
-                                        </Label>
-                                    </div>
-                                    <Switch
-                                        checked={form.createSubChannel}
-                                        onCheckedChange={form.handleCreateSubChannelToggle}
-                                        className={cn(
-                                            "data-[state=checked]:bg-[#165DFF]",
-                                            "data-[state=unchecked]:bg-[#E5E6EB]"
-                                        )}
-                                    />
-                                </div>
-                                {form.createSubChannel && (
-                                    <div className="overflow-hidden border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
-                                        {form.subChannels.map((sub) => (
-                                            <SubChannelBlock
-                                                key={sub.id}
-                                                data={sub}
-                                                openInEditMode={sub.id === form.lastAddedSubChannelId}
-                                                onEditModeOpened={() => form.setLastAddedSubChannelId(null)}
-                                                onNameChange={(n) =>
-                                                    form.handleSubChannelNameChange(sub.id, n)
-                                                }
-                                                onNameCommitted={(n) => {
-                                                    const normalized = n.trim().toLowerCase();
-                                                    if (!normalized) return;
-                                                    const duplicate = form.subChannels.some(
-                                                        (s) =>
-                                                            s.id !== sub.id &&
-                                                            s.name.trim().toLowerCase() === normalized
-                                                    );
-                                                    if (!duplicate) return;
-                                                    showToast({
-                                                        message:
-                                                            localize(
-                                                                "com_subscription.sub_channel_name_duplicate"
-                                                            ) || "子频道名称已存在，请更换",
-                                                        severity: NotificationSeverity.WARNING
-                                                    });
-                                                }}
-                                                onRemove={() => form.handleRemoveSubChannel(sub.id)}
-                                                onToggleCollapse={() =>
-                                                    form.handleSubChannelToggleCollapse(sub.id)
-                                                }
-                                                onGroupsChange={(groups) =>
-                                                    form.handleSubChannelGroupsChange(sub.id, groups)
-                                                }
-                                                onTopRelationChange={(topRelation) =>
-                                                    form.setSubChannels((prev) =>
-                                                        prev.map((s) =>
-                                                            s.id === sub.id ? { ...s, topRelation } : s
-                                                        )
-                                                    )
-                                                }
-                                                onOverLimit={() =>
-                                                    showToast({
-                                                        message: localize("com_subscription.max_10_characters"),
-                                                        severity: NotificationSeverity.WARNING
-                                                    })
-                                                }
-                                                onEmptyName={() =>
-                                                    showToast({
-                                                        message:
-                                                            localize(
-                                                                "com_subscription.sub_channel_name_cannot_be_empty"
-                                                            ),
-                                                        severity: NotificationSeverity.WARNING
-                                                    })
-                                                }
-                                            />
-                                        ))}
-                                        {form.subChannels.length < MAX_SUB_CHANNELS && (
-                                            <button
-                                                type="button"
-                                                onClick={form.handleAddSubChannel}
-                                                className="flex h-12 w-full items-center gap-3 rounded-none bg-[#F8F8F8] px-4 text-left text-[14px] leading-none transition-colors hover:bg-[#F2F3F5]"
-                                            >
-                                                <PlusSquare className="size-4 shrink-0 text-[#86909C]" />
-                                                <span>{localize("com_subscription.add_sub_channel")}</span>
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 底部操作按钮 */}
-                    {(!form.showSuccess || isEditMode) && (
-                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 px-6 pt-10 pb-5 border-t border-[#E5E6EB] bg-white">
-                            <Button
-                                variant="secondary"
-                                onClick={() => handleClose(false)}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] !font-normal text-[#4E5969]"
-                            >
-                                {localize("cancel")}
-                            </Button>
-                            <Button
-                                disabled={form.submitting || crawlQueue.inProgressCount > 0}
-                                onClick={async () => {
-                                    if (crawlQueue.inProgressCount > 0) {
-                                        showToast({
-                                            message: localize("com_subscription.wait_for_crawl_completion"),
-                                            severity: NotificationSeverity.WARNING,
-                                        });
-                                        return;
-                                    }
-                                    const data: CreateChannelFormData = {
-                                        sources: form.sources,
-                                        channelName: form.channelName.trim(),
-                                        channelDesc: form.channelDesc.trim(),
-                                        visibility: form.visibility,
-                                        publishToSquare: form.publishToSquare,
-                                        contentFilter: form.contentFilter,
-                                        filterGroups: form.filterGroups,
-                                        topFilterRelation: form.topFilterRelation,
-                                        createSubChannel: form.createSubChannel,
-                                        subChannels: form.subChannels
-                                    };
-
-                                    // 创建和编辑统一走同一套校验逻辑：
-                                    // 1) 至少 1 个信息源
-                                    // 2) 频道名称不能为空
-                                    // 3) 主频道 / 子频道筛选条件中的关键词不能为空
-                                    const validationError = validateCreateChannelForm(data, localize);
-                                    if (validationError) {
-                                        showToast({
-                                            message: validationError,
-                                            severity: NotificationSeverity.WARNING
-                                        });
-                                        return;
-                                    }
-
-                                    if (!onConfirm) return;
-                                    try {
-                                        form.setSubmitting(true);
-                                        const res = await onConfirm(data);
-                                        if (!isEditMode) {
-                                            form.setCreatedChannelId(res.channelId);
-                                            form.setShowSuccess(true);
-                                        } else {
+                                        // 创建和编辑统一走同一套校验逻辑：
+                                        // 1) 至少 1 个信息源
+                                        // 2) 频道名称不能为空
+                                        // 3) 主频道 / 子频道筛选条件中的关键词不能为空
+                                        const validationError = validateCreateChannelForm(data, localize);
+                                        if (validationError) {
                                             showToast({
-                                                message: localize("com_subscription.save_success"),
-                                                severity: NotificationSeverity.SUCCESS
+                                                message: validationError,
+                                                severity: NotificationSeverity.WARNING
                                             });
-                                            form.resetForm();
-                                            onOpenChange(false);
-                                        }
-                                    } catch (error) {
-                                        const code = extractApiStatusCode(error);
-                                        if (code != null) {
                                             return;
                                         }
-                                        showToast({
-                                            message:
-                                                localize("channel_create_failed") ||
-                                                localize("com_subscription.create_channel_failed_retry"),
-                                            severity: NotificationSeverity.ERROR
-                                        });
-                                    } finally {
-                                        form.setSubmitting(false);
-                                    }
-                                }}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] !font-normal disabled:opacity-50"
-                            >
-                                {isEditMode
-                                    ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")
-                                    : form.submitting
-                                        ? (localize("creating") || localize("com_subscription.creating"))
-                                        : (localize("com_subscription.confirm_creation") || localize("com_subscription.confirm_create"))}
-                            </Button>
-                        </div>
-                    )}
+
+                                        if (!onConfirm) return;
+                                        try {
+                                            form.setSubmitting(true);
+                                            const res = await onConfirm(data);
+                                            if (!isEditMode) {
+                                                form.setCreatedChannelId(res.channelId);
+                                                form.setShowSuccess(true);
+                                            } else {
+                                                showToast({
+                                                    message: localize("com_subscription.save_success"),
+                                                    severity: NotificationSeverity.SUCCESS
+                                                });
+                                                form.resetForm();
+                                                onOpenChange(false);
+                                            }
+                                        } catch (error) {
+                                            const statusCode = extractApiStatusCode(error);
+                                            if (!statusCode) {
+                                                showToast({
+                                                    message: isEditMode
+                                                        ? (localize("com_subscription.update_failed_retry") || localize("com_subscription.save_failed"))
+                                                        : localize("com_subscription.create_channel_failed_retry"),
+                                                    severity: NotificationSeverity.ERROR
+                                                });
+                                            }
+                                        } finally {
+                                            form.setSubmitting(false);
+                                        }
+                                    }}
+                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1 btn-brand-primary"
+                                >
+                                    {isEditMode
+                                        ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")
+                                        : form.submitting
+                                            ? (localize("creating") || localize("com_subscription.creating"))
+                                            : (localize("com_subscription.confirm_creation") || localize("com_subscription.confirm_create"))}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </SheetContent>
             </Sheet>
 
-            {previewItem && (
+            {previewItem && previewItem.preview && (
                 <CrawlPreviewDialog
                     open
                     onOpenChange={(v) => { if (!v) setPreviewItemId(null); }}
                     url={previewItem.url}
-                    mode="view"
                     initialPreview={previewItem.preview}
-                    onAddSource={() => { /* noop in view mode */ }}
                 />
             )}
             <CrawlFeedbackDialog

@@ -139,11 +139,11 @@ const EditPresetDialog = ({
         title={`${localize('com_ui_edit') + ' ' + localize('com_endpoint_preset')} - ${
           preset?.title
         }`}
-        className="h-full max-w-full overflow-y-auto pb-4 sm:w-[680px] sm:pb-0 md:h-[720px] md:w-[750px] md:overflow-y-hidden lg:w-[950px] xl:h-[720px]"
+        className="h-full max-w-full overflow-y-auto pb-4 sm:w-[680px] sm:pb-0 touch-desktop:h-[720px] touch-desktop:w-[750px] touch-desktop:overflow-y-hidden lg:w-[950px] xl:h-[720px]"
         main={
-          <div className="flex w-full flex-col items-center gap-2 md:h-[550px] md:overflow-y-auto">
+          <div className="flex w-full flex-col items-center gap-2 touch-desktop:h-[550px] touch-desktop:overflow-y-auto">
             <div className="grid w-full">
-              <div className="col-span-4 flex flex-col items-start justify-start gap-6 pb-4 md:flex-row">
+              <div className="col-span-4 flex flex-col items-start justify-start gap-6 pb-4 touch-desktop:flex-row">
                 <div className="flex w-full flex-col">
                   <Label htmlFor="preset-name" className="mb-1 text-left text-sm font-medium">
                     {localize('com_endpoint_preset_name')}
@@ -198,13 +198,13 @@ const EditPresetDialog = ({
                 conversation={preset}
                 setOption={setOption}
                 isPreset={true}
-                className="h-full text-text-primary md:mb-4 md:h-[440px]"
+                className="h-full text-text-primary touch-desktop:mb-4 touch-desktop:h-[440px]"
               />
             </div>
           </div>
         }
         buttons={
-          <div className="mb-6 md:mb-2">
+          <div className="mb-6 touch-desktop:mb-2">
             <DialogButton
               onClick={exportPreset}
               className="border-gray-100 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"

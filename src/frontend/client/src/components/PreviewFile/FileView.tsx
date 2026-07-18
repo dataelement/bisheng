@@ -369,7 +369,7 @@ export default function FileView({
                 ? <div className="flex h-full items-center justify-center text-gray-500 dark:text-gray-400 text-lg">源文件不存在</div> :
                 loading
                     ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                        <LoadingIcon />
+                        <LoadingIcon className="size-20" />
                     </div>
                     : <div id="warp-pdf" className="file-view absolute">
                         <List

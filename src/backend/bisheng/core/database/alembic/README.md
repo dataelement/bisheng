@@ -1,5 +1,11 @@
 Generic single-database configuration.
 
+Schema ownership:
+
+* Missing whole tables are created from the latest discovered SQLModel metadata before every online upgrade.
+* Changes to existing tables (columns, indexes, constraints, rename/drop) are applied by Alembic revisions.
+* `create_all()` does not alter existing tables and cannot replace an Alembic revision for table evolution.
+
 * 创建迁移脚本
     ```bash
     alembic revision -m "描述信息"

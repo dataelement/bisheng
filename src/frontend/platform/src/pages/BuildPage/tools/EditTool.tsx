@@ -10,11 +10,10 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
-import { userContext } from "@/contexts/userContext"
 import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Plus } from "lucide-react"
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface TestDialogProps {
@@ -182,11 +181,8 @@ const EditTool = forwardRef((props: any, ref) => {
     const schemaUrl = useRef('')
     const [formState, setFormState] = useState({ ...formData });
     const fromDataRef = useRef<any>({}) // same as formState
-    const { user } = useContext(userContext);
-    const [isSelf, setIsSelf] = useState(false);
-
     const [tableData, setTableData] = useApiTableData()
-    const [isWrite, setIsWrite] = useState(false)
+    const [canDelete, setCanDelete] = useState(false)
 
     useImperativeHandle(ref, () => ({
         open: () => {
@@ -204,9 +200,7 @@ const EditTool = forwardRef((props: any, ref) => {
                 apiLocation: tool.api_location || "query",
                 parameter: tool.parameter_name || ""
             })
-            setIsWrite(tool.write)
-
-            setIsSelf(tool.user_id === user.user_id);
+            setCanDelete(tool.delete)
             setEditShow(true)
             setDelShow(true)
 
@@ -267,8 +261,10 @@ const EditTool = forwardRef((props: any, ref) => {
     };
 
     const { message } = useToast()
+    const [saveLoading, setSaveLoading] = useState(false)
     // save api
     const handleSave = () => {
+        if (saveLoading) return
         const errors = [];
 
         if (!formState.toolName) {
@@ -315,7 +311,9 @@ const EditTool = forwardRef((props: any, ref) => {
         }
 
         const methodApi = delShow ? updateTool : createTool
+        setSaveLoading(true)
         captureAndAlertRequestErrorHoc(methodApi(data)).then(res => {
+            setSaveLoading(false)
             if (!res) return
             // save
             setEditShow(false)
@@ -600,7 +598,7 @@ const EditTool = forwardRef((props: any, ref) => {
                     )}
                 </div>
                 <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                    {delShow && (user.role === 'admin' || isSelf || isWrite) && (
+                    {delShow && canDelete && (
                         <Button
                             size="sm"
                             variant="destructive"
@@ -609,7 +607,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         >{t('tools.delete')}</Button>
                     )}
                     <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
-                    <Button size="sm" className="text-[white]" onClick={handleSave}>{t('tools.save')}</Button>
+                    <Button size="sm" className="text-[white]" disabled={saveLoading} onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet >

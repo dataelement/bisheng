@@ -9,6 +9,7 @@ import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function FormSet({ data, onChange, onSave, onCancel }) {
+    const showReviewType = false;
 
     const [form, setForm] = useState<any>({})
     useEffect(() => {
@@ -45,20 +46,24 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
     }
     return <>
         <div className="px-4 mt-6">
-            <span className="bisheng-label">{t('build.reviewType')}</span>
-            <RadioGroup value="1"
-                className="flex space-x-2 h-[20px] mt-4 mb-6">
-                <div>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" value="1" />{t('build.sensitiveWordListMatch')}
-                    </Label>
-                </div>
-                <div>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem disabled className="mr-2" value="模型审查" />{t('build.modelReview')}
-                    </Label>
-                </div>
-            </RadioGroup>
+            {showReviewType && (
+                <>
+                    <span className="bisheng-label">{t('build.reviewType')}</span>
+                    <RadioGroup value="1"
+                        className="flex space-x-2 h-[20px] mt-4 mb-6">
+                        <div>
+                            <Label className="flex justify-center">
+                                <RadioGroupItem className="mr-2" value="1" />{t('build.sensitiveWordListMatch')}
+                            </Label>
+                        </div>
+                        <div>
+                            <Label className="flex justify-center">
+                                <RadioGroupItem disabled className="mr-2" value="模型审查" />{t('build.modelReview')}
+                            </Label>
+                        </div>
+                    </RadioGroup>
+                </>
+            )}
             <div className="mb-6">
                 <span className="bisheng-label">{t('build.wordListType')}</span>
                 <div className="mt-4 mb-6 space-y-3">

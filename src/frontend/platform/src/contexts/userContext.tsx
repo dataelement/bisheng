@@ -1,4 +1,7 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
+import { resolveRoutePermissions } from "@/routes";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
+import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
@@ -110,8 +113,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 异地登录强制退出
         requestInterceptor.remoteLoginFuc = (msg) => {
             logoutApi().then(_ => {
-                setUser(null)
+                const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL')
                 localStorage.removeItem('isLogin')
+                if (thirdPartyLogoutUrl) {
+                    window.location.href = thirdPartyLogoutUrl
+                    return
+                }
+                setUser(null)
             })
 
             toast({
@@ -122,22 +130,74 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 获取用户信息
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
-            const { user_id, web_menu = [] } = res;
+            const { user_id } = res;
+            // Apply the same fallback that routes/index.tsx uses, so
+            // department-admins and child-admins reach pages whose menu key the
+            // backend strips from web_menu (e.g. `sys`, `model`). Without this,
+            // the route-level guard below would still redirect to /403 even
+            // though `getPrivateRouter` admits the route.
+            const web_menu: string[] = resolveRoutePermissions(res);
 
             localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
             // if (user_id) loadComponents();
             // 是否有访问后台权限
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
 
-            if (res.role !== 'admin' && !web_menu.includes('backend')) {
-                location.href = `${location.origin}/workspace/c/new?error=90001`;
-                return;
+            const BASE_URL = __APP_ENV__.BASE_URL
+
+            // v2.5 角色菜单使用 admin 作为管理端父级；旧数据可能仍为 backend（WebMenuResource 遗留）
+            const adminMenuKeys = new Set([
+                'backend',
+                'admin',
+                'board',
+                'model',
+                'log',
+                'knowledge',
+                'build',
+                'evaluation',
+                'system_config',
+                'mark_task',
+            ])
+            // 部门管理员在 v2.5 允许进入管理端（至少可管理其权限范围内数据）；
+            // 仅依赖 web_menu 会把这类账号误判成无权限（error=90001）。
+            const canAccessPlatform =
+                res.has_admin_console
+                ?? (
+                    res.role === 'admin'
+                    || Boolean(res.is_department_admin)
+                    || Boolean(res.can_manage_user_groups)
+                    || web_menu.some((k: string) => adminMenuKeys.has(k))
+                )
+            if (!canAccessPlatform) {
+                // Check if the user can at least access the workspace client.
+                // If neither platform nor workspace is accessible, redirect to /403
+                // to avoid a back-and-forth redirect loop between the two apps.
+                const canAccessWorkspace =
+                    res.has_workbench
+                    ?? (
+                        web_menu.includes('workstation')
+                        || web_menu.includes('frontend')
+                    )
+                if (!canAccessWorkspace) {
+                    history.pushState(null, '', BASE_URL + '/403')
+                    return
+                }
+                toast({
+                    variant: 'error',
+                    description: i18next.t('menu.noAdminConsoleAccess'),
+                })
+                // Hard-navigate to the workspace client. Must NOT use history.back()
+                // here: under the SSO flow the previous history entry is the IdP /
+                // portal page, so "going back" silently re-triggers SSO and produces
+                // an infinite redirect loop for non-admin users. replace() also drops
+                // the un-usable platform URL from history.
+                window.location.replace(getWorkspaceClientUrl('/'))
+                return
             }
 
-            const BASE_URL = __APP_ENV__.BASE_URL
             const pathName = location.pathname.replace(BASE_URL, '');
 
-            // Jump to the route based on permissions 
+            // Jump to the route based on permissions
             if (pathName === '/admin') {
                 const MENU_ROUTE_MAP = [
                     { key: 'board', path: '/dashboard' },
@@ -145,25 +205,53 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     { key: 'knowledge', path: '/filelib' },
                     { key: 'model', path: '/model/management' },
                     { key: 'evaluation', path: '/evaluation' },
-                    { key: 'label', path: '/label' }, // 兜底选项放在最后
+                    { key: 'mark_task', path: '/label' }, // 与角色菜单 third_id 一致
+                    // admin/workstation are entry-level keys, not content menus;
+                    // excluded intentionally — fallback handles the no-match case.
                 ];
                 const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
                 if (target) {
                     history.pushState(null, '', BASE_URL + target.path);
                 } else {
-                    history.pushState(null, '', BASE_URL + '/label');
+                    // No accessible content menu. If approval mode is on, land on the
+                    // first approvable menu so the user sees an apply button.
+                    // Otherwise fall back to the generic placeholder.
+                    const APPROVABLE_ORDER = ['board', 'build', 'knowledge', 'model', 'evaluation', 'mark_task', 'log'];
+                    // Admin-area approval scope (legacy global flag as fallback).
+                    const adminApprovalMode = res.menu_approval_mode_admin ?? res.menu_approval_mode;
+                    const firstApprovable = adminApprovalMode
+                        ? APPROVABLE_ORDER[0]
+                        : null;
+                    const fallback = firstApprovable
+                        ? `/menu-pending?menu=${firstApprovable}`
+                        : '/menu-pending';
+                    history.pushState(null, '', BASE_URL + fallback);
                 }
             } else {
                 // 403
-                const MENU_KEY_MAP = {
+                const MENU_KEY_MAP: Record<string, string> = {
                     '/dashboard': 'board',
                     '/build/apps': 'build',
                     '/filelib': 'knowledge',
                     '/model/management': 'model',
                     '/evaluation': 'evaluation',
+                    '/label': 'mark_task',
+                    '/log': 'log',
                 }
-                const menuName = MENU_KEY_MAP[pathName]
-                if (menuName && res.role !== 'admin' && !web_menu.includes(menuName)) {
+                const normalizedPath = pathName.replace(/\/+$/, '') || '/'
+                let menuName = MENU_KEY_MAP[normalizedPath]
+                if (!menuName && normalizedPath.startsWith('/label')) {
+                    menuName = 'mark_task'
+                }
+                if (!menuName && normalizedPath.startsWith('/log')) {
+                    menuName = 'log'
+                }
+                if (
+                    menuName
+                    && res.role !== 'admin'
+                    && !web_menu.includes(menuName)
+                    && !(res.menu_approval_mode_admin ?? res.menu_approval_mode)
+                ) {
                     history.pushState(null, '', BASE_URL + '/403');
                 }
             }

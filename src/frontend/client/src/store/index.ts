@@ -13,6 +13,7 @@ import settings from './settings';
 import misc from './misc';
 import isTemporary from './temporary';
 import modelType from './modeltype';
+import brand from './brand';
 export default {
   ...artifacts,
   ...families,
@@ -29,4 +30,5 @@ export default {
   ...misc,
   ...isTemporary,
   ...modelType,
+  ...brand,
 };

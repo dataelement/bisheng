@@ -77,9 +77,11 @@ export function FileListRow({
             case FileStatus.SUCCESS:
                 return <span className="text-[#00b42a]">成功</span>;
             case FileStatus.PROCESSING:
-                return <span className="text-[#165dff]">处理中</span>;
+                return <span className="text-blue-500">处理中</span>;
             case FileStatus.FAILED:
                 return <span className="text-[#f53f3f]">失败</span>;
+            case FileStatus.VIOLATION:
+                return <span className="text-[#f53f3f]">违规</span>;
             default:
                 return null;
         }
@@ -89,7 +91,7 @@ export function FileListRow({
         <div
             className={cn(
                 "flex items-center px-4 py-3 border-b border-[#e5e6eb] hover:bg-[#f7f8fa] transition-colors cursor-pointer",
-                isSelected && "bg-[#e8f3ff]",
+                isSelected && "bg-blue-50",
                 hovered && "bg-[#f7f8fa]"
             )}
             onMouseEnter={() => setHovered(true)}
@@ -190,7 +192,7 @@ export function FileListRow({
                                         <Edit className="size-4 mr-2" />
                                         重命名
                                     </DropdownMenuItem>
-                                    {file.status === FileStatus.FAILED && onRetry && (
+                                    {(file.status === FileStatus.FAILED || file.status === FileStatus.VIOLATION) && onRetry && (
                                         <DropdownMenuItem onClick={onRetry}>
                                             <Circle className="size-4 mr-2" />
                                             重试

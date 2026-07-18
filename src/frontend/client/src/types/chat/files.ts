@@ -73,6 +73,12 @@ export type TFile = {
   metadata?: { fileIdentifier?: string };
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  // Task-mode ingestion result: 'failed' when the attachment could not be
+  // parsed into the workspace. The chip renders a failed state so the user
+  // knows the file was not used (the task still runs without it).
+  parsing_status?: string;
+  valid?: boolean;
+  error_message?: string;
 };
 
 export type TFileUpload = TFile & {

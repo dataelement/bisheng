@@ -2,31 +2,29 @@
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { generateUUID } from "@/components/bs-ui/utils";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getSubConfigApi, setSubConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { t } from "i18next";
-import { Settings } from "lucide-react";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
-import { FormInput } from "./FormInput";
-import { IconUploadSection } from "./IconUploadSection";
-import { Model, ModelManagement } from "./ModelManagement";
+import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
-import { ToggleSection } from "./ToggleSection";
-import { WebSearchConfig } from "./WebSearchConfig";
-import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import {
+    SubscriptionSensitivePolicy,
+    type SubscriptionSensitivePolicyHandle,
+} from "./SubscriptionSensitivePolicy";
 
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -46,9 +44,10 @@ export interface ChatConfigForm {
     userPrompt: string;
     maxChunkSize: number;
     feedbackTips: string;
+    /** 订阅侧 AI 助手自定义名称，对应接口 assistant_name；空表示用客户端默认文案 */
+    assistantName: string;
 }
-export default function Subscribe() {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
+export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -59,6 +58,7 @@ export default function Subscribe() {
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
+    const sensitivePolicyRef = useRef<SubscriptionSensitivePolicyHandle>(null);
 
     const { t } = useTranslation()
     const {
@@ -66,11 +66,11 @@ export default function Subscribe() {
         errors,
         setErrors,
         setFormData,
+        configMeta,
         handleInputChange,
         toggleFeature,
-        handleSave
+        handleSave: saveChatConfig
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -81,28 +81,51 @@ export default function Subscribe() {
         appCenterWelcomeRef,
         appCenterDescriptionRef,
         modelManagementContainerRef,
-    });
+    }, scopeVersion);
 
 
     const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
+        if (user.user_id && !canManageWorkbenchConfig(user)) {
             navigate('/build/apps')
         }
-    }, [user])
+    }, [navigate, user])
+
+    const handleSave = async () => {
+        const sensitiveSaved = await sensitivePolicyRef.current?.save();
+        if (sensitiveSaved === false) return false;
+        return saveChatConfig();
+    };
+
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
-                <CardContent className="pt-4 relative">
-                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                <CardContent className="pt-4 pb-0 relative">
+                    <div className="w-full  max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">
                                     <span>{t("chatConfig.prompts")}</span>
                                 </p>
                             </div>
+                            {/* AI 助手名称：留空则客户端回退到本地化默认文案 */}
+                            <>
+                                <Label className="bisheng-label">{t('chatConfig.aiAssistantName')}</Label>
+                                <div className="mt-3 mb-4">
+                                    <Input
+                                        value={formData.assistantName}
+                                        placeholder={t('chatConfig.aiAssistantNamePlaceholder')}
+                                        maxLength={50}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setFormData(prev => ({ ...prev, assistantName: val }));
+                                        }}
+                                    />
+                                </div>
+                            </>
                             <>
                                 <Label className="bisheng-label">{t('chatConfig.sysPrompts')}</Label>
                                 <div className="mt-3">
@@ -159,7 +182,6 @@ export default function Subscribe() {
                                         className="mt-3"
                                         value={formData.maxChunkSize ?? ''}
                                         defaultValue={15000}
-                                        max={15000}
                                         onValueChange={(val) => {
                                             setFormData(prev => ({ ...prev, maxChunkSize: val }));
                                         }}
@@ -195,6 +217,7 @@ export default function Subscribe() {
                                 </div>
                             </>
                         </div>
+                        <SubscriptionSensitivePolicy ref={sensitivePolicyRef} />
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
@@ -216,7 +239,6 @@ export default function Subscribe() {
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -229,47 +251,48 @@ interface UseChatConfigProps {
     modelManagementContainerRef: React.RefObject<HTMLDivElement>;
 }
 
-const useChatConfig = (refs: UseChatConfigProps) => {
+const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
     const { t } = useTranslation()
 
-    const defaultUserPrompt = t('chatConfig.referenceAndQuestion');
     const [formData, setFormData] = useState<ChatConfigForm>({
-        systemPrompt: t('chatConfig.systemPrompt2'),
-        userPrompt: defaultUserPrompt,
+        systemPrompt: '',
+        userPrompt: '',
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
+        assistantName: '',
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
 
     useEffect(() => {
+        setConfigMeta(null);
         getSubConfigApi().then((res) => {
-            // Interceptor returns response.data.data — null when no config row exists yet.
-            const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
-            const defaultSystemPrompt = t('chatConfig.systemPrompt2');
-            const defaultUser = t('chatConfig.referenceAndQuestion');
+            const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res);
+            setConfigMeta(meta);
+            const cfg = envData != null && typeof envData === 'object' ? envData : null;
             setFormData((prev) => {
                 const systemPromptFromRes = cfg?.systemPrompt ?? cfg?.system_prompt;
                 const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
                 const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
                 const feedbackTipsFromRes = cfg?.feedback_tips ?? cfg?.feedbackTips;
-                const normalizeNonEmptyString = (value: unknown): string | undefined => {
-                    if (typeof value !== 'string') return undefined;
-                    const trimmed = value.trim();
-                    // Treat empty string / whitespace-only as "API empty" and do not override defaults.
-                    return trimmed ? value : undefined;
-                };
+                const assistantNameFromRes = cfg?.assistant_name ?? cfg?.assistantName;
+                // When backend returns no saved value, seed the textarea with the
+                // localized default template so it is editable as a real value.
+                const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
+                const resolvedUserPrompt = resolveConfigString(userPromptFromRes, '');
                 return {
                     ...prev,
-                    systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? defaultSystemPrompt,
-                    userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? defaultUser,
+                    systemPrompt: resolvedSystemPrompt || t('chatConfig.aiPrompt'),
+                    userPrompt: resolvedUserPrompt || t('chatConfig.referenceAndQuestion'),
                     maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
-                    feedbackTips: normalizeNonEmptyString(feedbackTipsFromRes) ?? prev.feedbackTips,
+                    feedbackTips: resolveConfigString(feedbackTipsFromRes, prev.feedbackTips),
+                    // Keep blank when unset — empty means "use client i18n default".
+                    assistantName: resolveConfigString(assistantNameFromRes, ''),
                 };
             });
         });
-    }, []);
+    }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -303,7 +326,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     const validateForm = (): boolean => {
         let isValid = true;
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             inputPlaceholder: '',
@@ -318,20 +340,16 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             applicationCenterDescription: '',
         };
 
+        // systemPrompt / userPrompt are auto-refilled with the i18n default template
+        // in handleSave when blank, so only the length cap needs to be checked here.
         const sys = (formData.systemPrompt || '').trim();
-        if (!sys) {
-            newErrors.systemPrompt = '不可为空';
-            isValid = false;
-        } else if (sys.length > 30000) {
+        if (sys.length > 30000) {
             newErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
         }
 
         const user = (formData.userPrompt || '').trim();
-        if (!user) {
-            newErrors.userPrompt = '不可为空';
-            isValid = false;
-        } else if (user.length > 30000) {
+        if (user.length > 30000) {
             newErrors.userPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
         }
@@ -347,25 +365,20 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     };
 
     const handleSave = async () => {
+        // Refill blank prompts with the i18n default template so the empty input
+        // never reaches the server; reflect the refill in formData for the UI too.
+        const finalSystemPrompt = (formData.systemPrompt || '').trim() || t('chatConfig.aiPrompt');
+        const finalUserPrompt = (formData.userPrompt || '').trim() || t('chatConfig.referenceAndQuestion');
+        if (finalSystemPrompt !== formData.systemPrompt || finalUserPrompt !== formData.userPrompt) {
+            setFormData(prev => ({
+                ...prev,
+                systemPrompt: finalSystemPrompt,
+                userPrompt: finalUserPrompt,
+            }));
+        }
+
         if (!validateForm()) {
-            // 主要针对提示词为空的场景，给出明确的 toast
-            const sys = (formData.systemPrompt || '').trim();
-            const user = (formData.userPrompt || '').trim();
             const feedback = (formData.feedbackTips || '').trim();
-            if (!sys) {
-                toast({
-                    variant: 'error',
-                    description: '系统提示词不可为空',
-                });
-                return false;
-            }
-            if (!user) {
-                toast({
-                    variant: 'error',
-                    description: '用户提示词不可为空',
-                });
-                return false;
-            }
             if (!feedback) {
                 toast({
                     variant: 'error',
@@ -377,30 +390,34 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         const feedback = (formData.feedbackTips || '').trim();
         const feedbackTooLong = feedback.length > 1000;
         const dataToSave = {
-            system_prompt: formData.systemPrompt,
-            user_prompt: formData.userPrompt,
+            system_prompt: finalSystemPrompt,
+            user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
             feedback_tips: formData.feedbackTips,
+            assistant_name: (formData.assistantName || '').trim(),
         };
 
-        captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave)).then((res) => {
-            if (res) {
-                if (feedbackTooLong) {
-                    toast({
-                        variant: 'warning',
-                        description: '提示文案不可超过 1000 个字符',
-                    });
-                } else {
-                    toast({
-                        variant: 'success',
-                        description: t('chatConfig.saveSuccess'),
-                    });
-                }
-                reloadConfig()
+        const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));
+        if (res) {
+            setConfigMeta({
+                inherited_from_root: false,
+                has_override: true,
+            });
+            if (feedbackTooLong) {
+                toast({
+                    variant: 'warning',
+                    description: '提示文案不可超过 1000 个字符',
+                });
+            } else {
+                toast({
+                    variant: 'success',
+                    description: t('chatConfig.saveSuccess'),
+                });
             }
-        })
+            reloadConfig()
+        }
 
-        return true
+        return Boolean(res)
     };
 
     return {
@@ -408,6 +425,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         errors,
         setFormData,
         setErrors,
+        configMeta,
         handleInputChange,
         toggleFeature,
         handleSave

@@ -1,4 +1,5 @@
 import { Edge, Node, ReactFlowJsonObject, Viewport, XYPosition } from "@xyflow/react";
+import type { ChatCitation } from "@/controllers/API";
 import { APIClassType } from "../api/index";
 
 export const enum OnlineState {
@@ -194,21 +195,25 @@ export interface WorkflowNodeParam {
 
 /** 工作流消息结构 */
 export interface WorkflowMessage {
+  id?: number | string;
+  his?: boolean;
   category: string;              // "processing"
   node_id?: string;               // Node identifier
-  flow_id: string;               // Flow identifier
-  chat_id: string | null;        // Nullable, could be null if not set
-  message_id: string | null;     // Nullable, could be null if not set
-  files: any[];                  // Array, likely for file attachments
-  is_bot: boolean;               // True if the sender is a bot
+  flow_id?: string;               // Flow identifier
+  chat_id?: string | null;        // Nullable, could be null if not set
+  message_id?: string | null;     // Nullable, could be null if not set
+  files?: any[];                  // Array, likely for file attachments
+  is_bot?: boolean;               // True if the sender is a bot
   liked?: boolean;                 // Count or boolean representing like status
   message: any;               // Actual message content, empty in this case
-  receiver: string | null;       // Nullable receiver field
-  sender: string | null;         // Nullable sender field
-  source: number;                // Source identifier, type unclear
-  user_id: number;               // User identifier, integer type
-  end: boolean;
-  update_time: string;
+  receiver?: string | null | any;       // Nullable receiver field
+  sender?: string | null;         // Nullable sender field
+  source?: number;                // Source identifier, type unclear
+  user_id?: number;               // User identifier, integer type
+  end?: boolean;
+  create_time?: string;
+  update_time?: string;
   reasoning_log?: string; // 推理
   extra?: string;
+  citations?: ChatCitation[] | null;
 }

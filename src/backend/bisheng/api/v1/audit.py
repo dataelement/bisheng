@@ -28,11 +28,11 @@ async def get_audit_logs(*,
 
 
 @router.get('/operators')
-def get_all_operators(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_all_operators(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Get all users who have acted on a resource under a group
     """
-    return resp_200(data=AuditLogService.get_all_operators(login_user))
+    return resp_200(data=await AuditLogService.get_all_operators(login_user))
 
 
 @router.get('/session')

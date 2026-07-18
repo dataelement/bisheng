@@ -3,8 +3,8 @@ from __future__ import annotations
 import inspect
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
-from langchain.chains.conversational_retrieval.base import \
+from langchain_classic.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
+from langchain_classic.chains.conversational_retrieval.base import \
     ConversationalRetrievalChain as BaseConversationalRetrievalChain
 from langchain_core.messages import BaseMessage
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRecoilState } from "recoil";
 import {
   CheckMark,
@@ -7,13 +7,12 @@ import {
   RegenerateIcon,
 } from "~/components/svg";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import type {
   TConversation,
   TMessage,
 } from "~/types/chat";
 import { useGenerationsByLatest, useLocalize } from "~/hooks";
-import MessageSource from "~/pages/appChat/components/MessageSource";
-import ResouceModal from "~/pages/appChat/components/ResouceModal";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -31,6 +30,8 @@ type THoverButtons = {
   latestMessage: TMessage | null;
   isLast: boolean;
   index: number;
+  onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+  activeCitationMessageId?: string | null;
 };
 
 export default function HoverButtons({
@@ -45,6 +46,8 @@ export default function HoverButtons({
   handleContinue,
   latestMessage,
   isLast,
+  onOpenCitationPanel,
+  activeCitationMessageId,
 }: THoverButtons) {
   const localize = useLocalize();
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
@@ -74,7 +77,22 @@ export default function HoverButtons({
   }
 
   const { isCreatedByUser, error } = message;
-  const sourceRef = useRef(null);
+  const { referenceContent, referenceWebContent } = useMemo(() => {
+    const rawText = message.text || "";
+    let regularContent = rawText.replace(/:::thinking[\s\S]*?:::/, "").trim();
+    let webContent: any[] = [];
+    const webMatch = regularContent.match(/:::web([\s\S]*?):::/);
+    if (webMatch) {
+      regularContent = regularContent.replace(/:::web[\s\S]*?:::/, "").trim();
+      try {
+        const str = webMatch[1].trim();
+        webContent = str ? JSON.parse(str) : [];
+      } catch {
+        webContent = [];
+      }
+    }
+    return { referenceContent: regularContent, referenceWebContent: webContent };
+  }, [message.text]);
 
   const renderRegenerate = () => {
     if (!regenerateEnabled) {
@@ -83,8 +101,8 @@ export default function HoverButtons({
     return (
       <button
         className={cn(
-          "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible md:group-[.final-completion]:visible",
-          !isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""
+          "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:invisible fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible",
+          !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
         )}
         onClick={regenerate}
         type="button"
@@ -114,22 +132,17 @@ export default function HoverButtons({
   };
   return (
     <div className="visible mt-0 flex justify-center gap-1 self-end text-gray-500 lg:justify-start">
-      <div className="mr-2 pt-0.5">
-        <MessageSource
-          extra={null}
-          end={true}
-          source={message.source}
-          onSource={() => {
-            sourceRef.current?.openModal({
-              messageId: message.messageId,
-              message: message.text
-                .replace(/:::thinking[\s\S]*?:::/, "")
-                .trim(),
-              chatId: message.conversationId,
-            });
-          }}
+      {!isCreatedByUser && (
+        <CitationReferencesDrawer
+          content={referenceContent}
+          webContent={referenceWebContent}
+          citations={(message as any).citations}
+          messageId={message.messageId}
+          desktopMode="inline-panel"
+          open={activeCitationMessageId === message.messageId}
+          onDesktopOpen={onOpenCitationPanel}
         />
-      </div>
+      )}
       {/* {TextToSpeech && (
         <MessageAudio
           index={index}
@@ -137,7 +150,7 @@ export default function HoverButtons({
           content={message.content ?? message.text}
           isLast={isLast}
           className={cn(
-            'ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible',
+            'ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible',
           )}
         />
       )} */}
@@ -146,11 +159,11 @@ export default function HoverButtons({
         <button
           id={`edit-${message.messageId}`}
           className={cn(
-            'hover-button rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible',
+            'hover-button rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible',
             isCreatedByUser ? '' : 'active',
             hideEditButton ? 'opacity-0' : '',
             isEditing ? 'active text-gray-700 dark:text-gray-200' : '',
-            !isLast ? 'md:opacity-0 md:group-hover:opacity-100' : '',
+            !isLast ? 'fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100' : '',
           )}
           onClick={onEdit}
           type="button"
@@ -162,11 +175,11 @@ export default function HoverButtons({
       )} */}
       <button
         className={cn(
-          "ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible",
+          "ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible",
           isSubmitting && isCreatedByUser
-            ? "md:opacity-0 md:group-hover:opacity-100"
+            ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"
             : "",
-          !isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""
+          !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
         )}
         onClick={() => copyToClipboard(setIsCopied)}
         type="button"
@@ -193,8 +206,8 @@ export default function HoverButtons({
       {continueSupported === true ? (
         <button
           className={cn(
-            "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible",
-            !isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""
+            "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:invisible fine-pointer:group-hover:visible",
+            !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
           )}
           onClick={handleContinue}
           type="button"
@@ -205,13 +218,11 @@ export default function HoverButtons({
       ) : null}
       {regenerateEnabled && message.text && (
         <TextToSpeechButton
-          className={!isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""}
+          className={!isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""}
           messageId={message.messageId}
           text={message.text.replace(/:::([\s\S]*?):::/g, "")}
         />
       )}
-
-      <ResouceModal ref={sourceRef}></ResouceModal>
     </div>
   );
 }

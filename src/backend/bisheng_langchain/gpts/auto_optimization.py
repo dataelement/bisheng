@@ -116,7 +116,7 @@ if __name__ == '__main__':
 
     load_dotenv('/app/.env', override=True)
 
-    httpx_client = httpx.Client(proxies=os.getenv('OPENAI_PROXY'))
+    httpx_client = httpx.Client(proxy=os.getenv('OPENAI_PROXY'))
     llm = ChatOpenAI(model='gpt-4-0125-preview', temperature=0.01, http_client=httpx_client)
     # llm = ChatQWen(model="qwen1.5-72b-chat", temperature=0.01, api_key=os.getenv('QWEN_API_KEY'))
     assistant_name = '金融分析助手'

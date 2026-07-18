@@ -14,7 +14,7 @@ import { Toaster } from "./components/bs-ui/toast";
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
-import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
+import { getAdminRouter, getPrivateRouter, publicRouter, resolveRoutePermissions } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
 import { useToast } from "./components/bs-ui/toast/use-toast";
 
@@ -170,18 +170,23 @@ export default function App() {
   const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.replace(__APP_ENV__.BASE_URL, '').split('/')?.[1] || ''
 
-  // 动态路由根据权限
+  // Resolve route permissions with fallbacks for department and child tenant admins.
   const router = useMemo(() => {
-    // return getAdminRouter()
-    if (user && ['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
-    return user?.user_id ? getPrivateRouter(user.web_menu) : null
+    if (user && user.role === 'admin') return getAdminRouter()
+    if (!user?.user_id) return null
+    const perms = resolveRoutePermissions(user)
+    // Admin-shell routes: gated by the admin approval scope (legacy flag as fallback).
+    return getPrivateRouter(perms, { menuApprovalMode: Boolean(user.menu_approval_mode_admin ?? user.menu_approval_mode) })
   }, [user])
 
   // url error toast
   const { toast } = useToast()
   useEffect(() => {
     if (window.url_error) {
-      toast({ description: t(`errors.${window.url_error}`), variant: 'error' });
+      toast({
+        description: t(`errors.${window.url_error}`, { defaultValue: String(window.url_error) }),
+        variant: 'error',
+      });
       delete window.url_error
     }
   }, [])

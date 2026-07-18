@@ -4,7 +4,7 @@ import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from langchain.chains.base import Chain
+from langchain_classic.chains.base import Chain
 from langchain_core.callbacks import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from pydantic import Field
 
@@ -17,7 +17,7 @@ class TransformChain(Chain):
     Example:
         .. code-block:: python
 
-            from langchain.chains import TransformChain
+            from langchain_classic.chains import TransformChain
             transform_chain = TransformChain(input_variables=["text"],
              output_variables["entities"], transform=func())
     """

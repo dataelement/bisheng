@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import requests
 from langchain_community.document_loaders.blob_loaders import Blob
-from langchain.schema import Document
+from langchain_classic.schema import Document
 
 
 class LayoutParser(object):

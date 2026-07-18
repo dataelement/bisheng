@@ -62,10 +62,10 @@ export const PlaySop = ({ content: _content, className }: PlaySopProps) => {
                 )}
             // src={`${__APP_ENV__.BASE_URL}/assets/linsi-bg.mp4`}
             >
-                <source
+                {/* <source
                     src={`${__APP_ENV__.BASE_URL}/assets/linsi-bg.mp4`}
                     type="video/mp4"
-                />
+                /> */}
                 <img
                     src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`}
                     alt=""

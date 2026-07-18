@@ -21,6 +21,24 @@ export const applyFontSize = (val: string) => {
   }
 };
 
+/**
+ * Brand (accent) color theme. Admin-configured "workbench theme" delivered via
+ * window.BRAND_CONFIG.workbenchTheme (applied by brand-runtime.js before paint).
+ * Blue is the default; green re-points the brand CSS variables incl. --primary
+ * (see `.theme-green` in style.css). No longer a per-user localStorage switch.
+ */
+export type BrandTheme = 'blue' | 'green';
+
+export const getInitialBrand = (): BrandTheme => {
+  if (typeof window === 'undefined') return 'blue';
+  return window.BRAND_CONFIG?.workbenchTheme === 'green' ? 'green' : 'blue';
+};
+
+export const applyBrandTheme = (brand: BrandTheme) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.classList.toggle('theme-green', brand === 'green');
+};
+
 export const getInitialTheme = () => {
   if (typeof window !== 'undefined' && window.localStorage) {
     // const storedPrefs = window.localStorage.getItem('color-theme') || 'light';

@@ -1,201 +1,1046 @@
-import { PlusIcon } from "@/components/bs-icons/plus";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Label } from "@/components/bs-ui/label";
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/bs-ui/button";
-import { SearchInput } from "../../../components/bs-ui/input";
+import { PlusIcon } from "@/components/bs-icons/plus"
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
+import { Button } from "@/components/bs-ui/button"
+import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Switch } from "@/components/bs-ui/switch"
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableFooter,
-    TableHead,
-    TableHeader,
-    TableRow
-} from "../../../components/bs-ui/table";
-import { delRoleApi, getRolesByGroupApi, getUserGroupsApi } from "../../../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import { ROLE } from "../../../types/api/user";
-import EditRole from "./EditRole";
-import SelectSearch from "@/components/bs-ui/select/select"
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/bs-ui/dialog"
+import { Input, SearchInput } from "@/components/bs-ui/input"
+import { Label } from "@/components/bs-ui/label"
+import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/bs-ui/table"
+import {
+  ColumnResizeHandle,
+  useResizableColumns,
+} from "@/components/bs-ui/table/useResizableColumns"
+import { cname } from "@/components/bs-ui/utils"
+import { userContext } from "@/contexts/userContext"
+import { getDepartmentChildrenApi } from "@/controllers/API/department"
+import {
+  createRoleV2Api,
+  deleteRoleV2Api,
+  getRoleMenuV2Api,
+  getRolesPageApi,
+  updateRoleV2Api,
+} from "@/controllers/API/user"
+import { message } from "@/components/bs-ui/toast/use-toast"
+import { TreeDepartmentSelect } from "@/components/bs-comp/department"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { DepartmentTreeNode } from "@/types/api/department"
+import { ROLE } from "@/types/api/user"
+import { useContext, useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 
-interface State {
-    roles: ROLE[];
-    role: Partial<ROLE> | null;
-    searchWord: string;
-    group: string;
-    groups: { label: string; value: string }[];
+const WORKBENCH_PARENT_ID = "workstation"
+const ADMIN_PARENT_ID = "admin"
+const WORKBENCH_CHILD_MENUS = ["home", "apps", "subscription", "knowledge_space"] as const
+const ADMIN_CHILD_MENUS = [
+  "board",
+  "model",
+  "log",
+  "knowledge",
+  "create_knowledge",
+  "build",
+  "create_app",
+  "evaluation",
+  "mark_task",
+] as const
+/**
+ * 工作台「首页」下挂的子能力：任务模式。它本身就是客户端早已消费的菜单键
+ * `linsight_task_mode`（user.plugins）——开启后工作台首页展示技能与任务模式
+ * 选择、左上角「新建任务」入口；关闭则全部隐藏。归属首页，作为其依赖项。
+ */
+const TASK_MODE_MENU_ID = "linsight_task_mode"
+const WORKBENCH_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
+  home: [TASK_MODE_MENU_ID],
+}
+/**
+ * 某些子菜单依赖另一个子菜单（父项关闭则隐藏、且会级联移除）。
+ * `create_app` 依赖 `build`；"新建知识库"依赖 `knowledge`（PRD 3.3.3）。
+ */
+const ADMIN_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
+  build: ["create_app"],
+  knowledge: ["create_knowledge"],
+}
+/** 工作台 + 管理后台父子依赖合并表，供加载 / 保存 / 级联删除统一引用。 */
+const CHILD_DEPENDENTS: Record<string, readonly string[]> = {
+  ...WORKBENCH_CHILD_DEPENDENTS,
+  ...ADMIN_CHILD_DEPENDENTS,
 }
 
-const initialState: State = {
-    roles: [],
-    role: null,
-    searchWord: '',
-    group: '',
-    groups: []
-};
+/** Knowledge-space total upload quota (GB); one decimal, inclusive bounds. */
+const KB_SPACE_FILE_GB_MIN = 0.1
+const KB_SPACE_FILE_GB_MAX = 999
 
-type Action =
-    | { type: 'SET_ROLES'; payload: ROLE[] }
-    | { type: 'SET_ROLE'; payload: Partial<ROLE> | null }
-    | { type: 'SET_SEARCH_WORD'; payload: string }
-    | { type: 'SET_GROUP'; payload: string }
-    | { type: 'SET_GROUPS'; payload: any };
-
-function reducer(state: State, action: Action): State {
-    switch (action.type) {
-        case 'SET_ROLES':
-            return { ...state, roles: action.payload };
-        case 'SET_ROLE':
-            return { ...state, role: action.payload };
-        case 'SET_SEARCH_WORD':
-            return { ...state, searchWord: action.payload };
-        case 'SET_GROUP':
-            return { ...state, group: action.payload };
-        case 'SET_GROUPS':
-            return { ...state, groups: action.payload };
-        default:
-            return state;
-    }
+function normalizeKnowledgeSpaceFileGb(raw: string): number | null {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  const r = Math.round(n * 10) / 10
+  if (r < KB_SPACE_FILE_GB_MIN || r > KB_SPACE_FILE_GB_MAX) return null
+  if (Math.abs(r - n) > 1e-6) return null
+  return r
 }
+
+function formatKnowledgeSpaceGbInput(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "500"
+  const r = Math.round(n * 10) / 10
+  if (r < KB_SPACE_FILE_GB_MIN || r > KB_SPACE_FILE_GB_MAX) return "500"
+  return Number.isInteger(r) ? String(r) : r.toFixed(1)
+}
+
+/** Clamp and format after blur — allows odd drafts while typing, fixes display on blur. */
+function clampKnowledgeQuotaGbDisplay(raw: string): string {
+  const t = raw.trim().replace(/，/g, ".")
+  if (!t) return "500"
+  const n = Number(t)
+  if (!Number.isFinite(n)) return "500"
+  const r = Math.round(n * 10) / 10
+  const clamped = Math.max(KB_SPACE_FILE_GB_MIN, Math.min(KB_SPACE_FILE_GB_MAX, r))
+  return Number.isInteger(clamped) ? String(clamped) : clamped.toFixed(1)
+}
+/** 工作台四项（首页 / 应用 / 订阅 / 知识空间）新建角色默认全开，与 PRD 一致 */
+const DEFAULT_ENABLED_MENU_IDS = [
+  WORKBENCH_PARENT_ID,
+  "home",
+  TASK_MODE_MENU_ID,
+  "apps",
+  "subscription",
+  "knowledge_space",
+  ADMIN_PARENT_ID,
+  "knowledge",
+  "build",
+] as const
 
 export default function Roles() {
-    const { t } = useTranslation();
-    const [state, dispatch] = useReducer(reducer, initialState);
-    const allRolesRef = useRef<ROLE[]>([]);
+  const { t } = useTranslation()
+  const { user } = useContext(userContext)
+  const isPlatformAdmin = user?.role === "admin"
 
-    const loadData = useCallback(async () => {
-        const inputDom = document.getElementById('role-input') as HTMLInputElement;
-        if (inputDom) {
-            inputDom.value = '';
-        }
-        try {
-            if (!state.group) return
-            const data: any = await getRolesByGroupApi('', [state.group]);
-            dispatch({ type: 'SET_ROLES', payload: data });
-            allRolesRef.current = data;
-        } catch (error) {
-            console.error(error);
-        }
-    }, [state.group]);
+  const [roles, setRoles] = useState<ROLE[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [keyword, setKeyword] = useState("")
+  const [deptTree, setDeptTree] = useState<DepartmentTreeNode[]>([])
+  const [editOpen, setEditOpen] = useState(false)
+  const [activeRole, setActiveRole] = useState<ROLE | null>(null)
+  const [roleName, setRoleName] = useState("")
+  const [departmentId, setDepartmentId] = useState<string>("none")
+  const [quotaFileUnlimited, setQuotaFileUnlimited] = useState(false)
+  const [quotaFileGb, setQuotaFileGb] = useState("500")
+  const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
+  const [quotaChannelCount, setQuotaChannelCount] = useState("10")
+  const [quotaSpaceSubscribeUnlimited, setQuotaSpaceSubscribeUnlimited] = useState(false)
+  const [quotaSpaceSubscribeCount, setQuotaSpaceSubscribeCount] = useState("100")
+  const [menuIds, setMenuIds] = useState<string[]>([])
+  // Per-area "show unauthorized menus (apply)" toggles, split from the legacy
+  // single flag so workbench and admin can be configured independently.
+  const [workbenchApprovalMode, setWorkbenchApprovalMode] = useState(false)
+  const [adminApprovalMode, setAdminApprovalMode] = useState(false)
+  const [isMenuLoading, setIsMenuLoading] = useState(false)
+  const [menuLoadFailed, setMenuLoadFailed] = useState(false)
+  const [initialEditSnapshot, setInitialEditSnapshot] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
 
-    useEffect(() => {
-        getUserGroupsApi().then((res: any) => {
-            const groups = res.records.map(ug => ({ label: ug.group_name, value: ug.id }))
-            // 获取最近修改用户组
-            dispatch({ type: 'SET_GROUP', payload: groups[0].value });
-            dispatch({ type: 'SET_GROUPS', payload: groups });
-        })
-    }, []);
+  const WORKBENCH_MENU_OPTIONS = useMemo(
+    () => [
+      { id: "home", label: t("menu.workbenchHome") },
+      { id: "apps", label: t("menu.workbenchApps") },
+      { id: "subscription", label: t("menu.workbench1") },
+      { id: "knowledge_space", label: t("menu.workbench2") },
+    ],
+    [t]
+  )
 
-    const handleDelete = async (item: ROLE) => {
-        bsConfirm({
-            desc: `${t('system.confirmText')} 【${item.role_name}】 ?`,
-            okTxt: t('delete'),
-            onOk: async (next) => {
-                try {
-                    await captureAndAlertRequestErrorHoc(delRoleApi(item.id));
-                    await loadData();
-                    next();
-                } catch (error) {
-                    console.error(error);
-                }
-            }
-        });
-    };
+  const ADMIN_MENU_OPTIONS = useMemo(
+    () => [
+      { id: "board", label: t("menu.board") },
+      { id: "model", label: t("menu.models") },
+      { id: "log", label: t("menu.log") },
+      { id: "knowledge", label: t("menu.knowledge") },
+      { id: "create_knowledge", label: t("menu.createKnowledge"), parentMenuId: "knowledge" as const },
+      { id: "build", label: t("menu.skills") },
+      // `create_app` 依赖 `build`：只有当构建开启时渲染，关闭构建时级联移除。
+      { id: "create_app", label: t("menu.createApp"), parentMenuId: "build" as const },
+      { id: "evaluation", label: t("menu.evaluation") },
+      { id: "mark_task", label: t("menu.annotation") },
+    ],
+    [t]
+  )
 
-    const checkSameName = useCallback((name: string) => {
-        return state.roles.find(_role => _role.role_name === name && state.role?.id !== _role.id);
-    }, [state.roles, state.role]);
+  const defaultMenuIds = useMemo(() => [...DEFAULT_ENABLED_MENU_IDS], [])
 
-    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const word = e.target.value;
-        dispatch({ type: 'SET_SEARCH_WORD', payload: word });
-        dispatch({ type: 'SET_ROLES', payload: allRolesRef.current.filter(item => item.role_name.toUpperCase().includes(word.toUpperCase())) });
-    };
-    useEffect(() => {
-        loadData()
-    }, [state.group])
+  const roleTableCols = useMemo(
+    () => [
+      { defaultWidth: 180, minWidth: 120 },
+      { defaultWidth: 280, minWidth: 200 },
+      { defaultWidth: 140, minWidth: 100 },
+      { defaultWidth: 120, minWidth: 90 },
+      { defaultWidth: 100, minWidth: 80 },
+      { defaultWidth: 160, minWidth: 120 },
+      { defaultWidth: 170, minWidth: 140 },
+      { defaultWidth: 170, minWidth: 140 },
+      { defaultWidth: 168, minWidth: 120 },
+    ],
+    []
+  )
+  const rc = useResizableColumns(roleTableCols)
+  /** 最后一列（操作）不显示列宽拖拽把手，见 ColumnResizeHandle */
+  const roleLastResizeColIndex = roleTableCols.length - 2
 
-    const [keyWord, setKeyWord] = useState('')
-    const options = useMemo(() => {
-        if (!keyWord || !state.group) return state.groups
-        return state.groups.filter(group => group.label.toUpperCase().includes(keyWord.toUpperCase()) || group.value === state.group)
-    }, [keyWord, state.group])
+  const buildEditSnapshot = (
+    roleNameVal: string,
+    departmentIdVal: string,
+    quotaFileUnlimitedVal: boolean,
+    quotaFileGbVal: string,
+    quotaChannelUnlimitedVal: boolean,
+    quotaChannelCountVal: string,
+    quotaSpaceSubscribeUnlimitedVal: boolean,
+    quotaSpaceSubscribeCountVal: string,
+    menuIdsVal: string[],
+    workbenchApprovalModeVal: boolean,
+    adminApprovalModeVal: boolean,
+  ) => JSON.stringify({
+    roleNameVal,
+    departmentIdVal,
+    quotaFileUnlimitedVal,
+    quotaFileGbVal,
+    quotaChannelUnlimitedVal,
+    quotaChannelCountVal,
+    quotaSpaceSubscribeUnlimitedVal,
+    quotaSpaceSubscribeCountVal,
+    menuIds: [...menuIdsVal].sort(),
+    workbenchApprovalModeVal,
+    adminApprovalModeVal,
+  })
 
-    if (state.role) {
-        return <EditRole
-            id={state.role.id || -1}
-            name={state.role.role_name || ''}
-            knowledgeSpaceFileLimit={state.role.knowledge_space_file_limit || 40}
-            groupId={state.group}
-            onBeforeChange={checkSameName}
-            onChange={() => {
-                dispatch({ type: 'SET_ROLE', payload: null })
-                loadData()
-            }}
-        />;
+  const loadDepartments = async () => {
+    // F038: only the root layer is needed here (default role-scope selection);
+    // the scope picker itself lazy-loads. Avoids fetching the whole org tree.
+    const res = await captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null))
+    if (res) setDeptTree(res)
+  }
+
+  const loadRoles = async (nextPage = page, nextKeyword = keyword) => {
+    const res = await captureAndAlertRequestErrorHoc(
+      getRolesPageApi({ page: nextPage, limit: 20, keyword: nextKeyword || undefined })
+    )
+    if (res) {
+      setRoles(res.data || [])
+      setTotal(res.total || 0)
     }
+  }
 
-    return (
-        <div className="relative">
-            <div className="h-[calc(100vh-128px)] overflow-y-auto pt-2 pb-10">
-                <div className="flex justify-between">
-                    <div className="flex items-center">
-                        <Label>{t('system.currentGroup')}</Label>
-                        <SelectSearch value={state.group} options={options} selectPlaceholder={t('system.defaultGroup')}
-                            inputPlaceholder={t('log.selectUserGroup')}
-                            selectClass="w-[180px] inline-flex ml-2" contentClass="max-w-[180px] break-all"
-                            onOpenChange={(open) => {
-                                !open && setKeyWord('')
-                            }}
-                            onValueChange={(value) => {
-                                dispatch({ type: 'SET_GROUP', payload: value })
-                            }}
-                            onChange={e => setKeyWord(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex gap-6 items-center justify-between">
-                        <div className="w-[180px] relative">
-                            <SearchInput id="role-input" placeholder={t('system.roleName')} onChange={handleSearch} />
-                        </div>
-                        <Button className="flex justify-around" onClick={() => dispatch({ type: 'SET_ROLE', payload: {} })}>
-                            <PlusIcon className="text-primary" />
-                            <span className="text-[#fff] mx-4">{t('create')}</span>
-                        </Button>
-                    </div>
-                </div>
-                <Table className="mb-10">
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
-                            <TableHead>{t('createTime')}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {state.roles.map(el => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">{el.role_name}</TableCell>
-                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="link" onClick={() => dispatch({ type: 'SET_ROLE', payload: el })} className="px-0 pl-6">{t('edit')}</Button>
-                                    <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                    <TableFooter>
-                        {!state.roles.length && <TableRow>
-                            <TableCell colSpan={5} className="text-center text-gray-400">{t('build.empty')}</TableCell>
-                        </TableRow>}
-                    </TableFooter>
-                </Table>
-            </div>
-            <div className="bisheng-table-footer bg-background-login">
-                <p className="desc">{t('system.roleList')}.</p>
-            </div>
+  useEffect(() => {
+    loadDepartments()
+  }, [])
+
+  useEffect(() => {
+    loadRoles(1, keyword)
+    setPage(1)
+  }, [keyword])
+
+  const fmtTime = (v?: string) => (v ? String(v).replace("T", " ").slice(0, 19) : "-")
+
+  const openCreate = () => {
+    const nextDepartmentId = isPlatformAdmin ? "none" : deptTree[0] ? String(deptTree[0].id) : "none"
+    const nextMenuIds = [...defaultMenuIds]
+    setActiveRole(null)
+    setRoleName("")
+    setDepartmentId(nextDepartmentId)
+    setQuotaFileUnlimited(false)
+    setQuotaFileGb("500")
+    setQuotaChannelUnlimited(false)
+    setQuotaChannelCount("10")
+    setQuotaSpaceSubscribeUnlimited(false)
+    setQuotaSpaceSubscribeCount("100")
+    setWorkbenchApprovalMode(false)
+    setAdminApprovalMode(false)
+    setMenuIds(nextMenuIds)
+    setIsMenuLoading(false)
+    setMenuLoadFailed(false)
+    setInitialEditSnapshot(
+      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "100", nextMenuIds, false, false)
+    )
+    setEditOpen(true)
+  }
+
+  const loadRoleMenus = async (
+    role: ROLE,
+    fileLimit: number,
+    channelLimit: number,
+    spaceSubscribeLimit: number
+  ) => {
+    setIsMenuLoading(true)
+    setMenuLoadFailed(false)
+    const menuRes = await captureAndAlertRequestErrorHoc(getRoleMenuV2Api(role.id))
+    if (menuRes === false || !Array.isArray(menuRes)) {
+      setMenuLoadFailed(true)
+      setInitialEditSnapshot("")
+      setIsMenuLoading(false)
+      return
+    }
+    let ids = [...menuRes].filter((id) => id !== "system_config")
+    // 依赖约束：若父项未启用则剔除依赖项（例如 create_app 依赖 build、任务模式依赖首页）。
+    Object.entries(CHILD_DEPENDENTS).forEach(([parent, deps]) => {
+      if (!ids.includes(parent)) ids = ids.filter((id) => !deps.includes(id))
+    })
+    setMenuIds(ids)
+    const qc = (role.quota_config || {}) as Record<string, unknown>
+    // Scoped keys supersede the legacy global flag; fall back to it for roles
+    // saved before the split so the dialog mirrors the current behavior.
+    const legacyApproval = Boolean(qc.menu_approval_mode)
+    const workbenchApproval = Boolean(qc.menu_approval_mode_workbench ?? legacyApproval)
+    const adminApproval = Boolean(qc.menu_approval_mode_admin ?? legacyApproval)
+    setWorkbenchApprovalMode(workbenchApproval)
+    setAdminApprovalMode(adminApproval)
+    setInitialEditSnapshot(
+      buildEditSnapshot(
+        role.role_name || "",
+        role.department_id ? String(role.department_id) : "none",
+        fileLimit === -1,
+        fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500",
+        channelLimit === -1,
+        channelLimit >= 0 ? String(channelLimit) : "10",
+        spaceSubscribeLimit === -1,
+        spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100",
+        ids,
+        workbenchApproval,
+        adminApproval,
+      )
+    )
+    setIsMenuLoading(false)
+  }
+
+  const openEdit = async (role: ROLE) => {
+    const qc = role.quota_config || {}
+    setActiveRole(role)
+    setRoleName(role.role_name || "")
+    setDepartmentId(role.department_id ? String(role.department_id) : "none")
+    const rawFile = qc.knowledge_space_file
+    const fileLimit = typeof rawFile === "number" ? rawFile : Number(rawFile ?? -1)
+    const channelLimit = Number(qc.channel ?? 10)
+    const spaceSubscribeLimit = Number(qc.knowledge_space_subscribe ?? 100)
+    setQuotaFileUnlimited(fileLimit === -1)
+    setQuotaFileGb(fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500")
+    setQuotaChannelUnlimited(channelLimit === -1)
+    setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
+    setQuotaSpaceSubscribeUnlimited(spaceSubscribeLimit === -1)
+    setQuotaSpaceSubscribeCount(spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100")
+    setMenuIds([])
+    setMenuLoadFailed(false)
+    setEditOpen(true)
+    await loadRoleMenus(role, fileLimit, channelLimit, spaceSubscribeLimit)
+  }
+
+  const buildQuotaConfig = (): Record<string, unknown> => {
+    const base: Record<string, unknown> = activeRole?.quota_config
+      ? { ...(activeRole.quota_config as Record<string, unknown>) }
+      : {}
+    base.knowledge_space_file = quotaFileUnlimited
+      ? -1
+      : (normalizeKnowledgeSpaceFileGb(quotaFileGb) ?? KB_SPACE_FILE_GB_MIN)
+    base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    base.knowledge_space_subscribe = quotaSpaceSubscribeUnlimited
+      ? -1
+      : Math.max(0, Number(quotaSpaceSubscribeCount || 0))
+    base.menu_approval_mode_workbench = workbenchApprovalMode
+    base.menu_approval_mode_admin = adminApprovalMode
+    // Keep the legacy global flag in sync (= OR of both scopes) for any
+    // consumer that still reads it during the transition.
+    base.menu_approval_mode = workbenchApprovalMode || adminApprovalMode
+    return base
+  }
+
+  const submitRole = async () => {
+    if (isSaving || !roleName.trim() || isMenuLoading || menuLoadFailed) return
+    if (!quotaFileUnlimited && normalizeKnowledgeSpaceFileGb(quotaFileGb) === null) {
+      message({ variant: "error", description: t("system.knowledgeSpaceFileQuotaInvalid") })
+      return
+    }
+    setIsSaving(true)
+    const quota_config = buildQuotaConfig()
+    // 保存前清理依赖：父项未开则不应持久化依赖项（例如 build 关闭时移除 create_app）。
+    const sanitizedMenuIds = menuIds.filter((id) => {
+      const parent = Object.entries(CHILD_DEPENDENTS).find(([, deps]) =>
+        (deps as readonly string[]).includes(id),
+      )?.[0]
+      return !parent || menuIds.includes(parent)
+    })
+    const payload = {
+      role_name: roleName.trim(),
+      department_id: departmentId === "none" ? null : Number(departmentId),
+      quota_config,
+      remark: "PRD 2.5 role",
+      menu_ids: sanitizedMenuIds,
+    }
+    try {
+      if (!activeRole) {
+        const created = await captureAndAlertRequestErrorHoc(createRoleV2Api(payload))
+        if (created === null || created === false) return
+      } else {
+        const updated = await captureAndAlertRequestErrorHoc(updateRoleV2Api(activeRole.id, payload))
+        if (updated === null || updated === false) return
+      }
+
+      message({ variant: "success", description: t("saved") })
+      setEditOpen(false)
+      await loadRoles()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const onDelete = (item: ROLE) => {
+    const n = item.user_count ?? 0
+    const desc =
+      n > 0 ? (
+        <div className="space-y-2 text-left text-sm">
+          <p>
+            {t("system.confirmText")}「{item.role_name}」？
+          </p>
+          <p className="text-muted-foreground">
+            {t("system.roleDeleteRevokeWarning", { count: n })}
+          </p>
         </div>
-    );
+      ) : (
+        `${t("system.confirmText")}「${item.role_name}」？`
+      )
+    bsConfirm({
+      title: t("prompt"),
+      desc,
+      okTxt: t("delete"),
+      onOk: async (next) => {
+        try {
+          const res = await captureAndAlertRequestErrorHoc(deleteRoleV2Api(item.id))
+          if (res === false) return
+          await loadRoles()
+          message({ variant: "success", description: t("deleteSuccess") })
+        } finally {
+          next()
+        }
+      },
+    })
+  }
+
+  const isMenuEnabled = (id: string) => menuIds.includes(id)
+
+  /** 一级开关：开启只增父级；关闭时联动移除其下所有二级（含任务模式等挂在子项下的
+   *  嵌套依赖），与保存时的依赖清理一致——避免父级关了二级还残留勾选状态。 */
+  const toggleMenuGroup = (parentId: string, children: readonly string[], checked: boolean) => {
+    setMenuIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(parentId)
+      } else {
+        next.delete(parentId)
+        children.forEach((child) => {
+          next.delete(child)
+          const deps = CHILD_DEPENDENTS[child] || []
+          deps.forEach((dep) => next.delete(dep))
+        })
+      }
+      return Array.from(next)
+    })
+  }
+
+  const toggleMenuItem = (_parentId: string, _children: readonly string[], id: string, checked: boolean) => {
+    setMenuIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+        const dependents = CHILD_DEPENDENTS[id] || []
+        dependents.forEach((dep) => next.delete(dep))
+      }
+      return Array.from(next)
+    })
+  }
+
+  /** One workbench child toggle (首页/应用/订阅/知识空间) — reused for the 首页
+      row above and the remaining-items row, so they stay visually identical. */
+  const renderWorkbenchChild = (m: { id: string; label: string }) => (
+    <label
+      key={m.id}
+      className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+        !isMenuEnabled(WORKBENCH_PARENT_ID) ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+      }`}
+      onClick={() =>
+        isMenuEnabled(WORKBENCH_PARENT_ID) &&
+        toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, !isMenuEnabled(m.id))
+      }
+    >
+      <Switch
+        checked={isMenuEnabled(m.id)}
+        disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
+        onCheckedChange={(checked) =>
+          toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)
+        }
+        onClick={(e) => e.stopPropagation()}
+      />
+      <span>{m.label}</span>
+    </label>
+  )
+
+  const scopeLabel = (el: ROLE) => {
+    // 作用域以 department_id 为准；全路径优先用后端按 path 解析的字段（不受部门树裁剪影响）
+    if (!el.department_id) return t("system.scopeGlobal")
+    const fromApi = (el.department_scope_path || "").trim()
+    if (fromApi) return fromApi
+    // F038: no full tree on hand for an ancestor-path lookup; fall back to the
+    // role's own department_name. The backend department_scope_path above is the
+    // authoritative full-path source and is unaffected.
+    return el.department_name || "-"
+  }
+
+  const creatorLabel = (el: ROLE) => {
+    return el.creator_name?.trim() || "-"
+  }
+
+  const formatKnowledgeSpaceUploadQuota = (el: ROLE) => {
+    const qc = (el.quota_config || {}) as Record<string, unknown>
+    const raw = qc.knowledge_space_file
+    const v = typeof raw === "number" ? raw : Number(raw ?? -1)
+    if (Number.isNaN(v)) return "-"
+    if (v === -1) return t("system.unlimited")
+    const r = Math.round(v * 10) / 10
+    const label = Number.isInteger(r) ? String(r) : r.toFixed(1)
+    return `${label} GB`
+  }
+
+  const formatChannelCreationLimit = (el: ROLE) => {
+    const qc = (el.quota_config || {}) as Record<string, unknown>
+    const v = Number(qc.channel ?? 10)
+    if (Number.isNaN(v)) return "-"
+    if (v === -1) return t("system.unlimited")
+    return String(v)
+  }
+
+  const hasUnsavedEditChanges = useMemo(() => {
+    if (!editOpen || !initialEditSnapshot) return false
+    const current = buildEditSnapshot(
+      roleName,
+      departmentId,
+      quotaFileUnlimited,
+      quotaFileGb,
+      quotaChannelUnlimited,
+      quotaChannelCount,
+      quotaSpaceSubscribeUnlimited,
+      quotaSpaceSubscribeCount,
+      menuIds,
+      workbenchApprovalMode,
+      adminApprovalMode,
+    )
+    return current !== initialEditSnapshot
+  }, [
+    editOpen,
+    initialEditSnapshot,
+    roleName,
+    departmentId,
+    quotaFileUnlimited,
+    quotaFileGb,
+    quotaChannelUnlimited,
+    quotaChannelCount,
+    quotaSpaceSubscribeUnlimited,
+    quotaSpaceSubscribeCount,
+    menuIds,
+    workbenchApprovalMode,
+    adminApprovalMode,
+  ])
+
+  const requestCloseEditDialog = () => {
+    if (!hasUnsavedEditChanges) {
+      setEditOpen(false)
+      return
+    }
+    bsConfirm({
+      title: t("prompt"),
+      desc: t("flow.unsavedChangesConfirmation"),
+      okTxt: t("flow.leave"),
+      canelTxt: t("cancel"),
+      onOk: (next) => {
+        setEditOpen(false)
+        next()
+      },
+    })
+  }
+
+  return (
+    <div className="relative h-full">
+      <div className="h-full overflow-y-auto pb-10 pt-2">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="w-[220px]">
+            <SearchInput
+              placeholder={t("system.roleSearchPlaceholder")}
+              onChange={(e) => setKeyword(e.target.value)}
+            />
+          </div>
+          <Button className="flex justify-around" onClick={openCreate}>
+            <PlusIcon className="text-primary" />
+            <span className="mx-4 text-[#fff]">{t("create")}</span>
+          </Button>
+        </div>
+        <Table
+          noScroll
+          className="mb-6 !w-auto min-w-full"
+          style={{ tableLayout: "fixed", width: rc.totalWidth }}
+        >
+          <TableHeader>
+            <TableRow>
+              <TableHead {...rc.getThProps(0)}>
+                {t("system.roleName")}
+                <ColumnResizeHandle
+                  columnIndex={0}
+                  lastColumn={0 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(1)}>
+                {t("system.roleScope")}
+                <ColumnResizeHandle
+                  columnIndex={1}
+                  lastColumn={1 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(2)}>
+                {t("system.roleListKnowledgeSpaceUploadLimit")}
+                <ColumnResizeHandle
+                  columnIndex={2}
+                  lastColumn={2 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(3)}>
+                {t("system.channelQuotaLimit")}
+                <ColumnResizeHandle
+                  columnIndex={3}
+                  lastColumn={3 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(4)}>
+                {t("system.userCount")}
+                <ColumnResizeHandle
+                  columnIndex={4}
+                  lastColumn={4 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(5)}>
+                {t("system.creator")}
+                <ColumnResizeHandle
+                  columnIndex={5}
+                  lastColumn={5 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(6)}>
+                {t("createTime")}
+                <ColumnResizeHandle
+                  columnIndex={6}
+                  lastColumn={6 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(7)}>
+                {t("system.changeTime")}
+                <ColumnResizeHandle
+                  columnIndex={7}
+                  lastColumn={7 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead
+                style={rc.getThProps(8).style}
+                className={cname(rc.getThProps(8).className, "text-right")}
+              >
+                {t("operations")}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {roles.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center text-gray-400">
+                  {t("build.empty")}
+                </TableCell>
+              </TableRow>
+            ) : (
+              roles.map((el) => (
+                <TableRow key={el.id}>
+                  <TableCell {...rc.getTdProps(0)} className="font-medium">
+                    {el.role_name}
+                  </TableCell>
+                  <TableCell
+                    {...rc.getTdProps(1)}
+                    className="whitespace-normal break-words text-left"
+                  >
+                    {scopeLabel(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(2)} className="whitespace-nowrap tabular-nums">
+                    {formatKnowledgeSpaceUploadQuota(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(3)} className="whitespace-nowrap tabular-nums">
+                    {formatChannelCreationLimit(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(4)}>{el.user_count ?? "-"}</TableCell>
+                  <TableCell
+                    {...rc.getTdProps(5)}
+                    className={cname(
+                      "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground"
+                    )}
+                    title={creatorLabel(el)}
+                  >
+                    {creatorLabel(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(6)} className="whitespace-nowrap tabular-nums">
+                    {fmtTime(el.create_time)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
+                    {fmtTime(el.update_time)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(8)} className="text-right">
+                    {el.is_readonly ? (
+                      <span className="text-sm text-muted-foreground">&mdash;</span>
+                    ) : (
+                      <>
+                        <Button
+                          variant="link"
+                          className="px-0 pl-4"
+                          onClick={() => openEdit(el)}
+                        >
+                          {t("edit")}
+                        </Button>
+                        <Button
+                          variant="link"
+                          disabled={[1, 2].includes(el.id)}
+                          className="px-0 pl-4 text-red-500"
+                          onClick={() => onDelete(el)}
+                        >
+                          {t("delete")}
+                        </Button>
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+        <AutoPagination
+          className="m-0 w-auto justify-end"
+          page={page}
+          pageSize={20}
+          total={total}
+          showTotal={true}
+          onChange={(p) => {
+            setPage(p)
+            loadRoles(p, keyword)
+          }}
+        />
+      </div>
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setEditOpen(true)
+          } else {
+            requestCloseEditDialog()
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{activeRole ? t("system.roleEditTitle") : t("system.roleCreateTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+            <div>
+              <Label>{t("system.roleName")}</Label>
+              <Input
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+                className="mt-1"
+                maxLength={128}
+                placeholder={t("system.roleNameInputPlaceholder")}
+              />
+            </div>
+
+            <div>
+              <Label>{t("system.roleScope")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.roleScopeHint")}</p>
+              <TreeDepartmentSelect
+                modal={false}
+                className="mt-1"
+                value={departmentId === "none" ? null : Number(departmentId)}
+                onChange={(id) => setDepartmentId(id == null ? "none" : String(id))}
+                allowNone={isPlatformAdmin}
+                noneLabel={t("system.scopeGlobalRole")}
+                placeholder={t("system.treeDepartmentSelectPlaceholder")}
+                emptyText={t("system.treeDepartmentSelectEmpty")}
+              />
+            </div>
+
+            <div className="rounded-md border p-3">
+              <Label>{t("system.knowledgeSpaceFileUploadLimit")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.knowledgeSpaceFileLimitDesc")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Checkbox
+                  checked={quotaFileUnlimited}
+                  onCheckedChange={(v) => setQuotaFileUnlimited(Boolean(v))}
+                />
+                <span className="text-sm">{t("system.unlimited")}</span>
+                {!quotaFileUnlimited && (
+                  <>
+                    <Input
+                      type="number"
+                      step={0.1}
+                      value={quotaFileGb}
+                      onChange={(e) => setQuotaFileGb(e.target.value)}
+                      onBlur={() => setQuotaFileGb((prev) => clampKnowledgeQuotaGbDisplay(prev))}
+                      className="w-[120px]"
+                      inputMode="decimal"
+                    />
+                    <span className="text-sm">GB</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <Label>{t("system.channelQuotaLimit")}</Label>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Checkbox
+                  checked={quotaChannelUnlimited}
+                  onCheckedChange={(v) => setQuotaChannelUnlimited(Boolean(v))}
+                />
+                <span className="text-sm">{t("system.unlimited")}</span>
+                {!quotaChannelUnlimited && (
+                  <Input
+                    type="number"
+                    min={0}
+                    value={quotaChannelCount}
+                    onChange={(e) => setQuotaChannelCount(e.target.value)}
+                    className="w-[120px]"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <Label>{t("system.spaceSubscribeQuotaLimit")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.spaceSubscribeQuotaLimitDesc")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Checkbox
+                  checked={quotaSpaceSubscribeUnlimited}
+                  onCheckedChange={(v) => setQuotaSpaceSubscribeUnlimited(Boolean(v))}
+                />
+                <span className="text-sm">{t("system.unlimited")}</span>
+                {!quotaSpaceSubscribeUnlimited && (
+                  <Input
+                    type="number"
+                    min={0}
+                    value={quotaSpaceSubscribeCount}
+                    onChange={(e) => setQuotaSpaceSubscribeCount(e.target.value)}
+                    className="w-[120px]"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <Label>{t("system.menuPermissionSection")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
+              {isMenuLoading && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("system.roleMenuLoading")}
+                </p>
+              )}
+              {menuLoadFailed && activeRole && (
+                <div className="mt-2 flex items-center gap-3 text-xs text-destructive">
+                  <span>{t("system.roleMenuLoadFailed")}</span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => {
+                      const qc = activeRole.quota_config || {}
+                      const rawF = qc.knowledge_space_file
+                      const fileLimit = typeof rawF === "number" ? rawF : Number(rawF ?? -1)
+                      const channelLimit = Number(qc.channel ?? 10)
+                      const spaceSubscribeLimit = Number(qc.knowledge_space_subscribe ?? 100)
+                      void loadRoleMenus(activeRole, fileLimit, channelLimit, spaceSubscribeLimit)
+                    }}
+                  >
+                    {t("retry")}
+                  </Button>
+                </div>
+              )}
+              <div className="mt-3 space-y-4">
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-xs font-medium text-muted-foreground">{t("system.workbenchMenuAuthorization")}</div>
+                  </div>
+                  <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
+                    <Switch
+                      checked={workbenchApprovalMode}
+                      onCheckedChange={(v) => setWorkbenchApprovalMode(Boolean(v))}
+                      disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
+                    />
+                    <div>
+                      <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
+                      <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeWorkbenchHint")}</div>
+                    </div>
+                  </label>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
+                    onClick={() =>
+                      toggleMenuGroup(
+                        WORKBENCH_PARENT_ID,
+                        WORKBENCH_CHILD_MENUS,
+                        !isMenuEnabled(WORKBENCH_PARENT_ID)
+                      )
+                    }
+                  >
+                    <Switch
+                      checked={isMenuEnabled(WORKBENCH_PARENT_ID)}
+                      onCheckedChange={(checked) =>
+                        toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, checked)
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span>{t("menu.workspace")}</span>
+                  </label>
+                  {/* 首页 sits on its own with the 任务模式 sub-toggle nested right
+                      under it; 应用/订阅/知识空间 then share a single row below. */}
+                  <div className="mt-3 flex flex-col gap-2">
+                    {renderWorkbenchChild(WORKBENCH_MENU_OPTIONS.find((m) => m.id === "home")!)}
+
+                    {/* 「首页」子能力：任务模式 —— 紧跟首页下方，缩进 + 竖线体现层级。
+                        依赖首页，首页（或工作台）关闭时置灰不可用并级联移除。 */}
+                    <div className="ml-6 border-l border-border pl-3">
+                      <label
+                        className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
+                        }`}
+                        onClick={() =>
+                          isMenuEnabled(WORKBENCH_PARENT_ID) &&
+                          isMenuEnabled("home") &&
+                          toggleMenuItem(
+                            WORKBENCH_PARENT_ID,
+                            WORKBENCH_CHILD_MENUS,
+                            TASK_MODE_MENU_ID,
+                            !isMenuEnabled(TASK_MODE_MENU_ID)
+                          )
+                        }
+                      >
+                        <Switch
+                          checked={isMenuEnabled(TASK_MODE_MENU_ID)}
+                          disabled={!isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")}
+                          onCheckedChange={(checked) =>
+                            toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, TASK_MODE_MENU_ID, checked)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span>{t("menu.linsightTaskMode")}</span>
+                      </label>
+                      <p className="mt-1 pl-2 text-xs text-muted-foreground">
+                        {t("system.workbenchTaskModeHint")}
+                      </p>
+                    </div>
+
+                    {/* 应用 / 订阅 / 知识空间 同一行 */}
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                      {WORKBENCH_MENU_OPTIONS.filter((m) => m.id !== "home").map(renderWorkbenchChild)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-xs font-medium text-muted-foreground">{t("system.adminMenuAuthorization")}</div>
+                  </div>
+                  <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
+                    <Switch
+                      checked={adminApprovalMode}
+                      onCheckedChange={(v) => setAdminApprovalMode(Boolean(v))}
+                      disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
+                    />
+                    <div>
+                      <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
+                      <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeAdminHint")}</div>
+                    </div>
+                  </label>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
+                    onClick={() =>
+                      toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, !isMenuEnabled(ADMIN_PARENT_ID))
+                    }
+                  >
+                    <Switch
+                      checked={isMenuEnabled(ADMIN_PARENT_ID)}
+                      onCheckedChange={(checked) => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, checked)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span>{t("system.adminSpace")}</span>
+                  </label>
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
+                    {ADMIN_MENU_OPTIONS.filter(
+                      (m) => !("parentMenuId" in m) || !m.parentMenuId || isMenuEnabled(m.parentMenuId)
+                    ).map((m) => (
+                      <label
+                        key={m.id}
+                        className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(ADMIN_PARENT_ID)
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
+                        }`}
+                        onClick={() =>
+                          isMenuEnabled(ADMIN_PARENT_ID) &&
+                          toggleMenuItem(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, m.id, !isMenuEnabled(m.id))
+                        }
+                      >
+                        <Switch
+                          checked={isMenuEnabled(m.id)}
+                          disabled={!isMenuEnabled(ADMIN_PARENT_ID)}
+                          onCheckedChange={(checked) =>
+                            toggleMenuItem(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, m.id, checked)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span>{m.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="mt-4 shrink-0 border-t pt-2">
+            <Button variant="outline" onClick={requestCloseEditDialog} disabled={isSaving}>
+              {t("cancel")}
+            </Button>
+            <Button onClick={submitRole} disabled={isSaving || isMenuLoading || menuLoadFailed}>
+              {isSaving ? `${t("save")}...` : t("save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }

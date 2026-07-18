@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -15,18 +15,24 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { truncateString } from "@/util/utils";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
+import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi, batchDownloadFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
+import AddKnowledgeFileMenu from "./AddKnowledgeFileMenu";
+import WebLinkImportDialog from "./WebLinkImportDialog";
+import FileTagList from "./tags/FileTagList";
+import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 interface StatusIndicatorProps {
     status: number;
@@ -40,22 +46,59 @@ const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgCl
     4: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
     5: { labelKey: "queuing", colorClass: "text-yellow-500", bgClass: "bg-yellow-500" },
     6: { labelKey: "timeout", colorClass: "text-red-500", bgClass: "bg-red-500" },
+    7: { labelKey: "violation", colorClass: "text-red-500", bgClass: "bg-red-500" },
 };
+
+function normalizeWebLinkDisplayName(fileName: string): string {
+    const trimmed = fileName.trim().replace(/\.md$/i, "").trim();
+    if (!trimmed) return fileName;
+    return trimmed.toLowerCase().endsWith(".html") ? trimmed : `${trimmed}.html`;
+}
+
+function getKnowledgeFileDisplayName(file: Record<string, any>): string {
+    const fileName = String(file.file_name ?? "");
+    return file.file_source === "web_link" ? normalizeWebLinkDisplayName(fileName) : fileName;
+}
+
+function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?: Record<string, any>) => string) {
+    const words = hits
+        .map((item) => String(item?.word ?? "").trim())
+        .filter(Boolean)
+        .filter((word, index, arr) => arr.indexOf(word) === index);
+
+    if (!words.length) {
+        return t("sensitiveViolationMessage", { ns: "knowledge" });
+    }
+
+    return `${t("sensitiveViolationMessagePrefix", { ns: "knowledge" })}{${words.join(",")}}${t("sensitiveViolationMessageSuffix", { ns: "knowledge" })}`;
+}
+
+function formatMediaParseFailureMessage(obj: any, t: (key: string, options?: Record<string, any>) => string) {
+    return resolveKnowledgeParseFailure(obj, t) ?? "";
+}
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
     const { t } = useTranslation()
     const config = STATUS_CONFIG[status];
     const reason = useMemo(() => {
-        if (remark?.indexOf('{') === 0) {
+        const trimmedRemark = remark?.trim();
+        if (!trimmedRemark) return "";
+
+        if (trimmedRemark.indexOf('{') === 0) {
             try {
-                const obj = JSON.parse(remark)
+                const obj = JSON.parse(trimmedRemark)
+                if (status === 7 && obj?.reason === "sensitive_check") {
+                    return formatSensitiveViolationMessage(Array.isArray(obj?.hits) ? obj.hits : [], t);
+                }
+                const mediaMessage = formatMediaParseFailureMessage(obj, t);
+                if (mediaMessage) return mediaMessage;
                 return t(`errors.${obj.status_code}`, obj.data)
             } catch (error) {
-                return remark
+                return trimmedRemark
             }
         }
-        return remark
-    }, [remark, t])
+        return trimmedRemark
+    }, [remark, status, t])
 
     // 如果状态不在定义中，返回 null 或默认 UI
     if (!config) return null;
@@ -97,22 +140,38 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
         </div>
     );
 
+    if (status === 7 && reason) {
+        return (
+            <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {BadgeContent}
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="whitespace-pre-line">
+                        <div className="max-w-96 text-left break-all whitespace-normal">
+                            {reason}
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+
     // 其他状态直接渲染内容
     return BadgeContent;
 };
 
-export default function Files({ onPreview }) {
+export default function Files({ onPreview, canEditKb = false, canDeleteKb = false }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
+    const { toast } = useToast()
 
-    const { isEditable, setEditable } = useKnowledgeStore();
+    const { setEditable } = useKnowledgeStore();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
-            setEditable(res.writeable)
-            return res
-        })
+        readFileByLibDatabase({ ...param, id, name: param.keyword })
     )
     const [metadataOpen, setMetadataOpen] = useState(false);
+    const [webLinkOpen, setWebLinkOpen] = useState(false);
     const navigate = useNavigate()
 
     // Store complete file objects (preserving all original parameters)
@@ -123,6 +182,10 @@ export default function Files({ onPreview }) {
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
+    useEffect(() => {
+        setEditable(canEditKb);
+    }, [canEditKb, setEditable]);
+
     // Polling during parsing
     const timerRef = useRef(null)
     useEffect(() => {
@@ -160,6 +223,7 @@ export default function Files({ onPreview }) {
     };
 
     const handleDelete = (id) => {
+        if (!canDeleteKb) return;
         bsConfirm({
             title: t('prompt'),
             desc: t('confirmDeleteFile'),
@@ -175,6 +239,7 @@ export default function Files({ onPreview }) {
 
     // Retry parsing (preserving original file parameter structure)
     const handleRetry = (files) => {
+        if (!canEditKb) return;
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
@@ -218,6 +283,7 @@ export default function Files({ onPreview }) {
 
     // Batch delete
     const handleBatchDelete = () => {
+        if (!canDeleteKb) return;
         bsConfirm({
             title: t('prompt'),
             desc: t('confirmDeleteSelectedFiles', { count: selectedFileObjs.length }),
@@ -235,8 +301,46 @@ export default function Files({ onPreview }) {
         })
     }
 
+    // Batch Download
+    const [isDownloading, setIsDownloading] = useState(false);
+    const canBatchEditTags = canEditKb && selectedFileObjs.length > 0 && selectedFileObjs.every(file => file.status === 2);
+    const hasRowActions = canEditKb || canDeleteKb;
+    const handleBatchDownload = async () => {
+        setIsDownloading(true);
+        try {
+            const fileIds = selectedFileObjs.map(f => Number(f.id));
+            if (!fileIds.length) {
+                toast({ variant: 'error', description: t('selectFile', { ns: 'knowledge' }) });
+                setIsDownloading(false);
+                return;
+            }
+            const url = await batchDownloadFileApi({ knowledge_id: Number(id), file_ids: fileIds });
+            if (url) {
+                if (fileIds.length === 1) {
+                    downloadFile(url, selectedFileObjs[0].file_name);
+                } else {
+                    const now = new Date();
+                    const dateStr =
+                        String(now.getFullYear()) +
+                        String(now.getMonth() + 1).padStart(2, '0') +
+                        String(now.getDate()).padStart(2, '0');
+                    const timeStr = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+                    const libName = localStorage.getItem('libname') || '知识库';
+                    downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
+                }
+            } else {
+                toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+            }
+        } catch (e) {
+            toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     // Batch retry
     const handleBatchRetry = () => {
+        if (!canEditKb) return;
         // Filter failed files, preserving complete parameters
         const failedFiles = selectedFileObjs.filter(file => file.status === 3);
 
@@ -250,15 +354,19 @@ export default function Files({ onPreview }) {
     // Strategy parsing
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
-            if (el.file_name.includes('xlsx', 'xls', 'csv') && el.parse_type !== "local" && el.parse_type !== "uns") {
+            const suffix = el.file_name.split('.').pop()?.toLowerCase() || '';
+            const displayFileName = getKnowledgeFileDisplayName(el);
+            if (['xlsx', 'xls', 'csv', 'et'].includes(suffix) && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
+                    display_file_name: displayFileName,
                     strategy: ['', t('everyRowsAsOneSegment', { count: excel_rule?.slice_length })]
                 }
             }
             if (!el.split_rule) return {
                 ...el,
+                display_file_name: displayFileName,
                 strategy: ['', '']
             }
             const rule = JSON.parse(el.split_rule)
@@ -266,6 +374,7 @@ export default function Files({ onPreview }) {
             const data = separator.map((el, i) => `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`)
             return {
                 ...el,
+                display_file_name: displayFileName,
                 strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
             }
         })
@@ -276,7 +385,7 @@ export default function Files({ onPreview }) {
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
         if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
-        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
+        return ['XLSX', 'XLS', 'CSV', 'ET'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
     }
 
     // Check if there are selected parsing failed files
@@ -346,29 +455,55 @@ export default function Files({ onPreview }) {
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
-                        <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
+                        <Button
+                            variant="outline"
+                            onClick={handleBatchDownload}
+                            disabled={isDownloading}
+                            className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                        >
+                            {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
+                            <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
+                        </Button>
+                        {canEditKb && (
+                            <Tip content={!canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
+                            <KnowledgeTagSelect
+                                knowledgeId={id}
+                                fileIds={selectedFileObjs.map(f => Number(f.id))}
+                                onUpdate={reload}
+                                isEditable={canBatchEditTags}
+                                mode="batch"
+                            >
+                                <Button
+                                    variant="outline"
+                                    disabled={!canBatchEditTags}
+                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <TagIcon size={16} />
+                                    <span className="hidden sm:inline">{t('tags')}</span>
+                                </Button>
+                            </KnowledgeTagSelect>
+                            </Tip>
+                        )}
+                        {canDeleteKb && (
                             <Button
                                 variant="outline"
                                 onClick={handleBatchDelete}
-                                disabled={!isEditable}
                                 className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                             >
                                 <Trash2 size={16} />
                                 <span className="hidden sm:inline">{t('delete')}</span>
                             </Button>
-                        </Tip>
-                        {hasSelectedFailedFiles && (
-                            <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
+                        )}
+                        {canEditKb && hasSelectedFailedFiles && (
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchRetry}
-                                    disabled={!isEditable}
                                     className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                                 >
                                     <RotateCw size={16} />
                                     <span className="hidden sm:inline">{t('retry')}</span>
                                 </Button>
-                            </Tip>
                         )}
                     </div>
                 )}
@@ -380,23 +515,28 @@ export default function Files({ onPreview }) {
                         setSelectedFileObjs([]);
                         setIsAllSelected(false);
                     }} />
-                    <Button
-                        variant="outline"
-                        onClick={() => setMetadataOpen(true)}
-                        className="px-2 md:px-4 whitespace-nowrap h-9"
-                    >
-                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
-                        <span className="hidden md:inline">{t('metaData')}</span>
-                    </Button>
-                    {isEditable && (
-                        <Link to={`/filelib/upload/${id}`}>
-                            <Button className="px-4 md:px-8 h-9">{t('uploadFile')}</Button>
-                        </Link>
+                    {canEditKb && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setMetadataOpen(true)}
+                            className="px-2 md:px-4 whitespace-nowrap h-9"
+                        >
+                            <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
+                            <span className="hidden md:inline">{t('metaData')}</span>
+                        </Button>
+                    )}
+                    {canEditKb && (
+                        <AddKnowledgeFileMenu
+                            buttonClassName="px-4 md:px-8"
+                            supportedFormatsLabel={t("supportedFormatsTip", { defaultValue: "" })}
+                            onUploadFile={() => navigate(`/filelib/upload/${id}`)}
+                            onWebLink={() => setWebLinkOpen(true)}
+                        />
                     )}
                 </div>
             </div>
 
-            <div className="h-[calc(100vh-180px)] overflow-y-auto pb-20">
+            <div className="h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -408,6 +548,7 @@ export default function Files({ onPreview }) {
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
                             <TableHead>{t('segmentationStrategy')}</TableHead>
+                            <TableHead className="min-w-[150px]">{t('tags')}</TableHead>
                             <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
@@ -469,6 +610,19 @@ export default function Files({ onPreview }) {
                                                                 </span>
                                                             </div>
                                                         )
+                                                    },
+                                                    {
+                                                        value: 7,
+                                                        label: 'Violation',
+                                                        color: 'text-red-500',
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
+                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
+                                                                    {t("violation")}
+                                                                </span>
+                                                            </div>
+                                                        )
                                                     }
                                                 ].map(({ value, label, color, icon }) => (
                                                     <div
@@ -522,7 +676,9 @@ export default function Files({ onPreview }) {
                                     </DropdownMenu>
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                            {hasRowActions && (
+                                <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -530,6 +686,9 @@ export default function Files({ onPreview }) {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
+                                    if (document.body.dataset.knowledgeTagDialogOpen === 'true') {
+                                        return;
+                                    }
                                     if (selectedFileObjs.length === 0 && el.status !== 3 && el.status !== 1) {
                                         onPreview(el.id);
                                     }
@@ -546,13 +705,13 @@ export default function Files({ onPreview }) {
                                     />
                                 </TableCell>
                                 <TableCell className="min-w-[250px]">
-                                    <Tip content={el.file_name} align="start" >
+                                    <Tip content={el.display_file_name || el.file_name} align="start" >
                                         <div className="flex items-center gap-2">
                                             <FileIcon
-                                                type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
+                                                type={(el.display_file_name || el.file_name).split('.').pop().toLowerCase() || 'txt'}
                                                 className="size-[30px] min-w-[30px]"
                                             />
-                                            {truncateString(el.file_name, 35)}
+                                            {truncateString(el.display_file_name || el.file_name, 35)}
                                         </div>
                                     </Tip>
                                 </TableCell>
@@ -568,19 +727,26 @@ export default function Files({ onPreview }) {
                                         </TooltipProvider>
                                     ) : splitRuleDesc(el)}
                                 </TableCell>
+                                <TableCell className="min-w-[150px]">
+                                    <FileTagList
+                                        knowledgeId={id}
+                                        fileId={el.id}
+                                        tags={el.tags || []}
+                                        isEditable={canEditKb && el.status === 2}
+                                        onUpdate={reload}
+                                    />
+                                </TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
 
                                 <TableCell>
                                     <StatusIndicator status={el.status} remark={el.remark} />
                                 </TableCell>
-                                <TableCell className="text-right">
+                                {hasRowActions && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
-                                        {el.status === 3 && (
-                                            <Tip content={!isEditable && t('noOperationPermission')} side='top'>
+                                        {canEditKb && el.status === 3 && (
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    disabled={!isEditable}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object
@@ -590,13 +756,8 @@ export default function Files({ onPreview }) {
                                                 >
                                                     <RotateCw size={16} />
                                                 </Button>
-                                            </Tip>
                                         )}
-                                        <Tip
-                                            content={!isEditable && t('noOperationPermission')}
-                                            side='top'
-                                            styleClasses="-translate-x-6"
-                                        >
+                                        {canDeleteKb && (
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -605,14 +766,13 @@ export default function Files({ onPreview }) {
                                                     e.stopPropagation();
                                                     handleDelete(el.id);
                                                 }}
-                                                disabled={!isEditable}
                                                 title={t('delete')}
                                             >
                                                 <Trash2 size={16} />
                                             </Button>
-                                        </Tip>
+                                        )}
                                     </div>
-                                </TableCell>
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>
@@ -625,6 +785,7 @@ export default function Files({ onPreview }) {
                         page={page}
                         pageSize={pageSize}
                         total={total}
+                        showTotal={true}
                         onChange={(newPage) => setPage(newPage)}
                     />
                 </div>
@@ -633,9 +794,15 @@ export default function Files({ onPreview }) {
                 open={metadataOpen}
                 onOpenChange={() => setMetadataOpen(false)}
                 onSave={() => { }}
-                hasManagePermission={isEditable}
+                hasManagePermission={canEditKb}
                 id={id}
                 initialMetadata={metadataFields}
+            />
+            <WebLinkImportDialog
+                knowledgeId={id}
+                open={webLinkOpen}
+                onOpenChange={setWebLinkOpen}
+                onImported={reload}
             />
         </div>
 

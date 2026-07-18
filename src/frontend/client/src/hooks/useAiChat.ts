@@ -12,11 +12,12 @@ import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import { useLocalize } from "~/hooks";
 import type { ChatMessage } from "~/api/chatApi";
-import {
-    buildMessageTree,
-    getMessages as fetchMessages
-} from "~/api/chatApi";
+import { getAgentMessages } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { useLinsightManager } from "~/hooks/useLinsightManager";
+import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
+import { SopStatus, taskModeSkillsState } from "~/store/linsight";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
@@ -40,11 +41,37 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const [chatModel] = useRecoilState(store.chatModel);
     const [selectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
     const [searchType] = useRecoilState(store.searchType);
+    // v2.5 Agent-mode: tools toggled on in the chat input bar. Non-empty
+    // means the backend dispatcher routes to the LangGraph Agent flow (which
+    // emits the new ChatResponse SSE format). Empty array keeps us on the
+    // legacy flow so existing tests / old clients aren't disrupted.
+    const [selectedAgentTools] = useRecoilState(store.selectedAgentTools);
+    // F035 Track H: skills picked in the daily task-mode input live in the shared
+    // 'new' atom (AiChatInput keys the picker there). Threaded onto the task-mode
+    // turn's submit payload so the user's explicit selection is what gets loaded.
+    const [dailyTaskSkills] = useRecoilState(taskModeSkillsState('new'));
+    // Admin-level org-KB toggle. Knowledge spaces remain available even when
+    // the org knowledge base feature is disabled, so we only strip org ids.
+    const { data: bsConfig } = useGetBsConfig();
 
     const queryClient = useQueryClient();
 
+    // F035 Track J (TJ-6): task-mode turns reuse the linsight execution machinery
+    // (createLinsight seeds the per-SV store, startLinsight kicks off the run, the
+    // inline task bubble hosts the WS). The turn stays in THIS daily conversation.
+    const { createLinsight, updateLinsight } = useLinsightManager();
+
     // --- SSE hook ---
     const { abort: abortSSE } = useAiChatSSE(sseSubmission);
+
+    // F035 Track J (TJ-6): after a task handoff we bind the conversation to the
+    // freshly-minted chat_id, which would normally trigger a history refetch.
+    // But the bot task row isn't persisted yet (the worker writes it at execution
+    // start), so a refetch here returns ONLY the user question and CLOBBERS the
+    // optimistic task turn — the panel vanishes ("jumps back to empty daily").
+    // This ref tells the load effect to skip exactly that one refetch; the live
+    // optimistic message + linsightMapState are authoritative for this turn.
+    const skipLoadConvoRef = useRef<string | null>(null);
 
     // Track previous external ID to distinguish sidebar navigation from self-navigate
     const prevExternalIdRef = useRef(initialConversationId);
@@ -67,13 +94,24 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // In this case don't reset, messages are still valid.
         if (initialConversationId === internalConvoIdRef.current) return;
 
-        // Genuine sidebar navigation — reset and load new conversation
+        // Genuine sidebar navigation — reset and load new conversation.
+        // Set isLoading=true up-front (not false) so the welcome page doesn't
+        // briefly flash before the load effect fires on the next tick.
         abortSSE();
         setSseSubmission(null);
         setIsStreaming(false);
-        setIsLoading(false);
+        setIsLoading(initialConversationId !== "new");
         setMessages([]);
         setTitle("");
+        // Drop the post-handoff skip guard: it only protects the ONE in-place
+        // refetch right after a task handoff. The handoff happens mid-stream, so
+        // the load effect's `isStreaming` guard already suppresses that refetch
+        // and the skip guard never gets consumed — it lingers set to that convo.
+        // Once we genuinely navigate away, it's stale; if left set, returning to
+        // that convo would hit the skip branch and load NOTHING (blank page on the
+        // first switch-back, only loading on the second). Clearing it here makes
+        // the first return load history normally.
+        skipLoadConvoRef.current = null;
         setConversationId(initialConversationId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialConversationId]);
@@ -89,8 +127,20 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         if (!conversationId || conversationId === "new") {
             return;
         }
+        // F035 Track J: skip the one post-handoff refetch that would clobber the
+        // optimistic task turn (see skipLoadConvoRef). Consume the guard so a
+        // genuine later navigation back to this convo still reloads normally.
+        if (conversationId === skipLoadConvoRef.current) {
+            skipLoadConvoRef.current = null;
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
-        fetchMessages(conversationId, shareToken)
+        // v2.5: use the native Agent-mode history endpoint.
+        // Returns ChatMessage[] with category + structured fields (reasoning,
+        // tool_calls, steps, thinking_segments) already expanded; legacy
+        // regenerate siblings are pre-collapsed server-side.
+        getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
                 setMessages(msgs);
                 setIsLoading(false);
@@ -100,18 +150,25 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 setIsLoading(false);
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
-    }, [conversationId]);
+    }, [conversationId, shareToken]);
 
-    // --- Message tree (for rendering) ---
-    const messagesTree = useMemo(() => {
-        if (messages.length === 0) return null;
-        return buildMessageTree(messages);
-    }, [messages]);
+    // v2.5 Module B: agent flow renders a flat list keyed by category;
+    // messagesTree + buildMessageTree were only needed by the legacy
+    // SiblingSwitch UI which is no longer shown (ChatView passes flatMode).
+    // The (still-used) legacy Messages/* component chain imports
+    // buildMessageTree directly from chatApi, so only this local indirection
+    // is removed.
 
     // --- Send a message ---
     const sendMessage = useCallback(
-        (text: string, files?: any[] | null) => {
+        (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if (!text.trim() || isStreaming) return;
+            const taskMode = !!opts?.taskMode;
+
+            // Drop client-only fields (e.g. the local `previewUrl` blob string used
+            // for input-box image previews) before they reach the message state or
+            // the SSE payload — the backend only cares about the file ids/paths.
+            const cleanFiles = (files ?? []).map(({ previewUrl, ...rest }) => rest);
 
             const parentMsg = messagesRef.current[messagesRef.current.length - 1];
             const parentMessageId = parentMsg?.messageId ?? NO_PARENT;
@@ -131,7 +188,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 conversationId: currentConvoId ?? "",
                 messageId: userMessageId,
                 error: false,
-                files: files ?? [],
+                files: cleanFiles,
             };
 
             // Create placeholder response
@@ -150,10 +207,16 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             const updatedMessages = [...messagesRef.current, userMessage, initialResponse];
             setMessages(updatedMessages);
 
-            // Build SSE payload (same structure as useChatFunctions.ask)
-            // Filter only org-type kbs (exclude personal/space)
-            const orgKbs = selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id);
-            const spaceKbs = selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id));
+            // Build SSE payload (same structure as useChatFunctions.ask).
+            // Backend expects List[int] for both id fields; atom holds strings
+            // so we coerce via Number here.
+            const orgKbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
+            const orgKbs = orgKbDisabled
+                ? []
+                : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id));
+            const spaceKbs = selectedOrgKbs
+                .filter((kb) => kb.type === 'space')
+                .map((kb) => Number(kb.id));
             const payload = {
                 text: text.trim(),
                 clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
@@ -163,7 +226,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 endpoint: "",
                 endpointType: "custom",
                 model: chatModel.id + "",
-                search_enabled: searchType === "netSearch",
                 use_knowledge_base: {
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
@@ -171,10 +233,34 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
                 isContinued: false,
                 isTemporary: false,
-                files: files ?? [],
-                tools: [],
+                files: cleanFiles,
+                // v2.5: present `tools` array → backend agent flow.
+                // Absent (null/undefined) → legacy flow. We always send the
+                // field when the user has toggled any tool on.
+                tools: selectedAgentTools.flatMap((g) =>
+                    (g.children || []).map((c) => ({
+                        id: c.id,
+                        tool_key: c.tool_key,
+                        type: "tool",
+                    })),
+                ),
                 linsight: isLingsi,
+                // F035 Track J (TJ-6): route this turn to the linsight task kernel
+                // via the SAME unified entry. Backend replies with a handoff event.
+                task_mode: taskMode,
+                // F035 Track H: send the picked skill names on task-mode turns so
+                // the backend materializes exactly those (empty = none). Omitted
+                // outside task mode (the daily chain ignores it).
+                skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
             };
+
+            // Correlation key for the user (question) message. Starts as the
+            // client-side temp UUID, then gets promoted to the real persisted
+            // DB id once the backend's `created` event delivers it (see
+            // onCreated). Kept in sync so later callbacks (onFinal) and the
+            // F028 export selection address the question by its real id rather
+            // than a temp value the backend never persisted.
+            let realUserMessageId = userMessageId;
 
             // Create SSE submission
             const submission: SSESubmission = {
@@ -214,14 +300,185 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             );
                         }
                     }
-                    // Update user message with server-assigned data
+                    // Promote the question message to its real persisted DB id.
+                    // The `created` event carries the backend message_id in
+                    // mergedUser.messageId; older code pinned it back to the
+                    // temp UUID here, which left the question unexportable
+                    // (F028 parses messageId as an int — a UUID becomes NaN and
+                    // the whole question turn is silently dropped from exports).
+                    const serverMessageId =
+                        mergedUser.messageId != null && mergedUser.messageId !== ""
+                            ? String(mergedUser.messageId)
+                            : userMessageId;
+                    realUserMessageId = serverMessageId;
                     setMessages((prev) =>
                         prev.map((m) =>
                             m.messageId === userMessageId
-                                ? { ...m, ...mergedUser, messageId: userMessageId }
+                                ? { ...m, ...mergedUser, messageId: serverMessageId }
                                 : m
                         )
                     );
+                },
+                // F035 Track J (TJ-6): task-mode handoff. Promote the placeholder
+                // assistant turn into a `task` row pointing at the linsight SV,
+                // seed the per-SV store, and kick off execution. The inline task
+                // bubble (TJ-7) hosts the WS and renders the live run from there.
+                onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
+                    if (!svid) return;
+
+                    // The handoff is the daily SSE's last act: the task now runs via
+                    // the linsight worker/WS, so the daily stream is done. Clear
+                    // isStreaming NOW instead of waiting for the stream to drop on
+                    // its own (which can lag) — otherwise the input's stop button,
+                    // gated on `isStreaming || taskRunning`, stays lit after a task
+                    // is terminated (incl. from the QueueCard) until the stale stream
+                    // finally closes. With this, taskRunning alone drives the button,
+                    // so every terminate path syncs the input immediately. (QA: stop
+                    // /cancel while queued.)
+                    setIsStreaming(false);
+
+                    // Bind this conversation (new convo: chat_id was just minted
+                    // server-side as a flow_type=15 daily session). Guard the load
+                    // effect from refetching (and clobbering) the optimistic task
+                    // turn before the worker has persisted the bot task row.
+                    if (chat_id) {
+                        skipLoadConvoRef.current = chat_id;
+                        setConversationId(chat_id);
+                        if (wasNewConvo) {
+                            const placeholderConvo = {
+                                conversationId: chat_id,
+                                title: localize('com_ui_new_chat'),
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                                model: chatModel.name || '',
+                                endpoint: '',
+                                endpointType: 'custom',
+                                isArchived: false,
+                                tags: [],
+                            } as unknown as TConversation;
+                            queryClient.setQueryData<ConversationData>(
+                                [QueryKeys.allConversations],
+                                (convoData) =>
+                                    convoData ? addConversation(convoData, placeholderConvo) : convoData,
+                            );
+                        }
+                    }
+
+                    // Seed the linsight execution store for this SV, then start it.
+                    createLinsight(svid, {
+                        status: SopStatus.SopGenerating,
+                        question: text.trim(),
+                        tasks: [],
+                        sessionSteps: [],
+                        history: [],
+                        output_result: null,
+                        file_list: [],
+                        files: [],
+                        tools: [],
+                        session_id: chat_id,
+                        version: svid,
+                        queueCount: 0,
+                        taskError: '',
+                        sopError: '',
+                        inputSop: false,
+                    } as any);
+
+                    startLinsight(svid)
+                        .then(() => updateLinsight(svid, { status: SopStatus.Running }))
+                        .catch((err) => {
+                            console.error('[AiChat] task start-execute failed:', err);
+                            updateLinsight(svid, { taskError: String(err), status: SopStatus.Stoped });
+                        });
+
+                    // The handoff event carries no files; the backend has already
+                    // processed the uploaded sources for this SV. Pull them so the
+                    // workspace drawer (uploaded-files group + header button) shows
+                    // live instead of only after a page refresh.
+                    if (chat_id) {
+                        getLinsightSessionVersionList(chat_id, '')
+                            .then((versions: any[]) => {
+                                const item = (versions || []).find((v: any) => v.id === svid);
+                                if (item?.files?.length) {
+                                    updateLinsight(svid, {
+                                        files: item.files.map((f: any) => ({
+                                            ...f,
+                                            file_name: decodeURIComponent(f.original_filename),
+                                        })),
+                                    } as any);
+
+                                    // Stamp the user question's attachment chips with each
+                                    // file's parse result so a failed attachment shows its
+                                    // failed state live (not only after a refresh).
+                                    const statusById = new Map<string, any>(
+                                        item.files
+                                            .filter((f: any) => f?.file_id != null)
+                                            .map((f: any) => [String(f.file_id), f]),
+                                    );
+                                    setMessages((prev) =>
+                                        prev.map((m) =>
+                                            m.messageId === realUserMessageId && m.files?.length
+                                                ? {
+                                                      ...m,
+                                                      files: m.files.map((mf: any) => {
+                                                          const p = statusById.get(String(mf.file_id));
+                                                          return p
+                                                              ? {
+                                                                    ...mf,
+                                                                    valid: p.valid,
+                                                                    parsing_status: p.parsing_status,
+                                                                    error_message: p.error_message,
+                                                                }
+                                                              : mf;
+                                                      }),
+                                                  }
+                                                : m,
+                                        ),
+                                    );
+                                }
+                            })
+                            .catch(() => {
+                                /* best-effort: drawer still works after refresh */
+                            });
+                    }
+
+                    // Promote the placeholder assistant row to a task turn so the
+                    // bubble renders the embedded execution panel by SV.
+                    setMessages((prev) => {
+                        return prev.map((m) =>
+                            m.messageId === responseMessageId
+                                ? {
+                                      ...m,
+                                      category: 'task',
+                                      linsightSessionVersionId: svid,
+                                      conversationId: chat_id || m.conversationId,
+                                      unfinished: true,
+                                  }
+                                : m,
+                        );
+                    });
+
+                    // New task conversations have no daily `final` event to drive
+                    // title generation — request it explicitly. The gen_title
+                    // endpoint waits until the backend has persisted a real name,
+                    // so this no longer races slow models.
+                    if (wasNewConvo && chat_id) {
+                        dataService.genTitle({ conversationId: chat_id })
+                            .then((res: { title?: string }) => {
+                                if (!res?.title) return;
+                                setTitle(res.title);
+                                queryClient.setQueryData<ConversationData>(
+                                    [QueryKeys.allConversations],
+                                    (convoData) =>
+                                        convoData
+                                            ? updateConvoFields(convoData, {
+                                                  conversationId: chat_id,
+                                                  title: res.title,
+                                              } as TConversation)
+                                            : convoData,
+                                );
+                            })
+                            .catch(() => { /* non-critical */ });
+                    }
                 },
                 onMessage: (text, messageId) => {
                     console.log('[AiChat] message:', { text: text?.slice(0, 50), messageId });
@@ -235,6 +492,29 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 messageId: messageId || lastMsg.messageId,
                             };
                         }
+                        return msgs;
+                    });
+                },
+                // v2.5 Agent native update — merges structured fields so the
+                // AgentMessageBubble can render thinking / tool-calls / answer
+                // as separate sections instead of regex-parsing a `:::thinking:::`
+                // envelope.
+                onAgentUpdate: (patch) => {
+                    setMessages((prev) => {
+                        const msgs = [...prev];
+                        const lastMsg = msgs[msgs.length - 1];
+                        if (!lastMsg || lastMsg.isCreatedByUser) return prev;
+                        msgs[msgs.length - 1] = {
+                            ...lastMsg,
+                            // Tag with agent category so the bubble switches to
+                            // native rendering. First SSE event upgrades the row;
+                            // subsequent ones just refresh fields.
+                            category: patch.category ?? lastMsg.category ?? "agent_answer",
+                            ...(patch.messageId ? { messageId: patch.messageId } : {}),
+                            ...(patch.text != null ? { text: patch.text } : {}),
+                            ...(patch.events ? { events: patch.events } : {}),
+                            ...(patch.finalised ? { unfinished: false } : {}),
+                        };
                         return msgs;
                     });
                 },
@@ -253,9 +533,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             }
                         }
                         if (data.requestMessage) {
-                            // Update user message with final server data
+                            // Match by the (possibly promoted) real id first,
+                            // falling back to the temp UUID for the window
+                            // before `created` landed. onCreated may already
+                            // have swapped the question's messageId to the real
+                            // DB id, so a plain userMessageId lookup would miss.
                             const userIdx = msgs.findIndex(
-                                (m) => m.messageId === userMessageId
+                                (m) =>
+                                    m.messageId === realUserMessageId ||
+                                    m.messageId === userMessageId
                             );
                             if (userIdx >= 0 && data.requestMessage) {
                                 msgs[userIdx] = { ...msgs[userIdx], ...data.requestMessage };
@@ -266,7 +552,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     if (data.conversation?.conversationId) {
                         setConversationId(data.conversation.conversationId);
                     }
-                    // If this was a new conversation, call gen_title to get AI-generated title
+                    // New conversation: fetch the AI-generated title. The gen_title
+                    // endpoint waits until the backend's background task persists a
+                    // real name, so this no longer races slow models (>5s).
                     const finalConvoId = data.conversation?.conversationId || internalConvoIdRef.current;
                     if (wasNewConvo && finalConvoId && finalConvoId !== 'new') {
                         dataService.genTitle({ conversationId: finalConvoId })
@@ -305,7 +593,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         }
                     }
                 },
-                onError: (error) => {
+                onError: (error, errorCode) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
@@ -314,6 +602,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 ...lastMsg,
                                 text: error || "发生错误，请重试",
                                 error: true,
+                                errorCode,
                             };
                         }
                         return msgs;
@@ -329,7 +618,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, isLingsi]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, queryClient]
     );
 
     // --- Stop generating ---
@@ -387,15 +676,25 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 endpoint: "",
                 endpointType: "custom",
                 model: chatModel.id + "",
-                search_enabled: searchType === "netSearch",
                 use_knowledge_base: {
-                    organization_knowledge_ids: selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id),
-                    knowledge_space_ids: selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
+                    organization_knowledge_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
+                        ? []
+                        : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id)),
+                    knowledge_space_ids: selectedOrgKbs
+                        .filter((kb) => kb.type === 'space')
+                        .map((kb) => Number(kb.id)),
                 },
                 isContinued: false,
                 isRegenerate: true,
                 isTemporary: false,
                 files: parentMsg.files ?? [],
+                tools: selectedAgentTools.flatMap((g) =>
+                    (g.children || []).map((c) => ({
+                        id: c.id,
+                        tool_key: c.tool_key,
+                        type: "tool",
+                    })),
+                ),
                 linsight: isLingsi,
             };
 
@@ -427,6 +726,25 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         return msgs;
                     });
                 },
+                onAgentUpdate: (patch) => {
+                    setMessages((prev) => {
+                        const msgs = [...prev];
+                        const idx = msgs.findIndex(
+                            (m) => m.messageId === newResponseId,
+                        );
+                        if (idx < 0) return prev;
+                        msgs[idx] = {
+                            ...msgs[idx],
+                            category:
+                                patch.category ?? msgs[idx].category ?? "agent_answer",
+                            ...(patch.messageId ? { messageId: patch.messageId } : {}),
+                            ...(patch.text != null ? { text: patch.text } : {}),
+                            ...(patch.events ? { events: patch.events } : {}),
+                            ...(patch.finalised ? { unfinished: false } : {}),
+                        };
+                        return msgs;
+                    });
+                },
 
                 onFinal: (data) => {
                     setMessages((prev) => {
@@ -443,7 +761,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         setConversationId(data.conversation.conversationId);
                     }
                 },
-                onError: (error) => {
+                onError: (error, errorCode) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const idx = msgs.findIndex(
@@ -454,6 +772,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 ...msgs[idx],
                                 text: error || "发生错误，请重试",
                                 error: true,
+                                errorCode,
                             };
                         }
                         return msgs;
@@ -468,13 +787,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools]
     );
 
     return {
         // State
         messages,
-        messagesTree,
+        // Legacy alias — kept null to maintain the old destructuring shape
+        // without shipping tree-building on the hot path.
+        messagesTree: null as unknown,
         conversationId,
         title,
         isLoading,

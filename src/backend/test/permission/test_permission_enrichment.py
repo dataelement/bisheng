@@ -1,0 +1,434 @@
+"""Unit tests for PermissionService.get_resource_permissions() enrichment (T003).
+
+Tests the FGA tuple parsing, name resolution, department merging, and edge cases.
+"""
+
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.group import GroupDao
+from bisheng.user.domain.models.user import UserDao
+from test.fixtures.mock_openfga import InMemoryOpenFGAClient
+
+
+@pytest.fixture
+def mock_fga():
+    """In-memory FGA client."""
+    return InMemoryOpenFGAClient()
+
+
+class TestEnrichPermissionTuples:
+    """Test _enrich_permission_tuples directly."""
+
+    @pytest.mark.asyncio
+    async def test_parse_user_tuple(self):
+        """Parse 'user:7' into subject_type='user', subject_id=7."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [{"user": "user:7", "relation": "owner", "object": "workflow:1"}]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {("user", 7): "Alice"}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].subject_type == "user"
+        assert result[0].subject_id == 7
+        assert result[0].subject_name == "Alice"
+        assert result[0].relation == "owner"
+
+    @pytest.mark.asyncio
+    async def test_parse_department_member_tuple(self):
+        """'department:5#member' is the canonical department grant subject."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [
+            {"user": "department:5#member", "relation": "viewer", "object": "workflow:1"},
+        ]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {("department", 5): "Engineering"}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].subject_type == "department"
+        assert result[0].subject_id == 5
+        assert result[0].subject_name == "Engineering"
+        assert result[0].relation == "viewer"
+
+    @pytest.mark.asyncio
+    async def test_parse_department_direct_tuple(self):
+        """'department:5' + relation='viewer' should be kept."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [{"user": "department:5", "relation": "viewer", "object": "workflow:1"}]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {("department", 5): "Engineering"}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].subject_type == "department"
+        assert result[0].subject_id == 5
+        assert result[0].subject_name == "Engineering"
+        assert result[0].relation == "viewer"
+
+    @pytest.mark.asyncio
+    async def test_parse_user_group_member_tuple(self):
+        """'user_group:3#member' is the canonical user-group grant subject."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [
+            {"user": "user_group:3#member", "relation": "editor", "object": "workflow:1"},
+        ]
+
+        with (
+            patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve,
+            patch.object(
+                PermissionService, "_resolve_user_group_member_names", new_callable=AsyncMock
+            ) as mock_member_names,
+        ):
+            mock_resolve.return_value = {("user_group", 3): "Alpha Team"}
+            mock_member_names.return_value = {3: ["Alice"]}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].subject_type == "user_group"
+        assert result[0].subject_id == 3
+        assert result[0].subject_name == "Alpha Team"
+        assert result[0].subject_member_names == ["Alice"]
+        assert result[0].relation == "editor"
+
+    @pytest.mark.asyncio
+    async def test_parse_user_group_direct_tuple(self):
+        """'user_group:3' + relation='editor' should be kept."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [{"user": "user_group:3", "relation": "editor", "object": "workflow:1"}]
+
+        with (
+            patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve,
+            patch.object(
+                PermissionService, "_resolve_user_group_member_names", new_callable=AsyncMock
+            ) as mock_member_names,
+        ):
+            mock_resolve.return_value = {("user_group", 3): "Alpha Team"}
+            mock_member_names.return_value = {3: ["Alice", "Bob"]}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].subject_type == "user_group"
+        assert result[0].subject_id == 3
+        assert result[0].subject_name == "Alpha Team"
+        assert result[0].subject_member_names == ["Alice", "Bob"]
+        assert result[0].relation == "editor"
+
+    @pytest.mark.asyncio
+    async def test_department_merge(self):
+        """Same (dept_id, relation) with multiple tuples should merge to include_children=True."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [
+            {"user": "department:5", "relation": "viewer", "object": "workflow:1"},
+            {"user": "department:5", "relation": "viewer", "object": "workflow:1"},
+        ]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {("department", 5): "Engineering"}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].include_children is True
+
+    @pytest.mark.asyncio
+    async def test_empty_tuples(self):
+        """Empty FGA tuple list returns empty result."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        result = await PermissionService._enrich_permission_tuples([])
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_unknown_subject_type(self):
+        """Unknown subject format should be silently skipped."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [
+            {"user": "unknown_type:99", "relation": "viewer", "object": "workflow:1"},
+            {"user": "malformed", "relation": "viewer", "object": "workflow:1"},
+            {"user": "", "relation": "viewer", "object": "workflow:1"},
+        ]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {}
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_mixed_subjects(self):
+        """Mixed user/department/group tuples are all enriched correctly."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [
+            {"user": "user:1", "relation": "owner", "object": "knowledge_space:10"},
+            {"user": "user:2", "relation": "editor", "object": "knowledge_space:10"},
+            {"user": "department:5", "relation": "viewer", "object": "knowledge_space:10"},
+            {"user": "user_group:3", "relation": "manager", "object": "knowledge_space:10"},
+            {"user": "department:5#member", "relation": "viewer", "object": "knowledge_space:10"},
+        ]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {
+                ("user", 1): "Admin",
+                ("user", 2): "Bob",
+                ("department", 5): "Engineering",
+                ("user_group", 3): "Alpha Team",
+            }
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        # department:5#member is filtered out
+        assert len(result) == 4
+        types = [(r.subject_type, r.subject_id) for r in result]
+        assert ("user", 1) in types
+        assert ("user", 2) in types
+        assert ("department", 5) in types
+        assert ("user_group", 3) in types
+
+    @pytest.mark.asyncio
+    async def test_name_not_found(self):
+        """Subject whose name cannot be resolved gets subject_name=None."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        tuples = [{"user": "user:999", "relation": "viewer", "object": "workflow:1"}]
+
+        with patch.object(PermissionService, "_resolve_subject_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {}  # user:999 not found
+            result = await PermissionService._enrich_permission_tuples(tuples)
+
+        assert len(result) == 1
+        assert result[0].subject_name is None
+
+
+class TestResolveSubjectNames:
+    """Test _resolve_subject_names with mocked DAOs."""
+
+    @pytest.mark.asyncio
+    async def test_batch_name_resolution(self):
+        """Batch-resolve user, department, and group names."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        mock_user = AsyncMock()
+        mock_user.user_id = 7
+        mock_user.user_name = "Alice"
+
+        mock_dept = AsyncMock()
+        mock_dept.id = 5
+        mock_dept.name = "Engineering"
+
+        mock_group = AsyncMock()
+        mock_group.id = 3
+        mock_group.group_name = "Alpha Team"
+
+        with (
+            patch.object(UserDao, "aget_user_by_ids", new_callable=AsyncMock, return_value=[mock_user]),
+            patch.object(DepartmentDao, "aget_by_ids", new_callable=AsyncMock, return_value=[mock_dept]),
+            patch.object(GroupDao, "aget_group_by_ids", new_callable=AsyncMock, return_value=[mock_group]),
+        ):
+            result = await PermissionService._resolve_subject_names(
+                user_ids=[7],
+                dept_ids=[5],
+                group_ids=[3],
+            )
+
+        assert result[("user", 7)] == "Alice"
+        assert result[("department", 5)] == "Engineering"
+        assert result[("user_group", 3)] == "Alpha Team"
+
+    @pytest.mark.asyncio
+    async def test_department_name_is_full_materialized_path(self):
+        """F038 perf: a department's subject_name is its full ancestor path, so the
+        permission list needs no per-grant path-tree call. Ancestors that are not
+        themselves granted are loaded in ONE extra batched query."""
+        import types
+
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        catalog = {
+            1: types.SimpleNamespace(id=1, name="总公司", path="/1/"),
+            21: types.SimpleNamespace(id=21, name="研发部", path="/1/21/"),
+            106: types.SimpleNamespace(id=106, name="平台组", path="/1/21/106/"),
+        }
+        calls: list[list[int]] = []
+
+        async def fake_aget_by_ids(ids):
+            calls.append(list(ids))
+            return [catalog[i] for i in ids if i in catalog]
+
+        with patch.object(DepartmentDao, "aget_by_ids", new=AsyncMock(side_effect=fake_aget_by_ids)):
+            result = await PermissionService._resolve_subject_names(
+                user_ids=[],
+                dept_ids=[106],
+                group_ids=[],
+            )
+
+        assert result[("department", 106)] == "总公司/研发部/平台组"
+        # one query for the granted dept, one batched query for the missing ancestors
+        assert len(calls) == 2
+        assert calls[0] == [106]
+        assert sorted(calls[1]) == [1, 21]
+
+    @pytest.mark.asyncio
+    async def test_empty_ids(self):
+        """Empty ID lists should not call DAOs."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        result = await PermissionService._resolve_subject_names(
+            user_ids=[],
+            dept_ids=[],
+            group_ids=[],
+        )
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_dao_failure_graceful(self):
+        """DAO failure should not raise, just return partial results."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        mock_user = AsyncMock()
+        mock_user.user_id = 7
+        mock_user.user_name = "Alice"
+
+        with (
+            patch.object(UserDao, "aget_user_by_ids", new_callable=AsyncMock, return_value=[mock_user]),
+            patch.object(DepartmentDao, "aget_by_ids", new_callable=AsyncMock, side_effect=Exception("DB error")),
+        ):
+            result = await PermissionService._resolve_subject_names(
+                user_ids=[7],
+                dept_ids=[5],
+                group_ids=[],
+            )
+
+        assert result[("user", 7)] == "Alice"
+        assert ("department", 5) not in result
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_group_member_names(self):
+        """User-group entries expose their member names for the permission UI."""
+        from bisheng.database.models.user_group import UserGroupDao
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        rows = [
+            type("UG", (), {"group_id": 3, "user_id": 7})(),
+            type("UG", (), {"group_id": 3, "user_id": 8})(),
+        ]
+        users = [
+            type("User", (), {"user_id": 7, "user_name": "Alice", "delete": 0})(),
+            type("User", (), {"user_id": 8, "user_name": "Bob", "delete": 0})(),
+        ]
+
+        with (
+            patch.object(
+                UserGroupDao,
+                "aget_group_users",
+                new_callable=AsyncMock,
+                return_value=rows,
+            ),
+            patch.object(
+                UserDao,
+                "aget_user_by_ids",
+                new_callable=AsyncMock,
+                return_value=users,
+            ),
+        ):
+            result = await PermissionService._resolve_user_group_member_names([3])
+
+        assert result == {3: ["Alice", "Bob"]}
+
+
+class TestGetResourcePermissionsIntegration:
+    """Integration test with mock FGA client."""
+
+    @pytest.mark.asyncio
+    async def test_full_flow(self, mock_fga):
+        """Full enrichment flow: write tuples → read → enrich → verify."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        # Pre-populate FGA tuples
+        await mock_fga.write_tuples(
+            writes=[
+                {"user": "user:1", "relation": "owner", "object": "workflow:42"},
+                {"user": "user:2", "relation": "editor", "object": "workflow:42"},
+            ]
+        )
+
+        mock_user1 = AsyncMock()
+        mock_user1.user_id = 1
+        mock_user1.user_name = "Admin"
+
+        mock_user2 = AsyncMock()
+        mock_user2.user_id = 2
+        mock_user2.user_name = "Bob"
+
+        with (
+            patch.object(PermissionService, "_get_fga", return_value=mock_fga),
+            patch.object(UserDao, "aget_user_by_ids", new_callable=AsyncMock, return_value=[mock_user1, mock_user2]),
+        ):
+            result = await PermissionService.get_resource_permissions(
+                object_type="workflow",
+                object_id="42",
+            )
+
+        assert len(result) == 2
+        owner = next(r for r in result if r.relation == "owner")
+        assert owner.subject_name == "Admin"
+        editor = next(r for r in result if r.relation == "editor")
+        assert editor.subject_name == "Bob"
+
+    @pytest.mark.asyncio
+    async def test_fga_unavailable(self):
+        """FGA unreachable returns empty list."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, "_get_fga", return_value=None):
+            result = await PermissionService.get_resource_permissions(
+                object_type="workflow",
+                object_id="42",
+            )
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_knowledge_library_permissions_merge_legacy_knowledge_space_tuples(self, mock_fga):
+        """knowledge_library should still surface historical knowledge_space tuples."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        await mock_fga.write_tuples(
+            writes=[
+                {"user": "user:1", "relation": "owner", "object": "knowledge_space:42"},
+            ]
+        )
+
+        mock_user1 = AsyncMock()
+        mock_user1.user_id = 1
+        mock_user1.user_name = "Admin"
+
+        with (
+            patch.object(PermissionService, "_get_fga", return_value=mock_fga),
+            patch.object(
+                PermissionService,
+                "_legacy_alias_object_types",
+                new_callable=AsyncMock,
+                return_value=["knowledge_space"],
+            ),
+            patch.object(UserDao, "aget_user_by_ids", new_callable=AsyncMock, return_value=[mock_user1]),
+        ):
+            result = await PermissionService.get_resource_permissions(
+                object_type="knowledge_library",
+                object_id="42",
+            )
+
+        assert len(result) == 1
+        assert result[0].relation == "owner"
+        assert result[0].subject_name == "Admin"

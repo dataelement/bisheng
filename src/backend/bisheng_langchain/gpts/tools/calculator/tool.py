@@ -3,7 +3,7 @@ from math import *
 
 import sympy
 from pydantic import BaseModel, Field
-from langchain.tools import tool
+from langchain_classic.tools import tool
 from sympy import *
 
 

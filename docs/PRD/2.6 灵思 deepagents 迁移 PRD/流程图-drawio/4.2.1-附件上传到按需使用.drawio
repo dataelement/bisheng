@@ -1,0 +1,133 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="4.2.1 从上传到被灵思按需使用">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="在输入区点击 + 菜单" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="40" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="选择 附件" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="160" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="选择上传方式" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="570" y="270" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="系统文件选择器" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="420" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="D2" value="拖拽热区高亮 松手即上传" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="420" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="D3" value="剪贴板内容直接进入上传" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="420" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="格式与大小校验" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="570" y="540" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="X1" value="即时拦截&lt;br&gt;提示支持的格式清单" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="120" y="550" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="X2" value="即时拦截&lt;br&gt;提示上限并建议改用知识库" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="980" y="550" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="出现文件 chip&lt;br&gt;状态: 上传中 spinner" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="660" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="X4" value="自动移除 chip&lt;br&gt;toast 失败原因" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="120" y="660" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="状态: 解析中 spinner&lt;br&gt;转为结构化资料" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="780" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="X3" value="自动移除 chip&lt;br&gt;toast 失败原因" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="980" y="790" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="状态: 可用&lt;br&gt;chip 显示文件类型 icon" style="rounded=1;whiteSpace=wrap;html=1;arcSize=40;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="560" y="900" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="I" value="继续添加更多文件 或 撰写指令" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="1020" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="J" value="发送前: 附件出现在&lt;br&gt;本轮上下文一览 可逐项移除" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1140" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="提交任务" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="1260" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="L" value="执行中: 灵思先看文件结构&lt;br&gt;用到才翻相关章节" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1380" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="M" value="执行流出现可见步骤&lt;br&gt;正在翻阅《X 文件》" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1500" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="N" value="产物中按原文件名标注来源&lt;br&gt;可点击溯源回看" style="rounded=1;whiteSpace=wrap;html=1;arcSize=40;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1620" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="eAB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eBC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eCD" value="点击选文件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="C" target="D">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eCD2" value="拖拽到输入区" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="C" target="D2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eCD3" value="粘贴 截图/文件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="C" target="D3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eDE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="D" target="E">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eD2E" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="D2" target="E">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eD3E" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="D3" target="E">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEX1" value="不支持格式" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="X1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEX2" value="超过单文件上限" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="X2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEF" value="通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="F">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eFX4" value="上传失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="F" target="X4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eFG" value="传输完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="F" target="G">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eGH" value="成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="G" target="H">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eGX3" value="无法提取文本" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="G" target="X3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eHI" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="H" target="I">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eIJ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="I" target="J">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eJK" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="J" target="K">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eKL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="K" target="L">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eLM" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L" target="M">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eMN" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="M" target="N">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

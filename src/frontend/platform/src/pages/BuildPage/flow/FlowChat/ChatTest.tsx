@@ -98,7 +98,7 @@ export const ChatTest = forwardRef((props, ref) => {
                     ><X /></Button>
                 </div>
             </div>
-            <div className={`h-[calc(100vh-28px)] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
+            <div className={`h-[calc(100vh-28px-var(--license-banner-h,0px))] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
                 <ChatPane autoRun chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
             </div>
             {!small && <div

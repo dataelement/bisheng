@@ -5,7 +5,7 @@ import type { ContextType } from '~/common';
 import { EndpointsMenu, ModelSpecsMenu, PresetsMenu, HeaderNewChat } from './Menus';
 import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import ExportAndShareMenu from './ExportAndShareMenu';
-import { useMediaQuery, useHasAccess } from '~/hooks';
+import { usePrefersMobileLayout, useHasAccess } from '~/hooks';
 import HeaderOptions from './Input/HeaderOptions';
 import BookmarkMenu from './Menus/BookmarkMenu';
 import AddMultiConvo from './AddMultiConvo';
@@ -31,7 +31,7 @@ export default function Header() {
     permission: Permissions.USE,
   });
 
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
 
   return (
     <div className="sticky top-0 z-10 flex h-14 w-full items-center justify-between bg-white p-2 font-semibold dark:bg-gray-800 dark:text-white">

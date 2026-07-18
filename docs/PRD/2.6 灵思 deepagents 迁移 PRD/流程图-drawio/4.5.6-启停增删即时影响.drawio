@@ -1,0 +1,37 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="4.5.6 启停增删即时影响">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="M1" value="管理页 新建/启用 自定义技能" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="V1" value="终端用户输入区&lt;br&gt;该技能 即时出现 可选" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="M2" value="管理页 停用 自定义技能" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="160" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="V2" value="终端用户输入区&lt;br&gt;该技能 即时消失 不可选" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="360" y="160" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="M3" value="管理页 删除 自定义技能" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="V3" value="终端用户输入区&lt;br&gt;该技能 移除&lt;br&gt;已勾选者本轮失效并提示" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="360" y="280" width="240" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="M1" target="V1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="M2" target="V2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="M3" target="V3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -8,7 +8,7 @@ class UnAuthorizedError(BaseErrorCode):
 
 class NotFoundError(BaseErrorCode):
     Code: int = 404
-    Msg: str = 'This role does not exist - '
+    Msg: str = 'This resource does not exist'
 
 
 class ServerError(BaseErrorCode):

@@ -80,3 +80,15 @@ class ModifyKnowledgeFileMetaDataReq(BaseModel):
     """Change Knowledge Base File Metadata Request Body"""
     knowledge_file_id: int = Field(..., description='Knowledge Base FilesID')
     user_metadata_list: List[FileUserMetaDataInfo] = Field(..., description='List of file metadata to add')
+
+
+class UpdateFileTagsReq(BaseModel):
+    knowledge_id: int = Field(..., description="知识库ID")
+    file_id: int = Field(..., description="文件ID")
+    tag_ids: List[int] = Field(..., description="全量标签 ID，最多 5 个")
+
+
+class BatchAddFileTagsReq(BaseModel):
+    knowledge_id: int = Field(..., description="知识库ID")
+    file_ids: List[int] = Field(..., description="文件ID列表")
+    tag_ids: List[int] = Field(..., description="追加的标签 ID 列表")

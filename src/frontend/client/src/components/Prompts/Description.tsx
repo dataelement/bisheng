@@ -54,7 +54,7 @@ const Description = ({
           className="border-none"
         />
         {!disabled && (
-          <span className="mr-4 w-10 text-xs text-text-secondary md:text-sm">{`${charCount}/${MAX_LENGTH}`}</span>
+          <span className="mr-4 w-10 text-xs text-text-secondary touch-desktop:text-sm">{`${charCount}/${MAX_LENGTH}`}</span>
         )}
       </h3>
     </div>

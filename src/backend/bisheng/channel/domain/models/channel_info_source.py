@@ -2,11 +2,13 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, CHAR, VARCHAR, Text, DateTime, text
+from sqlalchemy import Column, CHAR, Integer, VARCHAR, Text, DateTime, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 
+
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 class ChannelInfoSource(SQLModelSerializable, table=True):
     """Channel Information Source Model"""
@@ -20,8 +22,14 @@ class ChannelInfoSource(SQLModelSerializable, table=True):
     source_type: str = Field(..., description='Information Source Type', sa_column=Column(VARCHAR(50), nullable=False))
     description: str = Field(None, description='Information Source Description', sa_column=Column(Text, nullable=True))
 
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
+
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))

@@ -7,9 +7,9 @@ import LogContent from '~/components/Chat/Messages/Content/Parts/LogContent';
 import ResultSwitcher from '~/components/Messages/Content/ResultSwitcher';
 import { useToolCallsMapContext, useMessageContext } from '~/Providers';
 import RunCode from '~/components/Messages/Content/RunCode';
-import Clipboard from '~/components/svg/Clipboard';
-import CheckMark from '~/components/svg/CheckMark';
+import { Outlined } from 'bisheng-icons';
 import useLocalize from '~/hooks/useLocalize';
+import { useScrollRevealRef } from '~/hooks';
 import cn from '~/utils/cn';
 
 type CodeBlockProps = Pick<
@@ -25,10 +25,10 @@ const CodeBar: React.FC<CodeBarProps> = React.memo(
     const localize = useLocalize();
     const [isCopied, setIsCopied] = useState(false);
     return (
-      <div className="relative flex items-center justify-between rounded-tl-md rounded-tr-md bg-gray-700 px-4 py-2 font-sans text-xs text-gray-200 dark:bg-gray-700">
-        <span className="">{lang}</span>
+      <div className="relative flex items-center justify-between rounded-tl-md rounded-tr-md border-b border-[#E0E0E0] bg-[#ECECEC] px-4 py-2 font-sans text-xs text-[#57606A]">
+        <span className="text-sm font-medium">{lang}</span>
         {plugin === true ? (
-          <InfoIcon className="ml-auto flex h-4 w-4 gap-2 text-white/50" />
+          <InfoIcon className="ml-auto flex h-4 w-4 gap-2 text-black/40" />
         ) : (
           <div className="flex items-center justify-center gap-4">
             {allowExecution === true && (
@@ -37,8 +37,8 @@ const CodeBar: React.FC<CodeBarProps> = React.memo(
             <button
               type="button"
               className={cn(
-                'ml-auto flex gap-2',
-                error === true ? 'h-4 w-4 items-start text-white/50' : '',
+                'ml-auto flex items-center gap-2',
+                error === true ? 'h-4 w-4 items-start text-black/40' : '',
               )}
               onClick={async () => {
                 const codeString = codeRef.current?.textContent;
@@ -54,12 +54,12 @@ const CodeBar: React.FC<CodeBarProps> = React.memo(
             >
               {isCopied ? (
                 <>
-                  <CheckMark className="h-[18px] w-[18px]" />
+                  <Outlined.Copied size={14} />
                   {error === true ? '' : localize('com_ui_copied')}
                 </>
               ) : (
                 <>
-                  <Clipboard />
+                  <Outlined.Copy size={14} />
                   {error === true ? '' : localize('com_ui_copy_code')}
                 </>
               )}
@@ -81,6 +81,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   error,
 }) => {
   const codeRef = useRef<HTMLElement>(null);
+  const codeScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const toolCallsMap = useToolCallsMapContext();
   const { messageId, partIndex } = useMessageContext();
   const key = allowExecution
@@ -119,7 +120,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   const language = isNonCode ? 'json' : lang;
 
   return (
-    <div className="w-full rounded-md bg-gray-900 text-xs text-white/80">
+    <div className="w-full rounded-md border border-[#E0E0E0] bg-[#F6F8FA] text-xs text-[#24292e]">
       <CodeBar
         lang={lang}
         error={error}
@@ -128,7 +129,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         plugin={plugin === true}
         allowExecution={allowExecution}
       />
-      <div className={cn(classProp, 'overflow-y-auto scrollbar-on-hover p-4')}>
+      <div ref={codeScrollRevealRef} className={cn(classProp, 'overflow-y-auto scrollbar-on-scroll p-4')}>
         <code
           ref={codeRef}
           className={cn(

@@ -13,6 +13,15 @@ autogen_coding/
 # Mac
 .DS_Store
 
+# Claude Code local settings
+.claude/settings.local.json
+# Personal notes (lilu's local reference docs, not for sharing)
+.claude/docs/
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
+
+
+
 # VSCode
 .vscode
 .vscode/settings.json
@@ -129,6 +138,10 @@ build/
 ./third_party
 develop-eggs/
 config.dev.yaml
+src/backend/bisheng/config.yaml
+# Local per-environment configs (contain connection strings / encrypted creds)
+src/backend/bisheng/config.*.yaml
+src/backend/data/
 downloads/
 eggs/
 .eggs/
@@ -262,7 +275,26 @@ docker/data/*
 docker/mysql/data/*
 docker/office/bisheng/*.gz
 
-CLAUDE.md
-!src/backend/bisheng/telemetry_search/**/*.pyc
+bisheng-sync.sh
+/deploy.sh
+.omx/
 
-docs
+# Local installers / stray root files (do not commit)
+*.msi
+
+# Permission migration checkpoint (per-deployment local state)
+src/backend/bisheng/permission/migration/migration_f006_checkpoint.json
+
+# MySQL -> DM migration local config (may contain DB passwords; never commit)
+src/backend/scripts/migrate_dm.yaml
+
+# Git worktrees (claude code)
+.worktrees/
+.claude/worktrees/
+
+# UI component refactor working docs (local handoff notes; never commit / ship)
+docs-ui-refactor/
+
+# CoAligne local state + sync config (per-developer; the tool rewrites them itself)
+.coaligne/
+.coaligneignore

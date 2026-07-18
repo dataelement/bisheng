@@ -1,0 +1,76 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="4.7.2 用户视角可见性流程图">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="用户打开灵思 + 菜单 选用技能" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="技能来源?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="380" y="160" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="当前角色?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="380" y="295" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="根本不展示&lt;br&gt;列表里查不到 搜不出" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="300" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="可见 可激活选用&lt;br&gt;不可编辑/删除" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="440" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="可见 可激活&lt;br&gt;可创建/编辑/删除/启停" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="440" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="该技能被停用?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="560" y="560" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="I" value="出现在输入区可选列表" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="700" width="220" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="J" value="输入区不再出现&lt;br&gt;已选中的本轮自动失效" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="695" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="A2" value="系统管理员要管某租户技能" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="40" width="240" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="先做 admin-scope 切换&lt;br&gt;进入目标租户身份" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="160" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="L" value="在该租户视角下&lt;br&gt;按租户管理员权限维护" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="295" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="eAB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eBD" value="本租户自定义" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="B" target="D">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eBE" value="他租户自定义" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="B" target="E">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eDF" value="终端用户" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="D" target="F">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eDG" value="租户管理员" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="D" target="G">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eGH" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="G" target="H">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eHI" value="启用" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="H" target="I">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eHJ" value="停用" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="H" target="J">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eA2K" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="A2" target="K">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eKL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="K" target="L">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

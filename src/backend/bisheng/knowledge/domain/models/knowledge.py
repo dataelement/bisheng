@@ -1,18 +1,19 @@
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional, Tuple, Union, Dict
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON, String, collate
+from sqlalchemy import Boolean, Integer, String
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, name_sort_clauses
+from bisheng.core.database.manager import get_database_connection
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
@@ -23,9 +24,9 @@ class KnowledgeTypeEnum(Enum):
 
 
 class AuthTypeEnum(str, Enum):
-    PUBLIC = 'public'
-    PRIVATE = 'private'
-    APPROVAL = 'approval'
+    PUBLIC = "public"
+    PRIVATE = "private"
+    APPROVAL = "approval"
 
 
 class KnowledgeState(Enum):
@@ -37,7 +38,8 @@ class KnowledgeState(Enum):
 
 
 class MetadataFieldType(str, Enum):
-    """ Metadata field type"""
+    """Metadata field type"""
+
     STRING = "string"
     NUMBER = "number"
     TIME = "time"
@@ -53,28 +55,57 @@ class MetadataFieldType(str, Enum):
 
 
 class KnowledgeBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(default=None, index=True)
-    name: str = Field(index=True, min_length=1, max_length=200,
-                      description='Knowledge Base Name')
-    type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
-                      description='Knowledge Base Type, value from KnowledgeTypeEnum')
-    description: Optional[str] = Field(default=None, index=True)
-    model: Optional[str] = Field(default=None, index=False)
-    collection_name: Optional[str] = Field(default=None, index=False)
-    index_name: Optional[str] = Field(default=None, index=False)
-    state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
-                                 description='value from KnowledgeState')
-    is_released: bool = Field(default=False, description='is released to knowledge space square')
-    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
+    user_id: int | None = Field(default=None, index=True)
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    name: str = Field(index=True, min_length=1, max_length=200, description="Knowledge Base Name")
+    type: int = Field(
+        index=False,
+        default=KnowledgeTypeEnum.NORMAL.value,
+        description="Knowledge Base Type, value from KnowledgeTypeEnum",
+    )
+    description: str | None = Field(default=None, index=True)
+    model: str | None = Field(default=None, index=False)
+    collection_name: str | None = Field(default=None, index=False)
+    index_name: str | None = Field(default=None, index=False)
+    state: int | None = Field(
+        index=False, default=KnowledgeState.PUBLISHED.value, description="value from KnowledgeState"
+    )
+    is_released: bool = Field(default=False, description="is released to knowledge space square")
+    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description="Authentication Type")
+    is_shared: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean,
+            nullable=False,
+            server_default=text("0"),
+            comment="F017: Root resource shared to all children (mirrors FGA shared_with tuples)",
+        ),
+    )
+    auto_tag_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("0"), comment="是否启用自动标签"),
+    )
+    auto_tag_library_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, index=True, comment="绑定的自动标签库ID"),
+    )
 
-    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
-                                                  description="Metadata Field Configuration for Knowledge Base")
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    metadata_fields: list[dict] | None = Field(
+        default=None,
+        sa_column=Column(JsonType, nullable=True),
+        description="Metadata Field Configuration for Knowledge Base",
+    )
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
-    @field_validator('model', mode='before')
+    @field_validator("model", mode="before")
     @classmethod
     def convert_model(cls, v: Any) -> str:
         if isinstance(v, int):
@@ -83,28 +114,57 @@ class KnowledgeBase(SQLModelSerializable):
 
 
 class Knowledge(KnowledgeBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
 
 class KnowledgeRead(KnowledgeBase):
     id: int
-    user_name: Optional[str] = None
-    copiable: Optional[bool] = None
-    is_pinned: Optional[bool] = False
+    user_name: str | None = None
+    copiable: bool | None = None
+    is_pinned: bool | None = False
+    permission_ids: list[str] | None = None
 
 
 class KnowledgeUpdate(BaseModel):
     knowledge_id: int
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
 
 
-class KnowledgeCreate(KnowledgeBase):
-    is_partition: Optional[bool] = None
+class KnowledgeCreate(BaseModel):
+    user_id: int | None = Field(default=None, index=True)
+    name: str = Field(index=True, min_length=1, max_length=200, description="Knowledge Base Name")
+    type: int = Field(
+        index=False,
+        default=KnowledgeTypeEnum.NORMAL.value,
+        description="Knowledge Base Type, value from KnowledgeTypeEnum",
+    )
+    description: str | None = Field(default=None, index=True)
+    model: str | None = Field(default=None, index=False)
+    collection_name: str | None = Field(default=None, index=False)
+    index_name: str | None = Field(default=None, index=False)
+    state: int | None = Field(
+        index=False, default=KnowledgeState.PUBLISHED.value, description="value from KnowledgeState"
+    )
+    is_released: bool = Field(default=False, description="is released to knowledge space square")
+    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description="Authentication Type")
+    is_shared: bool = Field(default=False)
+    auto_tag_enabled: bool = Field(default=False)
+    auto_tag_library_id: int | None = None
+    metadata_fields: list[dict] | None = Field(
+        default=None, description="Metadata Field Configuration for Knowledge Base"
+    )
+    is_partition: bool | None = None
+
+    @field_validator("model", mode="before")
+    @classmethod
+    def convert_model(cls, v: Any) -> str:
+        if isinstance(v, int):
+            v = str(v)
+        return v
 
 
 class KnowledgeDao(KnowledgeBase):
-
     @classmethod
     def insert_one(cls, data: Knowledge) -> Knowledge:
         with get_sync_db_session() as session:
@@ -138,35 +198,31 @@ class KnowledgeDao(KnowledgeBase):
             return data
 
     @classmethod
-    async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+    async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: datetime | None = None):
         async with get_async_db_session() as session:
             statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
-            statement = statement.values(state=state.value,
-                                         update_time=update_time or datetime.now())
+            statement = statement.values(state=state.value, update_time=update_time or datetime.now())
             await session.exec(statement)
             await session.commit()
 
     @classmethod
-    def update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+    def update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: datetime | None = None):
         with get_sync_db_session() as session:
             statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
-            statement = statement.values(state=state.value,
-                                         update_time=update_time or datetime.now())
+            statement = statement.values(state=state.value, update_time=update_time or datetime.now())
             session.exec(statement)
             session.commit()
 
     @classmethod
     def update_knowledge_update_time(cls, knowledge: Knowledge):
-        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(
-            update_time=text('NOW()'))
+        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(update_time=text("NOW()"))
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
     async def async_update_knowledge_update_time_by_id(cls, knowledge_id: int):
-        statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id).values(
-            update_time=text('NOW()'))
+        statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id).values(update_time=text("NOW()"))
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
@@ -188,39 +244,61 @@ class KnowledgeDao(KnowledgeBase):
             return result.scalars().first()
 
     @classmethod
-    def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
+    def get_list_by_ids(cls, ids: list[int]) -> list[Knowledge]:
         with get_sync_db_session() as session:
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 
     @classmethod
-    async def aget_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
+    async def aget_list_by_ids(cls, ids: list[int]) -> list[Knowledge]:
         async with get_async_db_session() as session:
             result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
             return result.all()
 
     @classmethod
+    async def aget_knowledge_ids_created_by(
+        cls,
+        user_id: int,
+        knowledge_type: KnowledgeTypeEnum,
+    ) -> list[int]:
+        """当前用户在指定类型下创建的知识库主键，用于与 OpenFGA can_read 列表取并集。"""
+        async with get_async_db_session() as session:
+            stmt = select(Knowledge.id).where(
+                Knowledge.user_id == user_id,
+                Knowledge.type == knowledge_type.value,
+            )
+            result = await session.exec(stmt)
+            rows = result.all()
+        out: list[int] = []
+        for row in rows:
+            if row is None:
+                continue
+            rid = row[0] if isinstance(row, tuple) else row
+            out.append(int(rid))
+        return out
+
+    @classmethod
     def _user_knowledge_filters(
-            cls,
-            statement: Any,
-            user_id: int,
-            knowledge_id_extra: List[int] = None,
-            knowledge_type: KnowledgeTypeEnum = None,
-            name: str = None,
-            page: int = 0,
-            limit: int = 0,
-            filter_knowledge: List[int] = None) -> Union[Select, SelectOfScalar]:
+        cls,
+        statement: Any,
+        user_id: int,
+        knowledge_id_extra: list[int] = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        name: str = None,
+        page: int = 0,
+        limit: int = 0,
+        filter_knowledge: list[int] = None,
+    ) -> Union[Select, SelectOfScalar]:
         if knowledge_id_extra:
-            statement = statement.where(
-                or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
+            statement = statement.where(or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
         else:
             statement = statement.where(Knowledge.user_id == user_id)
         if filter_knowledge:
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
-        if knowledge_type:
+        # 使用 is not None：避免 NORMAL=0 被当作「未传类型」而漏掉 type 条件
+        if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
-
-            conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]
+            conditions = [col(Knowledge.name).like(f"%{name}%"), col(Knowledge.description).like(f"%{name}%")]
 
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
@@ -234,165 +312,200 @@ class KnowledgeDao(KnowledgeBase):
         return statement
 
     @classmethod
-    def get_user_knowledge(cls,
-                           user_id: int,
-                           knowledge_id_extra: List[int] = None,
-                           knowledge_type: KnowledgeTypeEnum = None,
-                           name: str = None,
-                           page: int = 0,
-                           limit: int = 10,
-                           filter_knowledge: List[int] = None) -> List[Knowledge]:
+    def get_user_knowledge(
+        cls,
+        user_id: int,
+        knowledge_id_extra: list[int] = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        name: str = None,
+        page: int = 0,
+        limit: int = 10,
+        filter_knowledge: list[int] = None,
+    ) -> list[Knowledge]:
         statement = select(Knowledge)
 
-        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name, page, limit,
-                                                filter_knowledge)
+        statement = cls._user_knowledge_filters(
+            statement, user_id, knowledge_id_extra, knowledge_type, name, page, limit, filter_knowledge
+        )
 
         statement = statement.order_by(Knowledge.update_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_user_knowledge(cls,
-                                  user_id: int,
-                                  knowledge_id_extra: List[int] = None,
-                                  knowledge_type: KnowledgeTypeEnum = None,
-                                  name: str = None,
-                                  sort_by: str = "update_time",
-                                  page: int = 0,
-                                  limit: int = 10,
-                                  filter_knowledge: List[int] = None) -> List[Knowledge]:
+    async def aget_user_knowledge(
+        cls,
+        user_id: int,
+        knowledge_id_extra: list[int] = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        name: str = None,
+        sort_by: str = "update_time",
+        page: int = 0,
+        limit: int = 10,
+        filter_knowledge: list[int] = None,
+        preferred_ids: list[int] | None = None,
+        cursor: Sequence | None = None,
+    ) -> list[Knowledge]:
+        """List user-visible knowledge bases.
+
+        F027: when ``cursor`` is provided, the OFFSET path is bypassed and a
+        keyset WHERE predicate is injected for ``sort_by`` ∈
+        ``{create_time, update_time}``. ``preferred_ids`` pinning is ignored
+        when ``cursor`` is set (pinning is a first-page-only feature).
+        """
         statement = select(Knowledge)
 
-        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name, page, limit,
-                                                filter_knowledge)
+        # When using cursor-based keyset, suppress OFFSET inside _user_knowledge_filters.
+        page_for_filter = 0 if cursor is not None else page
+        statement = cls._user_knowledge_filters(
+            statement, user_id, knowledge_id_extra, knowledge_type, name, page_for_filter, limit, filter_knowledge
+        )
+        if cursor is not None:
+            # Cursor mode: append keyset WHERE and LIMIT only.
+            statement = cls._apply_keyset_where(statement, sort_by, cursor)
+            statement = statement.limit(limit)
 
+        order_clauses = []
+        # Pinning is a first-page-only UX; suppress it when continuing a cursor.
+        if preferred_ids and cursor is None:
+            # Float pinned ids to the top of the global sort so they land on page 1
+            # no matter what sort_by is, then fall back to the requested sort.
+            order_clauses.append(case((Knowledge.id.in_(preferred_ids), 0), else_=1))
         if sort_by == "create_time":
-            statement = statement.order_by(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.id.desc())  # tie-breaker for keyset
         elif sort_by == "update_time":
-            statement = statement.order_by(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.id.desc())
         elif sort_by == "name":
-            statement = statement.order_by(
-                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
-                text('CONVERT(name USING gbk) ASC'),
-            )
+            db_conn = await get_database_connection()
+            order_clauses.extend(name_sort_clauses(db_conn.async_engine.dialect.name))
+        if order_clauses:
+            statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
     @classmethod
-    def count_user_knowledge(cls,
-                             user_id: int,
-                             knowledge_id_extra: List[int] = None,
-                             knowledge_type: KnowledgeTypeEnum = None,
-                             name: str = None) -> int:
+    def _apply_keyset_where(cls, statement, sort_by: str, cursor: Sequence):
+        """F027: inject keyset WHERE for cursor continuation.
+
+        Only valid for sort_by ∈ {create_time, update_time}; name sort uses
+        pseudo-cursor (offset) per AD-15.
+        """
+        from bisheng.database.utils.keyset import build_keyset_where
+
+        if sort_by == "create_time":
+            sort_cols = (Knowledge.create_time, Knowledge.id)
+        elif sort_by == "update_time":
+            sort_cols = (Knowledge.update_time, Knowledge.id)
+        else:
+            # name sort or unknown — cursor mode is invalid; service should
+            # have routed this to the offset path. Defensive no-op.
+            return statement
+        return statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=True))
+
+    @classmethod
+    def count_user_knowledge(
+        cls,
+        user_id: int,
+        knowledge_id_extra: list[int] = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        name: str = None,
+    ) -> int:
         statement = select(func.count(Knowledge.id))
-        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name)
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra, knowledge_type, name)
         with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
-    async def acount_user_knowledge(cls,
-                                    user_id: int,
-                                    knowledge_id_extra: List[int] = None,
-                                    knowledge_type: KnowledgeTypeEnum = None,
-                                    name: str = None) -> int:
+    async def acount_user_knowledge(
+        cls,
+        user_id: int,
+        knowledge_id_extra: list[int] = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        name: str = None,
+    ) -> int:
         statement = select(func.count(Knowledge.id))
-        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name)
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra, knowledge_type, name)
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
-    def count_by_filter(cls, filters: List[Any]) -> int:
+    def count_by_filter(cls, filters: list[Any]) -> int:
         with get_sync_db_session() as session:
             return session.scalar(select(Knowledge.id).where(*filters))
 
     @classmethod
-    def judge_knowledge_permission(cls, user_name: str,
-                                   knowledge_ids: List[int]) -> List[Knowledge]:
+    def judge_knowledge_permission(cls, user_name: str, knowledge_ids: list[int]) -> list[Knowledge]:
+        """Filter knowledge_ids to those the user can read.
+
+        F008 follow-up: delegates to ReBAC via PermissionService instead of
+        the legacy role_access table. Admin still gets the full set; owners
+        and tenant-admin scope are picked up by list_accessible_ids' implicit
+        scope expansion.
         """
-        Based on username and knowledge baseIDList to get a list of knowledge bases that the user has permission to view
-        :param user_name: Username
-        :param knowledge_ids: The knowledge base uponIDVertical
-        :return: Returns a list of knowledge bases that the user has permissions
-        """
-        # get user info
+        if not knowledge_ids:
+            return []
         user_info = UserDao.get_user_by_username(user_name)
         if not user_info:
             return []
 
-        # Query the role the user belongs to
-        role_list = UserRoleDao.get_user_roles(user_info.user_id)
-        if not role_list:
-            return []
+        from bisheng.permission.domain.services.owner_service import _run_async_safe
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.user.domain.services.auth import LoginUser
 
-        role_id_list = []
-        is_admin = False
-        for role in role_list:
-            role_id_list.append(role.role_id)
-            if role.role_id == 1:
-                is_admin = True
-        # admin User has all knowledge base permissions
-        if is_admin:
-            return KnowledgeDao.get_list_by_ids(knowledge_ids)
+        login_user = LoginUser.init_login_user_sync(
+            user_id=user_info.user_id,
+            user_name=user_name,
+        )
+        accessible_ids = _run_async_safe(
+            PermissionService.list_accessible_ids(
+                user_id=login_user.user_id,
+                relation="can_read",
+                object_type="knowledge_library",
+                login_user=login_user,
+            ),
+        )
+        if accessible_ids is None:
+            return cls.get_list_by_ids(knowledge_ids)
 
-        # query role List of knowledge bases with permissions
-        role_access_list = RoleAccessDao.find_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                          AccessType.KNOWLEDGE)
-
-        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                     knowledge_id_extra=[int(access.third_id) for access in
-                                                                         role_access_list],
-                                                     filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+        accessible_set = {int(x) for x in accessible_ids}
+        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
+        return cls.get_list_by_ids(filtered) if filtered else []
 
     @classmethod
-    async def ajudge_knowledge_permission(cls, user_name: str,
-                                          knowledge_ids: List[int]) -> List[Knowledge]:
-        """
-        By Username and Knowledge BaseIDlist, asynchronously get a list of knowledge bases that the user has permission to view
-        Args:
-            user_name:
-            knowledge_ids:
-
-        Returns:
-
-        """
-        # get user info
+    async def ajudge_knowledge_permission(cls, user_name: str, knowledge_ids: list[int]) -> list[Knowledge]:
+        """Async variant of :meth:`judge_knowledge_permission`. Same semantics."""
+        if not knowledge_ids:
+            return []
         user_info = await UserDao.aget_user_by_username(user_name)
         if not user_info:
             return []
-        # Query the role the user belongs to
-        role_list = await UserRoleDao.aget_user_roles(user_info.user_id)
-        if not role_list:
-            return []
-        role_id_list = []
-        is_admin = False
-        for role in role_list:
-            role_id_list.append(role.role_id)
-            if role.role_id == 1:
-                is_admin = True
-        # admin User has all knowledge base permissions
-        if is_admin:
+
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.user.domain.services.auth import LoginUser
+
+        login_user = await LoginUser.init_login_user(
+            user_id=user_info.user_id,
+            user_name=user_name,
+        )
+        accessible_ids = await PermissionService.list_accessible_ids(
+            user_id=login_user.user_id,
+            relation="can_read",
+            object_type="knowledge_library",
+            login_user=login_user,
+        )
+        if accessible_ids is None:
             return await cls.aget_list_by_ids(knowledge_ids)
-        # query role List of knowledge bases with permissions
-        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                                 AccessType.KNOWLEDGE)
-        # Query whether the knowledge base created by the user is included
-        user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
-                                                            knowledge_id_extra=[int(access.third_id) for access in
-                                                                                role_access_list],
-                                                            filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+
+        accessible_set = {int(x) for x in accessible_ids}
+        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
+        return await cls.aget_list_by_ids(filtered) if filtered else []
 
     @classmethod
-    def filter_knowledge_by_ids(cls,
-                                knowledge_ids: List[int],
-                                keyword: str = None,
-                                page: int = 0,
-                                limit: int = 0) -> (List[Knowledge], int):
+    def filter_knowledge_by_ids(
+        cls, knowledge_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0
+    ) -> (list[Knowledge], int):
         """
         Based on keywords and knowledge baseidFilter out the corresponding knowledge base
 
@@ -404,11 +517,11 @@ class KnowledgeDao(KnowledgeBase):
             count_statement = count_statement.where(Knowledge.id.in_(knowledge_ids))
         if keyword:
             statement = statement.where(
-                or_(Knowledge.name.like('%' + keyword + '%'),
-                    Knowledge.description.like('%' + keyword + '%')))
+                or_(Knowledge.name.like("%" + keyword + "%"), Knowledge.description.like("%" + keyword + "%"))
+            )
             count_statement = count_statement.where(
-                or_(Knowledge.name.like('%' + keyword + '%'),
-                    Knowledge.description.like('%' + keyword + '%')))
+                or_(Knowledge.name.like("%" + keyword + "%"), Knowledge.description.like("%" + keyword + "%"))
+            )
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Knowledge.update_time.desc())
@@ -416,15 +529,12 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def generate_all_knowledge_filter(cls,
-                                      statement,
-                                      name: str = None,
-                                      knowledge_type: KnowledgeTypeEnum = None):
-        if knowledge_type:
+    def generate_all_knowledge_filter(cls, statement, name: str = None, knowledge_type: KnowledgeTypeEnum = None):
+        if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
 
         if name:
-            conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]
+            conditions = [col(Knowledge.name).like(f"%{name}%"), col(Knowledge.description).like(f"%{name}%")]
 
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
@@ -436,15 +546,11 @@ class KnowledgeDao(KnowledgeBase):
         return statement
 
     @classmethod
-    def get_all_knowledge(cls,
-                          name: str = None,
-                          knowledge_type: KnowledgeTypeEnum = None,
-                          page: int = 0,
-                          limit: int = 0) -> List[Knowledge]:
+    def get_all_knowledge(
+        cls, name: str = None, knowledge_type: KnowledgeTypeEnum = None, page: int = 0, limit: int = 0
+    ) -> list[Knowledge]:
         statement = select(Knowledge)
-        statement = cls.generate_all_knowledge_filter(statement,
-                                                      name=name,
-                                                      knowledge_type=knowledge_type)
+        statement = cls.generate_all_knowledge_filter(statement, name=name, knowledge_type=knowledge_type)
 
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
@@ -453,68 +559,98 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_all_knowledge(cls,
-                                 name: str = None,
-                                 knowledge_type: KnowledgeTypeEnum = None,
-                                 sort_by: str = "update_time",
-                                 page: int = 0,
-                                 limit: int = 0) -> List[Knowledge]:
+    async def aget_all_knowledge(
+        cls,
+        name: str = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        sort_by: str = "update_time",
+        page: int = 0,
+        limit: int = 0,
+        preferred_ids: list[int] | None = None,
+        cursor: Sequence | None = None,
+    ) -> list[Knowledge]:
+        """Admin/scoped-super-admin path; same cursor semantics as
+        ``aget_user_knowledge`` (F027 AD-15)."""
         statement = select(Knowledge)
-        statement = cls.generate_all_knowledge_filter(statement,
-                                                      name=name,
-                                                      knowledge_type=knowledge_type)
+        statement = cls.generate_all_knowledge_filter(statement, name=name, knowledge_type=knowledge_type)
 
-        if page and limit:
+        if cursor is not None:
+            statement = cls._apply_keyset_where(statement, sort_by, cursor)
+            statement = statement.limit(limit)
+        elif page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+
+        order_clauses = []
+        if preferred_ids and cursor is None:
+            order_clauses.append(case((Knowledge.id.in_(preferred_ids), 0), else_=1))
         if sort_by == "create_time":
-            statement = statement.order_by(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.id.desc())
         elif sort_by == "update_time":
-            statement = statement.order_by(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.id.desc())
         elif sort_by == "name":
-            statement = statement.order_by(
-                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
-                text('CONVERT(name USING gbk) ASC'),
-            )
+            db_conn = await get_database_connection()
+            order_clauses.extend(name_sort_clauses(db_conn.async_engine.dialect.name))
+        if order_clauses:
+            statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
     @classmethod
-    def count_all_knowledge(cls,
-                            name: str = None,
-                            knowledge_type: KnowledgeTypeEnum = None) -> int:
+    def count_all_knowledge(cls, name: str = None, knowledge_type: KnowledgeTypeEnum = None) -> int:
         statement = select(func.count(Knowledge.id))
-        statement = cls.generate_all_knowledge_filter(statement,
-                                                      name=name,
-                                                      knowledge_type=knowledge_type)
+        statement = cls.generate_all_knowledge_filter(statement, name=name, knowledge_type=knowledge_type)
         with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
-    async def acount_all_knowledge(cls,
-                                   name: str = None,
-                                   knowledge_type: KnowledgeTypeEnum = None) -> int:
+    async def acount_all_knowledge(cls, name: str = None, knowledge_type: KnowledgeTypeEnum = None) -> int:
         statement = select(func.count(Knowledge.id))
-        statement = cls.generate_all_knowledge_filter(statement,
-                                                      name=name,
-                                                      knowledge_type=knowledge_type)
+        statement = cls.generate_all_knowledge_filter(statement, name=name, knowledge_type=knowledge_type)
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
-    def update_knowledge_list(cls, knowledge_list: List[Knowledge]):
+    def update_knowledge_list(cls, knowledge_list: list[Knowledge]):
         with get_sync_db_session() as session:
             for knowledge in knowledge_list:
                 session.add(knowledge)
             session.commit()
 
     @classmethod
-    def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
-        """ Get Knowledge Base Details by Knowledge Base Name """
+    def get_knowledge_by_name(
+        cls,
+        name: str,
+        user_id: int = 0,
+        knowledge_type: KnowledgeTypeEnum | int | None = None,
+    ) -> Knowledge | None:
+        """Get a knowledge base by its exact name, owner, and optional type."""
         statement = select(Knowledge).where(Knowledge.name == name)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
+        if knowledge_type is not None:
+            type_value = knowledge_type.value if isinstance(knowledge_type, KnowledgeTypeEnum) else knowledge_type
+            statement = statement.where(Knowledge.type == type_value)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_knowledge_by_name(
+        cls,
+        name: str,
+        user_id: int = 0,
+        knowledge_type: KnowledgeTypeEnum | int | None = None,
+    ) -> Knowledge | None:
+        """Async variant of :meth:`get_knowledge_by_name`."""
+        statement = select(Knowledge).where(Knowledge.name == name)
+        if user_id:
+            statement = statement.where(Knowledge.user_id == user_id)
+        if knowledge_type is not None:
+            type_value = knowledge_type.value if isinstance(knowledge_type, KnowledgeTypeEnum) else knowledge_type
+            statement = statement.where(Knowledge.type == type_value)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
 
     @classmethod
     def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
@@ -538,13 +674,11 @@ class KnowledgeDao(KnowledgeBase):
             await session.commit()
 
     @classmethod
-    def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
-                                    page_size: int = 0) -> List[Knowledge]:
-        """ Get a list of knowledge bases based on the creation timeframe """
-        statement = select(Knowledge).where(
-            Knowledge.create_time >= start_time,
-            Knowledge.create_time < end_time
-        )
+    def get_knowledge_by_time_range(
+        cls, start_time: datetime, end_time: datetime, page: int = 0, page_size: int = 0
+    ) -> list[Knowledge]:
+        """Get a list of knowledge bases based on the creation timeframe"""
+        statement = select(Knowledge).where(Knowledge.create_time >= start_time, Knowledge.create_time < end_time)
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         statement = statement.order_by(col(Knowledge.id).asc())
@@ -552,8 +686,8 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_first_knowledge(cls) -> Optional[Knowledge]:
-        """ Get the first knowledge base """
+    def get_first_knowledge(cls) -> Knowledge | None:
+        """Get the first knowledge base"""
         statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
@@ -561,71 +695,48 @@ class KnowledgeDao(KnowledgeBase):
     # ─── Knowledge Space specific ────────────────────────────────────────────
 
     @classmethod
-    def count_spaces_by_user(cls, user_id: int) -> int:
-        """ Count how many Knowledge Spaces a user has created """
+    def _exclude_department_spaces(cls, statement):
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
+
+        return statement.where(~col(Knowledge.id).in_(select(DepartmentKnowledgeSpace.space_id)))
+
+    @classmethod
+    def count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
+        """Count how many Knowledge Spaces a user has created"""
+        statement = select(func.count(Knowledge.id)).where(
+            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        if exclude_department_spaces:
+            statement = cls._exclude_department_spaces(statement)
         with get_sync_db_session() as session:
-            return session.scalar(
-                select(func.count(Knowledge.id)).where(
-                    Knowledge.user_id == user_id,
-                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
-                )
-            )
+            return session.scalar(statement)
 
     @classmethod
-    async def async_count_spaces_by_user(cls, user_id: int) -> int:
-        """ Async: Count how many Knowledge Spaces a user has created """
+    async def async_count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
+        """Async: Count how many Knowledge Spaces a user has created"""
+        statement = select(func.count(Knowledge.id)).where(
+            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        if exclude_department_spaces:
+            statement = cls._exclude_department_spaces(statement)
         async with get_async_db_session() as session:
-            return await session.scalar(
-                select(func.count(Knowledge.id)).where(
-                    Knowledge.user_id == user_id,
-                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
-                )
-            )
+            return await session.scalar(statement)
 
     @classmethod
-    def get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
-        """ Get all Knowledge Spaces created by a user """
+    def get_spaces_by_user(cls, user_id: int, order_by: str = "update_time") -> list[Knowledge]:
+        """Get all Knowledge Spaces created by a user"""
         statement = select(Knowledge).where(
-            Knowledge.user_id == user_id,
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
         )
         statement = cls._apply_space_order(statement, order_by)
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
-    async def async_get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
-        """ Async: Get all Knowledge Spaces created by a user """
+    async def async_get_spaces_by_user(cls, user_id: int, order_by: str = "update_time") -> list[Knowledge]:
+        """Async: Get all Knowledge Spaces created by a user"""
         statement = select(Knowledge).where(
-            Knowledge.user_id == user_id,
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value
-        )
-        statement = cls._apply_space_order(statement, order_by)
-        async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
-
-    @classmethod
-    def get_spaces_by_ids(cls, space_ids: List[int], order_by: str = 'update_time') -> List[Knowledge]:
-        """ Get Knowledge Spaces by a list of IDs """
-        if not space_ids:
-            return []
-        statement = select(Knowledge).where(
-            Knowledge.id.in_(space_ids),
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value
-        )
-        statement = cls._apply_space_order(statement, order_by)
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
-
-    @classmethod
-    async def async_get_spaces_by_ids(cls, space_ids: List[int], order_by: str = 'update_time') -> List[Knowledge]:
-        """ Async: Get Knowledge Spaces by a list of IDs """
-        if not space_ids:
-            return []
-        statement = select(Knowledge).where(
-            Knowledge.id.in_(space_ids),
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
         )
         statement = cls._apply_space_order(statement, order_by)
         async with get_async_db_session() as session:
@@ -633,27 +744,53 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
-    def get_public_spaces(cls, order_by: str = 'update_time') -> List[Knowledge]:
-        """ Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
+    def get_spaces_by_ids(cls, space_ids: list[int], order_by: str = "update_time") -> list[Knowledge]:
+        """Get Knowledge Spaces by a list of IDs"""
+        if not space_ids:
+            return []
         statement = select(Knowledge).where(
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
+            Knowledge.id.in_(space_ids), Knowledge.type == KnowledgeTypeEnum.SPACE.value
         )
         statement = cls._apply_space_order(statement, order_by)
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
-    async def async_get_public_spaces(cls, keyword: str = None, order_by: str = 'update_time') -> List[Knowledge]:
-        """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
+    async def async_get_spaces_by_ids(cls, space_ids: list[int], order_by: str = "update_time") -> list[Knowledge]:
+        """Async: Get Knowledge Spaces by a list of IDs"""
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids), Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def get_public_spaces(cls, order_by: str = "update_time") -> list[Knowledge]:
+        """Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square)"""
         statement = select(Knowledge).where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            Knowledge.is_released == True,
-            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
+            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_public_spaces(cls, keyword: str = None, order_by: str = "update_time") -> list[Knowledge]:
+        """Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square)"""
+        statement = select(Knowledge).where(
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
+            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
         )
         if keyword:
-            statement = statement.where(or_(Knowledge.name.like(f"%{keyword}%"),
-                                            Knowledge.description.like(f"%{keyword}%")))
+            statement = statement.where(
+                or_(Knowledge.name.like(f"%{keyword}%"), Knowledge.description.like(f"%{keyword}%"))
+            )
         statement = cls._apply_space_order(statement, order_by)
         async with get_async_db_session() as session:
             result = await session.exec(statement)
@@ -661,7 +798,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def update_space(cls, space: Knowledge) -> Knowledge:
-        """ Persist an updated Knowledge Space record """
+        """Persist an updated Knowledge Space record"""
         with get_sync_db_session() as session:
             session.add(space)
             session.commit()
@@ -670,7 +807,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     async def async_update_space(cls, space: Knowledge) -> Knowledge:
-        """ Async: Persist an updated Knowledge Space record """
+        """Async: Persist an updated Knowledge Space record"""
         async with get_async_db_session() as session:
             session.add(space)
             await session.commit()
@@ -679,12 +816,12 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     async def async_get_public_spaces_paginated(
-            cls,
-            user_id: int,
-            keyword: Optional[str] = None,
-            page: int = 1,
-            page_size: int = 20,
-    ) -> List[Tuple[Any, ...]]:
+        cls,
+        user_id: int,
+        keyword: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[tuple[Any, ...]]:
         """
         Paginated query of released public/approval spaces for the Knowledge Square.
         Uses multi-table LEFT JOIN:
@@ -694,16 +831,21 @@ class KnowledgeDao(KnowledgeBase):
         (Knowledge, user_subscription_status, user_subscription_update_time, subscriber_count)
         """
         from bisheng.common.models.space_channel_member import (
-            SpaceChannelMember, BusinessTypeEnum, MembershipStatusEnum, REJECTED_STATUS_DISPLAY_WINDOW,
+            REJECTED_STATUS_DISPLAY_WINDOW,
+            BusinessTypeEnum,
+            MembershipStatusEnum,
+            SpaceChannelMember,
         )
 
         rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
+
+        kid_str = col(Knowledge.id).cast(String)
 
         # Subquery: count subscribers (status=ACTIVE) per space
         subscriber_subq = (
             select(
                 SpaceChannelMember.business_id,
-                func.count().label('subscriber_count'),
+                func.count().label("subscriber_count"),
             )
             .where(
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -717,30 +859,30 @@ class KnowledgeDao(KnowledgeBase):
         query = (
             select(
                 Knowledge,
-                SpaceChannelMember.status.label('user_subscription_status'),
-                SpaceChannelMember.update_time.label('user_subscription_update_time'),
-                func.coalesce(subscriber_subq.c.subscriber_count, 0).label('subscriber_count'),
+                SpaceChannelMember.status.label("user_subscription_status"),
+                SpaceChannelMember.update_time.label("user_subscription_update_time"),
+                func.coalesce(subscriber_subq.c.subscriber_count, 0).label("subscriber_count"),
             )
             .outerjoin(
                 SpaceChannelMember,
-                (collate(col(Knowledge.id).cast(String), 'utf8mb4_unicode_ci') == SpaceChannelMember.business_id)
+                (kid_str == SpaceChannelMember.business_id)
                 & (SpaceChannelMember.business_type == BusinessTypeEnum.SPACE)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(
                 subscriber_subq,
-                collate(col(Knowledge.id).cast(String), 'utf8mb4_unicode_ci') == subscriber_subq.c.business_id,
+                kid_str == subscriber_subq.c.business_id,
             )
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released == True,
+                Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )
 
         # Keyword filter
         if keyword:
-            like_pattern = f'%{keyword}%'
+            like_pattern = f"%{keyword}%"
             query = query.where(
                 or_(
                     Knowledge.name.like(like_pattern),
@@ -772,20 +914,20 @@ class KnowledgeDao(KnowledgeBase):
             return list(result.all())
 
     @classmethod
-    async def async_count_public_spaces(cls, keyword: Optional[str] = None) -> int:
+    async def async_count_public_spaces(cls, keyword: str | None = None) -> int:
         """Count total released public/approval spaces matching the keyword filter."""
         query = (
             select(func.count())
             .select_from(Knowledge)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released == True,
+                Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )
 
         if keyword:
-            like_pattern = f'%{keyword}%'
+            like_pattern = f"%{keyword}%"
             query = query.where(
                 or_(
                     Knowledge.name.like(like_pattern),
@@ -798,9 +940,9 @@ class KnowledgeDao(KnowledgeBase):
 
     @staticmethod
     def _apply_space_order(statement, order_by: str):
-        if order_by == 'create_time':
+        if order_by == "create_time":
             return statement.order_by(Knowledge.create_time.desc())
-        elif order_by == 'name':
+        elif order_by == "name":
             return statement.order_by(Knowledge.name.asc())
         else:
             return statement.order_by(Knowledge.update_time.desc())

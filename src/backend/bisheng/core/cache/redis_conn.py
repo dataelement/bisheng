@@ -41,11 +41,11 @@ class RedisClient:
             hosts = [eval(x) for x in redis_conf.pop('sentinel_hosts')]
             password = redis_conf.pop('sentinel_password', None)
             master = redis_conf.pop('sentinel_master')
-            sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
-            async_sentinel = AsyncSentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
+            sentinel = Sentinel(sentinels=hosts, sentinel_kwargs={'password': password})
+            async_sentinel = AsyncSentinel(sentinels=hosts, sentinel_kwargs={'password': password})
             # Get the connection of the master node
-            self.connection = sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
-            self.async_connection: AsyncRedis = async_sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
+            self.connection = sentinel.master_for(master, **redis_conf)
+            self.async_connection: AsyncRedis = async_sentinel.master_for(master, **redis_conf)
 
         else:
             # Singleplayer Mode
@@ -342,6 +342,22 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             await self.async_connection.expire(key, expiration)
+        except Exception as e:
+            raise e
+
+    async def attl(self, key) -> int:
+        """Return the remaining TTL of ``key`` in seconds.
+
+        Mirrors ``redis-py`` semantics:
+          - positive int: seconds until expiry
+          - -1: key exists with no TTL
+          - -2: key does not exist
+        Used by F019 ``TenantScopeService.get_scope`` to report accurate
+        ``expires_at`` to the UI.
+        """
+        try:
+            await self.acluster_nodes(key)
+            return await self.async_connection.ttl(key)
         except Exception as e:
             raise e
 

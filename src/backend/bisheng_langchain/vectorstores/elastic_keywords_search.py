@@ -7,13 +7,13 @@ from abc import ABC
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import jieba.analyse
-from langchain.chains.llm import LLMChain
-from langchain.docstore.document import Document
-from langchain.embeddings.base import Embeddings
-from langchain.llms.base import BaseLLM
-from langchain.prompts.prompt import PromptTemplate
-from langchain.utils import get_from_dict_or_env
-from langchain.vectorstores.base import VectorStore
+from langchain_classic.chains.llm import LLMChain
+from langchain_classic.docstore.document import Document
+from langchain_classic.embeddings.base import Embeddings
+from langchain_classic.llms.base import BaseLLM
+from langchain_classic.prompts.prompt import PromptTemplate
+from langchain_classic.utils import get_from_dict_or_env
+from langchain_classic.vectorstores.base import VectorStore
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -285,7 +285,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             .. code-block:: python
 
                 from langchain import ElasticKeywordsSearch
-                from langchain.embeddings import OpenAIEmbeddings
+                from langchain_classic.embeddings import OpenAIEmbeddings
                 embeddings = OpenAIEmbeddings()
                 elastic_vector_search = ElasticKeywordsSearch.from_texts(
                     texts,

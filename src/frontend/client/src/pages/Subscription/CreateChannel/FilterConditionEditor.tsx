@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { RefreshCcw, SquarePlus } from "lucide-react";
+import { RefreshCcw, SquarePlus, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -107,17 +107,32 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
         }
     };
 
+    const removeKeyword = (idx: number) => {
+        onChange(keywords.filter((_, i) => i !== idx));
+    };
+
     return (
         <div
-            className="min-h-[32px] w-full rounded-[6px] border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#165DFF] focus-within:ring-2 focus-within:ring-[#165DFF]/20"
+            className="min-h-[32px] w-full rounded-[6px] border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#DDDDDD] focus-within:ring-2 focus-within:ring-[#F1F5F9]"
             onClick={() => inputRef.current?.focus()}
         >
             {keywords.map((kw, idx) => (
                 <span
                     key={`${kw}-${idx}`}
-                    className="inline-flex items-center rounded-[4px] bg-[#F2F3F5] px-[8px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px] truncate"
+                    className="inline-flex items-center gap-[2px] rounded-[4px] bg-[#F2F3F5] pl-[8px] pr-[4px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px]"
                 >
-                    {kw}
+                    <span className="truncate">{kw}</span>
+                    <X
+                        className="size-3 shrink-0 cursor-pointer text-[#86909C] hover:text-[#4E5969]"
+                        onMouseDown={(e) => {
+                            // Keep the input focused so the tag row doesn't lose focus-within styling.
+                            e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            removeKeyword(idx);
+                        }}
+                    />
                 </span>
             ))}
             <input
@@ -238,7 +253,7 @@ export function FilterConditionEditor({
                 <>
                     <button
                         type="button"
-                        className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-[26px] text-[12px] leading-[20px] text-[#666] cursor-pointer hover:text-[#165DFF] transition-colors whitespace-nowrap"
+                        className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-[26px] text-[12px] leading-[20px] text-[#666] cursor-pointer hover:text-blue-500 transition-colors whitespace-nowrap"
                         onClick={toggleRelation}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
@@ -251,7 +266,7 @@ export function FilterConditionEditor({
                         <span className="transition-opacity group-hover/btn:opacity-0">
                             {relationLabel}
                         </span>
-                        <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none text-[#165DFF]" />
+                        <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none text-blue-500" />
                     </button>
                     {/* 连接线（包住所有条件行） */}
                     <div className="pointer-events-none absolute left-[25px] top-[14px] bottom-[14px] w-[9px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
@@ -274,7 +289,7 @@ export function FilterConditionEditor({
                                     className={cn(
                                         "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         cond.include
-                                            ? "bg-[#335CFF26] text-[#335CFF] font-medium"
+                                            ? "bg-blue-500/15 text-blue-500 font-medium"
                                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
                                     )}
                                 >
@@ -286,7 +301,7 @@ export function FilterConditionEditor({
                                     className={cn(
                                         "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         !cond.include
-                                            ? "bg-[#335CFF26] text-[#335CFF] font-medium"
+                                            ? "bg-blue-500/15 text-blue-500 font-medium"
                                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
                                     )}
                                 >

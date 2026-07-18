@@ -1,34 +1,96 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
 import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { checkPermission } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
+import store from "~/store";
 import ChatView from "./ChatView";
-import { chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
+import { appConversationsState } from "./store/appSidebarAtoms";
+import { chatApiVersionState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
 import { AppLostMessage } from "./useWebsocket";
 
 const API_VERSION = 'v1';
+const TRAFFIC_LIMIT_ERROR_CODES = new Set([429, 503, 12045]);
+
+const getInitialChatError = (res: any) => {
+    const code = Number(res?.status_code);
+    if (TRAFFIC_LIMIT_ERROR_CODES.has(code)) {
+        return { code: String(code), data: res?.data ?? null };
+    }
+    return { code: AppLostMessage, data: null };
+};
+
 export const enum FLOW_TYPES {
     WORK_FLOW = 10,
     ASSISTANT = 5,
     SKILL = 1,
 }
 
-export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '' }) {
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '', isGuestMode = false }) {
     const { conversationId: _cid, fid: _fid, type: _type } = useParams();
     const cid = _cid || chatId;
     const fid = _fid || flowId;
     const type = _type || flowType;
+    const effectiveApiVersion = apiVersion || API_VERSION;
     const [readOnly] = useState(shareToken);
+    const setApiVersion = useRecoilState(chatApiVersionState)[1];
+
+    // Sync apiVersion into Recoil so useChatHelpers picks up v2 WS URLs
+    useEffect(() => {
+        setApiVersion(effectiveApiVersion as 'v1' | 'v2');
+        return () => { setApiVersion('v1'); };
+    }, [effectiveApiVersion, setApiVersion]);
     const [chats, setChats] = useRecoilState(chatsState)
     const [__, setRunningState] = useRecoilState(runningState)
     const [_, setChatId] = useRecoilState(chatIdState)
     const chatState = useRecoilValue(currentChatState)
+    const conversations = useRecoilValue(appConversationsState);
+    const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
+    const localize = useLocalize();
     const build = useBuild()
     const navigate = useNavigate()
     const { showToast } = useToastContext()
+
+    const flow = chatState?.flow;
+    const headerTitleForMobile = useMemo(() => {
+        if (!cid) return localize("com_ui_new_chat");
+        const activeConversation = conversations.find((item) => item.id === cid);
+        return (
+            [activeConversation?.title, flow?.name]
+                .map((item) => String(item || "").trim())
+                .find(Boolean) || localize("com_ui_new_chat")
+        );
+    }, [cid, conversations, flow?.name, localize]);
+
+    const hideShareForMobile = flow?.can_share !== true;
+
+    // flow 尚未写入 Recoil 时 ChatView 不会挂载，但 AppRoot 的 MobileNav 仍需要标题（与桌面 HeaderTitle 同源字段）
+    useEffect(() => {
+        if (!cid || !fid || !type) return;
+        setChatMobileHeader({
+            title: headerTitleForMobile,
+            conversationId: cid,
+            flowId: flow?.id || String(fid),
+            flowType: Number(flow?.flow_type ?? type) || 15,
+            readOnly: !!readOnly,
+            hideShare: hideShareForMobile,
+        });
+        return () => setChatMobileHeader(null);
+    }, [
+        cid,
+        fid,
+        type,
+        flow?.id,
+        flow?.flow_type,
+        headerTitleForMobile,
+        readOnly,
+        hideShareForMobile,
+        setChatMobileHeader,
+    ]);
 
     // console.log('[chatState] :>> ', chatState);
     // console.log('[runningState] :>> ', __);
@@ -39,11 +101,23 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
         const currentData = chats[cid]
-        let error = { code: '', data: null }
+        let error: { code: string; data: any } = { code: '', data: null }
 
         setChatId(cid!) // 切换会话
 
         const numericType = Number(type);
+        const ensureUseAppPermission = async (objectType: "workflow" | "assistant") => {
+            if (shareToken || isGuestMode) return true;
+            const permission = await checkPermission(objectType, fid!, "can_read", "use_app")
+                .catch(() => ({ allowed: false }));
+            if (permission?.allowed) return true;
+            showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+            navigate('/apps', { replace: true });
+            return false;
+        };
+
+        if (numericType === FLOW_TYPES.WORK_FLOW && !(await ensureUseAppPermission("workflow"))) return;
+        if (numericType === FLOW_TYPES.ASSISTANT && !(await ensureUseAppPermission("assistant"))) return;
 
         if (currentData) { // 有缓存不重复加载
             numericType === FLOW_TYPES.SKILL && setRunningState((prev) => {
@@ -67,8 +141,8 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             case FLOW_TYPES.WORK_FLOW:
                 // Fetch detail and chat history, skip global 403 redirect
                 const [flowRes, msgRes] = await Promise.all([
-                    getFlowApi(fid!, API_VERSION, shareToken, true),
-                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
+                    getFlowApi(fid!, effectiveApiVersion, shareToken, true),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken, apiVersion: effectiveApiVersion })
                 ])
 
                 // Handle 403: no permission, redirect to app center
@@ -79,7 +153,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 }
 
                 if (flowRes.status_code !== 200) {
-                    error = { code: AppLostMessage, data: null }
+                    error = getInitialChatError(flowRes)
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
                         id: lostFlow.data.flow_id,
@@ -109,8 +183,8 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             case FLOW_TYPES.ASSISTANT:
                 // Fetch assistant detail, skip global 403 redirect
                 const [assistantRes, historyRes] = await Promise.all([
-                    getAssistantDetailApi(fid, shareToken, true),
-                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
+                    getAssistantDetailApi(fid, shareToken, true, effectiveApiVersion),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken, apiVersion: effectiveApiVersion })
                 ]);
 
                 // Handle 403: no permission, redirect to app center
@@ -121,7 +195,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 }
 
                 if (assistantRes.status_code !== 200) {
-                    error = { code: AppLostMessage, data: null };
+                    error = getInitialChatError(assistantRes);
                     const lostFlow = await getDeleteFlowApi(cid)
                     assistantRes.data = {
                         name: lostFlow.data.flow_name,
@@ -173,7 +247,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} cid={cid} v={API_VERSION} readOnly={readOnly} />
+    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} isGuestMode={isGuestMode} />
 };
 
 /**

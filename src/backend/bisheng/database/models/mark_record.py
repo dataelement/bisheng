@@ -3,12 +3,14 @@ from enum import Enum
 from typing import List, Optional
 
 # if TYPE_CHECKING:
-from sqlalchemy import Column, DateTime, delete, text
+from sqlalchemy import Column, DateTime, Integer, delete, text
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
 
+
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 class MarkRecordStatus(Enum):
     DEFAULT = 1
@@ -24,10 +26,15 @@ class MarkRecordBase(SQLModelSerializable):
     task_id: int = Field(index=True)
     session_id: str = Field(index=True)
     status: int = Field(index=False, default=1)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class MarkRecord(MarkRecordBase, table=True):

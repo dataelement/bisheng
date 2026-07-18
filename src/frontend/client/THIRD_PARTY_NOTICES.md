@@ -1,0 +1,41 @@
+# Third-Party Notices
+
+This application (`bishengchat`, the BiSheng end-user chat UI) is derived from
+**LibreChat** (https://github.com/danny-avila/LibreChat), which is distributed
+under the MIT License. Portions of this codebase are based on or copied from
+LibreChat and remain subject to the MIT License terms reproduced below.
+
+The MIT copyright and permission notice is retained here in accordance with the
+MIT License requirements.
+
+---
+
+## LibreChat
+
+- Project: LibreChat
+- Homepage: https://github.com/danny-avila/LibreChat
+- License: MIT
+
+```
+MIT License
+
+Copyright (c) 2026 LibreChat
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

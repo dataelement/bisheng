@@ -13,21 +13,22 @@ import {
 import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
-import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Shield, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import LoadMore from "../../components/bs-comp/loadMore";
 import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useTable } from "../../util/hook";
+import { useInfiniteCursorTable } from "../../util/hook";
 import { useModel } from "../ModelPage/manage";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 
@@ -39,6 +40,12 @@ const enum KnowledgeBaseStatus {
     Rebuilding = 3,  // Document knowledge base rebuilding status
     Failed = 4       // Document knowledge base rebuild failed status
 }
+
+const KB_MANAGE_PERMISSION_IDS = [
+    'manage_kb_owner',
+    'manage_kb_manager',
+    'manage_kb_viewer',
+]
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation('knowledge')
@@ -144,6 +151,11 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 
         if (descRef.current.value && desc.length > 200) {
             handleError(t('lib.descriptionLimit', { ns: 'bs' }));
+            return;
+        }
+
+        if (mode === 'create' && !modelId) {
+            handleError(t('lib.selectModel', { ns: 'bs' }));
             return;
         }
 
@@ -322,10 +334,44 @@ export default function KnowledgeFile() {
     // New: Control Select dropdown state to avoid occasional popup issues
     const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
     const [modalKey, setModalKey] = useState(0); // New: Used to force re-render of modal
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileLibDatabase({ ...param, name: param.keyword })
+    // F027: cursor-based infinite scroll; no `total` / `page` anymore.
+    const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
+        { cancelLoadingWhenReload: true },
+        (param) =>
+            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, permissionId: 'view_kb' }),
     )
+
+    // Permission levels for badge display
+    // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
+    const visibleLibs = datalist;
+    const hasListPermission = (el: any, permissionId: string) =>
+        Array.isArray(el.permission_ids) && el.permission_ids.includes(permissionId);
+    const canEdit = (el: any) =>
+        hasListPermission(el, 'edit_kb');
+    const canDelete = (el: any) =>
+        hasListPermission(el, 'delete_kb');
+    // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
+    const canCreateLibrary =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_knowledge');
+    const canReadRow = (el: any) =>
+        hasListPermission(el, 'view_kb');
+    /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
+    const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
+    const canManageKb = (el: any) =>
+        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasListPermission(el, permissionId));
+    const isLibraryBusy = (el: any) =>
+        [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
+    const canCopy = (el: any) =>
+        canUseCopy(el) && el.state === KnowledgeBaseStatus.Published;
+    const hasRowActions = (el: any) =>
+        canManageKb(el) || canCopy(el) || canEdit(el) || canDelete(el);
+    const showOperationsColumn = visibleLibs.some((el: any) => isLibraryBusy(el) || hasRowActions(el));
 
     // Enable polling during copying
     useEffect(() => {
@@ -398,19 +444,19 @@ export default function KnowledgeFile() {
         }
     };
 
-    // Cache page before entering detail page, temporary solution
+    // Cache the active tab hint before entering detail; the parent's
+    // ``defaultValue`` reads ``LibPage.type`` to restore the file/qa tab.
+    // F027: ``page`` is now an opaque cursor token, not restorable, so we
+    // only persist the type marker.
     const handleCachePage = () => {
-        window.LibPage = { page, type: 'file' }
+        window.LibPage = { type: 'file' }
     }
 
     useEffect(() => {
-        const _page = window.LibPage
-        if (_page) {
-            setPage(_page.page);
-            delete window.LibPage
-        } else {
-            setPage(1);
-        }
+        // F027: ``useInfiniteCursorTable`` auto-loads page 1 on mount; we no
+        // longer try to restore a specific page on return from detail. Just
+        // drop the marker so subsequent navigations get a fresh first page.
+        delete window.LibPage;
     }, [])
 
     const { t, i18n } = useTranslation('knowledge');
@@ -467,10 +513,10 @@ export default function KnowledgeFile() {
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
-            <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
+            <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>
+                    {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
                 <Table noScroll>
                     <TableHeader>
@@ -478,15 +524,18 @@ export default function KnowledgeFile() {
                             <TableHead>{t('lib.libraryName', { ns: 'bs' })}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead>{t('lib.createUser', { ns: 'bs' })}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
+                            {showOperationsColumn && (
+                                <TableHead className="text-right">{t('operations')}</TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {datalist.map((el: any) => (
+                        {visibleLibs.map((el: any) => (
                             <TableRow
                                 key={el.id}
                                 className=""
                                 onClick={() => {
+                                    if (!canReadRow(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/${el.id}`);
@@ -501,7 +550,7 @@ export default function KnowledgeFile() {
                                             <BookIcon className="text-primary size-10" />
                                         </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
                                                 {el.name}
                                             </div>
                                             <Tip
@@ -528,13 +577,13 @@ export default function KnowledgeFile() {
                                     <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                                 </TableCell>
 
-                                <TableCell className="text-right">
+                                {showOperationsColumn && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <Select
+                                        {(isLibraryBusy(el) || hasRowActions(el)) && <Select
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
-                                                if (el.state === 2 || el.state === 0) return;
+                                                if (isLibraryBusy(el) || !hasRowActions(el)) return;
                                                 if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {
@@ -547,14 +596,19 @@ export default function KnowledgeFile() {
                                                 console.log("Selected value:", selectedValue, "for lib:", el.id);
 
                                                 switch (selectedValue) {
+                                                    case 'permission':
+                                                        setPermTarget({ id: String(el.id), name: el.name });
+                                                        setPermDialogOpen(true);
+                                                        setModalKey(prev => prev + 1);
+                                                        break;
                                                     case 'copy':
-                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
+                                                        canCopy(el) && handleCopy(el);
                                                         break;
                                                     case 'set':
-                                                        handleOpenSettings(el);
+                                                        canEdit(el) && handleOpenSettings(el);
                                                         break;
                                                     case 'delete':
-                                                        el.copiable && handleDelete(el.id);
+                                                        canDelete(el) && handleDelete(el.id);
                                                         break;
                                                 }
                                             }}
@@ -575,33 +629,38 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                                    hasRowActions(el) && <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                                 )}
                                             </SelectTrigger>
-                                            <SelectContent
+                                            {hasRowActions(el) && <SelectContent
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
                                                 className="z-50 overflow-visible"
                                             >
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                {canManageKb(el) && (
+                                                    <SelectItem showIcon={false} value="permission">
+                                                        <div className="flex gap-2 items-center">
+                                                            <Shield className="w-4 h-4" />
+                                                            {t('managePermission', { ns: 'permission' })}
+                                                        </div>
+                                                    </SelectItem>
+                                                )}
+                                                {canCopy(el) && (
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                        disabled={copyLoadingId === el.id}
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
                                                             {t('lib.copy', { ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                )}
+                                                {canEdit(el) && (
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!el.copiable}
-                                                        className="data-[disabled]:pointer-events-auto"
                                                         showIcon={false}
                                                     >
                                                         <div className="flex gap-2 items-center">
@@ -609,38 +668,35 @@ export default function KnowledgeFile() {
                                                             {t('settings')}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                )}
+                                                {canDelete(el) && (
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
-                                                        className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!el.copiable}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />
                                                             {t('delete')}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                            </SelectContent>
-                                        </Select>
+                                                )}
+                                            </SelectContent>}
+                                        </Select>}
                                     </div>
-                                </TableCell>
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
+                {/* F027: infinite-scroll trigger lives INSIDE the
+                    `overflow-y-auto` scroll container so IntersectionObserver
+                    tracks in-container scroll. Outside-container placement
+                    keeps the footer always-visible and stalls pagination. */}
+                {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
-                <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                <div>
-                    <AutoPagination
-                        page={page}
-                        pageSize={pageSize}
-                        total={total}
-                        onChange={(newPage) => setPage(newPage)}
-                    />
+                <div className="flex items-center gap-2">
+                    <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
                 </div>
             </div>
 
@@ -663,6 +719,17 @@ export default function KnowledgeFile() {
                     onLoadEnd={reload}
                     mode="edit"
                     currentLib={currentSettingLib}
+                />
+            )}
+
+            {/* Permission management dialog */}
+            {permTarget && (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="knowledge_library"
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
                 />
             )}
         </div>

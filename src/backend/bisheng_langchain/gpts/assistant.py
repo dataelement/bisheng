@@ -6,7 +6,7 @@ import httpx
 import yaml
 from bisheng_langchain.gpts.load_tools import get_all_tool_names, load_tools
 from bisheng_langchain.gpts.utils import import_by_type, import_class
-from langchain.tools import BaseTool
+from langchain_classic.tools import BaseTool
 from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableBinding
@@ -72,8 +72,8 @@ class BishengAssistant:
         if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
             llm_params.pop('type')
             llm = llm_object(
-                http_client=httpx.Client(proxies=llm_params['openai_proxy']),
-                http_async_client=httpx.AsyncClient(proxies=llm_params['openai_proxy']),
+                http_client=httpx.Client(proxy=llm_params['openai_proxy']),
+                http_async_client=httpx.AsyncClient(proxy=llm_params['openai_proxy']),
                 **llm_params,
             )
         else:

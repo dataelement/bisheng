@@ -24,11 +24,27 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         pass
 
     @abstractmethod
+    async def find_public_recommend_channels(
+        self, user_id: int, candidate_limit: int = 100
+    ) -> List[Tuple[Any, ...]]:
+        """
+        Find released PUBLIC channels for the home-page discovery carousel.
+        Same tuple shape as find_square_channels, restricted to visibility=PUBLIC and
+        capped at candidate_limit (unpaginated). Caller re-sorts by ES article count.
+        """
+        pass
+
+    @abstractmethod
     async def count_square_channels(self, keyword: Optional[str] = None) -> int:
         """Count total released channels matching the keyword filter."""
         pass
 
     @abstractmethod
-    async def find_channels_by_source_id(self, source_id: str) -> List[Channel]:
-        """Find channels whose source_list contains the specified source_id."""
+    async def find_all_referenced_source_ids(self) -> set[str]:
+        """Return the union of all source_ids referenced by any channel in the current tenant.
+
+        This is the desired-subscription set used by the daily reconcile. It reads the
+        source_list JSON column of every channel and unions the ids in Python — no
+        JSON_CONTAINS / JSON_EXTRACT, so it stays DM8-compatible.
+        """
         pass

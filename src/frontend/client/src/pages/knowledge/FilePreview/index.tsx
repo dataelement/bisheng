@@ -17,6 +17,7 @@ import { PdfViewer } from "./viewers/PdfViewer";
 import { TextViewer } from "./viewers/TextViewer";
 import { XlsxViewer } from "./viewers/XlsxViewer";
 import { useLocalize } from "~/hooks";
+import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
 
 export interface FilePreviewProps {
     /** File display name (with extension) */
@@ -29,6 +30,27 @@ export interface FilePreviewProps {
     actions?: React.ReactNode;
     /** True when pptx-to-pdf conversion failed on the backend */
     conversionFailed?: boolean;
+    /** Optional PDF highlight boxes in original PDF coordinates. */
+    highlightBboxes?: CitationPdfBBox[];
+    /** Optional PDF box to scroll into view. */
+    targetBBox?: CitationPdfBBox | null;
+    /** Render viewer-only layout (hide top toolbar and sidebar controls). */
+    compactMode?: boolean;
+    /** Hide the TopBar header entirely while keeping the full preview controls
+     *  (sidebar/zoom/pagination). Used by the mobile bare-preview layout where the
+     *  header is replaced by floating controls. */
+    hideHeader?: boolean;
+    /** Hide the left thumbnail sidebar entirely (e.g. the mobile bare-preview
+     *  layout, where the page-thumbnail panel has no room and isn't wanted). */
+    hideSidebar?: boolean;
+    /** Whether to expose download actions. */
+    allowDownload?: boolean;
+    /** Suppress the TopBar's built-in download button (the caller renders its own,
+     *  e.g. inside a More dropdown). The unsupported-format CTA stays gated by
+     *  `allowDownload`. */
+    hideHeaderDownload?: boolean;
+    /** Optional business-level download handler. Defaults to downloading fileUrl. */
+    onDownloadFile?: () => void;
 }
 
 export default function FilePreview({
@@ -37,12 +59,23 @@ export default function FilePreview({
     fileUrl,
     actions,
     conversionFailed = false,
+    highlightBboxes = [],
+    targetBBox = null,
+    compactMode = false,
+    hideHeader = false,
+    hideSidebar = false,
+    allowDownload = true,
+    hideHeaderDownload = false,
+    onDownloadFile,
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
-    const hasSidebar = supportsSidebar(viewerType);
-    const hasPagination = supportsPagination(viewerType);
-    const hasZoom = supportsZoom(viewerType);
+    const hasSidebar = !compactMode && !hideSidebar && supportsSidebar(viewerType);
+    const hasPagination = !compactMode && supportsPagination(viewerType);
+    const hasZoom = !compactMode && supportsZoom(viewerType);
+    // Suppress the TopBar header without dropping into compactMode (which also
+    // strips sidebar/zoom/pagination). `showHeader` gates every header render below.
+    const showHeader = !compactMode && !hideHeader;
 
     // --- PDF-specific state ---
     const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -103,6 +136,10 @@ export default function FilePreview({
     }, []);
 
     const handleDownload = useCallback(() => {
+        if (onDownloadFile) {
+            onDownloadFile();
+            return;
+        }
         const link = document.createElement("a");
         link.href = fileUrl;
         link.download = fileName;
@@ -110,22 +147,26 @@ export default function FilePreview({
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-    }, [fileName, fileUrl]);
+    }, [fileName, fileUrl, onDownloadFile]);
+
+    const topBarDownload = allowDownload && !hideHeaderDownload ? handleDownload : undefined;
 
     // Unsupported format
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />
+                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
                         <p className="text-lg">{localize("com_knowledge.unsupported_format_prefix")}{fileType}{localize("com_knowledge.unsupported_format_suffix")}</p>
-                        <button
-                            onClick={handleDownload}
-                            className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
-                        >
-                            {localize("com_knowledge.download_file")}</button>
+                        {allowDownload && (
+                            <button
+                                onClick={handleDownload}
+                                className="btn-brand-primary px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
+                            >
+                                {localize("com_knowledge.download_file")}</button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -136,15 +177,17 @@ export default function FilePreview({
     if (conversionFailed) {
         return (
             <div className="w-full h-full flex flex-col">
-                <TopBar
-                    fileName={fileName}
-                    showZoom={true}
-                    zoomLevel={zoomLevel}
-                    onZoomIn={handleZoomIn}
-                    onZoomOut={handleZoomOut}
-                    onDownload={fileUrl ? handleDownload : undefined}
-                    actions={actions}
-                />
+                {showHeader && (
+                    <TopBar
+                        fileName={fileName}
+                        showZoom={true}
+                        zoomLevel={zoomLevel}
+                        onZoomIn={handleZoomIn}
+                        onZoomOut={handleZoomOut}
+                        onDownload={fileUrl ? topBarDownload : undefined}
+                        actions={actions}
+                    />
+                )}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-5xl">📄</div>
@@ -159,7 +202,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />
+                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-4xl">📄</div>
@@ -179,6 +222,8 @@ export default function FilePreview({
                         pdfDoc={pdfDoc}
                         zoomLevel={zoomLevel}
                         targetPage={targetPage}
+                        highlightBboxes={highlightBboxes}
+                        targetBBox={targetBBox}
                         onCurrentPageChange={handleCurrentPageChange}
                     />
                 );
@@ -201,22 +246,24 @@ export default function FilePreview({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden">
-            <TopBar
-                fileName={fileName}
-                showSidebar={hasSidebar}
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-                showZoom={hasZoom}
-                zoomLevel={zoomLevel}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                showPagination={hasPagination}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onDownload={handleDownload}
-                actions={actions}
-            />
+            {showHeader && (
+                <TopBar
+                    fileName={fileName}
+                    showSidebar={hasSidebar}
+                    sidebarOpen={sidebarOpen}
+                    onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                    showZoom={hasZoom}
+                    zoomLevel={zoomLevel}
+                    onZoomIn={handleZoomIn}
+                    onZoomOut={handleZoomOut}
+                    showPagination={hasPagination}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                    onDownload={topBarDownload}
+                    actions={actions}
+                />
+            )}
             <div className="flex flex-1 min-h-0">
                 {hasSidebar && (
                     <Sidebar

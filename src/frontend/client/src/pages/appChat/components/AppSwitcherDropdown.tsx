@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/comp
 import { cn } from '~/utils';
 import AppAvator from '~/components/Avator';
 import { useAppSwitcher } from '~/pages/appChat/hooks/useAppSwitcher';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useScrollRevealRef } from '~/hooks';
 
 /**
  * App switcher dropdown built with Popover + custom search input.
@@ -13,6 +13,7 @@ import { useLocalize } from '~/hooks';
  */
 export function AppSwitcherDropdown() {
   const localize = useLocalize();
+  const appListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const {
     allApps,
     searchQuery,
@@ -28,7 +29,7 @@ export function AppSwitcherDropdown() {
   const trigger = (
     <button
       disabled={disabled}
-      className="p-1 text-gray-400 hover:text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      className="p-1 text-gray-400 transition-colors fine-pointer:hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
     >
       <ArrowLeftRight size={14} />
     </button>
@@ -56,7 +57,7 @@ export function AppSwitcherDropdown() {
       >
         {/* Search input */}
         <div className="px-[12px] pt-[12px] pb-[8px] shrink-0">
-          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-[6px] focus-within:border-[#335cff] transition-colors">
+          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-[6px] focus-within:border-[#DDDDDD] focus-within:shadow-[0_0_0_2px_#F1F5F9] transition-[border-color,box-shadow]">
             <Search size={14} className="text-[#a9aeb8] shrink-0" />
             <input
               value={searchQuery}
@@ -69,7 +70,10 @@ export function AppSwitcherDropdown() {
         </div>
 
         {/* App list */}
-        <div className="flex-1 overflow-y-auto scrollbar-on-hover px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]">
+        <div
+          ref={appListScrollRevealRef}
+          className="flex-1 overflow-y-auto scrollbar-on-scroll px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]"
+        >
           {loading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 size={16} className="animate-spin text-gray-400" />
@@ -88,7 +92,7 @@ export function AppSwitcherDropdown() {
                   key={app.id}
                   onClick={() => switchApp(app)}
                   className={cn(
-                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-[6px] hover:bg-[#f2f3f5] transition-colors group cursor-pointer text-left',
+                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-[6px] transition-colors group cursor-pointer text-left fine-pointer:hover:bg-[#f2f3f5]',
                     isActive && 'bg-[#f2f3f5]'
                   )}
                 >
@@ -107,7 +111,7 @@ export function AppSwitcherDropdown() {
 
                   {isPinned && (
                     <div className="shrink-0 size-[22px] flex items-center justify-center ml-[4px]">
-                      <Pin size={14} className="text-[#335cff] fill-[#335cff]" />
+                      <Pin size={14} className="text-blue-500 fill-blue-500" />
                     </div>
                   )}
                 </button>

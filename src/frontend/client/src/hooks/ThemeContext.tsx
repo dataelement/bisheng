@@ -2,7 +2,7 @@
 // source: https://plainenglish.io/blog/light-and-dark-mode-in-react-web-application-with-tailwind-css-89674496b942
 import { useSetRecoilState } from 'recoil';
 import React, { createContext, useState, useEffect } from 'react';
-import { getInitialTheme, applyFontSize } from '~/utils';
+import { getInitialTheme, applyFontSize, applyBrandTheme, getInitialBrand } from '~/utils';
 import store from '~/store';
 
 type ProviderValue = {
@@ -52,6 +52,11 @@ export const ThemeProvider = ({ initialTheme, children }) => {
     return () => {
       mediaQuery.removeEventListener('change', changeThemeOnSystemChange);
     };
+  }, []);
+
+  // Apply the persisted brand (accent) color on startup, before the menu mounts.
+  useEffect(() => {
+    applyBrandTheme(getInitialBrand());
   }, []);
 
   useEffect(() => {

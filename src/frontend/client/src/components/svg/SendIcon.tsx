@@ -1,21 +1,13 @@
+import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
 
+// Thin wrapper around the bisheng-icons ArrowUp so every send button shares the
+// design-system icon. Keeps the original { size, className } API for callers.
 export default function SendIcon({ size = 24, className = '' }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={'0 0 24 24'}
-      fill="none"
+    <Outlined.ArrowUp
+      size={size}
       className={cn('text-white dark:text-black', className)}
-    >
-      <path
-        d="M7 11L12 6L17 11M12 18V7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    />
   );
 }

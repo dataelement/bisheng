@@ -19,7 +19,7 @@ export default function MessageRemark({readOnly, logo, title, message }:
             <div className="flex justify-end pr-4">
                 {
                     message && !readOnly && <TextToSpeechButton
-                        className={'md:opacity-0 md:group-hover:opacity-100'}
+                        className={'fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100'}
                         messageId={message}
                         text={message}
                     />

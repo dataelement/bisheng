@@ -53,11 +53,11 @@ export default function Message(props: TMessageProps) {
       <MessageContainer handleScroll={handleScroll}>
         {/* 切换树枝 */}
         {showSibling ? (
-          <div className="m-auto my-2 flex justify-center p-4 py-2 md:gap-6">
+          <div className="m-auto my-2 flex justify-center p-4 py-2 touch-desktop:gap-6">
             <div
               className={cn(
-                'flex w-full flex-row flex-wrap justify-between gap-1 md:flex-nowrap md:gap-2',
-                maximizeChatSpace ? 'w-full max-w-full' : 'md:max-w-5xl xl:max-w-6xl',
+                'flex w-full flex-row flex-wrap justify-between gap-1 touch-desktop:flex-nowrap touch-desktop:gap-2',
+                maximizeChatSpace ? 'w-full max-w-full' : 'touch-desktop:max-w-5xl xl:max-w-6xl',
               )}
             >
               <MessageRender
@@ -76,7 +76,7 @@ export default function Message(props: TMessageProps) {
             </div>
           </div>
         ) : (
-          <div className="m-auto justify-center p-4 py-2 md:gap-6 ">
+          <div className="m-auto justify-center p-4 py-2 touch-desktop:gap-6 ">
             <MessageRender iconURL={bsConfig?.assistantIcon.image ? __APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image : ''} {...props} />
           </div>
         )}

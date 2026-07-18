@@ -5,16 +5,17 @@ from queue import Queue
 from typing import Any, Dict, List, Union
 
 from fastapi import WebSocket
-from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
-from langchain.schema import AgentFinish, LLMResult
-from langchain.schema.agent import AgentAction
-from langchain.schema.document import Document
-from langchain.schema.messages import BaseMessage
+from langchain_classic.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
+from langchain_classic.schema import AgentFinish, LLMResult
+from langchain_classic.schema.agent import AgentAction
+from langchain_classic.schema.document import Document
+from langchain_classic.schema.messages import BaseMessage
 from langchain_core.messages import ToolMessage
 
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.llm.domain.utils import extract_reasoning_content
 from loguru import logger
 
 
@@ -50,8 +51,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # azureOccasionally returns aNone
         if token is None and chunk is None:
             return
-        reasoning_content = getattr(chunk.message, 'additional_kwargs',
-                                    {}).get('reasoning_content')
+        reasoning_content = extract_reasoning_content(chunk)
         if token is None:
             token = ''
         resp = ChatResponse(message={
@@ -120,7 +120,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
         logger.info("k=s act=on_tool_end flow_id={} output='{}'", self.flow_id, output)
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
-        # from langchain.docstore.document import Document # noqa
+        # from langchain_classic.docstore.document import Document # noqa
         # result = eval(output).get('result')
         result = output if isinstance(output, str) else getattr(output, 'content', output)
 
@@ -332,7 +332,7 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         """Run when tool ends running."""
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
-        # from langchain.docstore.document import Document # noqa
+        # from langchain_classic.docstore.document import Document # noqa
         # result = eval(output).get('result')
         result = output if isinstance(output, str) else getattr(output, 'content', output)
         # Create a formatted message.

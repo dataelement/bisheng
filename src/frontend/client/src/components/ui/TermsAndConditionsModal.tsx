@@ -67,7 +67,7 @@ const TermsAndConditionsModal = ({
     <OGDialog open={open} onOpenChange={handleOpenChange}>
       <DialogTemplate
         title={title ?? localize('com_ui_terms_and_conditions')}
-        className="w-11/12 max-w-3xl sm:w-3/4 md:w-1/2 lg:w-2/5"
+        className="w-11/12 max-w-3xl sm:w-3/4 touch-desktop:w-1/2 lg:w-2/5"
         showCloseButton={false}
         showCancelButton={false}
         main={

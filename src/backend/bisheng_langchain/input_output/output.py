@@ -3,8 +3,8 @@ from typing import Any, Dict, List, Optional
 from venv import logger
 
 from bisheng_langchain.chains import LoaderOutputChain
-from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
-from langchain.chains.base import Chain
+from langchain_classic.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
+from langchain_classic.chains.base import Chain
 from pydantic import ConfigDict, BaseModel
 
 _TEXT_COLOR_MAPPING = {

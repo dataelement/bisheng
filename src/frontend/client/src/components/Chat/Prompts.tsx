@@ -62,7 +62,7 @@ export default function Prompts() {
       <div className="flex h-full flex-col items-start gap-2">
         <div
           className={
-            'flex min-h-[121.1px] min-w-full max-w-3xl flex-col gap-4 overflow-y-auto md:min-w-[22rem] lg:min-w-[43rem]'
+            'flex min-h-[121.1px] min-w-full max-w-3xl flex-col gap-4 overflow-y-auto touch-desktop:min-w-[22rem] lg:min-w-[43rem]'
           }
         >
           {rows.map((rowSize, index) => (

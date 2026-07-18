@@ -34,7 +34,7 @@ import {
 import { useDeleteFilesFromTable } from '~/hooks/Files';
 import { TrashIcon, Spinner } from '~/components/svg';
 import useLocalize from '~/hooks/useLocalize';
-import { useMediaQuery } from '~/hooks';
+import { usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 
 interface DataTableProps<TData, TValue> {
@@ -62,7 +62,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
   const [isDeleting, setIsDeleting] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
   const [sorting, setSorting] = useState<SortingState>([]);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const { deleteFiles } = useDeleteFilesFromTable(() => setIsDeleting(false));

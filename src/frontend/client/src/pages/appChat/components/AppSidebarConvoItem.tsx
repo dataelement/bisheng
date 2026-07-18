@@ -1,13 +1,13 @@
-import { useState, useRef, useCallback, useEffect, useId, useMemo } from 'react';
-import { Check, X, Ellipsis, Pen, Trash } from 'lucide-react';
-import * as Menu from '@ariakit/react/menu';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { Check, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, FocusEvent, KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
 
 import { useLocalize } from '~/hooks';
-import { useToastContext } from '~/Providers';
+import { useToastContext, useConfirm } from '~/Providers';
 import { cn } from '~/utils';
 import { useUpdateConversationMutation, useDeleteConversationMutation } from '~/hooks/queries/data-provider';
 import type { AppConversation } from '~/@types/app';
@@ -16,8 +16,20 @@ import { QueryKeys } from '~/types/chat';
 import { chatsState, runningState } from '~/pages/appChat/store/atoms';
 import { closeAppChatWebSocket } from '~/pages/appChat/useWebsocket';
 
-import { DropdownPopup, OGDialog, Label } from '~/components';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import {
+    DropdownMenu,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '~/components/ui/DropdownMenu';
+import {
+    SidebarListMoreMenuContent,
+    sidebarListMoreMenuDangerIconClassName,
+    sidebarListMoreMenuDangerItemClassName,
+    sidebarListMoreMenuDangerLabelClassName,
+    sidebarListMoreMenuIconClassName,
+    sidebarListMoreMenuItemClassName,
+    sidebarListMoreMenuLabelClassName,
+} from '~/components/SidebarListMoreMenu';
 import TodayItemIcon from '~/components/ui/icon/TodayItem';
 import LingsiIcon from '~/components/ui/icon/Lingsi';
 
@@ -38,10 +50,9 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
     const [isPopoverActive, setIsPopoverActive] = useState(false);
     const [renaming, setRenaming] = useState(false);
     const [titleInput, setTitleInput] = useState(conv.title);
-    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const confirm = useConfirm();
 
     const inputRef = useRef<HTMLInputElement>(null);
-    const menuId = useId();
     const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
     const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
@@ -135,7 +146,6 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                 return next;
             });
             onDeleteSuccess();
-            setShowDeleteDialog(false);
         },
     });
 
@@ -147,17 +157,30 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
         deleteConvoMutation.mutate({ conversationId: conv.id, thread_id, endpoint, source: 'button' });
     }, [conv.id, deleteConvoMutation, queryClient]);
 
+    const handleDeleteClick = useCallback(async () => {
+        const ok = await confirm({
+            variant: 'destructive',
+            title: localize('com_ui_delete_conversation'),
+            description: `${localize('com_ui_delete_confirm')} "${conv.title}"`,
+            confirmText: localize('com_ui_delete'),
+        });
+        if (!ok) {
+            return;
+        }
+        confirmDelete();
+    }, [confirm, localize, conv.title, confirmDelete]);
+
     return (
         <div
             className={cn(
                 "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors cursor-pointer",
-                isActive ? "bg-[#e6edfc]" : "hover:bg-[#f7f7f7]",
-                renaming ? "bg-[#e6edfc]" : ""
+                isActive ? "bg-[#EEE]" : "fine-pointer:hover:bg-[#f7f7f7] coarse-pointer:hover:bg-transparent",
+                renaming ? "bg-[#EEE]" : ""
             )}
             onClick={(e) => {
                 if (renaming) return;
                 // prevent switching if we click dropdown
-                if (isPopoverActive || showDeleteDialog) return;
+                if (isPopoverActive) return;
                 onClick();
             }}
         >
@@ -174,10 +197,10 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                     />
                     <div className="flex gap-1 shrink-0">
                         <button onClick={cancelRename}>
-                            <X className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#4e5969]" />
+                            <X className="h-4 w-4 text-[#4e5969] transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
                         </button>
                         <button onClick={submitRename}>
-                            <Check className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#165dff]" />
+                            <Check className="h-4 w-4 text-blue-500 transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
                         </button>
                     </div>
                 </div>
@@ -207,73 +230,54 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                     isPopoverActive || isActive
                         ? "flex"
                         : "hidden group-focus-within:flex group-hover:flex",
-                    "shrink-0"
+                    "shrink-0 coarse-pointer:flex",
                 )}
                 onClick={(e) => e.stopPropagation()}
             >
                 {!renaming && (
                     <>
-                        <DropdownPopup
-                            isOpen={isPopoverActive}
-                            setIsOpen={setIsPopoverActive}
-                            trigger={
-                                <Menu.MenuButton
-                                    id={`app-conversation-menu-${conv.id}`}
+                        <DropdownMenu open={isPopoverActive} onOpenChange={setIsPopoverActive}>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    ref={deleteButtonRef}
+                                    type="button"
                                     className={cn(
-                                        'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-[#86909c] hover:text-[#1d2129]',
-                                        isActive
+                                        'z-10 flex size-7 shrink-0 items-center justify-center rounded-md text-[#4e5969] outline-none transition-colors hover:bg-black/5',
+                                        isActive || isPopoverActive
                                             ? 'opacity-100'
-                                            : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100',
+                                            : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 coarse-pointer:opacity-100',
                                     )}
+                                    onClick={(e) => e.stopPropagation()}
+                                    aria-label={localize('com_ui_more')}
                                 >
-                                    <Ellipsis className="icon-md" aria-hidden={true} />
-                                </Menu.MenuButton>
-                            }
-                            items={[
-                                {
-                                    label: localize('com_ui_rename'),
-                                    onClick: handleRenameStart,
-                                    icon: <Pen className="icon-sm mr-2 text-text-primary" />,
-                                },
-                                {
-                                    label: localize('com_ui_delete'),
-                                    onClick: () => {
+                                    <Outlined.More className="size-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenuItem
+                                    className={sidebarListMoreMenuItemClassName}
+                                    onClick={handleRenameStart}
+                                >
+                                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>
+                                        {localize('com_ui_rename')}
+                                    </span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    className={sidebarListMoreMenuDangerItemClassName}
+                                    onSelect={(e) => {
+                                        e.preventDefault();
                                         setIsPopoverActive(false);
-                                        setShowDeleteDialog(true);
-                                    },
-                                    icon: <Trash className="icon-sm mr-2 text-text-primary" />,
-                                    hideOnClick: false,
-                                    ref: deleteButtonRef,
-                                    render: (props) => <button {...props} />,
-                                }
-                            ]}
-                            menuId={menuId}
-                        />
-
-                        {/* Delete Confirmation Dialog */}
-                        {showDeleteDialog && (
-                            <OGDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog} triggerRef={deleteButtonRef}>
-                                <OGDialogTemplate
-                                    showCloseButton={false}
-                                    title={localize('com_ui_delete_conversation')}
-                                    className="max-w-[450px]"
-                                    main={
-                                        <div className="flex w-full flex-col items-center gap-2">
-                                            <div className="grid w-full items-center gap-2">
-                                                <Label className="text-left text-sm font-medium">
-                                                    {localize('com_ui_delete_confirm')} <strong>{conv.title}</strong>
-                                                </Label>
-                                            </div>
-                                        </div>
-                                    }
-                                    selection={{
-                                        selectHandler: confirmDelete,
-                                        selectClasses: 'bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white',
-                                        selectText: localize('com_ui_delete'),
+                                        handleDeleteClick();
                                     }}
-                                />
-                            </OGDialog>
-                        )}
+                                >
+                                    <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
+                                    <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                        {localize('com_ui_delete')}
+                                    </span>
+                                </DropdownMenuItem>
+                            </SidebarListMoreMenuContent>
+                        </DropdownMenu>
                     </>
                 )}
             </div>
