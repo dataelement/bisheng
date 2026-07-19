@@ -115,8 +115,6 @@ class PortalCourseMediaService:
         major_brand = PortalCourseMediaService._iso_bmff_major_brand(header)
         if major_brand is not None:
             normalized_brand = major_brand.lower()
-            if normalized_brand == b"qt  ":
-                raise PortalCourseMediaUnsupportedError(msg="检测到 MOV 容器。仅支持 MP4 或 WebM")
             if normalized_brand.startswith(b"3gp"):
                 raise PortalCourseMediaUnsupportedError(msg="检测到 3GP 容器。仅支持 MP4 或 WebM")
             if normalized_brand.startswith(b"3g2"):

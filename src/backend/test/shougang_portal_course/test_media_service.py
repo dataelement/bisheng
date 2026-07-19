@@ -109,9 +109,11 @@ def test_probe_accepts_only_browser_compatible_combinations(
     [
         pytest.param(b"MSNV", "aac", id="non-legacy-mp4-brand"),
         pytest.param(b"isom", "mp3", id="mp4-mp3-audio"),
+        pytest.param(b"qt  ", "aac", id="quicktime-h264-aac"),
+        pytest.param(b"qt  ", "mp3", id="quicktime-h264-mp3"),
     ],
 )
-def test_probe_accepts_compatible_mp4_without_legacy_false_rejections(
+def test_probe_accepts_compatible_iso_bmff_without_legacy_false_rejections(
     tmp_path,
     brand,
     audio,
@@ -164,13 +166,12 @@ def test_probe_ignores_auxiliary_streams_and_attached_cover_art(tmp_path):
 @pytest.mark.parametrize(
     ("header", "container", "video", "audio"),
     [
-        ("mov", "mov,mp4,m4a,3gp,3g2,mj2", "h264", "aac"),
         ("mp4", "mov,mp4,m4a,3gp,3g2,mj2", "hevc", "aac"),
         ("webm", "matroska,webm", "h264", "opus"),
         ("webm", "matroska,webm", "vp9", "aac"),
     ],
 )
-def test_probe_rejects_mov_and_unsupported_codecs(
+def test_probe_rejects_unsupported_codecs(
     tmp_path,
     header,
     container,
@@ -178,9 +179,7 @@ def test_probe_rejects_mov_and_unsupported_codecs(
     audio,
 ):
     path = tmp_path / "media"
-    if header == "mov":
-        _write_mp4(path, brand=b"qt  ")
-    elif header == "mp4":
+    if header == "mp4":
         _write_mp4(path)
     else:
         _write_webm(path)
@@ -199,9 +198,18 @@ def test_probe_rejects_mov_and_unsupported_codecs(
     [
         pytest.param(
             b"qt  ",
-            [{"codec_type": "video", "codec_name": "h264"}],
-            "MOV 容器",
-            id="quicktime-mov",
+            [{"codec_type": "video", "codec_name": "hevc"}],
+            "HEVC/H.265",
+            id="quicktime-hevc-video",
+        ),
+        pytest.param(
+            b"qt  ",
+            [
+                {"codec_type": "video", "codec_name": "h264"},
+                {"codec_type": "audio", "codec_name": "flac"},
+            ],
+            "FLAC 音频编码",
+            id="quicktime-unsupported-audio",
         ),
         pytest.param(
             b"3gp5",
