@@ -3,7 +3,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import ShougangPortalFileBrowseReq
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalFileBrowseReq,
+    ShougangPortalFileSearchReq,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
@@ -54,6 +57,58 @@ async def test_existing_latest_selected_browse_path_is_unchanged():
     service._recommend_shougang_portal_files.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_latest_selected_search_without_keyword_still_uses_hot_read():
+    service = object.__new__(KnowledgeSpaceService)
+    spaces = [SimpleNamespace(id=10)]
+    service._get_shougang_portal_visible_search_spaces = AsyncMock(return_value=spaces)
+    service._list_shougang_portal_hot_read_files = AsyncMock(
+        return_value={"data": [], "has_more": False, "next_cursor": None}
+    )
+    service._semantic_search_shougang_portal_files = AsyncMock()
+
+    request = ShougangPortalFileSearchReq(recommendation="latest_selected", sort="relevance", limit=20)
+    await service._search_shougang_portal_files_impl(request)
+
+    service._list_shougang_portal_hot_read_files.assert_awaited_once()
+    service._semantic_search_shougang_portal_files.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_latest_selected_keyword_search_uses_semantic_search_within_hot_read_pool():
+    service = object.__new__(KnowledgeSpaceService)
+    spaces = [SimpleNamespace(id=10)]
+    service._get_shougang_portal_visible_search_spaces = AsyncMock(return_value=spaces)
+    service._list_shougang_portal_hot_read_files = AsyncMock()
+    service._get_shougang_portal_tag_file_ids = AsyncMock(return_value=None)
+    service._collect_shougang_portal_hot_read_search_file_ids = AsyncMock(return_value=[101, 102, 103])
+    service._semantic_search_shougang_portal_files = AsyncMock(
+        return_value={"data": [], "has_more": False, "next_cursor": None}
+    )
+
+    request = ShougangPortalFileSearchReq(
+        q="设备",
+        recommendation="latest_selected",
+        sort="relevance",
+        limit=20,
+    )
+    await service._search_shougang_portal_files_impl(request)
+
+    service._list_shougang_portal_hot_read_files.assert_not_awaited()
+    service._collect_shougang_portal_hot_read_search_file_ids.assert_awaited_once()
+    service._semantic_search_shougang_portal_files.assert_awaited_once()
+    assert service._semantic_search_shougang_portal_files.await_args.kwargs["tag_file_ids"] == [101, 102, 103]
+
+
+def test_merge_shougang_portal_semantic_filter_file_ids_intersects_tag_and_scope():
+    merged = KnowledgeSpaceService._merge_shougang_portal_semantic_filter_file_ids([1, 2, 3], [2, 3, 4])
+    assert merged == [2, 3]
+
+    assert KnowledgeSpaceService._merge_shougang_portal_semantic_filter_file_ids([1, 2], [3, 4]) == []
+    assert KnowledgeSpaceService._merge_shougang_portal_semantic_filter_file_ids(None, [5, 6]) == [5, 6]
+    assert KnowledgeSpaceService._merge_shougang_portal_semantic_filter_file_ids(None, None) is None
+
+
 def test_public_fast_path_uses_live_acl_and_rejects_stale_inherited_projection():
     file = SimpleNamespace(id=100, knowledge_id=10, file_level_path="/8")
     stale_projection = SimpleNamespace(permission_scope="inherited")
@@ -62,40 +117,47 @@ def test_public_fast_path_uses_live_acl_and_rejects_stale_inherited_projection()
     ]
 
     assert stale_projection.permission_scope == "inherited"
-    assert KnowledgeSpaceService._can_fast_allow_public_recommendation(
-        file,
-        public_space_ids={10},
-        live_bindings=live_bindings,
-    ) is False
+    assert (
+        KnowledgeSpaceService._can_fast_allow_public_recommendation(
+            file,
+            public_space_ids={10},
+            live_bindings=live_bindings,
+        )
+        is False
+    )
 
 
 def test_non_public_file_never_uses_public_fast_path_after_permission_revocation():
     file = SimpleNamespace(id=101, knowledge_id=11, file_level_path=None)
 
-    assert KnowledgeSpaceService._can_fast_allow_public_recommendation(
-        file,
-        public_space_ids={10},
-        live_bindings=[],
-    ) is False
+    assert (
+        KnowledgeSpaceService._can_fast_allow_public_recommendation(
+            file,
+            public_space_ids={10},
+            live_bindings=[],
+        )
+        is False
+    )
 
 
 def test_public_fast_path_rejects_current_space_level_custom_binding():
     file = SimpleNamespace(id=101, knowledge_id=10, file_level_path=None)
 
-    assert KnowledgeSpaceService._can_fast_allow_public_recommendation(
-        file,
-        public_space_ids={10},
-        live_bindings=[{"resource_type": "knowledge_space", "resource_id": "10"}],
-    ) is False
+    assert (
+        KnowledgeSpaceService._can_fast_allow_public_recommendation(
+            file,
+            public_space_ids={10},
+            live_bindings=[{"resource_type": "knowledge_space", "resource_id": "10"}],
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio
 async def test_personalized_public_fast_path_preserves_public_download_permission():
     service = object.__new__(KnowledgeSpaceService)
     service._portal_file_download_map = {}
-    service._public_space_viewer_permission_ids = AsyncMock(
-        return_value={"view_file", "download_file"}
-    )
+    service._public_space_viewer_permission_ids = AsyncMock(return_value={"view_file", "download_file"})
     service._build_child_permission_context = AsyncMock()
     file = SimpleNamespace(id=101, knowledge_id=10, file_level_path=None)
 
@@ -172,10 +234,13 @@ async def test_personalized_non_public_path_preserves_effective_download_permiss
 
 @pytest.mark.parametrize("request_limit", [1, 10_000])
 def test_personalized_target_ignores_request_limit_and_uses_configured_top_n(request_limit):
-    assert KnowledgeSpaceService._personalized_recommendation_target_count(
-        configured_count=23,
-        request_limit=request_limit,
-    ) == 23
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_target_count(
+            configured_count=23,
+            request_limit=request_limit,
+        )
+        == 23
+    )
 
 
 @pytest.mark.parametrize(
