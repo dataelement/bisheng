@@ -73,6 +73,8 @@ PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level public
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level department --status failed --status waiting --status violation
 
 bash scripts/reparse_knowledge_space_files.sh
 bash scripts/reparse_knowledge_space_files.sh --apply --concurrency 4
@@ -84,7 +86,14 @@ Scope:
 - `--space-id`：包含指定知识空间下的所有真实文件，可重复传入
 - `--folder-id`：递归包含指定文件夹下所有层级的真实文件，可重复传入
 - `--file-id`：包含指定真实文件，可重复传入
-- 仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION` 状态，跳过 `WAITING` / `PROCESSING` / `REBUILDING`
+- `--space-level`：按空间类型过滤，可选 `public` / `department` / `team` / `personal`。该条件与
+  `--space-id` / `--folder-id` / `--file-id` 的并集取交集；未配置空间类型的知识空间不命中
+- `--status`：按文档状态过滤，可重复传入，多值之间取并集。可选 `processing` / `success` /
+  `failed` / `rebuilding` / `waiting` / `timeout` / `violation`
+- 不传 `--status` 时，仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION`；显式传入后会替换该默认集合
+- `--status` 不可与兼容参数 `--include-inflight` / `--only-inflight` 同时使用
+- `--include-inflight` 在默认状态集合上增加 `WAITING` / `PROCESSING` / `REBUILDING`；
+  `--only-inflight` 仅处理这三种执行中状态
 
 ### `move_knowledge_space_files.py`
 

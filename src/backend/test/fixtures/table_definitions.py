@@ -200,6 +200,19 @@ CREATE TABLE IF NOT EXISTS knowledge (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
 
+TABLE_KNOWLEDGE_SPACE_SCOPE = """\
+CREATE TABLE IF NOT EXISTS knowledge_space_scope (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    space_id INTEGER NOT NULL UNIQUE,
+    level VARCHAR(32) NOT NULL,
+    owner_type VARCHAR(64) NOT NULL,
+    owner_id INTEGER NOT NULL,
+    created_by INTEGER NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
 # ---------------------------------------------------------------------------
 # F002 preparation: department tables (based on PRD, not yet in production)
 # F002-department-tree will create the real ORM; update DDL here to match.
@@ -323,6 +336,8 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     user_metadata JSON,
     remark VARCHAR(4096) DEFAULT '',
     file_encoding VARCHAR(64),
+    file_subcategory_code VARCHAR(16),
+    file_subcategory_source VARCHAR(16),
     simhash VARCHAR(16),
     similar_status INTEGER NOT NULL DEFAULT 0,
     updater_id INTEGER,
@@ -695,6 +710,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "groupresource": TABLE_GROUP_RESOURCE,
     "flow": TABLE_FLOW,
     "knowledge": TABLE_KNOWLEDGE,
+    "knowledge_space_scope": TABLE_KNOWLEDGE_SPACE_SCOPE,
     "knowledge_tag_library_link": TABLE_KNOWLEDGE_TAG_LIBRARY_LINK,
     "department": TABLE_DEPARTMENT,
     "user_department": TABLE_USER_DEPARTMENT,

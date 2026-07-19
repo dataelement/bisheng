@@ -11,6 +11,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
 
 async def _seed_space(
@@ -50,6 +51,22 @@ async def _seed_file(
             file_level_path=file_level_path,
             object_name=f"knowledge/{knowledge_id}/{file_id}.pdf",
         )
+    )
+    await session.commit()
+
+
+async def _seed_space_scope(
+    session: AsyncSession,
+    *,
+    space_id: int,
+    level: KnowledgeSpaceLevelEnum,
+) -> None:
+    await session.exec(
+        text(
+            "INSERT INTO knowledge_space_scope "
+            "(tenant_id, space_id, level, owner_type, owner_id, created_by) "
+            "VALUES (1, :space_id, :level, 'user', 1, 1)"
+        ).bindparams(space_id=space_id, level=level.value)
     )
     await session.commit()
 
@@ -97,6 +114,102 @@ async def test_collect_explicit_scopes_are_unioned_and_folders_recurse(async_db_
 
     assert [item.id for item in report.selected_files] == [11, 13, 21, 31]
     assert report.skipped_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("space_level", "expected_file_id"),
+    [
+        (KnowledgeSpaceLevelEnum.PUBLIC, 101),
+        (KnowledgeSpaceLevelEnum.DEPARTMENT, 201),
+        (KnowledgeSpaceLevelEnum.TEAM, 301),
+        (KnowledgeSpaceLevelEnum.PERSONAL, 401),
+    ],
+)
+async def test_collect_filters_by_space_level(
+    async_db_session: AsyncSession,
+    space_level: KnowledgeSpaceLevelEnum,
+    expected_file_id: int,
+):
+    levels = [
+        KnowledgeSpaceLevelEnum.PUBLIC,
+        KnowledgeSpaceLevelEnum.DEPARTMENT,
+        KnowledgeSpaceLevelEnum.TEAM,
+        KnowledgeSpaceLevelEnum.PERSONAL,
+    ]
+    for index, level in enumerate(levels, start=1):
+        await _seed_space(async_db_session, index)
+        await _seed_space_scope(async_db_session, space_id=index, level=level)
+        await _seed_file(async_db_session, file_id=index * 100 + 1, knowledge_id=index)
+
+    report = await script_mod.collect_candidate_files(
+        async_db_session,
+        space_level=space_level,
+    )
+
+    assert [item.id for item in report.selected_files] == [expected_file_id]
+
+
+@pytest.mark.asyncio
+async def test_space_without_scope_does_not_match_space_level(async_db_session: AsyncSession):
+    await _seed_space(async_db_session, 1)
+    await _seed_space(async_db_session, 2)
+    await _seed_space_scope(async_db_session, space_id=1, level=KnowledgeSpaceLevelEnum.PUBLIC)
+    await _seed_file(async_db_session, file_id=101, knowledge_id=1)
+    await _seed_file(async_db_session, file_id=201, knowledge_id=2)
+
+    report = await script_mod.collect_candidate_files(
+        async_db_session,
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+    )
+
+    assert [item.id for item in report.selected_files] == [101]
+
+
+@pytest.mark.asyncio
+async def test_space_level_intersects_union_of_explicit_scopes(async_db_session: AsyncSession):
+    await _seed_space(async_db_session, 1)
+    await _seed_space(async_db_session, 2)
+    await _seed_space(async_db_session, 3)
+    await _seed_space_scope(async_db_session, space_id=1, level=KnowledgeSpaceLevelEnum.PUBLIC)
+    await _seed_space_scope(async_db_session, space_id=2, level=KnowledgeSpaceLevelEnum.DEPARTMENT)
+    await _seed_space_scope(async_db_session, space_id=3, level=KnowledgeSpaceLevelEnum.TEAM)
+    await _seed_file(async_db_session, file_id=10, knowledge_id=1, file_type=FileType.DIR.value)
+    await _seed_file(async_db_session, file_id=11, knowledge_id=1, file_level_path="/10")
+    await _seed_file(async_db_session, file_id=21, knowledge_id=2)
+    await _seed_file(async_db_session, file_id=31, knowledge_id=3)
+
+    report = await script_mod.collect_candidate_files(
+        async_db_session,
+        space_ids=[2],
+        folder_ids=[10],
+        file_ids=[31],
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+    )
+
+    assert [item.id for item in report.selected_files] == [11]
+
+
+@pytest.mark.asyncio
+async def test_collect_uses_explicit_status_union(async_db_session: AsyncSession):
+    await _seed_space(async_db_session, 1)
+    await _seed_space_scope(async_db_session, space_id=1, level=KnowledgeSpaceLevelEnum.DEPARTMENT)
+    await _seed_file(async_db_session, file_id=101, knowledge_id=1, status=KnowledgeFileStatus.SUCCESS.value)
+    await _seed_file(async_db_session, file_id=102, knowledge_id=1, status=KnowledgeFileStatus.FAILED.value)
+    await _seed_file(async_db_session, file_id=103, knowledge_id=1, status=KnowledgeFileStatus.WAITING.value)
+    await _seed_file(async_db_session, file_id=104, knowledge_id=1, status=KnowledgeFileStatus.VIOLATION.value)
+
+    report = await script_mod.collect_candidate_files(
+        async_db_session,
+        space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        eligible_statuses=(
+            KnowledgeFileStatus.FAILED.value,
+            KnowledgeFileStatus.WAITING.value,
+            KnowledgeFileStatus.VIOLATION.value,
+        ),
+    )
+
+    assert [item.id for item in report.selected_files] == [102, 103, 104]
 
 
 @pytest.mark.asyncio
@@ -172,6 +285,56 @@ def test_reparse_one_file_clears_vectors_and_runs_pipeline(monkeypatch):
     ]
 
 
+def test_reparse_one_file_honors_explicit_statuses_at_execution_time(monkeypatch):
+    db_file = KnowledgeFile(
+        id=100,
+        knowledge_id=10,
+        file_name="doc.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.WAITING.value,
+    )
+    knowledge = Knowledge(id=10, name="space", type=KnowledgeTypeEnum.SPACE.value, user_id=1)
+    calls: list[str] = []
+
+    monkeypatch.setattr(script_mod, "_get_file_sync", lambda file_id: db_file)
+    monkeypatch.setattr(script_mod, "_get_knowledge_sync", lambda knowledge_id: knowledge)
+    monkeypatch.setattr(script_mod, "_update_file_sync", lambda file: file)
+    monkeypatch.setattr(script_mod, "_delete_existing_vectors", lambda file_id, db_knowledge: calls.append("delete"))
+
+    def fake_parse(db_knowledge: Knowledge, file: KnowledgeFile) -> None:
+        calls.append("parse")
+        file.status = KnowledgeFileStatus.SUCCESS.value
+
+    monkeypatch.setattr(script_mod, "_run_parse_pipeline", fake_parse)
+
+    result = script_mod.reparse_one_file(
+        100,
+        eligible_statuses=(KnowledgeFileStatus.WAITING.value,),
+    )
+
+    assert result.success is True
+    assert calls == ["delete", "parse"]
+
+
+def test_reparse_one_file_rejects_status_changed_after_selection(monkeypatch):
+    db_file = KnowledgeFile(
+        id=100,
+        knowledge_id=10,
+        file_name="doc.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.WAITING.value,
+    )
+    monkeypatch.setattr(script_mod, "_get_file_sync", lambda file_id: db_file)
+
+    result = script_mod.reparse_one_file(
+        100,
+        eligible_statuses=(KnowledgeFileStatus.FAILED.value,),
+    )
+
+    assert result.success is False
+    assert result.error == "file is in-flight"
+
+
 def test_parse_args_defaults_to_dry_run_and_single_concurrency():
     args = script_mod.parse_args([])
 
@@ -180,3 +343,50 @@ def test_parse_args_defaults_to_dry_run_and_single_concurrency():
     assert args.space_ids == []
     assert args.folder_ids == []
     assert args.file_ids == []
+    assert args.space_level is None
+    assert args.statuses == []
+
+
+def test_parse_args_accepts_space_level_and_repeated_statuses():
+    args = script_mod.parse_args(
+        [
+            "--space-level",
+            "department",
+            "--status",
+            "failed",
+            "--status",
+            "waiting",
+            "--status",
+            "violation",
+        ]
+    )
+
+    assert args.space_level == "department"
+    assert args.statuses == ["failed", "waiting", "violation"]
+    assert script_mod.resolve_eligible_statuses(args) == (
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.WAITING.value,
+        KnowledgeFileStatus.VIOLATION.value,
+    )
+
+
+@pytest.mark.parametrize("legacy_flag", ["--include-inflight", "--only-inflight"])
+def test_parse_args_rejects_status_with_legacy_inflight_flags(legacy_flag: str):
+    with pytest.raises(SystemExit) as exc_info:
+        script_mod.parse_args(["--status", "failed", legacy_flag])
+
+    assert exc_info.value.code == 2
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--space-level", "unknown"],
+        ["--status", "unknown"],
+    ],
+)
+def test_parse_args_rejects_unknown_space_levels_and_statuses(argv: list[str]):
+    with pytest.raises(SystemExit) as exc_info:
+        script_mod.parse_args(argv)
+
+    assert exc_info.value.code == 2
