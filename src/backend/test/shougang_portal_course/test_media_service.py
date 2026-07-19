@@ -28,10 +28,20 @@ class FakeUpload:
         return next(self._chunks, b"")
 
 
-def _result(*, container: str, video: str, audio: str | None, duration: str = "1.2"):
-    streams = [{"codec_type": "video", "codec_name": video}]
-    if audio:
-        streams.append({"codec_type": "audio", "codec_name": audio})
+def _result(
+    *,
+    container: str,
+    video: str | None = None,
+    audio: str | None = None,
+    duration: str = "1.2",
+    streams: list[dict] | None = None,
+):
+    if streams is None:
+        streams = []
+        if video:
+            streams.append({"codec_type": "video", "codec_name": video})
+        if audio:
+            streams.append({"codec_type": "audio", "codec_name": audio})
     return subprocess.CompletedProcess(
         args=["ffprobe"],
         returncode=0,
@@ -95,11 +105,67 @@ def test_probe_accepts_only_browser_compatible_combinations(
 
 
 @pytest.mark.parametrize(
+    ("brand", "audio"),
+    [
+        pytest.param(b"MSNV", "aac", id="non-legacy-mp4-brand"),
+        pytest.param(b"isom", "mp3", id="mp4-mp3-audio"),
+    ],
+)
+def test_probe_accepts_compatible_mp4_without_legacy_false_rejections(
+    tmp_path,
+    brand,
+    audio,
+):
+    path = tmp_path / "media"
+    _write_mp4(path, brand=brand)
+    service = PortalCourseMediaService(
+        storage=AsyncMock(),
+        runner=lambda *a, **k: _result(
+            container="mov,mp4,m4a,3gp,3g2,mj2",
+            video="h264",
+            audio=audio,
+        ),
+    )
+
+    probe = service.probe(path)
+
+    assert probe.extension == "mp4"
+    assert probe.content_type == "video/mp4"
+
+
+def test_probe_ignores_auxiliary_streams_and_attached_cover_art(tmp_path):
+    path = tmp_path / "media"
+    _write_mp4(path)
+    streams = [
+        {"codec_type": "video", "codec_name": "h264", "disposition": {}},
+        {
+            "codec_type": "video",
+            "codec_name": "mjpeg",
+            "disposition": {"attached_pic": 1},
+        },
+        {"codec_type": "audio", "codec_name": "aac"},
+        {"codec_type": "subtitle", "codec_name": "mov_text"},
+        {"codec_type": "data", "codec_name": "tmcd"},
+        {"codec_type": "attachment", "codec_name": "ttf"},
+    ]
+    service = PortalCourseMediaService(
+        storage=AsyncMock(),
+        runner=lambda *a, **k: _result(
+            container="mov,mp4,m4a,3gp,3g2,mj2",
+            streams=streams,
+        ),
+    )
+
+    probe = service.probe(path)
+
+    assert probe.extension == "mp4"
+
+
+@pytest.mark.parametrize(
     ("header", "container", "video", "audio"),
     [
         ("mov", "mov,mp4,m4a,3gp,3g2,mj2", "h264", "aac"),
         ("mp4", "mov,mp4,m4a,3gp,3g2,mj2", "hevc", "aac"),
-        ("mp4", "mov,mp4,m4a,3gp,3g2,mj2", "h264", "mp3"),
         ("webm", "matroska,webm", "h264", "opus"),
         ("webm", "matroska,webm", "vp9", "aac"),
     ],
@@ -126,6 +192,114 @@ def test_probe_rejects_mov_and_unsupported_codecs(
 
     with pytest.raises(PortalCourseMediaUnsupportedError):
         service.probe(path)
+
+
+@pytest.mark.parametrize(
+    ("brand", "streams", "message_part"),
+    [
+        pytest.param(
+            b"qt  ",
+            [{"codec_type": "video", "codec_name": "h264"}],
+            "MOV 容器",
+            id="quicktime-mov",
+        ),
+        pytest.param(
+            b"3gp5",
+            [{"codec_type": "video", "codec_name": "h264"}],
+            "3GP 容器",
+            id="3gp-container",
+        ),
+        pytest.param(
+            b"3g2a",
+            [{"codec_type": "video", "codec_name": "h264"}],
+            "3G2 容器",
+            id="3g2-container",
+        ),
+        pytest.param(
+            b"isom",
+            [{"codec_type": "video", "codec_name": "hevc"}],
+            "HEVC/H.265",
+            id="hevc-video",
+        ),
+        pytest.param(
+            b"isom",
+            [{"codec_type": "video", "codec_name": "prores"}],
+            "ProRes",
+            id="prores-video",
+        ),
+        pytest.param(
+            b"isom",
+            [{"codec_type": "video", "codec_name": "mpeg4"}],
+            "MPEG-4 Visual",
+            id="mpeg4-visual-video",
+        ),
+        pytest.param(
+            b"isom",
+            [
+                {"codec_type": "video", "codec_name": "h264"},
+                {"codec_type": "video", "codec_name": "h264"},
+            ],
+            "多个主视频轨",
+            id="multiple-primary-video-streams",
+        ),
+        pytest.param(
+            b"isom",
+            [
+                {
+                    "codec_type": "video",
+                    "codec_name": "mjpeg",
+                    "disposition": {"attached_pic": 1},
+                }
+            ],
+            "未检测到主视频轨",
+            id="missing-primary-video-stream",
+        ),
+        pytest.param(
+            b"isom",
+            [
+                {"codec_type": "video", "codec_name": "h264"},
+                {"codec_type": "audio", "codec_name": "flac"},
+            ],
+            "FLAC 音频编码",
+            id="unsupported-mp4-audio",
+        ),
+    ],
+)
+def test_probe_rejects_unsupported_media_with_specific_safe_message(
+    tmp_path,
+    brand,
+    streams,
+    message_part,
+):
+    path = tmp_path / "media"
+    _write_mp4(path, brand=brand)
+    service = PortalCourseMediaService(
+        storage=AsyncMock(),
+        runner=lambda *a, **k: _result(
+            container="mov,mp4,m4a,3gp,3g2,mj2",
+            streams=streams,
+        ),
+    )
+
+    with pytest.raises(PortalCourseMediaUnsupportedError) as caught:
+        service.probe(path)
+
+    assert caught.value.code == 25005
+    assert message_part in caught.value.message
+    assert str(path) not in caught.value.message
+
+
+def test_probe_rejects_spoofed_mp4_header_with_specific_safe_message(tmp_path):
+    path = tmp_path / "lesson.mp4"
+    path.write_bytes(b"not-an-mp4")
+    service = PortalCourseMediaService(storage=AsyncMock())
+
+    with pytest.raises(PortalCourseMediaUnsupportedError) as caught:
+        service.probe(path)
+
+    assert caught.value.code == 25005
+    assert "无法识别视频容器" in caught.value.message
+    assert str(path) not in caught.value.message
 
 
 @pytest.mark.parametrize(

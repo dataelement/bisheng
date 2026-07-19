@@ -23,18 +23,22 @@ logger = logging.getLogger(__name__)
 MAX_MEDIA_BYTES = 1024 * 1024 * 1024
 _READ_CHUNK_BYTES = 1024 * 1024
 _MAX_PROBE_OUTPUT_BYTES = 1024 * 1024
-_MP4_BRANDS = {
-    b"isom",
-    b"iso2",
-    b"iso3",
-    b"iso4",
-    b"iso5",
-    b"iso6",
-    b"mp41",
-    b"mp42",
-    b"avc1",
-    b"dash",
-    b"M4V ",
+_AUXILIARY_STREAM_TYPES = {"subtitle", "data", "attachment"}
+_MP4_AUDIO_CODECS = {"aac", "mp3"}
+_WEBM_VIDEO_CODECS = {"vp8", "vp9"}
+_WEBM_AUDIO_CODECS = {"vorbis", "opus"}
+_CODEC_DISPLAY_NAMES = {
+    "aac": "AAC",
+    "flac": "FLAC",
+    "h264": "H.264",
+    "hevc": "HEVC/H.265",
+    "mp3": "MP3",
+    "mpeg4": "MPEG-4 Visual",
+    "opus": "Opus",
+    "prores": "ProRes",
+    "vorbis": "Vorbis",
+    "vp8": "VP8",
+    "vp9": "VP9",
 }
 
 
@@ -78,16 +82,64 @@ class PortalCourseMediaService:
             raise PortalCourseMediaTooLargeError()
 
     @staticmethod
+    def _iso_bmff_major_brand(header: bytes) -> bytes | None:
+        offset = 0
+        while offset + 8 <= len(header):
+            box_size = int.from_bytes(header[offset : offset + 4], "big")
+            box_type = header[offset + 4 : offset + 8]
+            box_header_size = 8
+            if box_size == 1:
+                if offset + 16 > len(header):
+                    return None
+                box_size = int.from_bytes(header[offset + 8 : offset + 16], "big")
+                box_header_size = 16
+            elif box_size == 0:
+                box_size = len(header) - offset
+
+            if box_size < box_header_size:
+                return None
+            if box_type == b"ftyp":
+                brand_offset = offset + box_header_size
+                if box_size < box_header_size + 8 or brand_offset + 4 > len(header):
+                    return None
+                return header[brand_offset : brand_offset + 4]
+            if offset + box_size > len(header):
+                return None
+            offset += box_size
+        return None
+
+    @staticmethod
     def _detect_container(path: Path) -> str:
         with path.open("rb") as stream:
             header = stream.read(4096)
-        if len(header) >= 12 and header[4:8] == b"ftyp":
-            if header[8:12] not in _MP4_BRANDS:
-                raise PortalCourseMediaUnsupportedError()
+        major_brand = PortalCourseMediaService._iso_bmff_major_brand(header)
+        if major_brand is not None:
+            normalized_brand = major_brand.lower()
+            if normalized_brand == b"qt  ":
+                raise PortalCourseMediaUnsupportedError(msg="检测到 MOV 容器。仅支持 MP4 或 WebM")
+            if normalized_brand.startswith(b"3gp"):
+                raise PortalCourseMediaUnsupportedError(msg="检测到 3GP 容器。仅支持 MP4 或 WebM")
+            if normalized_brand.startswith(b"3g2"):
+                raise PortalCourseMediaUnsupportedError(msg="检测到 3G2 容器。仅支持 MP4 或 WebM")
             return "mp4"
         if b"\x42\x82" in header and b"webm" in header.lower():
             return "webm"
-        raise PortalCourseMediaUnsupportedError()
+        raise PortalCourseMediaUnsupportedError(msg="无法识别视频容器。仅支持 MP4 或 WebM")
+
+    @staticmethod
+    def _is_attached_picture(stream: dict) -> bool:
+        disposition = stream.get("disposition")
+        return isinstance(disposition, dict) and disposition.get("attached_pic") == 1
+
+    @staticmethod
+    def _codec_display_name(codec: str) -> str:
+        known_name = _CODEC_DISPLAY_NAMES.get(codec)
+        if known_name is not None:
+            return known_name
+        safe_name = "".join(
+            char for char in codec if char.isascii() and (char.isalnum() or char in {"-", ".", "_", "+"})
+        )[:32]
+        return safe_name.upper() or "未知"
 
     def probe(self, path: str | Path) -> MediaProbe:
         media_path = Path(path)
@@ -146,37 +198,57 @@ class PortalCourseMediaService:
             raise PortalCourseProbeFailedError() from exc
         if not math.isfinite(duration) or duration <= 0 or not isinstance(streams, list):
             raise PortalCourseProbeFailedError()
+        if any(not isinstance(item, dict) for item in streams):
+            raise PortalCourseProbeFailedError()
 
-        video_codecs = [
-            str(item.get("codec_name", "")).lower()
-            for item in streams
-            if item.get("codec_type") == "video"
+        primary_video_streams = [
+            item for item in streams if item.get("codec_type") == "video" and not self._is_attached_picture(item)
         ]
+        if not primary_video_streams:
+            raise PortalCourseMediaUnsupportedError(msg="未检测到主视频轨")
+        if len(primary_video_streams) > 1:
+            raise PortalCourseMediaUnsupportedError(msg="检测到多个主视频轨。当前仅支持一个主视频轨")
+        unsupported_stream_types = {
+            str(item.get("codec_type", ""))
+            for item in streams
+            if item.get("codec_type") not in {"video", "audio", *_AUXILIARY_STREAM_TYPES}
+        }
+        if unsupported_stream_types:
+            raise PortalCourseMediaUnsupportedError(msg="视频包含不支持的媒体轨类型")
+
+        video_codec = str(primary_video_streams[0].get("codec_name", "")).lower()
         audio_codecs = [
-            str(item.get("codec_name", "")).lower()
-            for item in streams
-            if item.get("codec_type") == "audio"
+            str(item.get("codec_name", "")).lower() for item in streams if item.get("codec_type") == "audio"
         ]
-        known_streams = {"video", "audio"}
-        if (
-            len(video_codecs) != 1
-            or any(item.get("codec_type") not in known_streams for item in streams)
-        ):
-            raise PortalCourseMediaUnsupportedError()
 
         if container == "mp4":
-            if (
-                "mp4" not in format_names
-                or video_codecs != ["h264"]
-                or any(codec != "aac" for codec in audio_codecs)
-            ):
-                raise PortalCourseMediaUnsupportedError()
-        elif (
-            "webm" not in format_names
-            or video_codecs[0] not in {"vp8", "vp9"}
-            or any(codec not in {"vorbis", "opus"} for codec in audio_codecs)
-        ):
-            raise PortalCourseMediaUnsupportedError()
+            if "mp4" not in format_names:
+                raise PortalCourseMediaUnsupportedError(msg="检测到非 MP4 的 ISO-BMFF 容器。仅支持 MP4 或 WebM")
+            if video_codec != "h264":
+                display_name = self._codec_display_name(video_codec)
+                raise PortalCourseMediaUnsupportedError(msg=f"检测到 {display_name} 视频编码。请转换为 H.264")
+            unsupported_audio = next(
+                (codec for codec in audio_codecs if codec not in _MP4_AUDIO_CODECS),
+                None,
+            )
+            if unsupported_audio is not None:
+                display_name = self._codec_display_name(unsupported_audio)
+                raise PortalCourseMediaUnsupportedError(msg=f"检测到 {display_name} 音频编码。MP4 仅支持 AAC 或 MP3")
+        else:
+            if "webm" not in format_names:
+                raise PortalCourseMediaUnsupportedError(msg="检测到非 WebM 容器。仅支持 MP4 或 WebM")
+            if video_codec not in _WEBM_VIDEO_CODECS:
+                display_name = self._codec_display_name(video_codec)
+                raise PortalCourseMediaUnsupportedError(msg=f"检测到 {display_name} 视频编码。WebM 仅支持 VP8 或 VP9")
+            unsupported_audio = next(
+                (codec for codec in audio_codecs if codec not in _WEBM_AUDIO_CODECS),
+                None,
+            )
+            if unsupported_audio is not None:
+                display_name = self._codec_display_name(unsupported_audio)
+                raise PortalCourseMediaUnsupportedError(
+                    msg=f"检测到 {display_name} 音频编码。WebM 仅支持 Vorbis 或 Opus"
+                )
 
         return MediaProbe(
             extension=container,
