@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 960 960">
+  <defs>
+    <!-- 政务专用深蓝水平渐变 -->
+    <linearGradient id="nixGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0c2b61"/>
+      <stop offset="100%" stop-color="#2096e0"/>
+    </linearGradient>
+  </defs>
+  <!-- 淡色坐标网格（数据研判网格寓意） -->
+  <g stroke="#8094b4" stroke-width="1" opacity="0.3">
+    <!-- 纵向网格线 -->
+    <line x1="160" y1="220" x2="160" y2="640"/>
+    <line x1="260" y1="220" x2="260" y2="640"/>
+    <line x1="360" y1="220" x2="360" y2="640"/>
+    <line x1="460" y1="220" x2="460" y2="640"/>
+    <line x1="560" y1="220" x2="560" y2="640"/>
+    <line x1="660" y1="220" x2="660" y2="640"/>
+    <line x1="760" y1="220" x2="760" y2="640"/>
+    <!-- 横向网格线 -->
+    <line x1="160" y1="280" x2="760" y2="280"/>
+    <line x1="160" y1="360" x2="760" y2="360"/>
+    <line x1="160" y1="440" x2="760" y2="440"/>
+    <line x1="160" y1="520" x2="760" y2="520"/>
+    <line x1="160" y1="600" x2="760" y2="600"/>
+  </g>
+  <!-- 数据节点圆点（信息点位、终端节点象征） -->
+  <g fill="#8094b4" opacity="0.4">
+    <circle cx="160" cy="280" r="8"/>
+    <circle cx="160" cy="520" r="5"/>
+    <circle cx="160" cy="600" r="8"/>
+    <circle cx="360" cy="600" r="4"/>
+    <circle cx="460" cy="260" r="10" stroke="#8094b4" stroke-width="1" fill="none"/>
+    <circle cx="760" cy="280" r="8"/>
+    <circle cx="760" cy="440" r="5"/>
+    <circle cx="760" cy="520" r="10" stroke="#8094b4" stroke-width="1" fill="none"/>
+  </g>
+  <!-- 核心标识 N.I.X. -->
+  <text x="480" y="460" font-family="Inter,Microsoft YaHei,SimHei,sans-serif" font-size="220" font-weight="700" fill="url(#nixGrad)" text-anchor="middle" dominant-baseline="middle">
+    N.I.X.
+  </text>
+  <!-- 英文全称标注 -->
+  <text x="480" y="740" font-family="Inter,Microsoft YaHei,sans-serif" font-size="42" fill="#0c2b61" text-anchor="middle">
+    Ningxia Intelligence eXplorers
+  </text>
+</svg>

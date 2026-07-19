@@ -30,10 +30,10 @@ MAX_BRAND_ASSET_BYTES = 5 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {"ico", "png", "jpg", "jpeg", "svg", "gif", "webp"}
 DEFAULT_ASSET_URLS = {
     "favicon": "/assets/bisheng/favicon.ico",
-    "loginHeroLight": "/assets/bisheng/login-logo-big.png",
-    "loginHeroDark": "/assets/bisheng/login-logo-dark.png",
-    "headerLogoLight": "/assets/bisheng/login-logo-small.png",
-    "headerLogoDark": "/assets/bisheng/logo-small-dark.png",
+    "loginHeroLight": "/assets/bisheng/logo.svg",
+    "loginHeroDark": "/assets/bisheng/logo.svg",
+    "headerLogoLight": "/assets/bisheng/logo.svg",
+    "headerLogoDark": "/assets/bisheng/logo.svg",
 }
 # Empty by default so the frontend falls back to the built-in <Loading> spinner
 # SVG component (bs-icons/loading) instead of a static asset. Admin preview reads

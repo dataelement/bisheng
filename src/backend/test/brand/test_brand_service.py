@@ -28,7 +28,7 @@ async def test_runtime_config_falls_back_to_builtin_brand_for_invalid_saved_conf
     config = await service.get_runtime_config()
 
     assert config["brandName"] == {"zh": "BISHENG", "en": "BISHENG"}
-    assert config["assets"]["headerLogoLight"]["url"] == "/assets/bisheng/login-logo-small.png"
+    assert config["assets"]["headerLogoLight"]["url"] == "/assets/bisheng/logo.svg"
 
 
 async def test_runtime_config_preserves_saved_brand_and_fills_default_assets() -> None:

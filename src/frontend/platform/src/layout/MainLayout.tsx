@@ -119,8 +119,8 @@ export default function MainLayout() {
                 <div className="flex h-9 my-[14px]">
                     <div className="inline-block" >
                         {/* @ts-ignore */}
-                        <img src={getBrandAssetUrl('headerLogoLight', '/assets/bisheng/login-logo-small.png')} className="w-[104px] ml-[38px] rounded dark:hidden" alt="" />
-                        <img src={getBrandAssetUrl('headerLogoDark', '/assets/bisheng/logo-small-dark.png')} className="w-[104px] ml-[38px] rounded hidden dark:block" alt="" />
+                        <img src={getBrandAssetUrl('headerLogoLight', '/assets/bisheng/logo.svg')} className="w-[104px] ml-[38px] rounded dark:hidden" alt="" />
+                        <img src={getBrandAssetUrl('headerLogoDark', '/assets/bisheng/logo.svg')} className="w-[104px] ml-[38px] rounded hidden dark:block" alt="" />
                     </div>
                 </div>
                 <div>

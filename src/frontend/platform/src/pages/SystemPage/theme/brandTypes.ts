@@ -16,22 +16,22 @@ export const DEFAULT_BRAND_CONFIG: BrandConfig = {
             file_name: "",
         },
         loginHeroLight: {
-            url: "/assets/bisheng/login-logo-big.png",
+            url: "/assets/bisheng/logo.svg",
             relative_path: "",
             file_name: "",
         },
         loginHeroDark: {
-            url: "/assets/bisheng/login-logo-dark.png",
+            url: "/assets/bisheng/logo.svg",
             relative_path: "",
             file_name: "",
         },
         headerLogoLight: {
-            url: "/assets/bisheng/login-logo-small.png",
+            url: "/assets/bisheng/logo.svg",
             relative_path: "",
             file_name: "",
         },
         headerLogoDark: {
-            url: "/assets/bisheng/logo-small-dark.png",
+            url: "/assets/bisheng/logo.svg",
             relative_path: "",
             file_name: "",
         },
