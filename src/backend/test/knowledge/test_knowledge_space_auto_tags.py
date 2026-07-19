@@ -259,3 +259,55 @@ def test_count_file_ai_auto_tags_includes_pending_review_tags():
 
     with patch(f"{module_path}.get_sync_db_session", return_value=ctx):
         assert KnowledgeSpaceAutoTagService._count_file_ai_auto_tags(42) == 5
+
+
+def test_should_run_link_b_after_link_a_respects_tag_limit():
+    assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(0) is True
+    assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(3) is True
+    assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(4) is False
+
+
+def test_apply_after_upload_parse_returns_applied_tag_count():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=False,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        user_id=7,
+        tenant_id=1,
+        abstract="政策制度项目市场",
+    )
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_auto_tag_service"
+
+    with (
+        patch.object(KnowledgeSpaceAutoTagService, "_should_run", return_value=True),
+        patch.object(KnowledgeSpaceAutoTagService, "_resolve_library_ids", return_value=[10]),
+        patch.object(
+            KnowledgeSpaceAutoTagService,
+            "_collect_library_tags",
+            return_value=(["政策", "制度", "项目", "市场"], []),
+        ),
+        patch(
+            f"{module_path}.LLMService.get_knowledge_llm",
+            return_value=SimpleNamespace(auto_tag_enabled=True, extract_title_model_id=123, auto_tag_prompt=""),
+        ),
+        patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()),
+        patch.object(
+            KnowledgeSpaceAutoTagService,
+            "_invoke_llm",
+            return_value=["政策", "制度", "项目", "市场"],
+        ),
+        patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags"),
+    ):
+        applied_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
+
+    assert applied_count == 4
