@@ -4,6 +4,55 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Knowledge Space Scripts
 
+### `dedupe_department_space_documents.py`
+
+删除部门知识空间中与公共知识空间重复的逻辑文档。脚本只比较两类空间当前主版本中
+`file_type = FILE`、`status = SUCCESS` 且非空的精确 MD5；命中后以逻辑文档为单位删除部门侧
+全部历史版本。没有版本关系的兼容数据以单个物理文件为删除单元。公共空间文档和目录始终保留。
+
+默认 dry-run，只读取数据并在 `migration_reports/knowledge_file_dedup/` 生成 JSON 审计报告；
+只有显式传入 `--apply` 才会依次清理部门侧 Milvus、Elasticsearch、MinIO、OpenFGA、数据库关系
+和物理文件。脚本仅支持未启用多租户的部署。
+
+Usage:
+
+```bash
+# 全量只读扫描
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py
+
+# 按部门空间或当前文件收窄 dry-run 范围；参数可重复
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --department-space-id 10 --file-id 201 --limit 20
+
+# 审核 dry-run 报告并安排维护窗口后，重新扫描并执行真实删除
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --department-space-id 10 --limit 20 --apply
+
+# 仅使用先前 apply 报告恢复未完成单元；不可同时指定范围参数
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --apply --resume-report migration_reports/knowledge_file_dedup/dedupe-RUN_ID.json
+```
+
+Safety and reports:
+
+- `--department-space-id`、`--file-id` 可重复；`--limit` 在稳定排序后限制删除单元数。
+- 每个删除单元在写入前都会重新读取并校验空间级别、当前版本、精确 MD5、公共见证和版本链指纹；
+  数据漂移时跳过，不使用旧报告直接决定新的删除目标。
+- JSON 报告记录目标版本链、公共见证、关联影响计数、分步状态和删除后核验结果，并通过原子替换写入。
+- 标签、审核标签、分享、相似候选和门户推荐投影随部门文件关系清理；收藏引用与审计记录保留，报告中给出影响计数。
+- 任一单元失败后停止后续删除并返回非零退出码。`--resume-report` 只接受先前的 apply 报告，校验报告结构和指纹后
+  恢复失败或待处理单元；已完成或已安全跳过的单元不会重复处理。
+- `--apply` 是跨 MySQL、Milvus、Elasticsearch、MinIO、OpenFGA 的不可逆数据删除，不能提供原子回滚。
+  正式执行前必须完成备份、审核 dry-run 报告、单文件烟测和小批量灰度，并在维护窗口内运行。
+
+Exit codes:
+
+- `0`：dry-run 完成，或所有 apply 单元已完成/安全跳过。
+- `2`：参数、单租户约束、目标范围或恢复报告预检失败。
+- `3`：扫描或初始化失败。
+- `4`：真实删除、分步核验或恢复执行失败。
+- `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
+
 ### `backfill_file_similarity_candidates.py`
 
 回填历史知识空间文件的相似候选缓存表 `knowledge_file_similarity_candidate`。默认 dry-run，只统计将刷新的文件；传入 `--apply` 后会逐个调用相似候选刷新逻辑，写入候选明细并同步更新 `knowledgefile.similar_status`。可通过 `--sleep-ms` 降低回填期间 CPU 压力。
