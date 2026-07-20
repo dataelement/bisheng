@@ -127,16 +127,20 @@ class ExpertService:
 
     async def list_experts(
         self, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
-    ) -> tuple[List[Expert], int]:
+    ) -> tuple[List[dict], int]:
         """列表查询专家"""
         experts, total = await self.repository.list_all(keyword=keyword, skip=skip, limit=limit)
+        experts_all = []
         for expert in experts:
-            department = DepartmentDao.get_by_id(expert.depart_ment)
+            expert_dict = expert.model_dump()
+            expert_dict["department_id"] = expert.depart_ment
+            department = await DepartmentDao.get_by_id(expert.depart_ment)
             if department:
-                expert.depart_ment = department.name
+                expert_dict["depart_ment"] = department.name
             else:
-                expert.depart_ment = None
-        return experts, total
+                expert_dict["depart_ment"] = None
+            experts_all.append(expert_dict)
+        return experts_all, total
 
     async def delete_expert(self, expert_id: int) -> bool:
         """删除专家"""
