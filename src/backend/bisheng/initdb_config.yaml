@@ -251,9 +251,9 @@ in_app_message_forwarding:
   shougang_wechat:
     enabled: true
     api_url: "https://mobms.sggf.com.cn:30201/madp-app/madp/qywxPush-api/pushMessage"
-    id: ""
-    agentid: "1000053"
-    key: "FveVv2PHybeI3PSFjPcrJgFGUfuF5-ZGg6ca3NJkwFk"
+    id: "ww09d8b84921e7fd3f"
+    agentid: "1000008"
+    key: "BH27OF9Xn5n2mxDJ6z2Tkpk01USKmoUdyjbbFXTEONg"
     sys_id: "1"
     msg_type: "text"
     timeout_seconds: 10
