@@ -348,6 +348,76 @@ describe("SubjectSearchDepartment", () => {
       .toHaveAttribute("data-state", "unchecked");
   });
 
+  it("shows descendants as covered but unchecked after selecting a parent in single mode", async () => {
+    const onChange = jest.fn();
+    const loadDepartments = jest.fn().mockResolvedValue(threeLevelDepartments);
+
+    render(
+      <ControlledSingleDepartmentTree
+        onChange={onChange}
+        loadDepartments={loadDepartments}
+      />,
+    );
+
+    const rootLabel = await screen.findByText("集团");
+    const rootRow = rootLabel.parentElement as HTMLElement;
+    fireEvent.click(within(rootRow).getByRole("button"));
+
+    const branchALabel = await screen.findByText("A事业部");
+    const branchARow = branchALabel.parentElement as HTMLElement;
+    fireEvent.click(rootLabel);
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      {
+        type: "department",
+        id: 1,
+        name: "集团",
+        include_children: true,
+      },
+    ]);
+    expect(within(rootRow).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "checked");
+    expect(within(branchARow).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "unchecked");
+    expect(within(branchARow).getByText("com_permission.covered_by_parent_department"))
+      .toBeInTheDocument();
+  });
+
+  it("replaces the selected parent when clicking a covered child in single mode", async () => {
+    const onChange = jest.fn();
+    const loadDepartments = jest.fn().mockResolvedValue(threeLevelDepartments);
+
+    render(
+      <ControlledSingleDepartmentTree
+        onChange={onChange}
+        loadDepartments={loadDepartments}
+      />,
+    );
+
+    const rootLabel = await screen.findByText("集团");
+    const rootRow = rootLabel.parentElement as HTMLElement;
+    fireEvent.click(within(rootRow).getByRole("button"));
+
+    const branchALabel = await screen.findByText("A事业部");
+    const branchARow = branchALabel.parentElement as HTMLElement;
+    fireEvent.click(rootLabel);
+    fireEvent.click(branchALabel);
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      {
+        type: "department",
+        id: 2,
+        name: "A事业部",
+        include_children: true,
+      },
+    ]);
+    expect(onChange.mock.calls.every(([nextValue]) => nextValue.length <= 1)).toBe(true);
+    expect(within(rootRow).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "indeterminate");
+    expect(within(branchARow).getByRole("checkbox"))
+      .toHaveAttribute("data-state", "checked");
+  });
+
   it("does not add ancestor indeterminate state in multiple selection mode", async () => {
     render(
       <SubjectSearchDepartment

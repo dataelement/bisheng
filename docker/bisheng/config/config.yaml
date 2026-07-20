@@ -3,14 +3,21 @@
 database_url:
   "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
 
-# 数据库连接池配置（每个进程、每个数据库 Engine 独立创建一套连接池）。
-# 单个 Engine 的并发连接上限为 pool_size + max_overflow；多进程部署时需乘以进程数。
+# 数据库连接池配置（每个进程分别创建同步和异步连接池）。
+# 单个连接池的并发连接上限为 pool_size + max_overflow；多进程部署时需乘以进程数。
 database_pool:
-  pool_size: 100       # 常驻连接数
-  max_overflow: 20     # 高峰期允许额外创建的临时连接数
-  pool_timeout: 30     # 等待空闲连接的超时秒数
-  pool_recycle: 3600   # 连接回收重建周期，单位秒
-  pool_pre_ping: true  # 使用连接前检查连接是否有效
+  sync:
+    pool_size: 20       # 常驻连接数
+    max_overflow: 10    # 高峰期允许额外创建的临时连接数
+    pool_timeout: 30    # 等待空闲连接的超时秒数
+    pool_recycle: 3600  # 连接回收重建周期，单位秒
+    pool_pre_ping: true  # 使用连接前检查连接是否有效
+  async:
+    pool_size: 40
+    max_overflow: 20
+    pool_timeout: 30
+    pool_recycle: 3600
+    pool_pre_ping: true
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0

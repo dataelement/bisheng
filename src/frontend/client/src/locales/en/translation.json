@@ -2026,6 +2026,7 @@
     "empty_search": "No matching users",
     "empty_user_groups": "No user groups found",
     "already_granted": "Granted",
+    "covered_by_parent_department": "Covered by parent department",
     "error_grant_failed": "Failed to grant permissions. Please try again.",
     "error_last_owner": "At least one owner must remain. You cannot remove the last owner.",
     "error_permission_denied": "Failed to load permission entries",

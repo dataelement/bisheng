@@ -675,18 +675,101 @@ class InAppMessageForwardingConf(BaseModel):
     shougang_wechat: ShougangWeChatMessagePushConf = ShougangWeChatMessagePushConf()
 
 
-class DatabasePoolConf(BaseModel):
-    """SQLAlchemy connection-pool settings for each database engine."""
+DATABASE_POOL_FIELDS = (
+    "pool_size",
+    "max_overflow",
+    "pool_timeout",
+    "pool_recycle",
+    "pool_pre_ping",
+)
+SYNC_DATABASE_POOL_DEFAULTS: dict[str, Any] = {
+    "pool_size": 20,
+    "max_overflow": 10,
+    "pool_timeout": 30,
+    "pool_recycle": 3600,
+    "pool_pre_ping": True,
+}
+ASYNC_DATABASE_POOL_DEFAULTS: dict[str, Any] = {
+    "pool_size": 40,
+    "max_overflow": 20,
+    "pool_timeout": 30,
+    "pool_recycle": 3600,
+    "pool_pre_ping": True,
+}
 
-    pool_size: int = Field(default=100, description="Persistent connections per engine and process")
-    max_overflow: int = Field(default=20, description="Temporary connections allowed above pool_size")
-    pool_timeout: int = Field(default=30, description="Seconds to wait for an available connection")
-    pool_recycle: int = Field(default=3600, description="Seconds before recycling a connection")
-    pool_pre_ping: bool = Field(default=True, description="Check connection health before use")
+
+class DatabaseEnginePoolConf(BaseModel):
+    """Resolved SQLAlchemy connection-pool settings for one engine type."""
+
+    pool_size: int
+    max_overflow: int
+    pool_timeout: int
+    pool_recycle: int
+    pool_pre_ping: bool
 
     def as_engine_kwargs(self) -> dict[str, Any]:
-        """Return keyword arguments accepted by SQLAlchemy engine factories."""
+        """Return keyword arguments accepted by a SQLAlchemy engine factory."""
         return self.model_dump()
+
+
+class DatabasePoolConf(BaseModel):
+    """Resolve legacy common overrides and engine-specific pool settings."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    pool_size: int | None = Field(default=None, description="Legacy common persistent connections")
+    max_overflow: int | None = Field(default=None, description="Legacy common overflow connections")
+    pool_timeout: int | None = Field(default=None, description="Legacy common pool wait timeout")
+    pool_recycle: int | None = Field(default=None, description="Legacy common connection recycle time")
+    pool_pre_ping: bool | None = Field(default=None, description="Legacy common connection health check")
+    sync: DatabaseEnginePoolConf
+    async_: DatabaseEnginePoolConf = Field(alias="async")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_engine_pool_settings(cls, values: Any) -> Any:
+        """Apply defaults, legacy common fields, then engine-specific fields."""
+        if values is None:
+            values = {}
+        if not isinstance(values, dict):
+            return values
+
+        resolved_values = dict(values)
+        legacy_overrides = {field: resolved_values[field] for field in DATABASE_POOL_FIELDS if field in resolved_values}
+
+        def resolve(
+            defaults: dict[str, Any],
+            engine_values: Any,
+        ) -> Any:
+            if engine_values is None:
+                engine_values = {}
+            if isinstance(engine_values, BaseModel):
+                engine_values = engine_values.model_dump()
+            if not isinstance(engine_values, dict):
+                return engine_values
+            return {**defaults, **legacy_overrides, **engine_values}
+
+        resolved_values["sync"] = resolve(
+            SYNC_DATABASE_POOL_DEFAULTS,
+            resolved_values.get("sync"),
+        )
+        resolved_values["async"] = resolve(
+            ASYNC_DATABASE_POOL_DEFAULTS,
+            resolved_values.get("async", resolved_values.get("async_")),
+        )
+        return resolved_values
+
+    def as_sync_engine_kwargs(self) -> dict[str, Any]:
+        """Return resolved keyword arguments for the synchronous engine."""
+        return self.sync.as_engine_kwargs()
+
+    def as_async_engine_kwargs(self) -> dict[str, Any]:
+        """Return resolved keyword arguments for the asynchronous engine."""
+        return self.async_.as_engine_kwargs()
+
+    def as_engine_kwargs(self) -> dict[str, Any]:
+        """Return sync kwargs for callers using the legacy helper method."""
+        return self.as_sync_engine_kwargs()
 
 
 class PortalHotSearchConf(BaseModel):
@@ -848,7 +931,7 @@ class Settings(BaseModel):
     @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
-            if key != "dev" and not value:
+            if key not in {"dev", "database_pool"} and not value:
                 values[key] = []
         return values
 
