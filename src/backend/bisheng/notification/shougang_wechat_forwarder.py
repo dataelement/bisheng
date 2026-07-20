@@ -15,6 +15,7 @@ from bisheng.notification.external.shougang_wechat_payload import (
     resolve_action_code,
 )
 from bisheng.user.domain.models.user import UserDao
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ async def maybe_push_shougang_wechat_message(message: InboxMessage) -> None:
             wechat_user_ids=wechat_user_ids,
             body=body,
             max_retries=conf.max_retries,
+            next_retry_at=datetime.now(),
         )
 
         async with get_async_db_session() as session:

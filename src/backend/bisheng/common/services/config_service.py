@@ -291,17 +291,49 @@ class ConfigService(Settings):
         return self.in_app_message_forwarding.cofco
 
     def get_shougang_wechat_message_push_conf(self) -> ShougangWeChatMessagePushConf:
-        """Hot-reload Shougang WeChat message push config from DB; fall back to YAML boot value."""
+        """Hot-reload Shougang WeChat message push config from DB; merge with YAML boot value.
+
+        DB values override YAML defaults, but missing fields fall back to YAML so that a
+        partial DB block (e.g. saved without ``enabled``) does not silently disable the
+        feature via Pydantic defaults.
+        """
         all_config = self.get_all_config()
         db_block = (all_config.get('in_app_message_forwarding') or {}).get('shougang_wechat') or {}
-        if db_block:
-            try:
-                return ShougangWeChatMessagePushConf.model_validate(db_block)
-            except Exception as exc:
-                logger.warning(
-                    'Invalid shougang_wechat message push config in DB: %s; falling back to YAML', exc,
-                )
-        return self.in_app_message_forwarding.shougang_wechat
+        yaml_conf = self.in_app_message_forwarding.shougang_wechat
+        yaml_enabled = yaml_conf.enabled
+
+        # Diagnostic logging: make it obvious where the effective ``enabled`` value comes from.
+        if not db_block:
+            logger.info(
+                "shougang_wechat_config.source=yaml yaml_enabled={} effective_enabled={}",
+                yaml_enabled,
+                yaml_enabled,
+            )
+            return yaml_conf
+
+        db_enabled = db_block.get("enabled")
+        try:
+            merged = yaml_conf.model_dump()
+            merged.update(db_block)
+            conf = ShougangWeChatMessagePushConf.model_validate(merged)
+            logger.info(
+                "shougang_wechat_config.source=db_merge db_enabled={} yaml_enabled={} effective_enabled={}",
+                db_enabled,
+                yaml_enabled,
+                conf.enabled,
+            )
+            return conf
+        except Exception as exc:
+            logger.warning(
+                'Invalid shougang_wechat message push config in DB: {}; falling back to YAML', exc,
+            )
+        logger.info(
+            "shougang_wechat_config.source=yaml_fallback db_enabled={} yaml_enabled={} effective_enabled={}",
+            db_enabled,
+            yaml_enabled,
+            yaml_enabled,
+        )
+        return yaml_conf
 
     async def aget_from_db(self, key: str):
         # Get all of them firstkey
