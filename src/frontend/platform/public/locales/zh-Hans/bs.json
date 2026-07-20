@@ -1049,7 +1049,7 @@
     "importTagLibrary": "导入标签库",
     "tagLibraryManagementTitle": "标签库管理",
     "tagLibraryManagementDesc": "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标从库中选取候选标签。",
-    "searchTagLibrary": "按标签库名搜索",
+    "searchTagLibrary": "按标签名搜索",
     "tagLibraryEmpty": "暂无标签库，请点击右上角新增",
     "tagLibraryTagsTitle": "标签库标签",
     "tagLibraryTagsEmpty": "暂无标签，请点击右上角添加",

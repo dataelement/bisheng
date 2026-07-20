@@ -1060,7 +1060,7 @@
     "importTagLibrary": "Import Tag Library",
     "tagLibraryManagementTitle": "Tag Library Management",
     "tagLibraryManagementDesc": "Maintain platform tag libraries. Knowledge spaces can bind one or more libraries; AI tagging picks candidates from them.",
-    "searchTagLibrary": "Search by library name",
+    "searchTagLibrary": "Search by tag name",
     "tagLibraryEmpty": "No tag libraries yet. Click Add Tag Library above.",
     "tagLibraryTagsTitle": "Library Tags",
     "tagLibraryTagsEmpty": "No tags yet. Click Add in the top right.",

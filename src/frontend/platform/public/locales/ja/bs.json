@@ -1043,7 +1043,7 @@
     "importTagLibrary": "タグライブラリをインポート",
     "tagLibraryManagementTitle": "タグライブラリ管理",
     "tagLibraryManagementDesc": "プラットフォームのタグライブラリを管理します。ナレッジスペースは複数のライブラリをバインドでき、AI タグ付けは候補をそこから選びます。",
-    "searchTagLibrary": "ライブラリ名で検索",
+    "searchTagLibrary": "タグ名で検索",
     "tagLibraryEmpty": "タグライブラリがありません。右上から追加してください。",
     "tagLibraryTagsTitle": "ライブラリ内タグ",
     "tagLibraryTagsEmpty": "タグがありません。右上の追加ボタンをクリックしてください。",
