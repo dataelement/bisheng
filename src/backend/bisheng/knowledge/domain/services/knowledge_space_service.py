@@ -282,8 +282,8 @@ from bisheng.workstation.domain.services.workstation_service import WorkStationS
 
 if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.department_space_binding_repository import (
-        DepartmentSpaceRebindPlan,
         DepartmentSpaceBindingRepository,
+        DepartmentSpaceRebindPlan,
     )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
         KnowledgeDocumentRepository,
@@ -343,6 +343,7 @@ PORTAL_SEARCH_FINAL_LIMIT = 50
 PORTAL_SEARCH_PERMISSION_BATCH_SIZE = 50
 PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE = 100
 PORTAL_HOT_READ_CURSOR_SCAN_BATCH_SIZE = 100
+PORTAL_HOT_READ_SEARCH_FILE_ID_LIMIT = 500
 PORTAL_SEARCH_OVERSAMPLE_FACTOR = 3
 PORTAL_SEARCH_RRF_K = 60
 PORTAL_SEARCH_ES_WEIGHT = 1.0
@@ -1103,10 +1104,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 levels_ms = (time.perf_counter() - _t_levels) * 1000
                 permission_levels.update(
-                    {
-                        space_id: level_map.get(str(space_id))
-                        for space_id in permission_level_ids_to_resolve
-                    }
+                    {space_id: level_map.get(str(space_id)) for space_id in permission_level_ids_to_resolve}
                 )
         if required_permission_id and permission_id_space_ids:
             # ``memberships`` comes from async_get_user_space_members(), which
@@ -1125,9 +1123,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     space_id for space_id in permission_id_space_ids if space_id in membership_map
                 )
                 level_granted_space_ids = {
-                    space_id
-                    for space_id in permission_space_ids
-                    if permission_levels.get(space_id) is not None
+                    space_id for space_id in permission_space_ids if permission_levels.get(space_id) is not None
                 }
                 if level_granted_space_ids:
                     models, bindings = await asyncio.gather(
@@ -1146,9 +1142,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     }
                     trusted_permission_space_ids.update(level_granted_space_ids - custom_model_space_ids)
 
-            permission_ids_map = {
-                space_id: {required_permission_id} for space_id in trusted_permission_space_ids
-            }
+            permission_ids_map = {space_id: {required_permission_id} for space_id in trusted_permission_space_ids}
             permission_ids_to_resolve = [
                 space_id for space_id in permission_id_space_ids if space_id not in trusted_permission_space_ids
             ]
@@ -1167,9 +1161,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     ]
                 )
                 effective_ms = (time.perf_counter() - _t_effective) * 1000
-                permission_ids_map.update(
-                    dict(zip(permission_ids_to_resolve, permission_ids, strict=True))
-                )
+                permission_ids_map.update(dict(zip(permission_ids_to_resolve, permission_ids, strict=True)))
 
         normal_spaces = []
         for space in spaces:
@@ -4323,6 +4315,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _search_shougang_portal_files_impl(self, req: ShougangPortalFileSearchReq) -> dict:
         _set_portal_search_stage("resolve_spaces")
+        keyword = (req.q or "").strip()
         is_public_latest_selected = bool(req.public_only) and self._is_shougang_portal_latest_selected_recommendation(
             req.recommendation
         )
@@ -4336,9 +4329,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return self._build_shougang_portal_search_response([])
 
-        if self._is_shougang_portal_latest_selected_recommendation(
-            req.recommendation
-        ) and not self._is_shougang_portal_updated_at_sort(req.sort):
+        if (
+            self._is_shougang_portal_latest_selected_recommendation(req.recommendation)
+            and not keyword
+            and not self._is_shougang_portal_updated_at_sort(req.sort)
+        ):
             _set_portal_search_stage("list_hot_read_files")
             return await self._list_shougang_portal_hot_read_files(
                 req=req,
@@ -4352,12 +4347,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if req.tag and not tag_file_ids:
             return self._build_shougang_portal_search_response([])
 
-        if req.q and req.q.strip():
+        semantic_filter_file_ids = tag_file_ids
+        if keyword and self._is_shougang_portal_latest_selected_recommendation(req.recommendation):
+            hot_read_file_ids = await self._collect_shougang_portal_hot_read_search_file_ids(
+                req=req,
+                spaces=spaces,
+                trusted_public_scope=is_public_latest_selected,
+            )
+            if not hot_read_file_ids:
+                return self._build_shougang_portal_search_response([])
+            semantic_filter_file_ids = self._merge_shougang_portal_semantic_filter_file_ids(
+                tag_file_ids,
+                hot_read_file_ids,
+            )
+            if semantic_filter_file_ids is not None and not semantic_filter_file_ids:
+                return self._build_shougang_portal_search_response([])
+
+        if keyword:
             _set_portal_search_stage("semantic_search")
             return await self._semantic_search_shougang_portal_files(
                 req=req,
                 spaces=spaces,
-                tag_file_ids=tag_file_ids,
+                tag_file_ids=semantic_filter_file_ids,
             )
 
         _set_portal_search_stage("list_files")
@@ -4370,11 +4381,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _browse_shougang_portal_files_impl(self, req: ShougangPortalFileBrowseReq) -> dict:
         _set_portal_search_stage("resolve_spaces")
-        is_public_latest_selected = bool(req.public_only) and self._is_shougang_portal_latest_selected_recommendation(
-            req.recommendation
-        )
-        if is_public_latest_selected:
-            spaces = await self._get_shougang_portal_public_search_spaces()
+        trusted_public_scope = bool(req.public_only)
+        if trusted_public_scope:
+            requested_public_space_ids = (
+                None if self._is_shougang_portal_latest_selected_recommendation(req.recommendation) else req.space_ids
+            )
+            spaces = await self._get_shougang_portal_public_search_spaces(requested_public_space_ids)
         else:
             spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
         perf = _get_portal_search_perf()
@@ -4394,7 +4406,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return await self._list_shougang_portal_hot_read_files(
                 req=req,
                 spaces=spaces,
-                trusted_public_scope=is_public_latest_selected,
+                trusted_public_scope=trusted_public_scope,
             )
 
         _set_portal_search_stage("resolve_tag")
@@ -4408,7 +4420,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             req=req,
             spaces=spaces,
             tag_file_ids=tag_file_ids,
-            trusted_public_scope=is_public_latest_selected,
+            trusted_public_scope=trusted_public_scope,
         )
 
     async def _recommend_shougang_portal_files(
@@ -5120,6 +5132,83 @@ class KnowledgeSpaceService(KnowledgeUtils):
             encode_cursor((next_offset,), context=cursor_context) if has_more and next_offset is not None else None
         )
         return self._build_shougang_portal_cursor_response(page_items, has_more, next_cursor)
+
+    async def _collect_shougang_portal_hot_read_search_file_ids(
+        self,
+        *,
+        req: ShougangPortalFileBrowseReq,
+        spaces: list[Knowledge],
+        trusted_public_scope: bool = False,
+        max_file_ids: int = PORTAL_HOT_READ_SEARCH_FILE_ID_LIMIT,
+    ) -> list[int]:
+        """Collect visible hot-read file IDs for latest_selected keyword search."""
+        space_ids = [int(space.id) for space in spaces]
+        if not space_ids:
+            return []
+
+        safe_limit = max(int(max_file_ids or 0), 1)
+        collected: list[int] = []
+        seen: set[int] = set()
+        current_offset = 0
+        scan_limit = PORTAL_HOT_READ_CURSOR_SCAN_BATCH_SIZE
+
+        while len(collected) < safe_limit:
+            buckets = await PortalTelemetryEventService.list_document_read_counts_by_space_ids(
+                space_ids,
+                offset=current_offset,
+                limit=scan_limit,
+            )
+            if not buckets:
+                break
+
+            bucket_file_ids = [int(bucket["file_id"]) for bucket in buckets if int(bucket.get("file_id") or 0) > 0]
+            if bucket_file_ids:
+                raw_files = await KnowledgeFileDao.aget_file_by_space_filters(
+                    knowledge_ids=space_ids,
+                    status=[KnowledgeFileStatus.SUCCESS.value],
+                    file_ids=bucket_file_ids,
+                    file_ext=req.file_ext,
+                    file_subcategory_code=req.file_subcategory_code,
+                )
+                files = self._filter_shougang_portal_files_by_document_type(raw_files, req.document_type)
+                files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
+                files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
+                if files:
+                    visible_files = (
+                        self._accept_shougang_portal_public_files(files)
+                        if trusted_public_scope
+                        else await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+                    )
+                    visible_ids = {int(file.id) for file in visible_files if int(file.id or 0) > 0}
+                    for file_id in bucket_file_ids:
+                        if file_id not in visible_ids or file_id in seen:
+                            continue
+                        seen.add(file_id)
+                        collected.append(file_id)
+                        if len(collected) >= safe_limit:
+                            return collected
+
+            current_offset += len(buckets)
+            if len(buckets) < scan_limit:
+                break
+
+        return collected
+
+    @staticmethod
+    def _merge_shougang_portal_semantic_filter_file_ids(
+        *filters: list[int] | None,
+    ) -> list[int] | None:
+        active = [
+            list(dict.fromkeys(int(file_id) for file_id in items if int(file_id) > 0)) for items in filters if items
+        ]
+        if not active:
+            return None
+        merged = set(active[0])
+        for items in active[1:]:
+            merged &= set(items)
+            if not merged:
+                return []
+        return list(merged)
 
     async def _get_shougang_portal_hot_read_file_items(
         self,
@@ -6286,10 +6375,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def _is_shougang_portal_latest_selected_recommendation(recommendation: str | None) -> bool:
         return str(recommendation or "").strip() == SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED
 
-    async def _get_shougang_portal_public_search_spaces(self) -> list[Knowledge]:
+    async def _get_shougang_portal_public_search_spaces(
+        self,
+        requested_space_ids: list[int] | None = None,
+    ) -> list[Knowledge]:
         """Resolve the current tenant's public spaces without user permission checks."""
         public_space_ids = await KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC)
         unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in public_space_ids if int(space_id) > 0))
+        requested_ids = {int(space_id) for space_id in (requested_space_ids or []) if int(space_id) > 0}
+        if requested_ids:
+            unique_space_ids = [space_id for space_id in unique_space_ids if space_id in requested_ids]
         if not unique_space_ids:
             return []
 
@@ -6387,10 +6482,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if callable(is_admin):
             is_global_admin = bool(is_admin())
 
+        public_space_ids = await self._get_shougang_portal_public_space_ids(
+            space_ids,
+            spaces=ordered_spaces,
+        )
+        public_can_download = "download_file" in default_permission_ids_for_relation("viewer")
         visible_spaces: list[Knowledge] = []
-        # space_id -> can_download, derived from the same per-space effective
-        # 'download_file' permission the download endpoint enforces, so it never
-        # drifts from actual download enforcement (and matches file preview).
+        # space_id -> can_download. Public spaces use canonical viewer defaults;
+        # other spaces use the same effective permission enforced by downloads.
         download_map: dict[int, bool] = {}
         permission_checks = []
         permission_spaces: list[Knowledge] = []
@@ -6401,11 +6500,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 visible_spaces.append(space)
                 download_map[space_id] = True
                 continue
-            # Every other space (including square-preview ones) needs its real
-            # effective-permission set: square-preview spaces stay visible regardless
-            # of the result, but the download flag must reflect the actual grant — a
-            # viewer-role user, for instance, may see a space without being allowed to
-            # download its files.
+            if space_id in public_space_ids:
+                # Public spaces are visible by business definition. Reuse the
+                # canonical public viewer permissions instead of fanning out one
+                # user-specific OpenFGA lookup per space.
+                visible_spaces.append(space)
+                download_map[space_id] = public_can_download
+                continue
+            # Non-public spaces (including square-preview ones) need their real
+            # effective-permission set. Square-preview spaces stay visible regardless
+            # of the result, while the permission result still controls download.
             permission_spaces.append(space)
             permission_checks.append(self._get_effective_permission_ids("knowledge_space", space_id))
 
@@ -6925,12 +7029,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         revoke_manager_ids = plan.manager_grant_user_ids if reverse else plan.manager_revoke_user_ids
         grants = [
             *(
-                [AuthorizeGrantItem(
-                    subject_type="department",
-                    subject_id=grant_department_id,
-                    relation="viewer",
-                    include_children=True,
-                )]
+                [
+                    AuthorizeGrantItem(
+                        subject_type="department",
+                        subject_id=grant_department_id,
+                        relation="viewer",
+                        include_children=True,
+                    )
+                ]
                 if not reverse or plan.revoke_old_department_viewer
                 else []
             ),
@@ -6946,12 +7052,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ]
         revokes = [
             *(
-                [AuthorizeRevokeItem(
-                    subject_type="department",
-                    subject_id=revoke_department_id,
-                    relation="viewer",
-                    include_children=True,
-                )]
+                [
+                    AuthorizeRevokeItem(
+                        subject_type="department",
+                        subject_id=revoke_department_id,
+                        relation="viewer",
+                        include_children=True,
+                    )
+                ]
                 if reverse or plan.revoke_old_department_viewer
                 else []
             ),
@@ -7105,15 +7213,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             has_manual_old_department_viewer = False
             if int(old_department.id) != int(target_department.id):
-                has_manual_old_department_viewer = (
-                    await FineGrainedPermissionService.has_explicit_relation_binding(
-                        object_type="knowledge_space",
-                        object_id=space_id,
-                        subject_type="department",
-                        subject_id=int(old_department.id),
-                        relation="viewer",
-                        include_children=True,
-                    )
+                has_manual_old_department_viewer = await FineGrainedPermissionService.has_explicit_relation_binding(
+                    object_type="knowledge_space",
+                    object_id=space_id,
+                    subject_type="department",
+                    subject_id=int(old_department.id),
+                    relation="viewer",
+                    include_children=True,
                 )
             plan = await self.department_space_binding_repo.prepare_rebind_department(
                 space_id=space_id,
@@ -7141,9 +7247,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     plan = replace(
                         plan,
                         manager_revoke_user_ids=tuple(
-                            user_id
-                            for user_id in plan.manager_revoke_user_ids
-                            if user_id not in protected_manager_ids
+                            user_id for user_id in plan.manager_revoke_user_ids if user_id not in protected_manager_ids
                         ),
                     )
                 try:
@@ -7422,38 +7526,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return []
 
             candidate_space_ids = {int(space_id) for space_id in space_ids}
-            member_space_ids = {
-                int(member.business_id)
-                for member in memberships
-                if str(member.business_id).isdigit()
-            }
+            member_space_ids = {int(member.business_id) for member in memberships if str(member.business_id).isdigit()}
             if readable_space_ids is None:
                 # PermissionService returns None only for global administrators,
                 # whose complete access is handled by _format_accessible_spaces.
                 visible_space_ids = candidate_space_ids
                 precomputed_permission_levels: dict[int, str | None] = {}
             else:
-                readable_ids = {
-                    int(space_id) for space_id in readable_space_ids if str(space_id).isdigit()
-                }
-                manageable_ids = {
-                    int(space_id)
-                    for space_id in (manageable_space_ids or [])
-                    if str(space_id).isdigit()
-                }
+                readable_ids = {int(space_id) for space_id in readable_space_ids if str(space_id).isdigit()}
+                manageable_ids = {int(space_id) for space_id in (manageable_space_ids or []) if str(space_id).isdigit()}
                 readable_ids.update(manageable_ids)
                 visible_space_ids = candidate_space_ids & (readable_ids | member_space_ids)
                 if not visible_space_ids:
                     return []
-                precomputed_permission_levels = {
-                    space_id: "can_read" for space_id in (visible_space_ids & readable_ids)
-                }
-                precomputed_permission_levels.update(
-                    {
-                        space_id: "can_manage"
-                        for space_id in (visible_space_ids & manageable_ids)
-                    }
-                )
+                precomputed_permission_levels = dict.fromkeys(visible_space_ids & readable_ids, "can_read")
+                precomputed_permission_levels.update(dict.fromkeys(visible_space_ids & manageable_ids, "can_manage"))
             return await self._format_accessible_spaces(
                 [int(space_id) for space_id in space_ids if int(space_id) in visible_space_ids],
                 order_by,

@@ -37,7 +37,8 @@ class PortalHotSearchReadService:
         except Exception:
             logger.warning("hot-search redis read failed tenant={}", tenant_id)
             cached = None
-        if cached is not None:
+        # Empty list is a negative cache from a zero-result rebuild; fall back to MySQL.
+        if cached:
             return cached[: self.top_k]
 
         try:

@@ -1,3 +1,7 @@
+from unittest.mock import AsyncMock
+
+import pytest
+
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import PortalHotSearchItem
 from bisheng.knowledge.domain.services.portal_hot_search_read_service import (
     PortalHotSearchReadService,
@@ -71,6 +75,16 @@ async def test_read_returns_empty_when_no_data():
     assert await svc.list_for_home(1) == []
 
 
+async def test_read_ignores_empty_redis_cache_and_falls_back_to_db():
+    redis = _FakeRedisRepo(cached=[])
+    snapshot = _FakeSnapshotRepo([PortalHotSearchItem(rank=1, query="设备检修时的安全要求是什么？")])
+    svc = PortalHotSearchReadService(redis_repository=redis, snapshot_repository=snapshot, top_k=5)
+
+    result = await svc.list_for_home(1)
+    assert [i.query for i in result] == ["设备检修时的安全要求是什么？"]
+    assert snapshot.calls == 1
+
+
 async def test_read_survives_redis_failure():
     redis = _FakeRedisRepo(fail=True)
     snapshot = _FakeSnapshotRepo([PortalHotSearchItem(rank=1, query="环保设施运行要求？")])
@@ -141,3 +155,89 @@ async def test_list_hot_searches_returns_empty_when_disabled(monkeypatch):
     monkeypatch.setattr(config_service.settings.portal_hot_search, "enabled", False)
     svc = _bare_service()
     assert await svc._list_shougang_portal_hot_searches() == []
+
+
+# --------------------------------------------------------------------------
+# Admin trigger API (AC-34)
+# --------------------------------------------------------------------------
+
+
+async def test_admin_trigger_rebuild_dispatches_current_tenant(monkeypatch):
+    from types import SimpleNamespace
+
+    from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
+        PortalHotSearchTriggerRebuildReq,
+    )
+    from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
+        PortalHotSearchAdminService,
+    )
+
+    captured: dict[str, int] = {}
+
+    def _dispatch(tenant_id: int) -> str:
+        captured["tenant_id"] = tenant_id
+        return "tenant-task"
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.portal_hot_search_admin_service.get_current_tenant_id",
+        lambda: 7,
+    )
+
+    result = await PortalHotSearchAdminService.trigger_rebuild(
+        PortalHotSearchTriggerRebuildReq(fanout=False),
+        login_user=SimpleNamespace(user_id=1),
+        dispatch_tenant_rebuild=_dispatch,
+    )
+
+    assert result.scope == "tenant"
+    assert result.tenant_id == 7
+    assert result.task_id == "tenant-task"
+    assert captured["tenant_id"] == 7
+
+
+async def test_admin_trigger_fanout_requires_global_super(monkeypatch):
+    from types import SimpleNamespace
+
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+    from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
+        PortalHotSearchTriggerRebuildReq,
+    )
+    from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
+        PortalHotSearchAdminService,
+    )
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.portal_hot_search_admin_service._check_is_global_super",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(SpacePermissionDeniedError):
+        await PortalHotSearchAdminService.trigger_rebuild(
+            PortalHotSearchTriggerRebuildReq(fanout=True),
+            login_user=SimpleNamespace(user_id=2),
+            dispatch_fanout_rebuild=lambda: "should-not-run",
+        )
+
+
+async def test_admin_trigger_rebuild_rejects_when_disabled(monkeypatch):
+    from types import SimpleNamespace
+
+    from bisheng.common.errcode.knowledge_space import PortalHotSearchDisabledError
+    from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
+        PortalHotSearchTriggerRebuildReq,
+    )
+    from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
+        PortalHotSearchAdminService,
+    )
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.portal_hot_search_admin_service.settings.portal_hot_search.enabled",
+        False,
+    )
+
+    with pytest.raises(PortalHotSearchDisabledError):
+        await PortalHotSearchAdminService.trigger_rebuild(
+            PortalHotSearchTriggerRebuildReq(fanout=False),
+            login_user=SimpleNamespace(user_id=1),
+            dispatch_tenant_rebuild=lambda _tenant_id: "should-not-run",
+        )

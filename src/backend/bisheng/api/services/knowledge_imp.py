@@ -238,7 +238,7 @@ def addEmbedding(
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
             # Link A (approved tags): always attempt; gated inside _should_run (not by auto_tag_enabled).
-            KnowledgeSpaceAutoTagService.apply_after_upload_parse(
+            link_a_applied_tag_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(
                 knowledge=knowledge_info,
                 db_file=db_file,
                 documents=pipeline_result.documents,
@@ -248,11 +248,20 @@ def addEmbedding(
             cfg, inherited, source_tenant_id, has_override = WorkStationService.query_knowledge_space_config_with_meta()
             enable_pending_review_tags = bool(getattr(cfg, "review_tag_visible", True)) if cfg else True
 
-            if enable_pending_review_tags:
+            if enable_pending_review_tags and KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(
+                link_a_applied_tag_count
+            ):
                 KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
                     knowledge=knowledge_info,
                     db_file=db_file,
                     documents=pipeline_result.documents,
+                )
+            elif enable_pending_review_tags:
+                logger.info(
+                    "review_tag_skip_link_a_tag_limit space_id={} file_id={} link_a_applied_tag_count={}",
+                    knowledge_info.id,
+                    db_file.id,
+                    link_a_applied_tag_count,
                 )
             status = "success"
         except EtlException as e:

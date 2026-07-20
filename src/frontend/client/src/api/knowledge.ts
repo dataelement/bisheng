@@ -2643,6 +2643,11 @@ export async function batchRetryApi(
 export interface KnowledgeFilePreview {
     original_url: string;
     preview_url: string;
+    /**
+     * PDF rendition of a Word preview, laid out by LibreOffice the way Word does.
+     * Empty when conversion failed or the file predates it — fall back to preview_url.
+     */
+    pdf_preview_url: string;
     file_source: string;
     source_url: string;
     final_url: string;
@@ -2665,6 +2670,7 @@ export async function getFilePreviewApi(
     return {
         original_url: data?.original_url ?? "",
         preview_url: data?.preview_url ?? "",
+        pdf_preview_url: data?.pdf_preview_url ?? "",
         file_source: data?.file_source ?? "",
         source_url: data?.source_url ?? "",
         final_url: data?.final_url ?? "",

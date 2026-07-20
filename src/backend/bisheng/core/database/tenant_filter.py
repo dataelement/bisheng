@@ -59,6 +59,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.approval.domain.models.approval_request",
     "bisheng.approval.domain.models.approval_notification_outbox",
     "bisheng.citation.domain.models.message_citation",
+    "bisheng.shougang_portal_course.domain.models.portal_course",
     # Previously *not* on any auto-imported chain — silent tenant-id leaks.
     "bisheng.database.models.failed_tuple",
     "bisheng.database.models.flow_version",

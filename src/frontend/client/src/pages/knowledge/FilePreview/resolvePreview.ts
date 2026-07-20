@@ -75,6 +75,7 @@ export function resolveFilePreview(data: KnowledgeFilePreview): ResolvedPreview 
         ...data,
         original_url: resolvePreviewUrl(data.original_url),
         preview_url: resolvePreviewUrl(data.preview_url),
+        pdf_preview_url: resolvePreviewUrl(data.pdf_preview_url),
         html_preview_url: resolvePreviewUrl(data.html_preview_url),
     };
 
@@ -89,7 +90,12 @@ export function resolveFilePreview(data: KnowledgeFilePreview): ResolvedPreview 
         };
     }
 
-    const chosenUrl = data.preview_url || data.original_url;
+    // Prefer the PDF rendition of a Word file: LibreOffice lays the page out like Word
+    // does, while converting the .docx to HTML in the browser drops e-seals and shape
+    // positioning. Empty when conversion failed or the file predates it, so we fall back
+    // to the .docx preview. The viewer is picked from the extension, which the .pdf URL
+    // supplies by itself.
+    const chosenUrl = data.pdf_preview_url || data.preview_url || data.original_url;
     if (!chosenUrl) {
         return { isRich: false, fileUrl: "", fileType: "pdf", conversionFailed: false, previewData };
     }

@@ -39,6 +39,16 @@ class PortalHotSearchTelemetryRepositoryImpl(PortalHotSearchTelemetryRepository)
         self._es_client = es_client
 
     @staticmethod
+    def _epoch_ms(value: datetime) -> int:
+        """Convert UTC datetime to ES range bounds.
+
+        ``base_telemetry_events`` stores ``timestamp`` as epoch milliseconds in
+        practice (despite mapping ``epoch_second`` on legacy indices). Range
+        filters must use ms or Pass1/Pass2 return zero hits.
+        """
+        return int(value.timestamp() * 1000)
+
+    @staticmethod
     def _assert_current_tenant(tenant_id: int) -> None:
         current = get_current_tenant_id()
         if current is None or int(current) != int(tenant_id):
@@ -58,8 +68,8 @@ class PortalHotSearchTelemetryRepositoryImpl(PortalHotSearchTelemetryRepository)
             {
                 "range": {
                     "timestamp": {
-                        "gte": int(since.timestamp()),
-                        "lt": int(before.timestamp()),
+                        "gte": PortalHotSearchTelemetryRepositoryImpl._epoch_ms(since),
+                        "lt": PortalHotSearchTelemetryRepositoryImpl._epoch_ms(before),
                     }
                 }
             },

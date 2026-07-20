@@ -276,20 +276,25 @@ def test_portal_config_rejects_invalid_url_application():
         )
 
 
-def test_internal_config_endpoint_requires_admin_dependency():
-    async def deny_request():
-        raise HTTPException(status_code=401, detail="missing admin token")
+def test_internal_config_endpoint_is_open(monkeypatch):
+    requested_tenant_ids = []
 
+    async def fake_get_config(*, tenant_id: int | None = None):
+        requested_tenant_ids.append(tenant_id)
+        return None
+
+    monkeypatch.setattr(ShougangPortalConfigService, "get_config", staticmethod(fake_get_config))
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[UserPayload.get_admin_user] = deny_request
 
     response = TestClient(app).get("/shougang-portal/config/internal")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert response.json()["data"] is None
+    assert requested_tenant_ids == [None]
 
 
-def test_internal_config_endpoint_returns_current_tenant_full_config_for_admin(monkeypatch):
+def test_internal_config_endpoint_returns_default_tenant_full_config_without_auth(monkeypatch):
     config = ShougangPortalAdminConfig(
         portal=_minimal_portal_config(),
         bisheng={
@@ -313,11 +318,6 @@ def test_internal_config_endpoint_returns_current_tenant_full_config_for_admin(m
     monkeypatch.setattr(ShougangPortalConfigService, "get_config", staticmethod(fake_get_config))
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[UserPayload.get_admin_user] = lambda: type(
-        "AdminUser",
-        (),
-        {"tenant_id": 9, "user_id": 1},
-    )()
 
     response = TestClient(app).get("/shougang-portal/config/internal")
 
@@ -328,4 +328,27 @@ def test_internal_config_endpoint_returns_current_tenant_full_config_for_admin(m
     assert body["data"]["unified_auth"]["client_secret"] == "plain-client-secret"
     assert body["data"]["unified_auth"]["state_secret"] == "plain-state-secret"
     assert body["data"]["unified_auth"]["login_sync_hmac_secret"] == "plain-login-sync-secret"
-    assert requested_tenant_ids == [9]
+    assert requested_tenant_ids == [None]
+
+
+@pytest.mark.parametrize("method", ["GET", "PUT"])
+def test_other_portal_config_endpoints_still_require_admin(method):
+    async def deny_request():
+        raise HTTPException(status_code=401, detail="missing admin token")
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[UserPayload.get_admin_user] = deny_request
+    payload = ShougangPortalAdminConfig(
+        portal=_minimal_portal_config(),
+        bisheng={"base_url": "http://bisheng.example.com"},
+        unified_auth={},
+    ).model_dump(mode="json")
+
+    response = TestClient(app).request(
+        method,
+        "/shougang-portal/config",
+        json=payload if method == "PUT" else None,
+    )
+
+    assert response.status_code == 401

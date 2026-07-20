@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
-from sse_starlette import EventSourceResponse
 
 from bisheng.api.services.workstation import (
     WorkstationConversation, WorkstationMessage
@@ -28,8 +27,14 @@ from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelChatConversationNotFoundError
-from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.schemas.api import resp_500, SSEResponse
+from bisheng.common.stream_errors import (
+    StreamRetryEvent,
+    retry_async_stream,
+    stream_error_sse,
+    stream_retry_sse,
+)
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -142,11 +147,12 @@ async def chat_completions(
         article_content = ChannelChatService._truncate_article_content(article_content, max_chunk_size)
 
     except (BaseErrorCode, ValueError) as e:
-        error_response = e if isinstance(e, BaseErrorCode) else ServerError(msg=str(e))
-        return EventSourceResponse(iter([error_response.to_sse_event_instance()]))
+        logger.exception('Channel article chat setup rejected')
+        stage = 'document' if isinstance(e, BaseErrorCode) else 'config'
+        return StreamingResponse(iter([stream_error_sse(e, stage=stage)]), media_type='text/event-stream')
     except Exception as e:
         logger.exception(f'Error in channel article chat setup: {e}')
-        return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
+        return StreamingResponse(iter([stream_error_sse(e)]), media_type='text/event-stream')
 
     async def event_stream():
 
@@ -170,20 +176,8 @@ async def chat_completions(
                 article_content=article_content,
                 question=data.text
             )
-            await ChatMessageDao.ainsert_one(
-                ChatMessage(
-                    user_id=login_user.user_id,
-                    chat_id=conversation.chat_id,
-                    flow_id=data.article_doc_id,
-                    type='human',
-                    is_bot=False,
-                    sender='User',
-                    message=json.dumps({"query": data.text}, ensure_ascii=False),
-                    category=MessageCategory.QUESTION,
-                    source=0,
-                ))
-            # Get chat history (excluding the latest one)
-            history_messages = (await ChannelChatService.get_chat_history(conversationId, 8))[:-1]
+            # Persist the question with the final answer so retries do not duplicate history.
+            history_messages = await ChannelChatService.get_chat_history(conversationId, 8)
 
             # Build LLM input
             inputs = [
@@ -195,19 +189,33 @@ async def chat_completions(
             answer = ""
             reasoning_answer = ""
             # Streaming call to LLM
-            async for chunk in bishengllm.astream(inputs):
-                content = chunk.content
-                reasoning_content = extract_reasoning_content(chunk)
-                answer += content
-                reasoning_answer += reasoning_content
-                yield SSEResponse(data=ChatResponse(
-                    category=MessageCategory.STREAM,
-                    message={
-                        "content": content,
-                        "reasoning_content": reasoning_content,
-                    },
-                    type="stream"
-                )).to_string()
+            try:
+                async for chunk in retry_async_stream(
+                        lambda: bishengllm.astream(inputs),
+                        stage='model',
+                        is_output=lambda item: bool(
+                            getattr(item, 'content', '') or extract_reasoning_content(item)
+                        ),
+                ):
+                    if isinstance(chunk, StreamRetryEvent):
+                        yield stream_retry_sse(chunk)
+                        continue
+                    content = chunk.content
+                    reasoning_content = extract_reasoning_content(chunk)
+                    answer += content
+                    reasoning_answer += reasoning_content
+                    yield SSEResponse(data=ChatResponse(
+                        category=MessageCategory.STREAM,
+                        message={
+                            "content": content,
+                            "reasoning_content": reasoning_content,
+                        },
+                        type="stream"
+                    )).to_string()
+            except Exception as e:
+                logger.exception('Channel article model stream failed')
+                yield stream_error_sse(e, stage='model', had_output=bool(answer or reasoning_answer))
+                return
 
             yield SSEResponse(data=ChatResponse(
                 category=MessageCategory.STREAM,
@@ -218,8 +226,18 @@ async def chat_completions(
                 type="end"
             )).to_string()
 
-            # Append reasoning process to final result
-            await ChatMessageDao.ainsert_one(
+            await ChatMessageDao.ainsert_batch([
+                ChatMessage(
+                    user_id=login_user.user_id,
+                    chat_id=conversation.chat_id,
+                    flow_id=data.article_doc_id,
+                    type='human',
+                    is_bot=False,
+                    sender='User',
+                    message=json.dumps({"query": data.text}, ensure_ascii=False),
+                    category=MessageCategory.QUESTION,
+                    source=0,
+                ),
                 ChatMessage(
                     category=MessageCategory.ANSWER,
                     message=json.dumps({
@@ -231,19 +249,20 @@ async def chat_completions(
                     flow_id=data.article_doc_id,
                     type="end",
                     is_bot=True,
-                )
-            )
+                ),
+            ])
         except BaseErrorCode as e:
-            yield e.to_sse_event_instance_str()
+            logger.exception('Channel article chat business error')
+            yield stream_error_sse(e)
         except Exception as e:
-            logger.exception(f'Error in channel article chat processing')
-            yield ServerError(exception=e).to_sse_event_instance_str()
+            logger.exception('Error in channel article chat processing')
+            yield stream_error_sse(e)
 
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')
     except Exception as e:
         logger.exception(f'Error creating channel article chat stream: {e}')
-        return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
+        return StreamingResponse(iter([stream_error_sse(e)]), media_type='text/event-stream')
 
 
 @router.get('/messages/{article_doc_id}', summary='Query Channel Article AI Assistant Chat History')

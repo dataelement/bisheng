@@ -28,6 +28,23 @@ class ExtraFileTransformer(BaseDocumentTransformer):
         self.knowledge_file = knowledge_file
         self.source_file_path = source_file_path
 
+    def _upload_pdf_preview(self, minio_client) -> None:
+        """Upload the PDF rendition of the preview file, when the loader produced one.
+
+        Recorded in ``user_metadata`` rather than a column so the frontend can prefer it
+        and silently fall back to the .docx preview for files whose conversion failed or
+        that were parsed before this existed.
+        """
+        pdf_path = getattr(self.loader, "pdf_preview_file_path", None)
+        if not pdf_path or not os.path.exists(pdf_path):
+            return
+        pdf_object_name = KnowledgeUtils.get_knowledge_pdf_preview_file_object_name(self.document_id)
+        minio_client.put_object_sync(object_name=pdf_object_name, file=pdf_path)
+        self.knowledge_file.user_metadata = {
+            **(self.knowledge_file.user_metadata or {}),
+            "pdf_preview_object_name": pdf_object_name,
+        }
+
     def transform_documents(
             self, documents: Sequence[Document], **kwargs: Any
     ) -> Sequence[Document]:
@@ -40,6 +57,7 @@ class ExtraFileTransformer(BaseDocumentTransformer):
                 if preview_file_object_name:
                     minio_client.put_object_sync(object_name=preview_file_object_name, file=self.loader.preview_file_path)
                     self.knowledge_file.preview_file_object_name = preview_file_object_name
+                self._upload_pdf_preview(minio_client)
             elif self.source_file_path:
                 preview_file_object_name = KnowledgeUtils.get_tmp_preview_file_object_name(self.source_file_path)
                 if preview_file_object_name:

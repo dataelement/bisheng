@@ -113,6 +113,7 @@ export type AgentEvent =
 
 export interface ChatMessage {
     messageId: string;
+    serverMessageId?: string;
     parentMessageId: string;
     conversationId: string;
     sender: "user" | "assistant" | string;
@@ -120,6 +121,8 @@ export interface ChatMessage {
     clientTimestamp?: string;
     content?: ContentPart[];
     error?: boolean;
+    retrying?: boolean;
+    requestPayload?: Record<string, any>;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;

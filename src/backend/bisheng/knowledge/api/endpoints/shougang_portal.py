@@ -46,183 +46,203 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalTagSearchResp,
     ShougangPortalTelemetryEventReq,
 )
+from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
+    PortalHotSearchTriggerRebuildReq,
+    PortalHotSearchTriggerRebuildResp,
+)
+from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
+    PortalHotSearchAdminService,
+)
 
-router = APIRouter(prefix='/knowledge/shougang-portal', tags=['shougang_portal'])
+router = APIRouter(prefix="/knowledge/shougang-portal", tags=["shougang_portal"])
 
 
-@router.get('/space-levels')
+@router.get("/space-levels")
 async def get_shougang_portal_space_levels(
-        svc: Any = Depends(get_knowledge_space_service),
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     levels = await svc.get_shougang_portal_space_levels()
-    return resp_200(ShougangPortalSpaceLevelsResp(levels=levels).model_dump(mode='json'))
+    return resp_200(ShougangPortalSpaceLevelsResp(levels=levels).model_dump(mode="json"))
 
 
-@router.get('/personal-spaces')
+@router.get("/personal-spaces")
 async def get_shougang_portal_personal_spaces(
-        svc: Any = Depends(get_knowledge_space_service),
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_personal_spaces()
-    return resp_200(ShougangPortalPersonalSpacesResp(**result).model_dump(mode='json'))
+    return resp_200(ShougangPortalPersonalSpacesResp(**result).model_dump(mode="json"))
 
 
-@router.post('/favorites')
+@router.post("/favorites")
 async def create_shougang_portal_favorite(
-        req: ShougangPortalFavoriteCreateReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalFavoriteCreateReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         result = await svc.create_shougang_portal_favorite(req)
-        raw = result.model_dump() if hasattr(result, 'model_dump') else result
-        return resp_200(ShougangPortalFavoriteCreateResp(**raw).model_dump(mode='json'))
+        raw = result.model_dump() if hasattr(result, "model_dump") else result
+        return resp_200(ShougangPortalFavoriteCreateResp(**raw).model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.post('/favorites/remove')
+@router.post("/favorites/remove")
 async def remove_shougang_portal_favorite(
-        req: ShougangPortalFavoriteRemoveReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalFavoriteRemoveReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         result = await svc.remove_shougang_portal_favorite(req)
-        raw = result.model_dump() if hasattr(result, 'model_dump') else result
-        return resp_200(ShougangPortalFavoriteRemoveResp(**raw).model_dump(mode='json'))
+        raw = result.model_dump() if hasattr(result, "model_dump") else result
+        return resp_200(ShougangPortalFavoriteRemoveResp(**raw).model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.post('/favorites/status')
+@router.post("/favorites/status")
 async def get_shougang_portal_favorite_status(
-        req: ShougangPortalFavoriteStatusReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalFavoriteStatusReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_favorite_status(req)
-    raw = result.model_dump() if hasattr(result, 'model_dump') else result
-    return resp_200(ShougangPortalFavoriteStatusResp(**raw).model_dump(mode='json'))
+    raw = result.model_dump() if hasattr(result, "model_dump") else result
+    return resp_200(ShougangPortalFavoriteStatusResp(**raw).model_dump(mode="json"))
 
 
-@router.get('/favorites/files')
+@router.get("/favorites/files")
 async def list_shougang_portal_favorites(
-        page: int = 1,
-        page_size: int = 20,
-        svc: Any = Depends(get_knowledge_space_service),
+    page: int = 1,
+    page_size: int = 20,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.list_shougang_portal_favorites(page=page, page_size=page_size)
-    raw = result.model_dump() if hasattr(result, 'model_dump') else result
-    return resp_200(ShougangPortalFavoriteFilesResp(**raw).model_dump(mode='json'))
+    raw = result.model_dump() if hasattr(result, "model_dump") else result
+    return resp_200(ShougangPortalFavoriteFilesResp(**raw).model_dump(mode="json"))
 
 
-@router.post('/share-links')
+@router.post("/share-links")
 async def create_shougang_portal_share_link(
-        req: ShougangPortalShareLinkCreateReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalShareLinkCreateReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         result = await svc.create_shougang_portal_share_link(req)
-        raw = result.model_dump() if hasattr(result, 'model_dump') else result
-        return resp_200(ShougangPortalShareLinkCreateResp(**raw).model_dump(mode='json'))
+        raw = result.model_dump() if hasattr(result, "model_dump") else result
+        return resp_200(ShougangPortalShareLinkCreateResp(**raw).model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.get('/share-links/{share_token}')
+@router.get("/share-links/{share_token}")
 async def get_shougang_portal_share_link_meta(
-        share_token: str,
-        svc: Any = Depends(get_knowledge_space_service),
+    share_token: str,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         result = await svc.get_shougang_portal_share_link_meta(share_token)
-        raw = result.model_dump() if hasattr(result, 'model_dump') else result
-        return resp_200(ShougangPortalShareLinkMetaResp(**raw).model_dump(mode='json'))
+        raw = result.model_dump() if hasattr(result, "model_dump") else result
+        return resp_200(ShougangPortalShareLinkMetaResp(**raw).model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.post('/share-links/{share_token}/verify')
+@router.post("/share-links/{share_token}/verify")
 async def verify_shougang_portal_share_link(
-        share_token: str,
-        req: ShougangPortalShareLinkVerifyReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    share_token: str,
+    req: ShougangPortalShareLinkVerifyReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         result = await svc.verify_shougang_portal_share_link(share_token, req)
-        raw = result.model_dump() if hasattr(result, 'model_dump') else result
-        return resp_200(ShougangPortalShareLinkAccessResp(**raw).model_dump(mode='json'))
+        raw = result.model_dump() if hasattr(result, "model_dump") else result
+        return resp_200(ShougangPortalShareLinkAccessResp(**raw).model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.post('/spaces/info')
+@router.post("/spaces/info")
 async def get_shougang_portal_space_infos(
-        req: ShougangPortalSpaceInfoReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalSpaceInfoReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_shougang_portal_space_infos(req.space_ids)
-    return resp_200(ShougangPortalSpaceInfoResp(spaces=spaces).model_dump(mode='json'))
+    return resp_200(ShougangPortalSpaceInfoResp(spaces=spaces).model_dump(mode="json"))
 
 
-@router.put('/spaces/business-domain-codes')
+@router.put("/spaces/business-domain-codes")
 async def sync_shougang_portal_space_business_domain_codes(
-        req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalSpaceBusinessDomainCodesSyncReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         result = await svc.sync_shougang_portal_space_business_domain_codes(req)
-        return resp_200(ShougangPortalSpaceBusinessDomainCodesSyncResp(**result).model_dump(mode='json'))
+        return resp_200(ShougangPortalSpaceBusinessDomainCodesSyncResp(**result).model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.get('/spaces/domain-bindable')
+@router.get("/spaces/domain-bindable")
 async def get_shougang_portal_domain_bindable_spaces(
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
         spaces = await svc.list_shougang_portal_domain_bindable_spaces()
         response = ShougangPortalDomainBindableSpacesResp(spaces=spaces)
-        return resp_200(response.model_dump(mode='json'))
+        return resp_200(response.model_dump(mode="json"))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 
 
-@router.post('/tags/search')
+@router.post("/tags/search")
 async def search_shougang_portal_tags(
-        req: ShougangPortalTagSearchReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalTagSearchReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     tags = await svc.search_shougang_portal_tags(req.space_ids, req.space_level, req.business_domain_code)
-    return resp_200(ShougangPortalTagSearchResp(tags=tags).model_dump(mode='json'))
+    return resp_200(ShougangPortalTagSearchResp(tags=tags).model_dump(mode="json"))
 
 
-@router.post('/domain-file-counts')
+@router.post("/domain-file-counts")
 async def count_shougang_portal_domain_files(
-        req: ShougangPortalDomainFileCountReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalDomainFileCountReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     counts = await svc.count_shougang_portal_domain_files(req.domains)
-    return resp_200(ShougangPortalDomainFileCountResp(counts=counts).model_dump(mode='json'))
+    return resp_200(ShougangPortalDomainFileCountResp(counts=counts).model_dump(mode="json"))
 
 
-@router.post('/home')
+@router.post("/home")
 async def get_shougang_portal_home(
-        req: ShougangPortalHomeReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalHomeReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_home(req)
-    return resp_200(ShougangPortalHomeResp(**result).model_dump(mode='json'))
+    return resp_200(ShougangPortalHomeResp(**result).model_dump(mode="json"))
 
 
-@router.post('/telemetry/events')
+@router.post("/hot-searches/rebuild")
+async def trigger_shougang_portal_hot_search_rebuild(
+    req: PortalHotSearchTriggerRebuildReq,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> Any:
+    """Manually dispatch hot-search rebuild (AC-34). Tenant admin or global super admin."""
+    try:
+        result = await PortalHotSearchAdminService.trigger_rebuild(req, login_user=login_user)
+        return resp_200(PortalHotSearchTriggerRebuildResp(**result.model_dump()).model_dump(mode="json"))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.post("/telemetry/events")
 async def record_shougang_portal_telemetry_event(
-        req: ShougangPortalTelemetryEventReq,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalTelemetryEventReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     event_type = BaseTelemetryTypeEnum(req.event_type)
     event_data = PortalTelemetryEventService.build_event_data(
         event_type,
-        req.model_dump(exclude={'event_type'}, exclude_none=True),
+        req.model_dump(exclude={"event_type"}, exclude_none=True),
     )
     PortalTelemetryEventService.log_event_sync(
         user_id=login_user.user_id,
@@ -230,65 +250,65 @@ async def record_shougang_portal_telemetry_event(
         event_data=event_data,
     )
     await svc.record_shougang_portal_recommendation_behavior(req)
-    return resp_200({'accepted': True})
+    return resp_200({"accepted": True})
 
 
-@router.get('/home/stats')
+@router.get("/home/stats")
 async def get_shougang_portal_home_stats(
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     _ = login_user
     result, total_files = await asyncio.gather(
         PortalTelemetryEventService.count_home_events(),
         KnowledgeFileDao.async_count_all_success_files(),
     )
-    return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode='json'))
+    return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode="json"))
 
 
-@router.get('/files/{space_id}/{file_id}/related')
+@router.get("/files/{space_id}/{file_id}/related")
 async def list_shougang_portal_related_files(
-        space_id: int,
-        file_id: int,
-        limit: int = 3,
-        svc: Any = Depends(get_knowledge_space_service),
+    space_id: int,
+    file_id: int,
+    limit: int = 3,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.list_shougang_portal_related_files(space_id=space_id, file_id=file_id, limit=limit)
-    return resp_200(ShougangPortalRelatedFilesResp(**result).model_dump(mode='json'))
+    return resp_200(ShougangPortalRelatedFilesResp(**result).model_dump(mode="json"))
 
 
-@router.get('/files/{space_id}/{file_id}')
+@router.get("/files/{space_id}/{file_id}")
 async def get_shougang_portal_file(
-        space_id: int,
-        file_id: int,
-        svc: Any = Depends(get_knowledge_space_service),
+    space_id: int,
+    file_id: int,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     item = await svc.get_shougang_portal_file(space_id=space_id, file_id=file_id)
-    raw = item.model_dump(mode='json') if hasattr(item, 'model_dump') else item
-    return resp_200(ShougangPortalFileDetailResp(data=raw).model_dump(mode='json'))
+    raw = item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+    return resp_200(ShougangPortalFileDetailResp(data=raw).model_dump(mode="json"))
 
 
-@router.post('/files/search')
+@router.post("/files/search")
 async def search_shougang_portal_files(
-        req: ShougangPortalFileSearchReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalFileSearchReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_shougang_portal_files(req)
-    return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode='json'))
+    return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
 
 
-@router.post('/files/browse')
+@router.post("/files/browse")
 async def browse_shougang_portal_files(
-        req: ShougangPortalFileBrowseReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalFileBrowseReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.browse_shougang_portal_files(req)
-    return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode='json'))
+    return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
 
 
-@router.post('/qa/files/search')
+@router.post("/qa/files/search")
 async def search_shougang_portal_qa_files(
-        req: ShougangPortalQaFileSearchReq,
-        svc: Any = Depends(get_knowledge_space_service),
+    req: ShougangPortalQaFileSearchReq,
+    svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_shougang_portal_qa_files_by_name(req)
-    return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode='json'))
+    return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode="json"))

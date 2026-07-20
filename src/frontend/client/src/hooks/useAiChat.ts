@@ -159,10 +159,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 error: false,
             };
 
-            // Add both messages immediately
-            const updatedMessages = [...messagesRef.current, userMessage, initialResponse];
-            setMessages(updatedMessages);
-
             // Build SSE payload (same structure as useChatFunctions.ask).
             // Backend expects List[int] for both id fields; atom holds strings
             // so we coerce via Number here.
@@ -202,6 +198,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 ),
                 linsight: isLingsi,
             };
+            initialResponse.requestPayload = payload;
+
+            // Add both messages immediately
+            const updatedMessages = [...messagesRef.current, userMessage, initialResponse];
+            setMessages(updatedMessages);
 
             // Create SSE submission
             const submission: SSESubmission = {
@@ -243,11 +244,27 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     }
                     // Update user message with server-assigned data
                     setMessages((prev) =>
-                        prev.map((m) =>
-                            m.messageId === userMessageId
-                                ? { ...m, ...mergedUser, messageId: userMessageId }
-                                : m
-                        )
+                        prev.map((m) => {
+                            if (m.messageId === userMessageId) {
+                                return {
+                                    ...m,
+                                    ...mergedUser,
+                                    messageId: userMessageId,
+                                    serverMessageId: mergedUser.messageId,
+                                };
+                            }
+                            if (m.messageId === responseMessageId) {
+                                return {
+                                    ...m,
+                                    requestPayload: {
+                                        ...payload,
+                                        conversationId: newConvoId || payload.conversationId,
+                                        overrideParentMessageId: mergedUser.messageId,
+                                    },
+                                };
+                            }
+                            return m;
+                        })
                     );
                 },
                 onMessage: (text, messageId) => {
@@ -260,6 +277,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 ...lastMsg,
                                 text,
                                 messageId: messageId || lastMsg.messageId,
+                                error: false,
+                                retrying: false,
                             };
                         }
                         return msgs;
@@ -284,6 +303,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             ...(patch.text != null ? { text: patch.text } : {}),
                             ...(patch.events ? { events: patch.events } : {}),
                             ...(patch.finalised ? { unfinished: false } : {}),
+                            error: false,
+                            retrying: false,
                         };
                         return msgs;
                     });
@@ -355,6 +376,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         }
                     }
                 },
+                onRetry: (progress) => {
+                    setMessages((prev) => prev.map((message) =>
+                        message.messageId === responseMessageId
+                            ? { ...message, text: progress.message, error: false, retrying: true }
+                            : message
+                    ));
+                },
                 onError: (error) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -362,8 +390,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         if (lastMsg && !lastMsg.isCreatedByUser) {
                             msgs[msgs.length - 1] = {
                                 ...lastMsg,
-                                text: error || "发生错误，请重试",
+                                text: error.message,
                                 error: true,
+                                retrying: false,
                             };
                         }
                         return msgs;
@@ -408,8 +437,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             );
             if (!parentMsg) return;
 
-            // Create a new placeholder response as sibling
-            const newResponseId = v4();
+            const failedResponse = [...messagesRef.current].reverse().find(
+                (message) => message.parentMessageId === parentMessageId && message.error
+            );
+            const newResponseId = failedResponse?.messageId || v4();
             const newResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -420,11 +451,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 error: false,
             };
 
-            // Add the new response to messages (as a sibling of existing responses)
-            setMessages((prev) => [...prev, newResponse]);
-
             // Build SSE payload
-            const payload = {
+            const payload = failedResponse?.requestPayload ?? {
                 text: parentMsg.text?.trim() || "",
                 clientTimestamp: new Date()
                     .toLocaleString("sv")
@@ -458,9 +486,21 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 ),
                 linsight: isLingsi,
             };
+            const retryPayload = {
+                ...payload,
+                conversationId: conversationId === "new" ? payload.conversationId : conversationId,
+                overrideParentMessageId: parentMsg.serverMessageId ?? payload.overrideParentMessageId,
+                isRegenerate: true,
+            };
+            newResponse.requestPayload = retryPayload;
+
+            setMessages((prev) => failedResponse
+                ? prev.map((message) => message.messageId === newResponseId ? newResponse : message)
+                : [...prev, newResponse]
+            );
 
             const submission: SSESubmission = {
-                payload,
+                payload: retryPayload,
                 userMessage: parentMsg,
                 onStart: () => {
                     console.log("[AiChat] Regenerate SSE started");
@@ -482,6 +522,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 ...msgs[idx],
                                 text,
                                 messageId: messageId || msgs[idx].messageId,
+                                error: false,
+                                retrying: false,
                             };
                         }
                         return msgs;
@@ -502,6 +544,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             ...(patch.text != null ? { text: patch.text } : {}),
                             ...(patch.events ? { events: patch.events } : {}),
                             ...(patch.finalised ? { unfinished: false } : {}),
+                            error: false,
+                            retrying: false,
                         };
                         return msgs;
                     });
@@ -522,6 +566,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         setConversationId(data.conversation.conversationId);
                     }
                 },
+                onRetry: (progress) => {
+                    setMessages((prev) => prev.map((message) =>
+                        message.messageId === newResponseId
+                            ? { ...message, text: progress.message, error: false, retrying: true }
+                            : message
+                    ));
+                },
                 onError: (error) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -531,8 +582,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         if (idx >= 0) {
                             msgs[idx] = {
                                 ...msgs[idx],
-                                text: error || "发生错误，请重试",
+                                text: error.message,
                                 error: true,
+                                retrying: false,
                             };
                         }
                         return msgs;

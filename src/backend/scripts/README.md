@@ -4,6 +4,55 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Knowledge Space Scripts
 
+### `dedupe_department_space_documents.py`
+
+删除部门知识空间中与公共知识空间重复的逻辑文档。脚本只比较两类空间当前主版本中
+`file_type = FILE`、`status = SUCCESS` 且非空的精确 MD5；命中后以逻辑文档为单位删除部门侧
+全部历史版本。没有版本关系的兼容数据以单个物理文件为删除单元。公共空间文档和目录始终保留。
+
+默认 dry-run，只读取数据并在 `migration_reports/knowledge_file_dedup/` 生成 JSON 审计报告；
+只有显式传入 `--apply` 才会依次清理部门侧 Milvus、Elasticsearch、MinIO、OpenFGA、数据库关系
+和物理文件。脚本仅支持未启用多租户的部署。
+
+用法：
+
+```bash
+# 全量只读扫描
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py
+
+# 按部门空间或当前文件收窄 dry-run 范围；参数可重复
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --department-space-id 10 --file-id 201 --limit 20
+
+# 审核 dry-run 报告并安排维护窗口后，重新扫描并执行真实删除
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --department-space-id 10 --limit 20 --apply
+
+# 仅使用先前 apply 报告恢复未完成单元；不可同时指定范围参数
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --apply --resume-report migration_reports/knowledge_file_dedup/dedupe-RUN_ID.json
+```
+
+Safety and reports:
+
+- `--department-space-id`、`--file-id` 可重复；`--limit` 在稳定排序后限制删除单元数。
+- 每个删除单元在写入前都会重新读取并校验空间级别、当前版本、精确 MD5、公共见证和版本链指纹；
+  数据漂移时跳过，不使用旧报告直接决定新的删除目标。
+- JSON 报告记录目标版本链、公共见证、关联影响计数、分步状态和删除后核验结果，并通过原子替换写入。
+- 标签、审核标签、分享、相似候选和门户推荐投影随部门文件关系清理；收藏引用与审计记录保留，报告中给出影响计数。
+- 任一单元失败后停止后续删除并返回非零退出码。`--resume-report` 只接受先前的 apply 报告，校验报告结构和指纹后
+  恢复失败或待处理单元；已完成或已安全跳过的单元不会重复处理。
+- `--apply` 是跨 MySQL、Milvus、Elasticsearch、MinIO、OpenFGA 的不可逆数据删除，不能提供原子回滚。
+  正式执行前必须完成备份、审核 dry-run 报告、单文件烟测和小批量灰度，并在维护窗口内运行。
+
+Exit codes:
+
+- `0`：dry-run 完成，或所有 apply 单元已完成/安全跳过。
+- `2`：参数、单租户约束、目标范围或恢复报告预检失败。
+- `3`：扫描或初始化失败。
+- `4`：真实删除、分步核验或恢复执行失败。
+- `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
+
 ### `backfill_file_similarity_candidates.py`
 
 回填历史知识空间文件的相似候选缓存表 `knowledge_file_similarity_candidate`。默认 dry-run，只统计将刷新的文件；传入 `--apply` 后会逐个调用相似候选刷新逻辑，写入候选明细并同步更新 `knowledgefile.similar_status`。可通过 `--sleep-ms` 降低回填期间 CPU 压力。
@@ -73,6 +122,8 @@ PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level public
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level department --status failed --status waiting --status violation
 
 bash scripts/reparse_knowledge_space_files.sh
 bash scripts/reparse_knowledge_space_files.sh --apply --concurrency 4
@@ -84,56 +135,109 @@ Scope:
 - `--space-id`：包含指定知识空间下的所有真实文件，可重复传入
 - `--folder-id`：递归包含指定文件夹下所有层级的真实文件，可重复传入
 - `--file-id`：包含指定真实文件，可重复传入
-- 仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION` 状态，跳过 `WAITING` / `PROCESSING` / `REBUILDING`
+- `--space-level`：按空间类型过滤，可选 `public` / `department` / `team` / `personal`。该条件与
+  `--space-id` / `--folder-id` / `--file-id` 的并集取交集；未配置空间类型的知识空间不命中
+- `--status`：按文档状态过滤，可重复传入，多值之间取并集。可选 `processing` / `success` /
+  `failed` / `rebuilding` / `waiting` / `timeout` / `violation`
+- 不传 `--status` 时，仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION`；显式传入后会替换该默认集合
+- `--status` 不可与兼容参数 `--include-inflight` / `--only-inflight` 同时使用
+- `--include-inflight` 在默认状态集合上增加 `WAITING` / `PROCESSING` / `REBUILDING`；
+  `--only-inflight` 仅处理这三种执行中状态
 
 ### `move_knowledge_space_files.py`
 
-将指定知识空间中的已解析文档复制到同租户、同向量模型的目标知识空间，完成数据库、
-MinIO、Milvus、Elasticsearch、标签和 OpenFGA 权限校验后，再删除来源文件。默认 dry-run；
-只有显式传入 `--apply` 才会逐文件执行迁移。每次运行都会在
-`migration_reports/knowledge_file_move/` 下生成 JSON 报告。
+扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
+门户二级分类 code 缩小范围。默认按分类 `label` 自动匹配公共知识空间及其根目录
+直属文件夹；也可显式指定目标知识库和目标文件夹。版本链作为一个迁移单元整体处理。
+
+脚本默认为 dry-run；只有显式传入 `--apply` 才会写入目标并删除来源。每次运行都会在
+`--report-dir` 下生成 JSON 运行报告；apply 模式另外生成可用于手工还原的 JSONL 回溯记录。
 
 Usage:
 
 ```bash
-# 来源库全部 SUCCESS 文档；仅预检，不写数据
+# 扫描一个来源知识空间；仅预检，不写业务数据
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
-  --source-space-id 10 \
-  --target-space-id 20 \
-  --target-owner-id 30
+  --source-space-id 10
 
-# 递归选择来源文件夹，并同时匹配一级、二级分类；移动到目标文件夹
+# 一次扫描多个来源空间
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
   --source-space-id 10 \
-  --source-folder-id 11 \
-  --source-category-code STD \
-  --source-subcategory-code STD-A \
-  --target-space-id 20 \
-  --target-folder-id 21 \
-  --target-owner-id 30 \
-  --apply
+  --source-space-id 11
 
-# 指定多个文件 ID；同一参数可重复传入
+# 只选择文件夹 100/101 的递归子孙，且一级分类为 A/B，且二级分类为 A01/B01
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
   --source-space-id 10 \
-  --source-file-id 101 \
-  --source-file-id 102 \
+  --source-folder-id 100 \
+  --source-folder-id 101 \
+  --source-category-code A \
+  --source-category-code B \
+  --source-subcategory-code A01 \
+  --source-subcategory-code B01
+
+# 将筛选结果全部移入指定目标文件夹，每 10 个迁移单元落盘一次回溯记录
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
   --target-space-id 20 \
-  --target-owner-id 30 \
+  --target-folder-id 200 \
+  --rollback-record-file migration_reports/move-10-to-20.jsonl \
+  --batch-size 10 \
   --apply
 ```
 
-Selection and safety:
+参数：
 
-- `--source-folder-id` 递归命中文件夹全部后代；不传时覆盖来源库全目录。
-- `--source-file-id`、`--source-category-code`、`--source-subcategory-code` 均可重复。
-  同一维度内按 OR 匹配，不同维度之间按 AND 匹配。
-- 一级分类来自 `file_encoding`，二级分类来自 `file_subcategory_code`；同时指定时会校验父子关系。
-- 仅移动 `file_type = FILE` 且 `status = SUCCESS` 的普通文档；版本链文件直接跳过。
-- 所有来源文件都会平铺到目标文件夹；不传 `--target-folder-id` 时平铺到目标库根目录。
-- 目标文件夹存在同名文件，或目标库任意位置存在相同 MD5 时，跳过该文件且保留来源。
+- `--source-space-id`：必填、可重复；多个 ID 取并集，且必须属于同一租户。
+- `--source-folder-id`：可重复；每个文件夹都递归包含所有子孙文件，多个 ID 取并集。文件夹必须
+  存在于本次来源空间中。
+- `--source-category-code`：可重复；按门户一级分类 code 过滤，多值取并集，code 不区分大小写。
+- `--source-subcategory-code`：可重复；按门户二级分类 code 过滤，多值取并集，code 不区分大小写。
+  同时指定一级分类时，二级分类必须属于所选一级分类。
+- `--target-space-id` 与 `--target-folder-id`：必须同时传入或同时省略。传入后，所有选中迁移单元
+  都进入该文件夹；目标可为公共或部门空间，文件夹可为任意层级，但必须属于目标空间且与来源
+  处于同一租户。团队和个人空间不允许作为显式目标。
+- `--report-dir`：JSON 运行报告目录，默认为 `migration_reports/knowledge_file_move/`。
+- `--rollback-record-file`：apply 模式的 JSONL 回溯文件。省略时在 `--report-dir` 下按 `run_id` 自动命名。
+  文件以 `0600` 权限排他创建，如已存在则预检失败，不会覆盖或追加到旧记录。
+- `--batch-size`：每完成多少个迁移单元后 `flush + fsync` 一次 JSONL，必须为正整数，默认 `10`。
+  单个文件算一个单元，整条版本链也只算一个单元。
+- `--apply`：执行真实移动；省略时只生成 dry-run 计划与报告，不创建 JSONL 回溯文件。
+
+筛选组合：
+
+- 同一维度重复参数之间为 OR：多个来源空间 OR、多个来源文件夹 OR、多个一级分类 OR、
+  多个二级分类 OR。
+- 不同维度之间为 AND：`来源空间 AND 来源文件夹 AND 一级分类 AND 二级分类`。未传入的可选维度
+  不参与过滤。
+- 版本链中的每个版本都必须命中全部已启用的过滤条件，否则整条版本链跳过；一、二级分类也必须
+  在整条版本链中一致。
+- 显式目标只替代自动路由，不取消分类校验或源过滤。
+
+路由、回溯记录与安全性：
+
+- 仅处理 `file_type = FILE` 且 `status = SUCCESS` 的文档。
+- 一级分类 code 从 `file_encoding` 解析，二级分类 code 来自 `file_subcategory_code`；两级都必须
+  能在门户配置中解析出 `label`，否则跳过。
+- 一级分类 `label` 必须唯一精确匹配 `level = public` 的知识空间名称；二级分类 `label` 必须
+  唯一精确匹配该空间根目录下的直属文件夹名称。匹配前会去除普通首尾空白、`U+200B`
+  零宽空格和 `U+FEFF` BOM；脚本不会递归匹配、模糊匹配或自动创建目标。
+- 移动后文件所有者改为目标知识空间所有者；OpenFGA 只重建目标 owner/parent 必要关系，
+  不复制来源访问权限。
+- 已通过和待审核标签以复制前保存的来源快照为唯一依据，精确替换到新目标文件；若校验仍不一致，
+  报错会列出来源和目标双方的标签 ID，并在删除来源前清理目标残留。
+- 目标文件夹存在同名文件、目标空间任意位置存在相同 MD5，或来源/目标向量模型不一致时，
+  跳过文件且保留来源。多个来源文件互相冲突时按来源空间 ID、文件 ID 稳定选择第一个。
+- 版本链作为整体迁移：所有版本必须位于本次来源范围、均为 `SUCCESS`、分类完整、目标一致、
+  模型兼容且无目标冲突；否则整条链跳过。成功后使用新文件 ID 重建版本号、主版本和逻辑文档关系。
 - 每个文件按“复制 → 校验 → 删除来源”执行。失败时保留或恢复来源，并尽力清理目标残留；
-  任一文件失败时进程返回非零退出码，跳过不计为失败。
+  版本链按整链 Saga 执行。任一迁移单元失败时立即停止后续单元并返回非零退出码，业务跳过不计为失败。
+- JSONL 按顺序记录 `run_started`、`unit_started`、`unit_succeeded` / `unit_failed`、
+  `run_completed` / `run_failed` / `run_interrupted`；成功单元包含来源与目标文件、空间、文件夹、
+  分类、标签、权限、存储对象、索引统计和版本图元数据。当前脚本不提供自动回滚命令；保留目标数据时，
+  可依据该记录手工还原。
+- 首次 `Ctrl-C` 不会在单元内强行中断；脚本完成当前单元、强制落盘 JSONL 后以退出码 `130` 结束。
+  普通异常也会尝试写入终止事件并落盘。`kill -9`、进程崩溃或断电无法保证当前未落盘批次的记录完整。
+- JSONL 写入失败时，脚本停止迁移，并尝试补偿当前尚未持久化的批次；之前已落盘的批次保持已迁移状态。
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
 

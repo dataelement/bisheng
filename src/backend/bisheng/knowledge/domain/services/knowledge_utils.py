@@ -237,6 +237,17 @@ class KnowledgeUtils(BaseService):
         return None
 
     @classmethod
+    def get_knowledge_pdf_preview_file_object_name(cls, file_id: int | str) -> str:
+        """Storage path of the PDF rendition used to preview Word files.
+
+        Word previews render this PDF instead of the .docx: LibreOffice lays the page
+        out the way Word does, whereas the HTML converted from .docx in the browser
+        drops e-seals and shape positioning. The .docx preview stays around as the
+        fallback for files whose conversion failed or predates this.
+        """
+        return f"preview/{file_id}.pdf"
+
+    @classmethod
     def resolve_preview_object_name(
             cls, file_id: int | str, file_name: str = None, preview_file_object_name: Optional[str] = None
     ) -> Optional[str]:

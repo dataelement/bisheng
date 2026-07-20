@@ -142,8 +142,21 @@ class PortalHotSearchPipelineService:
             stats.truncated = bool(agg.truncated or records_result.truncated)
             stats.status = "degraded" if stats.truncated else "success"
 
+            published = [
+                PortalHotSearchItem(rank=item.final_rank, query=item.display_query)
+                for item in ranked
+                if item.final_rank is not None
+            ]
+
             diagnostic_top = ranked[: self.config.diagnostic_candidate_top_n]
-            await self.hot_search_repository.replace_snapshot(ranked, batch_id=batch_id, computed_at=now)
+            if published:
+                await self.hot_search_repository.replace_snapshot(ranked, batch_id=batch_id, computed_at=now)
+                await self.redis_repository.replace(self.tenant_id, published)
+            else:
+                logger.info(
+                    "hot-search rebuild produced no qualified results; keeping previous snapshot tenant={}",
+                    self.tenant_id,
+                )
             await self.hot_search_repository.insert_candidates(
                 diagnostic_top, batch_id=batch_id, computed_at=now, llm_samples=llm_samples
             )
@@ -155,12 +168,6 @@ class PortalHotSearchPipelineService:
             except Exception:
                 logger.warning("hot-search diagnostics purge failed tenant={}", self.tenant_id)
 
-            published = [
-                PortalHotSearchItem(rank=item.final_rank, query=item.display_query)
-                for item in ranked
-                if item.final_rank is not None
-            ]
-            await self.redis_repository.replace(self.tenant_id, published)
             return stats
         except Exception as exc:
             logger.exception("hot-search rebuild failed tenant={} batch={}", self.tenant_id, batch_id)
