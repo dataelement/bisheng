@@ -103,7 +103,10 @@ class ExpertService:
             introduction=request.introduction,
             depart_ment=request.depart_ment,
             user_id=request.user_id,
-            major = request.major
+            major = request.major,
+            position = request.position,
+            job_family = request.job_family,
+            job_category = request.job_category,
         )
         temp_expert = await self.repository.create(expert)
         depart = DepartmentDao.get_by_id(temp_expert.depart_ment)

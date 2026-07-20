@@ -77,6 +77,9 @@ class ExpertCreateRequest(BaseModel):
     depart_ment: Optional[str] = Field(default=[], description="所属部门")
     user_id: Optional[int] = Field(None, description="关联用户ID（可选）")
     major: Optional[str]= Field(None, description="所属专业")
+    position: Optional[str]= Field(None, description="所属岗位")
+    job_family: Optional[str]= Field(None, description="所属岗位族")
+    job_category: Optional[str]= Field(None, description="所属岗位分类")
     
 class ExpertUpdateRequest(BaseModel):
     """更新专家 - 请求"""
@@ -85,6 +88,9 @@ class ExpertUpdateRequest(BaseModel):
     introduction: Optional[str] = None
     depart_ment: Optional[str] = None
     major: Optional[str]= Field(None, description="所属专业")
+    position: Optional[str]= Field(None, description="所属岗位")
+    job_family: Optional[str]= Field(None, description="所属岗位族")
+    job_category: Optional[str]= Field(None, description="所属岗位分类")
 
 
 class ExpertResponse(BaseModel):
