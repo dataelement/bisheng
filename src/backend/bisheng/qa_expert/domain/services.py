@@ -134,7 +134,7 @@ class ExpertService:
         for expert in experts:
             expert_dict = expert.model_dump()
             expert_dict["department_id"] = expert.depart_ment
-            department = await DepartmentDao.get_by_id(expert.depart_ment)
+            department = await DepartmentDao.aget_by_id(expert.depart_ment)
             if department:
                 expert_dict["depart_ment"] = department.name
             else:
