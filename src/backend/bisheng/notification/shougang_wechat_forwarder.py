@@ -38,13 +38,23 @@ async def maybe_push_shougang_wechat_message(message: InboxMessage) -> None:
     Called from ``MessageService.send_message`` after the inbox message is saved.
     This function never raises; errors are logged and swallowed.
     """
+    message_id = getattr(message, "id", None)
     try:
         conf = settings.get_shougang_wechat_message_push_conf()
         if not conf.enabled:
+            logger.info(
+                "wechat_push.skipped message_id=%s reason=feature_disabled",
+                message_id,
+            )
             return
 
         action_code = resolve_action_code(message)
         if action_code not in PUSHABLE_ACTION_CODES:
+            logger.info(
+                "wechat_push.skipped message_id=%s action_code=%s reason=not_pushable",
+                message_id,
+                action_code,
+            )
             return
 
         receiver_user_ids = list(getattr(message, "receiver", None) or [])
@@ -52,7 +62,7 @@ async def maybe_push_shougang_wechat_message(message: InboxMessage) -> None:
         if not wechat_user_ids:
             logger.info(
                 "wechat_push.skipped message_id=%s action_code=%s reason=no_wechat_user_ids",
-                getattr(message, "id", None),
+                message_id,
                 action_code,
             )
             return
@@ -77,7 +87,7 @@ async def maybe_push_shougang_wechat_message(message: InboxMessage) -> None:
             saved = await repo.save(outbox)
             logger.info(
                 "wechat_push.outbox_created message_id=%s outbox_id=%s action_code=%s users=%s",
-                getattr(message, "id", None),
+                message_id,
                 saved.id,
                 action_code,
                 ",".join(wechat_user_ids),
@@ -85,7 +95,7 @@ async def maybe_push_shougang_wechat_message(message: InboxMessage) -> None:
     except Exception as exc:
         logger.warning(
             "wechat_push.outbox_failed message_id=%s reason=%s",
-            getattr(message, "id", None),
+            message_id,
             exc,
             exc_info=True,
         )
