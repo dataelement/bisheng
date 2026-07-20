@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import stat
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -154,6 +157,56 @@ def test_old_explicit_target_arguments_are_not_supported():
         )
 
 
+def test_parse_args_accepts_source_filters_explicit_target_and_record_options():
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--source-folder-id",
+            "202",
+            "--source-folder-id",
+            "201",
+            "--source-folder-id",
+            "202",
+            "--source-category-code",
+            " std ",
+            "--source-category-code",
+            "RPT",
+            "--source-subcategory-code",
+            " std-a ",
+            "--target-space-id",
+            "20",
+            "--target-folder-id",
+            "200",
+            "--rollback-record-file",
+            "/tmp/move-record.jsonl",
+            "--batch-size",
+            "10",
+            "--apply",
+        ]
+    )
+
+    assert args.source_folder_ids == [201, 202]
+    assert args.source_category_codes == ["RPT", "STD"]
+    assert args.source_subcategory_codes == ["STD-A"]
+    assert args.target_space_id == 20
+    assert args.target_folder_id == 200
+    assert args.rollback_record_file == Path("/tmp/move-record.jsonl")
+    assert args.batch_size == 10
+
+
+@pytest.mark.parametrize(
+    "target_args",
+    [
+        ["--target-space-id", "20"],
+        ["--target-folder-id", "200"],
+    ],
+)
+def test_parse_args_requires_explicit_target_pair(target_args):
+    with pytest.raises(SystemExit):
+        script_mod.parse_args(["--source-space-id", "10", *target_args])
+
+
 async def test_load_source_spaces_rejects_missing_space_before_planning(monkeypatch):
     class EmptySession:
         async def __aenter__(self):
@@ -269,6 +322,34 @@ def test_target_route_skips_disabled_or_missing_owner():
     assert disabled.resolve("标准规范", "制度文件").reason_code == "target_owner_invalid"
 
 
+@pytest.mark.parametrize("level", ["public", "department"])
+def test_build_explicit_target_accepts_nested_public_or_department_folder(level: str):
+    space = _space(20, "target")
+    folder = _folder(200, 20, "nested", path="/150", level=1)
+    target = script_mod.build_explicit_target_context(
+        tenant_id=1,
+        space=space,
+        scope=SimpleNamespace(space_id=20, tenant_id=1, level=level),
+        folder=folder,
+        owner=SimpleNamespace(user_id=30, user_name="target-owner", delete=0),
+    )
+
+    assert target.file_level_path == "/150/200"
+    assert target.level == 2
+
+
+@pytest.mark.parametrize("level", ["team", "personal"])
+def test_build_explicit_target_rejects_team_or_personal_space(level: str):
+    with pytest.raises(script_mod.PreflightError, match="public or department"):
+        script_mod.build_explicit_target_context(
+            tenant_id=1,
+            space=_space(20, "target"),
+            scope=SimpleNamespace(space_id=20, tenant_id=1, level=level),
+            folder=_folder(200, 20, "folder"),
+            owner=SimpleNamespace(user_id=30, user_name="target-owner", delete=0),
+        )
+
+
 def test_planner_builds_single_file_unit_and_skips_ineligible_records():
     source_space = _space(10, "source")
     files = [
@@ -291,6 +372,147 @@ def test_planner_builds_single_file_unit_and_skips_ineligible_records():
 
     assert [unit.unit_type for unit in plan.selected_units] == ["file"]
     assert [file.id for file in plan.selected_units[0].source_files] == [101]
+
+
+def test_source_selection_recursively_matches_folders_and_combines_category_filters():
+    selection = script_mod.SourceSelection(
+        folder_prefixes=("/201", "/202/203"),
+        category_codes=frozenset({"STD", "RPT"}),
+        subcategory_codes=frozenset({"STD-A"}),
+    )
+    std_category = script_mod.CategoryResolution(
+        category_code="STD",
+        category_label="标准规范",
+        subcategory_code="STD-A",
+        subcategory_label="制度文件",
+    )
+    wrong_subcategory = script_mod.CategoryResolution(
+        category_code="STD",
+        category_label="标准规范",
+        subcategory_code="STD-B",
+        subcategory_label="其他",
+    )
+
+    assert selection.matches(_file(101, file_level_path="/201"), std_category)
+    assert selection.matches(_file(102, file_level_path="/201/999"), std_category)
+    assert selection.matches(_file(103, file_level_path="/202/203/204"), std_category)
+    assert not selection.matches(_file(104, file_level_path="/202"), std_category)
+    assert not selection.matches(_file(105, file_level_path="/201"), wrong_subcategory)
+
+
+def test_build_source_selection_validates_folders_and_portal_category_relationships():
+    args = SimpleNamespace(
+        source_folder_ids=[201],
+        source_category_codes=["STD"],
+        source_subcategory_codes=["STD-A"],
+    )
+    selection = script_mod.build_source_selection(
+        args,
+        [_folder(201, 10, "source-folder", path="/150", level=1)],
+        script_mod.CategoryLabelIndex.from_config(_portal_config()),
+    )
+
+    assert selection.folder_prefixes == ("/150/201",)
+    assert selection.category_codes == frozenset({"STD"})
+    assert selection.subcategory_codes == frozenset({"STD-A"})
+
+
+def test_build_source_selection_rejects_missing_folder_or_invalid_category_pair():
+    category_index = script_mod.CategoryLabelIndex.from_config(_portal_config())
+    with pytest.raises(script_mod.PreflightError, match="source folders"):
+        script_mod.build_source_selection(
+            SimpleNamespace(
+                source_folder_ids=[999],
+                source_category_codes=[],
+                source_subcategory_codes=[],
+            ),
+            [],
+            category_index,
+        )
+    with pytest.raises(script_mod.PreflightError, match="do not belong"):
+        script_mod.build_source_selection(
+            SimpleNamespace(
+                source_folder_ids=[],
+                source_category_codes=["STD"],
+                source_subcategory_codes=["RPT-A"],
+            ),
+            [],
+            category_index,
+        )
+
+
+def test_planner_applies_folder_and_category_filters_as_an_intersection():
+    files = [
+        _file(101, file_level_path="/201"),
+        _file(102, file_level_path="/201/202", file_encoding="GF-RPT-SA-20260700000001", file_subcategory_code="RPT-A"),
+        _file(103, file_level_path="/999"),
+    ]
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=files,
+        all_files_by_id={item.id: item for item in files},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[],
+        source_selection=script_mod.SourceSelection(
+            folder_prefixes=("/201",),
+            category_codes=frozenset({"STD"}),
+            subcategory_codes=frozenset({"STD-A"}),
+        ),
+    )
+
+    assert [unit.source_files[0].id for unit in plan.selected_units] == [101]
+    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {
+        (102, "source_filter_mismatch"),
+        (103, "source_filter_mismatch"),
+    }
+
+
+def test_planner_skips_whole_version_chain_when_one_version_misses_source_filter():
+    files = [_file(101, file_level_path="/201"), _file(102, file_level_path="/999")]
+    versions = [
+        KnowledgeDocumentVersion(id=701, document_id=500, knowledge_file_id=101, version_no=1, is_primary=False),
+        KnowledgeDocumentVersion(id=702, document_id=500, knowledge_file_id=102, version_no=2, is_primary=True),
+    ]
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=files,
+        all_files_by_id={item.id: item for item in files},
+        documents_by_id={500: KnowledgeDocument(id=500, knowledge_id=10, primary_version_id=702)},
+        versions=versions,
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[],
+        source_selection=script_mod.SourceSelection(folder_prefixes=("/201",)),
+    )
+
+    assert plan.selected_units == []
+    assert {item.reason_code for item in plan.skipped_files} == {"version_chain_filter_mismatch"}
+
+
+def test_planner_uses_explicit_target_without_relaxing_classification_rules():
+    explicit_target = _target_index().resolve("标准规范", "制度文件").target
+    valid = _file(101)
+    invalid = _file(102, file_subcategory_code=None)
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[valid, invalid],
+        all_files_by_id={101: valid, 102: invalid},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=script_mod.TargetRouteIndex.from_records(1, [], [], {}),
+        target_files=[],
+        explicit_target=explicit_target,
+    )
+
+    assert [unit.source_files[0].id for unit in plan.selected_units] == [101]
+    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {(102, "missing_subcategory")}
 
 
 def test_planner_groups_and_preserves_a_complete_version_chain():
@@ -819,6 +1041,19 @@ class _FakeMoveOperations:
         self.calls: list[str] = []
         self.next_target_id = 900
         self.target_source_ids: dict[int, int] = {}
+        self.source_spaces = {10: _space(10, "source")}
+        self.snapshots: dict[int, script_mod.SourceSnapshot] = {}
+        self.target_files_by_source_id: dict[int, KnowledgeFile] = {}
+
+    async def snapshot_unit(self, unit):
+        self.calls.append(f"snapshot:{unit.unit_id}")
+        for source_file in unit.source_files:
+            self.snapshots[int(source_file.id)] = script_mod.SourceSnapshot(
+                tags=script_mod.TagSnapshot(),
+                permissions=(),
+                indexes=script_mod.IndexSnapshot(milvus_count=0, es_count=0),
+                storage_exists={"original": True, "converted": False, "bbox": False, "preview": False},
+            )
 
     async def copy_file(self, source_file, target):
         self.calls.append(f"copy:{source_file.id}")
@@ -827,6 +1062,7 @@ class _FakeMoveOperations:
         target_file = _file(self.next_target_id, knowledge_id=target.space.id, file_name=source_file.file_name)
         self.next_target_id += 1
         self.target_source_ids[int(target_file.id)] = int(source_file.id)
+        self.target_files_by_source_id[int(source_file.id)] = target_file
         if self.fail_at == "partial_copy" and self.fail_source_id == source_file.id:
             raise script_mod.TargetCopyError("copy failed after target creation", target_file)
         return target_file
@@ -869,7 +1105,17 @@ class _FakeVersionGraphStore:
         self.calls.append("create_target_graph")
         if self.fail_at == "create":
             raise RuntimeError("graph create failed")
+        self.target_file_ids = [int(file.id) for file in target_files]
         return 800
+
+    def get_target_graph_payload(self, target_document_id):
+        return {
+            "document": {"id": target_document_id, "primary_version_id": 802},
+            "versions": [
+                {"id": 801, "knowledge_file_id": self.target_file_ids[0], "version_no": 1, "is_primary": False},
+                {"id": 802, "knowledge_file_id": self.target_file_ids[1], "version_no": 2, "is_primary": True},
+            ],
+        }
 
     async def verify_target_graph(self, unit, target_document_id, target_files):
         self.calls.append("verify_target_graph")
@@ -944,6 +1190,7 @@ async def test_version_chain_saga_rebuilds_graph_before_deleting_sources():
     assert [result.status for result in results] == ["success", "success"]
     assert [result.target_file_id for result in results] == [900, 901]
     assert all(result.target_document_id == 800 for result in results)
+    assert [result.target_version_id for result in results] == [801, 802]
     assert graph_store.calls == ["create_target_graph", "verify_target_graph", "delete_source_graph"]
     assert operations.calls.index("verify:102") < operations.calls.index("delete:101")
 
@@ -1054,6 +1301,96 @@ def test_write_json_report_contains_version_traceability(tmp_path):
     assert payload["results"][0]["target_document_id"] == 800
 
 
+def test_rollback_journal_exclusively_creates_and_appends_jsonl_events(tmp_path):
+    path = tmp_path / "rollback.jsonl"
+    journal = script_mod.RollbackJournal(path=path, run_id="run-1")
+    journal.open()
+    journal.append_event(
+        "run_started",
+        {"started_at": datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)},
+    )
+    journal.append_event("unit_succeeded", {"unit_id": "file:101"})
+    journal.flush()
+    journal.close()
+
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["event_type"] for row in rows] == ["run_started", "unit_succeeded"]
+    assert [row["sequence"] for row in rows] == [1, 2]
+    assert all(row["schema_version"] == 1 and row["run_id"] == "run-1" for row in rows)
+    assert rows[0]["payload"]["started_at"] == "2026-07-19T12:00:00+00:00"
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    with pytest.raises(script_mod.RollbackRecordError, match="already exists"):
+        script_mod.RollbackJournal(path=path, run_id="run-2").open()
+
+
+def test_resolve_rollback_record_path_uses_explicit_path_or_report_directory(tmp_path):
+    explicit = tmp_path / "explicit.jsonl"
+    assert (
+        script_mod.resolve_rollback_record_path(
+            SimpleNamespace(rollback_record_file=explicit, report_dir=tmp_path),
+            "run-1",
+        )
+        == explicit
+    )
+    assert (
+        script_mod.resolve_rollback_record_path(
+            SimpleNamespace(rollback_record_file=None, report_dir=tmp_path),
+            "run-2",
+        )
+        == tmp_path / "knowledge-file-move-rollback-run-2.jsonl"
+    )
+
+
+def test_rollback_payload_contains_full_source_and_target_traceability():
+    source = _file(101, file_level_path="/55")
+    target_context = _target_index().resolve("标准规范", "制度文件").target
+    unit = script_mod.MigrationUnit(
+        unit_id="file:101",
+        unit_type="file",
+        source_files=(source,),
+        target=target_context,
+        category_code="STD",
+        category_label="标准规范",
+        subcategory_code="STD-A",
+        subcategory_label="制度文件",
+    )
+    operations = script_mod.BishengMoveOperations(1, {10: _space(10, "source")})
+    operations.snapshots[101] = script_mod.SourceSnapshot(
+        tags=script_mod.TagSnapshot(approved_ids=(7,), pending_review_ids=(8,)),
+        permissions=({"user": "user:1", "relation": "owner", "object": "knowledge_file:101"},),
+        indexes=script_mod.IndexSnapshot(milvus_count=12, es_count=11),
+        storage_exists={"original": True, "converted": True, "bbox": False, "preview": True},
+    )
+    target_file = _file(900, knowledge_id=20, file_level_path="/200")
+    operations.target_files_by_source_id[101] = target_file
+    result = script_mod.FileMoveResult(
+        source_file_id=101,
+        source_space_id=10,
+        source_file_name="doc.pdf",
+        status="success",
+        target_space_id=20,
+        target_folder_id=200,
+        target_file_id=900,
+        source_deleted=True,
+    )
+
+    started = script_mod.build_unit_started_payload(unit, operations)
+    succeeded = script_mod.build_unit_succeeded_payload(unit, [result], operations, target_graph=None)
+
+    source_payload = started["source_files"][0]
+    assert source_payload["record"]["id"] == 101
+    assert source_payload["source_space"]["id"] == 10
+    assert source_payload["source_folder_id"] == 55
+    assert source_payload["snapshot"]["tags"]["approved_ids"] == (7,)
+    assert source_payload["snapshot"]["permissions"][0]["relation"] == "owner"
+    assert source_payload["snapshot"]["indexes"] == {"milvus_count": 12, "es_count": 11}
+    assert source_payload["storage_object_names"]["original"] == source.object_name
+    assert succeeded["target_files"][0]["record"]["id"] == 900
+    assert succeeded["target_files"][0]["source_file_id"] == 101
+    assert succeeded["results"][0]["source_deleted"] is True
+
+
 async def test_run_defaults_to_dry_run_without_constructing_write_operations(monkeypatch, tmp_path):
     args = script_mod.parse_args(
         [
@@ -1158,3 +1495,219 @@ async def test_apply_returns_nonzero_when_any_migration_unit_fails(monkeypatch, 
     assert await script_mod.run(args) == script_mod.EXIT_APPLY_ERROR
     payload = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
     assert payload["summary"]["failed"] == 1
+
+
+def _single_file_plan(*file_ids: int):
+    target = _target_index().resolve("标准规范", "制度文件").target
+    return script_mod.MigrationPlan(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        selected_units=[
+            script_mod.MigrationUnit(
+                unit_id=f"file:{file_id}",
+                unit_type="file",
+                source_files=(_file(file_id, file_name=f"doc-{file_id}.pdf"),),
+                target=target,
+                category_code="STD",
+                category_label="标准规范",
+                subcategory_code="STD-A",
+                subcategory_label="制度文件",
+            )
+            for file_id in file_ids
+        ],
+        skipped_files=[],
+    )
+
+
+async def test_apply_writes_complete_rollback_lifecycle(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        ["--source-space-id", "10", "--report-dir", str(tmp_path), "--batch-size", "10", "--apply"]
+    )
+    operations = _FakeMoveOperations()
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101)))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_OK
+
+    rollback_path = next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl"))
+    rows = [json.loads(line) for line in rollback_path.read_text(encoding="utf-8").splitlines()]
+    assert [row["event_type"] for row in rows] == [
+        "run_started",
+        "unit_started",
+        "unit_succeeded",
+        "run_completed",
+    ]
+    final_report = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
+    assert final_report["run_status"] == "completed"
+    assert final_report["rollback_record_path"] == str(rollback_path.resolve())
+
+
+async def test_apply_preserves_exit_status_when_journal_close_fails(monkeypatch, tmp_path):
+    args = script_mod.parse_args(["--source-space-id", "10", "--report-dir", str(tmp_path), "--apply"])
+    operations = _FakeMoveOperations()
+
+    class FailingCloseJournal(script_mod.RollbackJournal):
+        def close(self, *, flush=True):
+            super().close(flush=flush)
+            raise script_mod.RollbackRecordError("close failed")
+
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101)))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+    monkeypatch.setattr(script_mod, "RollbackJournal", FailingCloseJournal)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_OK
+
+
+async def test_apply_stops_after_first_failed_unit_and_flushes_failure(monkeypatch, tmp_path):
+    args = script_mod.parse_args(["--source-space-id", "10", "--report-dir", str(tmp_path), "--apply"])
+    operations = _FakeMoveOperations(fail_at="verify", fail_source_id=101)
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101, 102)))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_APPLY_ERROR
+
+    assert "copy:101" in operations.calls
+    assert "copy:102" not in operations.calls
+    rows = [
+        json.loads(line)
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl")).read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["event_type"] for row in rows][-2:] == ["unit_failed", "run_failed"]
+    final_report = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
+    assert final_report["pending_units"] == 1
+
+
+async def test_apply_honors_graceful_stop_after_current_unit(monkeypatch, tmp_path):
+    args = script_mod.parse_args(["--source-space-id", "10", "--report-dir", str(tmp_path), "--apply"])
+    stop_controller = script_mod.StopController()
+
+    class InterruptingOperations(_FakeMoveOperations):
+        async def delete_source(self, source_file, target_file, target):
+            await super().delete_source(source_file, target_file, target)
+            stop_controller.request_stop()
+
+    operations = InterruptingOperations()
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101, 102)))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert (
+        await script_mod.run(
+            args,
+            stop_controller=stop_controller,
+            install_signal_handlers=False,
+        )
+        == 130
+    )
+
+    assert "copy:101" in operations.calls
+    assert "copy:102" not in operations.calls
+    rows = [
+        json.loads(line)
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl")).read_text(encoding="utf-8").splitlines()
+    ]
+    assert rows[-1]["event_type"] == "run_interrupted"
+    final_report = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
+    assert final_report["pending_units"] == 1
+
+
+async def test_rollback_record_checkpoint_failure_compensates_unpersisted_batch(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        ["--source-space-id", "10", "--report-dir", str(tmp_path), "--batch-size", "1", "--apply"]
+    )
+    operations = _FakeMoveOperations()
+
+    class FailingCheckpointJournal(script_mod.RollbackJournal):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.flush_calls = 0
+
+        def flush(self):
+            self.flush_calls += 1
+            if self.flush_calls == 2:
+                raise script_mod.RollbackRecordError("checkpoint failed")
+            return super().flush()
+
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101, 102)))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+    monkeypatch.setattr(script_mod, "RollbackJournal", FailingCheckpointJournal)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_APPLY_ERROR
+
+    assert "restore:101" in operations.calls
+    assert "cleanup:900" in operations.calls
+    assert "copy:102" not in operations.calls
+    payload = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
+    moved = next(result for result in payload["results"] if result["source_file_id"] == 101)
+    assert moved["status"] == "failed"
+    assert moved["source_deleted"] is False
+    assert moved["reason_code"] == "rollback_record_write_failed"
+
+
+async def test_apply_rejects_existing_rollback_record_before_write_operations(monkeypatch, tmp_path):
+    rollback_path = tmp_path / "existing.jsonl"
+    rollback_path.write_text("existing\n", encoding="utf-8")
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--report-dir",
+            str(tmp_path),
+            "--rollback-record-file",
+            str(rollback_path),
+            "--apply",
+        ]
+    )
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101)))
+
+    def fail_if_constructed(*_args, **_kwargs):
+        raise AssertionError("write operations must not be constructed when the rollback record exists")
+
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", fail_if_constructed)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_INPUT_ERROR
+    assert rollback_path.read_text(encoding="utf-8") == "existing\n"
+
+
+async def test_batch_size_counts_completed_migration_units(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        ["--source-space-id", "10", "--report-dir", str(tmp_path), "--batch-size", "2", "--apply"]
+    )
+    operations = _FakeMoveOperations()
+    instances = []
+
+    class CountingJournal(script_mod.RollbackJournal):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.flush_calls = 0
+            instances.append(self)
+
+        def flush(self):
+            self.flush_calls += 1
+            return super().flush()
+
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_single_file_plan(101, 102, 103)))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+    monkeypatch.setattr(script_mod, "RollbackJournal", CountingJournal)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_OK
+    assert instances[0].flush_calls == 3  # run_started, two completed units, final remaining unit
