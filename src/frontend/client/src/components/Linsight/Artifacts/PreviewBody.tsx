@@ -5,7 +5,7 @@
  * so the two surfaces render identical content.
  */
 import { Colored, Outlined } from 'bisheng-icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import FilePreview from '~/pages/knowledge/FilePreview';
@@ -19,7 +19,10 @@ import {
     downloadArtifactFile,
     getArtifactPreviewKind,
     getFileExtension,
+    isAbsoluteImageSrc,
+    matchArtifactByRelPath,
     resolveArtifactUrl,
+    stripEmptyHtmlPlaceholders,
 } from './artifactUtils';
 
 // Placeholder icons (bisheng-icons) for the "can't preview" fallback, by extension.
@@ -140,13 +143,55 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
 interface PreviewBodyProps {
     file: ArtifactFile;
     versionId: string;
+    /**
+     * The full session artifact list. Used ONLY to resolve relative image
+     * references (`![](charts/x.png)`) inside a markdown deliverable back to their
+     * real workspace object: each deliverable image carries a resolvable file_url.
+     * Absent at legacy call sites → relative images simply don't resolve (the prior
+     * broken-image behaviour), everything else is unaffected.
+     */
+    fileList?: ArtifactFile[];
 }
 
-export function PreviewBody({ file, versionId }: PreviewBodyProps) {
+export function PreviewBody({ file, versionId, fileList }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
     const kind = getArtifactPreviewKind(file);
+
+    // Resolve a relative image ref inside a markdown deliverable to a real presigned
+    // URL by matching it against the session file list (see matchArtifactByRelPath).
+    // fileList / versionId are read through refs so resolveImageSrc stays a STABLE
+    // identity even when the parent passes a fresh `fileList` array each render
+    // (otherwise MarkdownImage's effect would re-run and re-resolve every render).
+    const fileListRef = useRef(fileList);
+    fileListRef.current = fileList;
+    const versionIdRef = useRef(versionId);
+    versionIdRef.current = versionId;
+    // Cache successful resolutions only, keyed by version::src. Misses are NOT
+    // cached so a ref that isn't in the list yet retries once it arrives (live run).
+    const imageUrlCacheRef = useRef<Map<string, string>>(new Map());
+    const resolveImageSrc = useCallback(async (src: string): Promise<string | null> => {
+        if (!src || isAbsoluteImageSrc(src)) return null;
+        const vid = versionIdRef.current;
+        const key = `${vid}::${src}`;
+        const hit = imageUrlCacheRef.current.get(key);
+        if (hit) return hit;
+        const entry = matchArtifactByRelPath(fileListRef.current, src);
+        if (!entry) return null;
+        try {
+            const url = await resolveArtifactUrl(entry.file_url, vid);
+            imageUrlCacheRef.current.set(key, url);
+            return url;
+        } catch (e) {
+            console.error('linsight image resolve failed:', src, e);
+            return null;
+        }
+    }, []);
+
+    // Strip empty raw-HTML placeholder boxes (comment/figure scaffolding meant for
+    // the derived HTML/PDF) so they don't leak as literal text in the md preview.
+    const markdownText = useMemo(() => stripEmptyHtmlPlaceholders(text), [text]);
 
     const handleDownloadToView = async () => {
         try {
@@ -213,7 +258,12 @@ export function PreviewBody({ file, versionId }: PreviewBodyProps) {
     if (kind === 'markdown') {
         return (
             <div className="bs-mkdown p-8">
-                <Markdown content={text} isLatestMessage={true} webContent={false} />
+                <Markdown
+                    content={markdownText}
+                    isLatestMessage={true}
+                    webContent={false}
+                    resolveImageSrc={resolveImageSrc}
+                />
             </div>
         );
     }

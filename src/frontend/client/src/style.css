@@ -48,6 +48,107 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
+
+  /* ============================================================
+   * Typography tokens (docs-ui-refactor/基础-字体规范.md)
+   * Two layers: primitive (--font-size-1..9, numeric source) and
+   * semantic (--text-*, what components use via Tailwind classes
+   * text-caption / text-body / text-h1 ...). Line height = size + 8px.
+   * Components must reference the semantic layer only.
+   * ============================================================ */
+  /* Primitive — desktop scale */
+  --font-size-1: 0.75rem;    --line-height-1: 1.25rem;   /* 12 / 20 */
+  --font-size-2: 0.8125rem;  --line-height-2: 1.3125rem; /* 13 / 21 */
+  --font-size-3: 0.875rem;   --line-height-3: 1.375rem;  /* 14 / 22 */
+  --font-size-4: 1rem;       --line-height-4: 1.5rem;    /* 16 / 24 */
+  --font-size-5: 1.125rem;   --line-height-5: 1.625rem;  /* 18 / 26 */
+  --font-size-6: 1.25rem;    --line-height-6: 1.75rem;   /* 20 / 28 */
+  --font-size-7: 1.5rem;     --line-height-7: 2rem;      /* 24 / 32 */
+  --font-size-8: 1.875rem;   --line-height-8: 2.375rem;  /* 30 / 38 */
+  --font-size-9: 2.25rem;    --line-height-9: 2.75rem;   /* 36 / 44 */
+
+  /* Semantic — referenced by tailwind.config.cjs theme.extend.fontSize */
+  --text-caption: var(--font-size-1);  --leading-caption: var(--line-height-1);
+  --text-body-sm: var(--font-size-2);  --leading-body-sm: var(--line-height-2);
+  --text-body: var(--font-size-3);     --leading-body: var(--line-height-3);
+  --text-h4: var(--font-size-4);       --leading-h4: var(--line-height-4);
+  --text-h3: var(--font-size-5);       --leading-h3: var(--line-height-5);
+  --text-h2: var(--font-size-6);       --leading-h2: var(--line-height-6);
+  --text-h1: var(--font-size-7);       --leading-h1: var(--line-height-7);
+  --text-display: var(--font-size-8);  --leading-display: var(--line-height-8);
+  --text-metric: var(--font-size-9);   --leading-metric: var(--line-height-9);
+
+  /* ============================================================
+   * Color tokens (docs-ui-refactor/基础-色彩规范.md §2/§3/§7)
+   * Two layers: primitive --arco-gray-1..10 (Arco gray ramp, the
+   * numeric source) and semantic --text-1..4 / --fill-1..4 /
+   * --border-base|-deep / --success|warning|danger-* — components use
+   * the semantic layer only, via Tailwind (text-text-1 / bg-fill-1 /
+   * border-border-base / bg-success ...). RGB channel triplets so
+   * Tailwind `/<alpha>` modifiers keep working.
+   * Naming constraints: --gray-N / --red-N / --green-N belong to the
+   * legacy LibreChat ramps above and must NOT be overwritten; --border
+   * belongs to shadcn (HSL) — hence --arco-gray-N and --border-base.
+   * success/warning/danger are theme-INDEPENDENT: they never follow
+   * the blue⇄green brand switch. Light-mode values only for now
+   * (dark mode inherits them — known debt, same as --btn-*).
+   * ============================================================ */
+  /* Primitive — Arco gray 1-10 */
+  --arco-gray-1: 247 248 250;   /* #F7F8FA */
+  --arco-gray-2: 242 243 245;   /* #F2F3F5 */
+  --arco-gray-3: 229 230 235;   /* #E5E6EB */
+  --arco-gray-4: 201 205 212;   /* #C9CDD4 */
+  --arco-gray-5: 169 174 184;   /* #A9AEB8 */
+  --arco-gray-6: 134 144 156;   /* #86909C */
+  --arco-gray-7: 107 119 133;   /* #6B7785 */
+  --arco-gray-8: 78 89 105;     /* #4E5969 */
+  --arco-gray-9: 39 46 59;      /* #272E3B */
+  --arco-gray-10: 29 33 41;     /* #1D2129 */
+
+  /* Semantic — neutral text / fill / border */
+  --text-1: var(--arco-gray-10);      /* primary text: titles, body */
+  --text-2: var(--arco-gray-8);       /* secondary text */
+  --text-3: var(--arco-gray-6);       /* hint / timestamp / placeholder */
+  --text-4: var(--arco-gray-4);       /* disabled text */
+  --fill-1: var(--arco-gray-1);       /* hover bg / light page bg */
+  --fill-2: var(--arco-gray-2);       /* active bg / filled control base */
+  --fill-3: var(--arco-gray-3);       /* filled hover */
+  --fill-4: var(--arco-gray-4);       /* filled active */
+  --border-base: var(--arco-gray-3);  /* regular border ("border" in the spec) */
+  --border-deep: var(--arco-gray-4);  /* emphasized divider / hover border */
+
+  /* Semantic — functional (never themed) */
+  --success: 0 180 42;          /* #00B42A (Arco green-6) */
+  --success-hover: 35 195 67;   /* #23C343 */
+  --success-active: 0 154 41;   /* #009A29 */
+  --success-tint: 232 255 234;  /* #E8FFEA (Arco green-1) — tag / light bg */
+  --warning: 255 125 0;         /* #FF7D00 (Arco orange-6) */
+  --warning-hover: 255 154 46;  /* #FF9A2E */
+  --warning-active: 210 95 0;   /* #D25F00 */
+  --warning-tint: 255 247 232;  /* #FFF7E8 (Arco orange-1) — tag / light bg */
+  --danger: 245 63 63;          /* #F53F3F (= --btn-danger) */
+  --danger-hover: 214 55 58;    /* #D6373A (= --btn-danger-hover) */
+  --danger-active: 208 47 51;   /* #D02F33 (= --btn-danger-active) */
+  --danger-tint: 255 236 232;   /* #FFECE8 (Arco red-1) — TAG bg only; buttons
+                                   use alpha over the main red (bg-danger/10 …) */
+}
+
+/* Mobile (narrow viewport ≤768px) remap of the SEMANTIC layer only:
+ * body raised (14→16), headings lowered (24→22) — a flatter ladder.
+ * Component classNames stay unchanged; caption / h4 are identical on
+ * both breakpoints so they are not remapped here.
+ * Some mobile steps (17/25, 22/30, 26/34) are not on the primitive
+ * scale, so they are literal rem values by design. */
+@media (max-width: 768px) {
+  :root {
+    --text-body-sm: var(--font-size-3);  --leading-body-sm: var(--line-height-3); /* 13→14 */
+    --text-body: var(--font-size-4);     --leading-body: var(--line-height-4);    /* 14→16 */
+    --text-h3: 1.0625rem;                --leading-h3: 1.5625rem;                 /* 18→17 / 25 */
+    --text-h2: var(--font-size-5);       --leading-h2: var(--line-height-5);      /* 20→18 */
+    --text-h1: 1.375rem;                 --leading-h1: 1.875rem;                  /* 24→22 / 30 */
+    --text-display: 1.625rem;            --leading-display: 2.125rem;             /* 30→26 / 34 */
+    --text-metric: var(--font-size-8);   --leading-metric: var(--line-height-8);  /* 36→30 */
+  }
 }
 
 html {
@@ -128,6 +229,21 @@ html {
   --brand-main: 22 93 255;   /* #165DFF */
   --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent (e.g. pin) */
 
+  /* Button semantic tokens (docs-ui-refactor/组件-Button按钮.md §5.1).
+     Neutral grays follow the Arco ramp; danger red is FIXED — never themed.
+     RGB channels so the Tailwind `btn-*` colors keep `/<alpha>` working.
+     Light-mode values only for now (dark mode inherits them — known debt). */
+  --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
+  --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
+  --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
+  --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
+  --btn-fill-3: 229 230 235;       /* #E5E6EB — filled hover */
+  --btn-fill-4: 201 205 212;       /* #C9CDD4 — filled active */
+  --btn-danger: 245 63 63;         /* #F53F3F */
+  --btn-danger-hover: 214 55 58;   /* #D6373A */
+  --btn-danger-active: 208 47 51;  /* #D02F33 */
+  --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
+
   /* Illustration palette — empty-state SVG illustrations use --illus-* instead
      of --brand-* so the green theme can render the illustrations' own vivid
      green ramp (#19B476 / #BDE6D3 / #7CD0B1) rather than the darker UI brand
@@ -139,18 +255,23 @@ html {
 
 /* Green brand theme — toggled via `theme-green` class on <html>.
    Re-points the brand palette + the few brand-tinted tokens. Frontend-only.
-   Mirrors the blue ramp: 500 = main #187C54, 600 = pressed, 50 = #E4F1EC tint. */
+   Ramp re-derived 2026-07-15 anchored on the FIXED primary #169C47 (the old
+   steps sat at hue ~157° teal while 500 is 142° green, so 500 jumped out):
+   light side keeps the OLD ramp's saturation/brightness envelope (the Arco-
+   algorithm version hit v=100 and read neon; designer nixed it) with only the
+   hue rotated onto the 500 family (−2°/step, same drift as the blue lights);
+   dark side mirrors the blue ramp's dark-side HSV geometry. */
 .theme-green {
-  --brand-50: 228 241 236;   /* #E4F1EC — light tint / selection bg */
-  --brand-100: 204 228 218;  /* #CCE4DA */
-  --brand-200: 163 210 192;  /* #A3D2C0 */
-  --brand-300: 111 186 160;  /* #6FBAA0 */
-  --brand-400: 61 155 120;   /* #3D9B78 */
-  --brand-500: 22 156 71;    /* #169C47 — main brand green */
-  --brand-600: 19 99 69;     /* #136345 — button / pressed */
-  --brand-700: 15 77 54;     /* #0F4D36 */
-  --brand-800: 10 56 38;     /* #0A3826 */
-  --brand-900: 6 38 25;      /* #062619 */
+  --brand-50: 228 241 231;   /* #E4F1E7 — light tint / selection bg */
+  --brand-100: 204 228 210;  /* #CCE4D2 */
+  --brand-200: 163 210 176;  /* #A3D2B0 */
+  --brand-300: 111 186 133;  /* #6FBA85 */
+  --brand-400: 61 155 92;    /* #3D9B5C */
+  --brand-500: 22 156 71;    /* #169C47 — main brand green (FIXED, do not touch) */
+  --brand-600: 9 139 53;     /* #098B35 — button / pressed */
+  --brand-700: 7 105 41;     /* #076929 */
+  --brand-800: 7 78 32;      /* #074E20 */
+  --brand-900: 6 50 22;      /* #063216 */
   --brand-main: 22 156 71;   /* #169C47 */
   --brand-muted: 92 138 119; /* #5C8A77 — muted/low-sat brand accent (e.g. pin) */
 
@@ -165,7 +286,7 @@ html {
      matching --brand-500. The old 154 67% 29% rounded to rgb(24,123,81), so
      bg-primary (e.g. picker checkboxes) drifted ~3/255 off the brand green. */
   --primary: 142 75% 35%;
-  --surface-active-alt: rgb(228 241 236);
+  --surface-active-alt: rgb(228 241 231); /* = --brand-50 (keep in sync) */
   --surface-primary-alt: #f4faf7;
   --search-input: hsla(152, 40%, 99%, 1);
 }
@@ -180,7 +301,7 @@ html {
    opacity, e.g. 60%, still applies). */
 .illus-grey {
   --illus-100: 229 229 229;  /* #E5E5E5 */
-  --illus-300: 255 255 255;  /* #FFFFFF */
+  --illus-300: 229 229 229;  /* #E5E5E5 — was #FFFFFF, but pure white washed out on white bg (e.g. CrawlingIllustration magnifier halo); grey-only override, green/blue keep the mid tone */
   --illus-500: 188 188 188;  /* #BCBCBC */
 }
 .illus-grey.brand-illustration,
@@ -205,13 +326,34 @@ html {
 .theme-green .btn-brand-primary:not(:disabled):hover {
   background-color: #148f41 !important; /* hover: slightly darker green */
 }
-.theme-green .btn-brand-primary:not(:disabled):active {
-  background-color: #12813b !important; /* active: deeper green on press */
+/* Press feedback is TOUCH-ONLY (组件-Button按钮.md §5.2): on hover-capable
+   devices a pressed button keeps its hover color (no click flash); on touch,
+   where hover is disabled, the deeper step is the only press feedback. */
+@media not ((hover: hover) and (pointer: fine)) {
+  .theme-green .btn-brand-primary:not(:disabled):active {
+    background-color: #12813b !important; /* active: deeper green on press */
+  }
 }
 /* Force a direct-child icon white too — some send buttons pin `[&>svg]:text-white`
    already, but others inherit; this keeps every primary-button icon white on the fill. */
 .theme-green .btn-brand-primary:not(:disabled) > svg {
   color: #fff !important;
+}
+
+/* Touch hit-area expansion (组件-Button按钮.md §5.5): medium and icon-only
+   buttons get an invisible ≥44×44 hot zone on touch devices — "跟手不跟屏"
+   (基础-多端适配原则.md §0/§2) — while the visual size stays unchanged.
+   The base Button sets `relative` + this class; never hand-roll per page. */
+@media (hover: none) and (pointer: coarse) {
+  .btn-touch-hit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
 }
 
 .dark {
@@ -1561,37 +1703,18 @@ button {
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
-/* Webkit scrollbar — `.scrollbar-os` opts out so the OS scrollbar setting
-   (auto-hide vs always-on) is respected instead of a forced custom scrollbar.
-   `html`/`body` (the document scroller) are always excluded so the page-level
-   scrollbar follows the OS setting rather than becoming a forced always-on bar. */
-:not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar {
-  height: 0.1em;
-  width: 0.5rem;
-}
+/* Scrollbar policy (设计规范 · 基础-滚动条规范.md, 2026-07-15):
+   scrollbars follow the OS setting — auto-hide stays auto-hide, always-on stays
+   always-on. DO NOT style ::-webkit-scrollbar / scrollbar-width by default:
+   any such rule kills the OS overlay behavior and forces an always-visible bar.
+   (The old global forced-slim rule was removed; the `.scrollbar-os` opt-out class
+   found in ~33 business files is now a no-op — clean it up as files get touched.)
+   Sanctioned exceptions below only make bars LESS visible, never force them on. */
 
-:not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 9999px;
-}
-
-.dark :not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: hsla(0, 0%, 100%, 0.1);
-}
-
-:not(.scrollbar-os):not(html):not(body)::-webkit-scrollbar-track {
-  background-color: transparent;
-  border-radius: 9999px;
-}
-
-/* Excel preview: horizontal scrollbar same thickness as vertical (override global 0.1em height) */
-.excel-scroll::-webkit-scrollbar {
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-/* Code block: always-visible horizontal scrollbar (override the global 0.1em-thin
-   height so wide code always shows a clearly-visible, persistent scrollbar). */
+/* COFCO exception (cofco customization): code blocks keep an always-visible,
+   persistent horizontal scrollbar. This deliberately FORCES a bar on — the one
+   sanctioned deviation from the OS-follow policy above — because wide code must
+   always advertise that it scrolls. Scoped to `.code-block-scroll` only. */
 .code-block-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
@@ -1609,14 +1732,6 @@ button {
 }
 .dark .code-block-scroll::-webkit-scrollbar-thumb {
   background-color: hsla(0, 0%, 100%, 0.25);
-}
-
-.scrollbar-transparent::-webkit-scrollbar-thumb {
-  background-color: transparent;
-}
-
-.dark .scrollbar-transparent::-webkit-scrollbar-thumb {
-  background-color: transparent;
 }
 
 /* Hide scrollbar entirely (used by horizontal tab strips) */
@@ -1966,17 +2081,24 @@ html {
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
+/* Global font stack = font-family-base in 基础-字体规范.md §1.
+ * Pure system stack (zero webfont loading): SF Pro + PingFang on Apple,
+ * Segoe UI + Microsoft YaHei on Windows, Roboto + Noto Sans CJK on Android.
+ * Step ① of the two-step swap: @font-face blocks and font files
+ * (Inter / AlibabaPuHuiTi / Roboto Mono / Söhne) are intentionally KEPT
+ * until the Windows regression pass confirms rendering, then removed. */
 body,
 html {
   height: 100%;
   font-family:
     -apple-system,
     BlinkMacSystemFont,
-    "AlibabaPuHuiTi-3-55-Regular",
+    "Segoe UI",
+    Roboto,
+    "PingFang SC",
     "Hiragino Sans GB",
     "Microsoft YaHei",
-    "Helvetica Neue",
-    Arial,
+    "Noto Sans CJK SC",
     sans-serif;
 }
 

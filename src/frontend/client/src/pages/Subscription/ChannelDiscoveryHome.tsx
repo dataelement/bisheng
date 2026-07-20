@@ -278,7 +278,7 @@ export function ChannelDiscoveryHome({
     );
 
     const renderEmptyIllustration = () => (
-        <EmptyStateIllustration className="size-[120px] opacity-90" />
+        <EmptyStateIllustration className="size-[120px]" />
     );
 
     const renderCarousel = () => {

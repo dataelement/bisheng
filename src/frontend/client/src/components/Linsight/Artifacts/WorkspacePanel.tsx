@@ -119,7 +119,7 @@ export function WorkspacePanel({
                     </div>
                     {/* preview body — scrollbar-os: respect OS scrollbar setting */}
                     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os">
-                        <PreviewBody file={previewFile} versionId={versionId} />
+                        <PreviewBody file={previewFile} versionId={versionId} fileList={files} />
                     </div>
                 </>
             ) : (
@@ -137,7 +137,7 @@ export function WorkspacePanel({
                             <div className="flex flex-col gap-2">{files.map(renderRow)}</div>
                         ) : (
                             <div className="flex h-full flex-col items-center justify-center text-center">
-                                <EmptyStateIllustration className="mb-4 size-[120px] opacity-90" />
+                                <EmptyStateIllustration className="mb-4 size-[120px]" />
                                 <p className="text-[14px] font-normal text-[#999999]">{localize('com_linsight_workspace_empty')}</p>
                             </div>
                         )}

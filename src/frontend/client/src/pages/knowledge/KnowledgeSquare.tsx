@@ -303,7 +303,7 @@ export default function KnowledgeSquare({
                         <div className="flex-1 flex items-center justify-center text-[#86909C]">{localize("com_knowledge.loading")}</div>
                     ) : visibleSpaces.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
-                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <EmptyStateIllustration className="size-[120px] mb-4" />
                             <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
                         </div>
                     ) : (

@@ -127,14 +127,15 @@ class TestGate:
         assert copied == []
         assert backend.uploaded == []
 
-    async def test_none_selection_copies_all_enabled(self, monkeypatch, store, backend):
+    async def test_none_selection_copies_nothing(self, monkeypatch, store, backend):
+        # None (field absent) is treated identically to [] — no skills this run.
+        # Regression guard: None used to mean "copy every enabled skill", which
+        # silently loaded ALL skills for any request that omitted the field
+        # (stale/cached client, non-UI caller, legacy row), defeating the picker.
         _patch_enabled(monkeypatch, ENABLED)
         copied = await materialize_session_skills(backend, TENANT, None, store=store)
-        assert copied == sorted(ENABLED)
-        assert _copied_rel_paths(backend) == {
-            "/skills/biao-shu-zhuan-xie/SKILL.md",
-            "/skills/he-tong-shen-yue/SKILL.md",
-        }
+        assert copied == []
+        assert backend.uploaded == []
 
     async def test_db_disabled_skill_never_copied_even_if_selected(self, monkeypatch, store, backend):
         _patch_enabled(monkeypatch, ENABLED)

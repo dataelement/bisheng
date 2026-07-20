@@ -161,7 +161,7 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
             {status === "error" && (
                 <div className="flex min-h-[270px] flex-1 flex-col justify-between rounded border border-[#E5E6EB] px-6 py-8">
                     <div className="flex flex-1 flex-col items-center justify-center text-center">
-                        <EmptyStateIllustration className="mb-5 size-[100px]" />
+                        <EmptyStateIllustration className="mb-4 size-[80px]" />
                         <p className="text-[14px] leading-6 text-[#4E5969]">
                             {localize(crawlErrorMessageKey(errorCode))}
                         </p>

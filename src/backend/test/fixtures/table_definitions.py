@@ -290,7 +290,7 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     user_name VARCHAR(255),
     knowledge_id INTEGER NOT NULL,
     thumbnails VARCHAR(512),
-    file_name VARCHAR(200) NOT NULL,
+    file_name VARCHAR(500) NOT NULL,
     file_type INTEGER DEFAULT 1,
     file_source VARCHAR(32),
     level INTEGER DEFAULT 0,

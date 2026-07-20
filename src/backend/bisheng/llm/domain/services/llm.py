@@ -1360,6 +1360,18 @@ class LLMService:
         )
         config_old_obj = WorkbenchModelConfig(**json.loads(old_value)) if old_value else WorkbenchModelConfig()
 
+        # Guard against a partial/legacy POST wiping the whole dialogue-model list.
+        # This setter persists ``config_obj`` wholesale (no field-level merge), so a
+        # body that omits ``models`` arrives as ``models=None`` and would blow away
+        # every configured model — the exact way a stale admin page nulled the Root
+        # config in prod. The picker always sends the full array and there is no
+        # "clear all models" flow, so treat a missing/None ``models`` as "no change"
+        # and keep the previously stored list. (``asr_model`` / ``tts_model`` /
+        # ``chat_title_llm`` legitimately use None to clear, so they are left as-is;
+        # an explicit ``models: []`` still clears.)
+        if config_obj.models is None:
+            config_obj.models = config_old_obj.models
+
         if config_obj.embedding_model:
             # Determine consistency
             if (

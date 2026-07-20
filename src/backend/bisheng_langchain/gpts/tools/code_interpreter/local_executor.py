@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import md5
 from os import DirEntry
 from pathlib import Path
-from typing import List, Tuple, Optional, Any
+from typing import Any
 
 import matplotlib
 from loguru import logger
@@ -19,10 +19,10 @@ from bisheng_langchain.gpts.tools.code_interpreter.base_executor import BaseExec
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
 DEFAULT_TIMEOUT = 600
-WIN32 = sys.platform == 'win32'
-PATH_SEPARATOR = WIN32 and '\\' or '/'
-WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'extensions')
-TIMEOUT_MSG = 'Timeout'
+WIN32 = sys.platform == "win32"
+PATH_SEPARATOR = (WIN32 and "\\") or "/"
+WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extensions")
+TIMEOUT_MSG = "Timeout"
 UNKNOWN = "unknown"
 
 LOCAL_DESCRIPTION = """Evaluates python code in native environment. \
@@ -30,11 +30,20 @@ You must send the whole script every time and print your outputs. \
 Script should be pure python code that can be evaluated. \
 It should be in python format NOT markdown. \
 The code should NOT be wrapped in backticks. \
-If you have any files outputted write them to "output/" relative to the execution \
-path. Output can only be read from the directory, stdout, and stdin. \
-Do not use things like plot.show() as it will \
-not work instead write them out `output/`\
-print() any output and results so you can capture the output."""  # noqa: T201
+FILE OUTPUT RULES (STRICT): write final deliverables to the RELATIVE directory \
+`output/` (e.g. `output/report.pdf`) and intermediate files to `scratch/`; these \
+are subfolders of the current working directory. NEVER use an absolute path with a \
+leading slash such as `/output/...` or `/scratch/...` — anything written outside the \
+current working directory is DISCARDED and will NOT be delivered to the user. \
+Do not use things like plot.show() as it will not work; save figures to `output/` \
+instead. print() any output and results so you can capture the output. \
+AVAILABLE LIBRARIES: this runs in the backend Python environment; these are ALREADY \
+installed — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
+python-docx (Word), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
+`fitz` (read/parse PDF). To READ text or tables from a PDF, use `import fitz` \
+(PyMuPDF); do NOT use pdfminer / pdfplumber / PyPDF2 — they are NOT installed. If an \
+import fails, switch to an already-installed library instead of assuming a package \
+exists; do NOT run `pip install` (this is a shared, offline environment)."""
 
 
 class LocalExecutor(BaseExecutor):
@@ -66,25 +75,25 @@ class LocalExecutor(BaseExecutor):
     def insert_set_font_code(code: str) -> str:
         """判断python代码中是否导入了matplotlib库，如果有则插入设置字体的代码"""
 
-        split_code = code.split('\n')
+        split_code = code.split("\n")
         cache_file = matplotlib.get_cachedir()
-        font_cache = glob.glob(f'{cache_file}/fontlist*')
+        font_cache = glob.glob(f"{cache_file}/fontlist*")
 
         for cache in font_cache:
             os.remove(cache)
 
         # todo: 如果生成的代码中已经有了设置字体的代码，可能会导致该段代码失效
-        if 'matplotlib' in code:
-            pattern = re.compile(r'(import matplotlib|from matplotlib)')
+        if "matplotlib" in code:
+            pattern = re.compile(r"(import matplotlib|from matplotlib)")
             index = max(i for i, line in enumerate(split_code) if pattern.search(line))
             split_code.insert(index + 1, 'import matplotlib\nmatplotlib.rc("font", family="WenQuanYi Zen Hei")')
 
-        return '\n'.join(split_code)
+        return "\n".join(split_code)
 
     @staticmethod
     def extract_code(
-            text: str, pattern: str = CODE_BLOCK_PATTERN, detect_single_line_code: bool = False
-    ) -> List[Tuple[str, str]]:
+        text: str, pattern: str = CODE_BLOCK_PATTERN, detect_single_line_code: bool = False
+    ) -> list[tuple[str, str]]:
         """Extract code from a text.
 
         Args:
@@ -122,28 +131,30 @@ class LocalExecutor(BaseExecutor):
 
     @staticmethod
     def _cmd(lang):
-        if lang.startswith('python') or lang in ['bash', 'sh', 'powershell']:
+        if lang.startswith("python") or lang in ["bash", "sh", "powershell"]:
             return lang
-        if lang in ['shell']:
-            return 'sh'
-        if lang in ['ps1']:
-            return 'powershell'
-        raise NotImplementedError(f'{lang} not recognized in code execution')
+        if lang in ["shell"]:
+            return "sh"
+        if lang in ["ps1"]:
+            return "powershell"
+        raise NotImplementedError(f"{lang} not recognized in code execution")
 
     @classmethod
-    def _execute_code(cls,
-                      code: Optional[str] = None,
-                      timeout: Optional[int] = None,
-                      filename: Optional[str] = None,
-                      work_dir: Optional[str] = None,
-                      lang: Optional[str] = 'python',
-                      file_path: Optional[str] = None):
+    def _execute_code(
+        cls,
+        code: str | None = None,
+        timeout: int | None = None,
+        filename: str | None = None,
+        work_dir: str | None = None,
+        lang: str | None = "python",
+        file_path: str | None = None,
+    ):
         cmd = [
-            sys.executable if lang.startswith('python') else cls._cmd(lang),
-            f'.\\{filename}' if WIN32 else filename,
+            sys.executable if lang.startswith("python") else cls._cmd(lang),
+            f".\\{filename}" if WIN32 else filename,
         ]
         if WIN32:
-            logger.warning('SIGALRM is not supported on Windows. No timeout will be enforced.')
+            logger.warning("SIGALRM is not supported on Windows. No timeout will be enforced.")
             result = subprocess.run(
                 cmd,
                 cwd=work_dir,
@@ -167,25 +178,25 @@ class LocalExecutor(BaseExecutor):
             logs = result.stderr
             if file_path is not None:
                 abs_path = str(Path(file_path).absolute())
-                logs = logs.replace(str(abs_path), '').replace(filename, '')
+                logs = logs.replace(str(abs_path), "").replace(filename, "")
             else:
                 abs_path = str(Path(work_dir).absolute()) + PATH_SEPARATOR
-                logs = logs.replace(str(abs_path), '')
+                logs = logs.replace(str(abs_path), "")
         else:
             logs = result.stdout
         return result.returncode, logs, ""
 
     @classmethod
     def execute_code(
-            cls,
-            code: Optional[str] = None,
-            timeout: Optional[int] = None,
-            filename: Optional[str] = None,
-            work_dir: Optional[str] = None,
-            lang: Optional[str] = 'python',
-    ) -> Tuple[int, str, str]:
+        cls,
+        code: str | None = None,
+        timeout: int | None = None,
+        filename: str | None = None,
+        work_dir: str | None = None,
+        lang: str | None = "python",
+    ) -> tuple[int, str, str]:
         if all((code is None, filename is None)):
-            error_msg = f'Either {code=} or {filename=} must be provided.'
+            error_msg = f"Either {code=} or {filename=} must be provided."
             logger.error(error_msg)
             raise AssertionError(error_msg)
 
@@ -201,13 +212,14 @@ class LocalExecutor(BaseExecutor):
         filepath = os.path.join(work_dir, filename)
         file_dir = os.path.dirname(filepath)
         os.makedirs(file_dir, exist_ok=True)
-        (Path(file_dir) / 'output').mkdir(exist_ok=True, parents=True)
+        (Path(file_dir) / "output").mkdir(exist_ok=True, parents=True)
         if code is not None:
-            with open(filepath, 'w', encoding='utf-8') as fout:
+            with open(filepath, "w", encoding="utf-8") as fout:
                 fout.write(code)
         try:
-            return cls._execute_code(code=code, timeout=timeout, filename=filename, work_dir=work_dir, lang=lang,
-                                     file_path=filepath)
+            return cls._execute_code(
+                code=code, timeout=timeout, filename=filename, work_dir=work_dir, lang=lang, file_path=filepath
+            )
         finally:
             if filepath is not None:
                 os.remove(filepath)
@@ -219,7 +231,7 @@ class LocalExecutor(BaseExecutor):
             work_dir=dir_path,
             lang=lang,
         )
-        logs += '\n' + logs
+        logs += "\n" + logs
         file_list = []
         if exitcode != 0:
             return exitcode, logs, file_list
@@ -237,8 +249,9 @@ class LocalExecutor(BaseExecutor):
         return exitcode, logs, file_list
 
     def run(self, code: str) -> Any:
+        original_code = code
         code_blocks = self.extract_code(code)
-        logs_all = ''
+        logs_all = ""
         all_file_list = []
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
@@ -250,13 +263,20 @@ class LocalExecutor(BaseExecutor):
                 with tempfile.TemporaryDirectory() as temp_dir:
                     exit_code, logs, file_list = self.run_with_dir(code, dir_path=temp_dir, lang=lang)
             if exit_code != 0:
-                return {'exitcode': exit_code, 'log': logs_all}
+                return {"exitcode": exit_code, "log": logs_all}
             logs_all += "\n" + logs
             all_file_list += file_list
 
-        return {'exitcode': 0, 'log': logs_all, 'file_list': all_file_list}
+        # Deterministic safety net: if the script wrote a deliverable to an absolute
+        # /output//scratch path it escaped the harvested working dir and silently
+        # vanished (see base_executor). Append a corrective notice so the model
+        # re-writes with a relative path on the next step. Non-blocking.
+        advisory = self.absolute_path_advisory(original_code)
+        if advisory:
+            logs_all += advisory
+        return {"exitcode": 0, "log": logs_all, "file_list": all_file_list}
 
-    def sync_files_to_local(self, files_info: List[DirEntry], root_path: str):
+    def sync_files_to_local(self, files_info: list[DirEntry], root_path: str):
         if not files_info:
             return
         for file in files_info:
@@ -277,11 +297,15 @@ class LocalExecutor(BaseExecutor):
         shutil.move(file_info.path, local_path)
 
 
-if __name__ == '__main__':
-    tmp_executor = LocalExecutor(minio={}, )
+if __name__ == "__main__":
+    tmp_executor = LocalExecutor(
+        minio={},
+    )
     result = tmp_executor.run(
-        code="""import os\nwith open("output/test2.txt", "w") as f:\n    f.write("Hello, E2222B!")\nprint("File written to output/test.txt")""")
+        code="""import os\nwith open("output/test2.txt", "w") as f:\n    f.write("Hello, E2222B!")\nprint("File written to output/test.txt")"""
+    )
     result2 = tmp_executor.run(
-        code="""import os\nwith open("output/test2.txt", "r") as f:\n    content = f.read()\n    print(f"File read from output/test2.txt=={content}")""")
+        code="""import os\nwith open("output/test2.txt", "r") as f:\n    content = f.read()\n    print(f"File read from output/test2.txt=={content}")"""
+    )
     print(result)
     print(result2)
