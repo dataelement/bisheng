@@ -2065,7 +2065,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Return PUBLIC/APPROVAL spaces for the Knowledge Square with pagination, sorted by:
         1. Not-joined first (easier to explore)
         2. Already-joined or pending last
-        3. Within each group: sorted by update_time DESC
+        3. Within each group: unique active subscriber count descending
         Sorting and pagination are handled at the SQL level for efficiency.
         Returns: {"total": int, "page": int, "page_size": int, "data": List[KnowledgeSpaceInfoResp]}
         """
