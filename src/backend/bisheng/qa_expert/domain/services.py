@@ -109,7 +109,7 @@ class ExpertService:
             job_category = request.job_category,
         )
         temp_expert = await self.repository.create(expert)
-        depart = DepartmentDao.get_by_id(temp_expert.depart_ment)
+        depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
         if depart:
             temp_expert.depart_ment = depart.name
         else:
@@ -123,7 +123,13 @@ class ExpertService:
             raise ExpertNotFoundError()
 
         update_data = request.dict(exclude_unset=True)
-        return await self.repository.update(expert_id, **update_data)
+        temp_expert = await self.repository.update(expert_id, **update_data)
+        depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
+        if depart:
+            temp_expert.depart_ment = depart.name
+        else:
+            temp_expert.depart_ment = None
+        return temp_expert
 
     async def list_experts(
         self, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
