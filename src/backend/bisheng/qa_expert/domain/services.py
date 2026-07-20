@@ -116,7 +116,7 @@ class ExpertService:
             temp_expert.depart_ment = None
         return temp_expert
 
-    async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> Expert:
+    async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> dict:
         """更新专家信息"""
         expert = await self.repository.get_by_id(expert_id)
         if not expert:
@@ -124,12 +124,14 @@ class ExpertService:
 
         update_data = request.dict(exclude_unset=True)
         temp_expert = await self.repository.update(expert_id, **update_data)
+        expert_dict = temp_expert.model_dump()
+        expert_dict["department_id"] = temp_expert.depart_ment
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
         if depart:
-            temp_expert.depart_ment = depart.name
+            expert_dict["depart_ment"] = depart.name
         else:
-            temp_expert.depart_ment = None
-        return temp_expert
+            expert_dict["depart_ment"] = None
+        return expert_dict
 
     async def list_experts(
         self, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
