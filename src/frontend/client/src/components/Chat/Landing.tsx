@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from "react-router-dom";
 import { useLocalize } from '~/hooks';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
 import ConvoStarter from './ConvoStarter';
@@ -18,6 +19,16 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
 }) {
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
+  const isMobile = usePrefersMobileLayout();
+
+  // Customization: on mobile, if functionDescription contains "——", show only the part after it.
+  const functionDescription = (() => {
+    const desc = bsConfig?.functionDescription ?? '';
+    if (isMobile && desc.includes('——')) {
+      return desc.slice(desc.indexOf('——') + '——'.length);
+    }
+    return desc;
+  })();
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
 
@@ -45,7 +56,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
         </div>
         {!hideSubtitle && (
           <div className="max-w-lg text-center mt-[26px] text-sm font-normal text-gray-500 leading-5">
-            {bsConfig?.functionDescription}
+            {functionDescription}
           </div>
         )}
 
