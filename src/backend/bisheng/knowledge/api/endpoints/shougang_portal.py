@@ -1,14 +1,27 @@
 import asyncio
 from typing import Any
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.knowledge_space import (
+    PortalPdfArtifactUnavailableError,
+    PortalPdfDownloadBusyError,
+    PortalPdfDownloadGenerationError,
+    PortalPdfDownloadServiceUnavailableError,
+    PortalPdfDownloadTimeoutError,
+    PortalShareDownloadGrantInvalidError,
+    SpaceFileNotFoundError,
+    SpaceNotFoundError,
+    SpacePermissionDeniedError,
+)
 from bisheng.common.schemas.api import resp_200
 from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
-from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_portal_pdf_download_service
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalDomainBindableSpacesResp,
@@ -50,11 +63,71 @@ from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
     PortalHotSearchTriggerRebuildReq,
     PortalHotSearchTriggerRebuildResp,
 )
+from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
 from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
     PortalHotSearchAdminService,
 )
 
 router = APIRouter(prefix="/knowledge/shougang-portal", tags=["shougang_portal"])
+
+
+_PORTAL_PDF_DOWNLOAD_STATUS = {
+    SpacePermissionDeniedError: 403,
+    PortalShareDownloadGrantInvalidError: 403,
+    SpaceNotFoundError: 404,
+    SpaceFileNotFoundError: 404,
+    PortalPdfArtifactUnavailableError: 409,
+    PortalPdfDownloadBusyError: 429,
+    PortalPdfDownloadServiceUnavailableError: 503,
+    PortalPdfDownloadTimeoutError: 504,
+    PortalPdfDownloadGenerationError: 500,
+}
+
+
+def _portal_pdf_download_error_response(error: BaseErrorCode) -> JSONResponse:
+    status_code = next(
+        (status for error_type, status in _PORTAL_PDF_DOWNLOAD_STATUS.items() if isinstance(error, error_type)),
+        500,
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content=error.to_dict(data={}),
+    )
+
+
+@router.get("/files/{space_id}/{file_id}/download")
+async def download_shougang_portal_pdf(
+    space_id: int,
+    file_id: int,
+    entry_point: str = Query(default="other"),
+    share_access_grant: str = Header(default="", alias="X-Portal-Share-Access-Grant"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    svc: Any = Depends(get_portal_pdf_download_service),
+) -> Any:
+    request = PortalPdfDownloadRequest(
+        space_id=space_id,
+        file_id=file_id,
+        entry_point=entry_point,
+        share_access_grant=share_access_grant,
+    )
+    try:
+        prepared = await svc.prepare_download(request, login_user)
+    except BaseErrorCode as error:
+        return _portal_pdf_download_error_response(error)
+
+    encoded_filename = quote(prepared.filename, safe="")
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"document.pdf\"; filename*=UTF-8''{encoded_filename}",
+        "Content-Length": str(prepared.size),
+        "Cache-Control": "private, no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "X-Content-Type-Options": "nosniff",
+    }
+    return StreamingResponse(
+        prepared.iter_bytes(),
+        media_type="application/pdf",
+        headers=headers,
+    )
 
 
 @router.get("/space-levels")
@@ -155,7 +228,12 @@ async def verify_shougang_portal_share_link(
     try:
         result = await svc.verify_shougang_portal_share_link(share_token, req)
         raw = result.model_dump() if hasattr(result, "model_dump") else result
-        return resp_200(ShougangPortalShareLinkAccessResp(**raw).model_dump(mode="json"))
+        access = ShougangPortalShareLinkAccessResp(**raw)
+        payload = access.model_dump(mode="json")
+        if not access.download_grant:
+            payload.pop("download_grant", None)
+            payload.pop("download_grant_expires_at", None)
+        return resp_200(payload)
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 

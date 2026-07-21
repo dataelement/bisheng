@@ -13,7 +13,6 @@ import {
     SpaceRole,
     VisibilityType,
     batchDeleteApi,
-    batchDownloadApi,
     batchRetryApi,
     deleteSpaceApi,
     getFileDownloadApi,
@@ -1210,7 +1209,6 @@ export default function PortalKnowledgeWorkbench() {
         [displayedFiles, selectedFileIds, selectedFolderIds],
     );
     const selectedCount = selectedFiles.length;
-    const selectedDownloadable = selectedFiles.length > 0 && selectedFiles.every((file) => effectiveDownloadEntryIds.has(file.id));
     const selectedDeletable = selectedFiles.length > 0 && selectedFiles.every((file) => effectiveDeleteEntryIds.has(file.id));
     const retryableSelectedFiles = selectedFiles.filter(isRetryable);
     const canBatchRetry = Boolean(isActiveSpaceAdmin && retryableSelectedFiles.length > 0);
@@ -2215,29 +2213,6 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFolderIds(new Set());
     }, []);
 
-    const handleBatchDownload = useCallback(async () => {
-        if (!activeSpace || selectedFiles.length === 0) return;
-        if (!selectedDownloadable) {
-            showToast({ message: "所选内容无下载权限", severity: NotificationSeverity.ERROR });
-            return;
-        }
-        const files = selectedFiles.filter((file) => !isFolder(file));
-        const folders = selectedFiles.filter(isFolder);
-        try {
-            const url = await batchDownloadApi(activeSpace.id, {
-                file_ids: files.length ? toNumericIds(files) : undefined,
-                folder_ids: folders.length ? toNumericIds(folders) : undefined,
-            });
-            if (!url) {
-                showToast({ message: "未获取到下载地址", severity: NotificationSeverity.ERROR });
-                return;
-            }
-            triggerUrlDownload(url, `${activeSpace.name || "knowledge"}_files.zip`);
-        } catch {
-            showToast({ message: "批量下载失败", severity: NotificationSeverity.ERROR });
-        }
-    }, [activeSpace, selectedDownloadable, selectedFiles, showToast]);
-
     const handleBatchDelete = useCallback(async () => {
         if (!activeSpace || selectedFiles.length === 0) return;
         if (!selectedDeletable) {
@@ -2577,6 +2552,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideNativeStatusFilter
                                                     hideSpaceInfoTooltip
                                                     hideShareButton
+                                                    hideBatchDownload
                                                     hideFilePermissionActions={isActiveSpacePersonal}
                                                     externalFileActionPermissions={publicFileActionPermissions}
                                                     enableEncodingClassification

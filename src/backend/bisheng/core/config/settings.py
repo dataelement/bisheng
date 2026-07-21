@@ -576,6 +576,26 @@ class KnowledgePdfArtifactConf(BaseModel):
         return self
 
 
+class KnowledgePdfWatermarkConf(BaseModel):
+    """门户 PDF 实时水印运行配置。"""
+
+    timeout_seconds: int = Field(default=60, ge=1, le=300, description="Watermark generation deadline")
+    max_concurrency: int = Field(default=2, ge=1, le=16, description="Per-process generation concurrency")
+    user_lock_ttl_seconds: int = Field(default=90, ge=2, le=600, description="Per-user Redis lock TTL")
+    process_terminate_grace_seconds: float = Field(
+        default=2,
+        gt=0,
+        le=10,
+        description="Worker terminate grace period before kill",
+    )
+
+    @model_validator(mode="after")
+    def validate_user_lock_ttl(self):
+        if self.user_lock_ttl_seconds <= self.timeout_seconds:
+            raise ValueError("user_lock_ttl_seconds must be greater than timeout_seconds")
+        return self
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -590,6 +610,10 @@ class KnowledgeConf(BaseModel):
     pdf_artifact: KnowledgePdfArtifactConf = Field(
         default_factory=KnowledgePdfArtifactConf,
         description="Unified PDF Artifact Configure",
+    )
+    pdf_watermark: KnowledgePdfWatermarkConf = Field(
+        default_factory=KnowledgePdfWatermarkConf,
+        description="Portal PDF Watermark Configure",
     )
 
     @property

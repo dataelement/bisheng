@@ -2602,12 +2602,13 @@ describe("PortalKnowledgeWorkbench", () => {
             teamSpaces: [teamSpace],
             personalSpaces: [],
         } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(teamSpace as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [firstFile, secondFile],
             total: 2,
         } as any);
 
-        renderWorkbench();
+        renderWorkbench("/knowledge-portal?spaceId=team-1");
 
         const firstRow = await screen.findByTestId("file-tree-row-201");
         const secondRow = screen.getByTestId("file-tree-row-202");
@@ -2620,7 +2621,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).not.toBeInTheDocument();
     });
 
-    test("shows only batch download for read-only selected files and folders", async () => {
+    test("hides the batch menu when download was the only permitted action", async () => {
         const teamSpace = makeSpace("team-1", "团队技术文档", {
             spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.MEMBER,
@@ -2647,12 +2648,13 @@ describe("PortalKnowledgeWorkbench", () => {
             teamSpaces: [teamSpace],
             personalSpaces: [],
         } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(teamSpace as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [folder, file],
             total: 2,
         } as any);
 
-        renderWorkbench();
+        renderWorkbench("/knowledge-portal?spaceId=team-1");
 
         const folderRow = await screen.findByTestId("file-tree-row-101");
         const fileRow = screen.getByTestId("file-tree-row-201");
@@ -2662,18 +2664,91 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(folderRow).getByRole("checkbox"));
         fireEvent.click(within(fileRow).getByRole("checkbox"));
 
-        expect(await screen.findByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).toBeEnabled();
-        expect(screen.getByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i })).toBeInTheDocument();
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalled();
+        });
+        expect(screen.queryByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i })).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: /批量删除|Batch delete|com_knowledge\.batch_delete|^delete$/i })).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: /批量重试|Batch retry|com_knowledge\.batch_retry|^retry$/i })).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: /批量添加标签|Batch add tags|com_knowledge\.batch_add_tags|^tag$/i })).not.toBeInTheDocument();
+        expect(batchDownloadApi).not.toHaveBeenCalled();
+    });
 
-        fireEvent.click(screen.getByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i }));
+    test.each([
+        ["file", false],
+        ["folder", true],
+    ] as const)("does not show batch download for an admin selecting one %s", async (_kind, folderOnly) => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const entry = makeFile("201", folderOnly ? "技术文档" : "后端开发.md", folderOnly ? {
+            type: FileType.FOLDER,
+            successFileNum: 0,
+            fileNum: 1,
+        } : {});
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [entry],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const row = await screen.findByTestId("file-tree-row-201");
+        fireEvent.click(within(row).getByRole("checkbox"));
+
+        expect(await screen.findByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).toBeEnabled();
+        expect(screen.queryByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /批量删除|Batch delete|com_knowledge\.batch_delete|^delete$/i })).toBeInTheDocument();
+        expect(batchDownloadApi).not.toHaveBeenCalled();
+    });
+
+    test("keeps row-level file and folder downloads available", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 1,
+        });
+        const file = makeFile("201", "后端开发.md");
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder, file],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        const fileRow = screen.getByTestId("file-tree-row-201");
+        fireEvent.mouseEnter(folderRow);
+        fireEvent.mouseEnter(fileRow);
         await waitFor(() => {
-            expect(batchDownloadApi).toHaveBeenCalledWith("team-1", {
-                file_ids: [201],
+            expect(screen.getAllByRole("button", { name: /下载|download|com_knowledge\.download/i })).toHaveLength(2);
+        });
+        fireEvent.click(within(folderRow).getByRole("button", { name: /下载|download|com_knowledge\.download/i }));
+        await waitFor(() => {
+            expect(batchDownloadApi).toHaveBeenCalledWith("personal-1", {
                 folder_ids: [101],
             });
+        });
+
+        fireEvent.click(within(fileRow).getByRole("button", { name: /下载|download|com_knowledge\.download/i }));
+        await waitFor(() => {
+            expect(getFileDownloadApi).toHaveBeenCalledWith("personal-1", "201");
         });
     });
 
@@ -4608,7 +4683,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
-    test("runs real batch actions for selected files and folders", async () => {
+    test("runs remaining batch actions for selected files and folders", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -4642,14 +4717,8 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(fileRow).getByRole("checkbox"));
 
         expect(await screen.findByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).toBeEnabled();
-
-        fireEvent.click(screen.getByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i }));
-        await waitFor(() => {
-            expect(batchDownloadApi).toHaveBeenCalledWith("personal-1", {
-                file_ids: [201],
-                folder_ids: [101],
-            });
-        });
+        expect(screen.queryByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i })).not.toBeInTheDocument();
+        expect(batchDownloadApi).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: /批量重试|Batch retry|com_knowledge\.batch_retry|^retry$/i }));
         await waitFor(() => {

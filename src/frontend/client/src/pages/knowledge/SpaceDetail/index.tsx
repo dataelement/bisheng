@@ -113,6 +113,8 @@ interface KnowledgeSpaceContentProps {
     /** 门户模式下隐藏知识库标题后的详情信息浮层。 */
     hideSpaceInfoTooltip?: boolean;
     hideShareButton?: boolean;
+    /** 宿主可隐藏多选操作中的批量下载，默认保留现有行为。 */
+    hideBatchDownload?: boolean;
     hideFilePermissionActions?: boolean;
     /** Public portal supplies a single batch result and skips legacy per-file probes. */
     externalFileActionPermissions?: ExternalFileActionPermissions;
@@ -172,6 +174,7 @@ export function KnowledgeSpaceContent({
     hideNativeStatusFilter,
     hideSpaceInfoTooltip = false,
     hideShareButton = false,
+    hideBatchDownload = false,
     hideFilePermissionActions = false,
     externalFileActionPermissions,
     enableEncodingClassification = false,
@@ -1276,9 +1279,9 @@ export function KnowledgeSpaceContent({
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         effectiveDeleteEntryIds.has(file.id)
     );
-    const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
-        effectiveDownloadEntryIds.has(file.id)
-    );
+    const canBatchDownload = !hideBatchDownload
+        && selectedList.length > 0
+        && selectedList.every((file) => effectiveDownloadEntryIds.has(file.id));
 
     return (
         <div

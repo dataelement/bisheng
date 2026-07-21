@@ -60,6 +60,7 @@
 | F054-file-publish-submit-performance | F025 | 复用统一审批事实和任务模型；新增独立通知 outbox，不修改业务执行 outbox 语义 |
 | F062-portal-course-management | F012, F017, F019 | 依赖租户解析、租户共享存储与管理员租户范围基线；复用现有首钢门户会话/BFF |
 | F063-unified-pdf-artifact | F017, F056 | 依赖租户共享存储路径与 Celery 单循环运行时基线；新增独立 PDF Artifact，不修改知识解析、预览或下载契约 |
+| F064-portal-watermarked-pdf-download | F063 | 只读 F063 提供的当前有效 `KnowledgeFilePdfArtifact` 引用；不创建、更新或删除统一 PDF 产物，不取得其写所有权 |
 
 ---
 
@@ -87,3 +88,4 @@
 | 2026-07-14 | 登记 F054 发布申请提交性能优化及 `ApprovalNotificationOutbox` 领域归属 | F054 |
 | 2026-07-18 | 登记 F062 门户课程、视频、学习进度、媒体清理领域归属，依赖关系及 250 模块错误码；标签确认为 PortalCourse 内值对象，不建立独立实体/表 | F062 |
 | 2026-07-20 | 登记 F063 知识文件统一 PDF 产物的领域归属与 F017/F056 依赖；明确其不拥有解析状态、预览和下载行为 | F063 |
+| 2026-07-21 | 登记 F064 门户带水印 PDF 下载依赖 F063；明确仅通过 accessor 读取统一 PDF 产物，不取得 `KnowledgeFilePdfArtifact` 写所有权 | F064, F063 |

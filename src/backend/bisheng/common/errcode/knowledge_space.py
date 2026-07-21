@@ -255,3 +255,33 @@ class FreeSpaceMigratingError(BaseErrorCode):
 class PortalHotSearchDisabledError(BaseErrorCode):
     Code: int = 18084
     Msg: str = "门户热搜批处理已关闭"
+
+
+class PortalPdfArtifactUnavailableError(BaseErrorCode):
+    Code: int = 18085
+    Msg: str = "该文档 PDF 产物暂不可用"
+
+
+class PortalPdfDownloadBusyError(BaseErrorCode):
+    Code: int = 18086
+    Msg: str = "下载任务繁忙, 请稍后重试"
+
+
+class PortalPdfDownloadTimeoutError(BaseErrorCode):
+    Code: int = 18087
+    Msg: str = "文档处理超时, 请稍后重试"
+
+
+class PortalShareDownloadGrantInvalidError(BaseErrorCode):
+    Code: int = 18088
+    Msg: str = "分享下载授权已失效"
+
+
+class PortalPdfDownloadGenerationError(BaseErrorCode):
+    Code: int = 18089
+    Msg: str = "文档下载生成失败"
+
+
+class PortalPdfDownloadServiceUnavailableError(BaseErrorCode):
+    Code: int = 18090
+    Msg: str = "下载服务暂不可用"

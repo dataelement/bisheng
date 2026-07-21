@@ -39,6 +39,7 @@ from bisheng.common.errcode.knowledge_space import (
     FreeSpaceMigrationEmbeddingMismatchError,
     FreeSpaceMigrationTargetNotFoundError,
     PersonalSpaceProtectedError,
+    PortalShareDownloadGrantInvalidError,
     SpaceBusinessDomainCodeInvalidError,
     SpaceCreateDepartmentDeniedError,
     SpaceCreatePublicDeniedError,
@@ -3104,6 +3105,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return create_time + timedelta(seconds=expire_time) < datetime.now()
 
     @staticmethod
+    def _shougang_portal_share_not_after(share_link: ShareLink) -> int | None:
+        expire_time = int(getattr(share_link, "expire_time", 0) or 0)
+        create_time = getattr(share_link, "create_time", None)
+        if expire_time <= 0 or not create_time:
+            return None
+        return int((create_time + timedelta(seconds=expire_time)).timestamp())
+
+    @staticmethod
     def _shougang_portal_share_permissions(meta_data: dict) -> ShougangPortalSharePermissions:
         permissions = meta_data.get("permissions") or {}
         return ShougangPortalSharePermissions(
@@ -3358,12 +3367,69 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         permissions = self._shougang_portal_share_permissions(meta_data)
+        download_grant = ""
+        download_grant_expires_at = None
+        if (
+            bool(getattr(req, "issue_download_grant", False))
+            and permissions.download
+            and int(getattr(self.login_user, "user_id", 0) or 0) > 0
+        ):
+            from bisheng.common.services.config_service import settings
+            from bisheng.knowledge.domain.services.portal_share_download_grant_service import (
+                PortalShareDownloadGrantService,
+            )
+
+            issued = PortalShareDownloadGrantService(secret=settings.jwt_secret).issue(
+                user_id=int(self.login_user.user_id),
+                tenant_id=int(getattr(self.login_user, "tenant_id", DEFAULT_TENANT_ID) or DEFAULT_TENANT_ID),
+                share_token=share_token,
+                space_id=space_id,
+                file_id=file_id,
+                allow_download=True,
+                not_after=self._shougang_portal_share_not_after(share_link),
+            )
+            download_grant = issued.token
+            download_grant_expires_at = issued.expires_at
+
         return ShougangPortalShareLinkAccessResp(
             share_token=share_token,
             space_id=space_id,
             file_id=file_id,
             allow_download=permissions.download,
+            download_grant=download_grant,
+            download_grant_expires_at=download_grant_expires_at,
         )
+
+    async def require_shougang_portal_share_download(
+        self,
+        *,
+        share_token: str,
+        space_id: int,
+        file_id: int,
+    ) -> None:
+        try:
+            share_link = await self._get_shougang_portal_share_link(share_token)
+            meta_data = self._require_shougang_portal_file_share_link(share_link)
+            if self._is_shougang_portal_share_expired(share_link):
+                raise PortalShareDownloadGrantInvalidError()
+            if int(meta_data.get("space_id") or 0) != int(space_id):
+                raise PortalShareDownloadGrantInvalidError()
+            if int(meta_data.get("file_id") or 0) != int(file_id):
+                raise PortalShareDownloadGrantInvalidError()
+            permissions = self._shougang_portal_share_permissions(meta_data)
+            if not permissions.download:
+                raise PortalShareDownloadGrantInvalidError()
+            visibility = self._enum_value(meta_data.get("visibility"))
+            if visibility == ShougangPortalShareVisibility.DEPARTMENT.value:
+                await self._require_shougang_portal_share_department_access(
+                    space_id=int(space_id),
+                    share_link=share_link,
+                    meta_data=meta_data,
+                )
+        except PortalShareDownloadGrantInvalidError:
+            raise
+        except Exception:
+            raise PortalShareDownloadGrantInvalidError() from None
 
     async def _require_shougang_portal_share_department_access(
         self,
@@ -11175,6 +11241,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "original_url": original_url,
             "preview_url": preview_url,
         }
+
+    async def require_shougang_portal_file_download_permission(self, *, space_id: int, file_id: int) -> None:
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        await self._require_permission_id(
+            "knowledge_file",
+            file_id,
+            "download_file",
+            space_id=file_record.knowledge_id,
+        )
 
     # ──────────────────────────── Tags ───────────────────────────────────
     async def get_space_tags(self, space_id: int) -> list[dict[str, Any]]:

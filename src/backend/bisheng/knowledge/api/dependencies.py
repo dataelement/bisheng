@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
+    from bisheng.knowledge.domain.services.portal_pdf_download_service import PortalPdfDownloadService
 
 
 async def get_knowledge_repository(
@@ -144,6 +145,38 @@ async def get_knowledge_space_service(
     service.doc_repo = doc_repo
     service.similar_candidate_repo = similar_candidate_repo
     return service
+
+
+async def get_portal_pdf_download_service(
+    file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    authorization_service: "KnowledgeSpaceService" = Depends(get_knowledge_space_service),
+    session: AsyncSession = Depends(get_db_session),
+) -> "PortalPdfDownloadService":
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.storage.minio.minio_manager import get_minio_storage
+    from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+        get_available_pdf_artifact_reference,
+    )
+    from bisheng.knowledge.domain.services.portal_pdf_download_service import (
+        PortalPdfDownloadService,
+        PortalPdfDownloadUserLock,
+    )
+    from bisheng.knowledge.domain.services.portal_share_download_grant_service import (
+        PortalShareDownloadGrantService,
+    )
+    from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
+
+    config = (await settings.async_get_knowledge()).pdf_watermark
+    return PortalPdfDownloadService(
+        config=config,
+        file_repository=file_repository,
+        user_repository=UserRepositoryImpl(session),
+        authorization_service=authorization_service,
+        artifact_accessor=get_available_pdf_artifact_reference,
+        storage=await get_minio_storage(),
+        share_grant_service=PortalShareDownloadGrantService(secret=settings.jwt_secret),
+        user_lock=PortalPdfDownloadUserLock(),
+    )
 
 
 async def get_knowledge_space_chat_service(

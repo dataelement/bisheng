@@ -301,6 +301,7 @@ class ShougangPortalShareLinkMetaResp(BaseModel):
 class ShougangPortalShareLinkVerifyReq(BaseModel):
     password: str = Field(default="", max_length=128)
     invite_code: str = Field(default="", max_length=32)
+    issue_download_grant: bool = Field(default=False, description="Issue an internal user-bound download grant")
 
 
 class ShougangPortalShareLinkAccessResp(BaseModel):
@@ -308,6 +309,8 @@ class ShougangPortalShareLinkAccessResp(BaseModel):
     space_id: int
     file_id: int
     allow_download: bool = False
+    download_grant: str = Field(default="", description="Internal opaque download grant")
+    download_grant_expires_at: int | None = Field(default=None, description="Internal grant expiry as Unix timestamp")
 
 
 class ShougangPortalTagSearchReq(BaseModel):
