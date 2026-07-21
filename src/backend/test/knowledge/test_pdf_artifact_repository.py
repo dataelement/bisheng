@@ -73,6 +73,68 @@ async def test_request_generation_creates_waiting_then_invalidates_success(
     assert await repository.find_available(7, 101) is None
 
 
+async def test_on_demand_request_reuses_inflight_generation(
+    repository: KnowledgeFilePdfArtifactRepositoryImpl,
+) -> None:
+    first = await repository.request_on_demand_generation(_snapshot())
+    second = await repository.request_on_demand_generation(_snapshot())
+
+    assert first.artifact.generation == 1
+    assert second.artifact.generation == 1
+    assert second.artifact.status == KnowledgeFilePdfArtifactStatus.WAITING.value
+
+    await repository.claim_generation(7, 101, 1, datetime(2026, 7, 20))
+    processing = await repository.request_on_demand_generation(_snapshot())
+
+    assert processing.artifact.generation == 1
+    assert processing.artifact.status == KnowledgeFilePdfArtifactStatus.PROCESSING.value
+
+
+async def test_on_demand_request_restarts_failed_or_changed_source(
+    repository: KnowledgeFilePdfArtifactRepositoryImpl,
+) -> None:
+    first = await repository.request_on_demand_generation(_snapshot())
+    await repository.fail_generation(7, 101, first.artifact.generation, "conversion failed")
+
+    retried = await repository.request_on_demand_generation(_snapshot())
+    retried_generation = retried.artifact.generation
+    changed = await repository.request_on_demand_generation(_snapshot("source-v2"))
+
+    assert retried_generation == 2
+    assert changed.artifact.generation == 3
+    assert changed.artifact.source_md5 == "source-v2"
+
+
+async def test_on_demand_forced_repair_is_generation_scoped(
+    repository: KnowledgeFilePdfArtifactRepositoryImpl,
+) -> None:
+    first = await repository.request_generation(_snapshot())
+    await repository.complete_generation(
+        tenant_id=7,
+        knowledge_file_id=101,
+        generation=first.artifact.generation,
+        origin=KnowledgeFilePdfArtifactOrigin.GENERATED,
+        object_name="knowledge/pdf-artifacts/101/1/broken.pdf",
+        artifact_sha256="a" * 64,
+        page_count=1,
+        artifact_size=100,
+        completed_at=datetime(2026, 7, 20),
+    )
+
+    repair = await repository.request_on_demand_generation(
+        _snapshot(),
+        invalid_generation=1,
+    )
+    concurrent = await repository.request_on_demand_generation(
+        _snapshot(),
+        invalid_generation=1,
+    )
+
+    assert repair.artifact.generation == 2
+    assert repair.artifact.status == KnowledgeFilePdfArtifactStatus.WAITING.value
+    assert concurrent.artifact.generation == 2
+
+
 async def test_claim_and_retry_are_generation_scoped(
     repository: KnowledgeFilePdfArtifactRepositoryImpl,
 ) -> None:

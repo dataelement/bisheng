@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocalize } from "~/hooks";
+import KnowledgePreviewWatermark from "../KnowledgePreviewWatermark";
 
 interface HtmlViewerProps {
     fileUrl: string;
@@ -52,7 +53,10 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
 
     return (
         <div className="flex-1 overflow-auto bg-[#fbfbfb]">
-            <div className="w-full h-full">
+            <div
+                className="relative w-full h-full overflow-hidden"
+                data-preview-watermark-surface
+            >
                 <iframe
                     srcDoc={htmlContent || ""}
                     title={localize("com_knowledge.html_preview")}
@@ -65,6 +69,7 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
                         height: `${100 / scale}%`,
                     }}
                 />
+                <KnowledgePreviewWatermark />
             </div>
         </div>
     );

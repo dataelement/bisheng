@@ -33,6 +33,49 @@ _COMPLETABLE_STATUSES = (
 _VALID_ORIGINS = tuple(origin.value for origin in KnowledgeFilePdfArtifactOrigin)
 
 
+def _same_source(artifact: KnowledgeFilePdfArtifact, snapshot: PdfArtifactSourceSnapshot) -> bool:
+    return bool(
+        artifact.source_object_name == snapshot.source_object_name
+        and artifact.source_md5 == snapshot.source_md5
+    )
+
+
+def _reset_for_generation(
+    artifact: KnowledgeFilePdfArtifact,
+    snapshot: PdfArtifactSourceSnapshot,
+) -> None:
+    artifact.generation += 1
+    artifact.source_object_name = snapshot.source_object_name
+    artifact.source_md5 = snapshot.source_md5
+    artifact.status = KnowledgeFilePdfArtifactStatus.WAITING.value
+    artifact.artifact_sha256 = None
+    artifact.attempt_count = 0
+    artifact.last_error = None
+    artifact.page_count = None
+    artifact.artifact_size = None
+    artifact.started_at = None
+    artifact.completed_at = None
+
+
+def _should_reuse_on_demand_generation(
+    artifact: KnowledgeFilePdfArtifact,
+    snapshot: PdfArtifactSourceSnapshot,
+    invalid_generation: int | None,
+) -> bool:
+    if invalid_generation is not None and int(artifact.generation) != int(invalid_generation):
+        # 另一个请求已经针对同一损坏 generation 发起过修复; 禁止重复递增。
+        return True
+    return bool(
+        invalid_generation is None
+        and _same_source(artifact, snapshot)
+        and artifact.status
+        in {
+            KnowledgeFilePdfArtifactStatus.WAITING.value,
+            KnowledgeFilePdfArtifactStatus.PROCESSING.value,
+        }
+    )
+
+
 class KnowledgeFilePdfArtifactRepositoryImpl:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -66,17 +109,7 @@ class KnowledgeFilePdfArtifactRepositoryImpl:
             )
             self.session.add(artifact)
         else:
-            artifact.generation += 1
-            artifact.source_object_name = snapshot.source_object_name
-            artifact.source_md5 = snapshot.source_md5
-            artifact.status = KnowledgeFilePdfArtifactStatus.WAITING.value
-            artifact.artifact_sha256 = None
-            artifact.attempt_count = 0
-            artifact.last_error = None
-            artifact.page_count = None
-            artifact.artifact_size = None
-            artifact.started_at = None
-            artifact.completed_at = None
+            _reset_for_generation(artifact, snapshot)
 
         await self.session.commit()
         await self.session.refresh(artifact)
@@ -85,6 +118,39 @@ class KnowledgeFilePdfArtifactRepositoryImpl:
             previous_object_name=previous_object_name,
             previous_origin=previous_origin,
         )
+
+    async def request_on_demand_generation(
+        self,
+        snapshot: PdfArtifactSourceSnapshot,
+        *,
+        invalid_generation: int | None = None,
+    ) -> PdfArtifactGenerationRequest:
+        statement = (
+            select(KnowledgeFilePdfArtifact)
+            .where(*self._scope(snapshot.tenant_id, snapshot.knowledge_file_id))
+            .with_for_update()
+        )
+        result = await self.session.execute(statement)
+        artifact = result.scalars().first()
+        previous_object_name = artifact.object_name if artifact else None
+        previous_origin = artifact.artifact_origin if artifact else None
+
+        if artifact is None:
+            artifact = KnowledgeFilePdfArtifact(
+                tenant_id=snapshot.tenant_id,
+                knowledge_file_id=snapshot.knowledge_file_id,
+                source_object_name=snapshot.source_object_name,
+                source_md5=snapshot.source_md5,
+                generation=1,
+                status=KnowledgeFilePdfArtifactStatus.WAITING.value,
+            )
+            self.session.add(artifact)
+        elif not _should_reuse_on_demand_generation(artifact, snapshot, invalid_generation):
+            _reset_for_generation(artifact, snapshot)
+
+        await self.session.commit()
+        await self.session.refresh(artifact)
+        return PdfArtifactGenerationRequest(artifact, previous_object_name, previous_origin)
 
     async def find_current(self, tenant_id: int, knowledge_file_id: int) -> KnowledgeFilePdfArtifact | None:
         result = await self.session.execute(
@@ -295,17 +361,40 @@ class KnowledgeFilePdfArtifactSyncRepositoryImpl:
             )
             self.session.add(artifact)
         else:
-            artifact.generation += 1
-            artifact.source_object_name = snapshot.source_object_name
-            artifact.source_md5 = snapshot.source_md5
-            artifact.status = KnowledgeFilePdfArtifactStatus.WAITING.value
-            artifact.artifact_sha256 = None
-            artifact.attempt_count = 0
-            artifact.last_error = None
-            artifact.page_count = None
-            artifact.artifact_size = None
-            artifact.started_at = None
-            artifact.completed_at = None
+            _reset_for_generation(artifact, snapshot)
+        self.session.commit()
+        self.session.refresh(artifact)
+        return PdfArtifactGenerationRequest(artifact, previous_object_name, previous_origin)
+
+    def request_on_demand_generation(
+        self,
+        snapshot: PdfArtifactSourceSnapshot,
+        *,
+        invalid_generation: int | None = None,
+    ) -> PdfArtifactGenerationRequest:
+        artifact = (
+            self.session.execute(
+                select(KnowledgeFilePdfArtifact)
+                .where(*self._scope(snapshot.tenant_id, snapshot.knowledge_file_id))
+                .with_for_update()
+            )
+            .scalars()
+            .first()
+        )
+        previous_object_name = artifact.object_name if artifact else None
+        previous_origin = artifact.artifact_origin if artifact else None
+        if artifact is None:
+            artifact = KnowledgeFilePdfArtifact(
+                tenant_id=snapshot.tenant_id,
+                knowledge_file_id=snapshot.knowledge_file_id,
+                source_object_name=snapshot.source_object_name,
+                source_md5=snapshot.source_md5,
+                generation=1,
+                status=KnowledgeFilePdfArtifactStatus.WAITING.value,
+            )
+            self.session.add(artifact)
+        elif not _should_reuse_on_demand_generation(artifact, snapshot, invalid_generation):
+            _reset_for_generation(artifact, snapshot)
         self.session.commit()
         self.session.refresh(artifact)
         return PdfArtifactGenerationRequest(artifact, previous_object_name, previous_origin)

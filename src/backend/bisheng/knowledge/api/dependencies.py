@@ -154,8 +154,19 @@ async def get_portal_pdf_download_service(
 ) -> "PortalPdfDownloadService":
     from bisheng.common.services.config_service import settings
     from bisheng.core.storage.minio.minio_manager import get_minio_storage
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_pdf_artifact_repository_impl import (
+        KnowledgeFilePdfArtifactRepositoryImpl,
+    )
     from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+        KnowledgePdfArtifactService,
         get_available_pdf_artifact_reference,
+    )
+    from bisheng.knowledge.domain.services.pdf_artifact_generation_service import (
+        process_pdf_artifact_on_demand,
+    )
+    from bisheng.knowledge.domain.services.pdf_artifact_on_demand_service import (
+        PdfArtifactGenerationLock,
+        PdfArtifactOnDemandService,
     )
     from bisheng.knowledge.domain.services.portal_pdf_download_service import (
         PortalPdfDownloadService,
@@ -165,14 +176,25 @@ async def get_portal_pdf_download_service(
         PortalShareDownloadGrantService,
     )
     from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
-
-    config = (await settings.async_get_knowledge()).pdf_watermark
+    knowledge_config = await settings.async_get_knowledge()
+    artifact_service = KnowledgePdfArtifactService(
+        repository=KnowledgeFilePdfArtifactRepositoryImpl(session),
+        config=knowledge_config.pdf_artifact,
+    )
+    on_demand_service = PdfArtifactOnDemandService(
+        artifact_service=artifact_service,
+        artifact_accessor=get_available_pdf_artifact_reference,
+        generation_runner=process_pdf_artifact_on_demand,
+        generation_lock=PdfArtifactGenerationLock(),
+        config=knowledge_config.pdf_artifact,
+    )
     return PortalPdfDownloadService(
-        config=config,
+        config=knowledge_config.pdf_watermark,
         file_repository=file_repository,
         user_repository=UserRepositoryImpl(session),
         authorization_service=authorization_service,
-        artifact_accessor=get_available_pdf_artifact_reference,
+        artifact_ensurer=on_demand_service.ensure_available,
+        artifact_readiness_timeout_seconds=knowledge_config.pdf_artifact.on_demand_timeout_seconds,
         storage=await get_minio_storage(),
         share_grant_service=PortalShareDownloadGrantService(secret=settings.jwt_secret),
         user_lock=PortalPdfDownloadUserLock(),

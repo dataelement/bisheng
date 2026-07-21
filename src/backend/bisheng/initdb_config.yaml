@@ -35,10 +35,12 @@ knowledges: # 知识库相关配置
     retry_base_seconds: 30
     retry_max_seconds: 300
     conversion_timeout_seconds: 300
+    on_demand_timeout_seconds: 300
+    generation_lock_ttl_seconds: 330
   pdf_watermark:
     timeout_seconds: 60
     max_concurrency: 2
-    user_lock_ttl_seconds: 90
+    user_lock_ttl_seconds: 390
     process_terminate_grace_seconds: 2
 
 llm_request:

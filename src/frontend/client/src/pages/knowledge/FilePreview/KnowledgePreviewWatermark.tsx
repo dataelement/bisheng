@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRecoilValue } from "recoil";
 
 import store from "~/store";
@@ -9,6 +9,8 @@ const BEIJING_TIME_ZONE = "Asia/Shanghai";
 const WATERMARK_TILE_COUNT = 24;
 
 type KnowledgePreviewWatermarkUser = Pick<TUser, "name" | "username">;
+
+const KnowledgePreviewWatermarkContext = createContext<string[] | null>(null);
 
 export function formatKnowledgePreviewWatermarkTime(value: Date): string {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -39,12 +41,22 @@ export function buildKnowledgePreviewWatermarkLines(
     ];
 }
 
-export default function KnowledgePreviewWatermark() {
+export function KnowledgePreviewWatermarkProvider({ children }: { children: ReactNode }) {
     const user = useRecoilValue(store.user);
     const [viewedAt] = useState(() => new Date());
+    const lines = user ? buildKnowledgePreviewWatermarkLines(user, viewedAt) : null;
 
-    if (!user) return null;
-    const lines = buildKnowledgePreviewWatermarkLines(user, viewedAt);
+    return (
+        <KnowledgePreviewWatermarkContext.Provider value={lines}>
+            {children}
+        </KnowledgePreviewWatermarkContext.Provider>
+    );
+}
+
+export default function KnowledgePreviewWatermark() {
+    const lines = useContext(KnowledgePreviewWatermarkContext);
+
+    if (!lines) return null;
 
     return (
         <div className={styles.overlay} aria-hidden="true">

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,10 @@ from bisheng.core.config.settings import KnowledgePdfWatermarkConf
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
 from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import PdfArtifactReference
+from bisheng.knowledge.domain.services.pdf_artifact_on_demand_service import (
+    PdfArtifactOnDemandGenerationError,
+    PdfArtifactOnDemandTimeoutError,
+)
 from bisheng.knowledge.domain.services.portal_pdf_download_service import (
     PortalPdfDownloadProcessCapacity,
     PortalPdfDownloadService,
@@ -41,6 +46,9 @@ def _pdf_bytes() -> bytes:
     data = document.tobytes()
     document.close()
     return data
+
+
+_DEFAULT_PDF_BYTES = _pdf_bytes()
 
 
 class FakeFileRepository:
@@ -107,14 +115,18 @@ class FakeStorageResponse:
 
 
 class FakeStorage:
-    def __init__(self, payload: bytes | None = None) -> None:
-        self.payload = payload or _pdf_bytes()
+    def __init__(self, payload: bytes | None = None, payloads: list[bytes | Exception] | None = None) -> None:
+        self.payload = _DEFAULT_PDF_BYTES if payload is None else payload
+        self.payloads = list(payloads or [])
         self.requested_object_names: list[str] = []
         self.responses: list[FakeStorageResponse] = []
 
     def download_object_sync(self, *, object_name: str):
         self.requested_object_names.append(object_name)
-        response = FakeStorageResponse(self.payload)
+        selected = self.payloads.pop(0) if self.payloads else self.payload
+        if isinstance(selected, Exception):
+            raise selected
+        response = FakeStorageResponse(selected)
         self.responses.append(response)
         return response
 
@@ -131,6 +143,25 @@ class FakeUserLock:
 
     async def release(self, *, tenant_id: int, user_id: int, token: str) -> None:
         self.release_calls.append((tenant_id, user_id, token))
+
+
+class FakeArtifactEnsurer:
+    def __init__(self, results: list[PdfArtifactReference | None | Exception]) -> None:
+        self.results = list(results)
+        self.calls: list[dict] = []
+
+    async def __call__(self, file, *, invalid_generation=None, timeout_seconds=None):
+        self.calls.append(
+            {
+                "file_id": file.id,
+                "invalid_generation": invalid_generation,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        result = self.results.pop(0) if len(self.results) > 1 else self.results[0]
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 class CapturingRunner:
@@ -165,9 +196,9 @@ def _artifact(**overrides) -> PdfArtifactReference:
         "knowledge_file_id": 1580,
         "generation": 1,
         "object_name": "knowledge/pdf-artifacts/1580/1/current.pdf",
-        "artifact_sha256": "sha256",
+        "artifact_sha256": hashlib.sha256(_DEFAULT_PDF_BYTES).hexdigest(),
         "page_count": 1,
-        "artifact_size": len(_pdf_bytes()),
+        "artifact_size": len(_DEFAULT_PDF_BYTES),
         "completed_at": datetime.now(),
     }
     payload.update(overrides)
@@ -199,6 +230,7 @@ def _build_service(
     file: KnowledgeFile | None = None,
     user=None,
     artifact: PdfArtifactReference | None | object = _DEFAULT_ARTIFACT,
+    artifact_ensurer: FakeArtifactEnsurer | None = None,
     authorization: FakeAuthorizationService | None = None,
     storage: FakeStorage | None = None,
     user_lock: FakeUserLock | None = None,
@@ -217,15 +249,15 @@ def _build_service(
     selected_runner = runner or CapturingRunner()
     telemetry_events = telemetry if telemetry is not None else []
 
-    async def artifact_accessor(_file_record):
-        return selected_artifact
+    selected_ensurer = artifact_ensurer or FakeArtifactEnsurer([selected_artifact])
 
     service = PortalPdfDownloadService(
         config=KnowledgePdfWatermarkConf(),
         file_repository=FakeFileRepository(selected_file),
         user_repository=FakeUserRepository(selected_user),
         authorization_service=selected_authorization,
-        artifact_accessor=artifact_accessor,
+        artifact_ensurer=selected_ensurer,
+        artifact_readiness_timeout_seconds=300,
         storage=selected_storage,
         share_grant_service=grant_service or FakeGrantService(),
         user_lock=selected_lock,
@@ -243,6 +275,7 @@ def _build_service(
         "runner": selected_runner,
         "telemetry": telemetry_events,
         "grant": service.share_grant_service,
+        "artifact_ensurer": selected_ensurer,
     }
 
 
@@ -357,7 +390,10 @@ async def test_file_space_tenant_and_type_must_match(tmp_path: Path, file) -> No
         _artifact(object_name=""),
     ],
 )
-async def test_unavailable_or_mismatched_artifact_fails_without_fallback(tmp_path: Path, artifact) -> None:
+async def test_ensurer_final_unavailable_or_mismatched_artifact_fails_without_source_fallback(
+    tmp_path: Path,
+    artifact,
+) -> None:
     storage = FakeStorage()
     service, _ = _build_service(
         tmp_path,
@@ -368,6 +404,62 @@ async def test_unavailable_or_mismatched_artifact_fails_without_fallback(tmp_pat
     with pytest.raises(PortalPdfArtifactUnavailableError):
         await service.prepare_download(_request(), _login_user())
     assert storage.requested_object_names == []
+
+
+@pytest.mark.asyncio
+async def test_corrupt_success_artifact_is_repaired_once_then_downloaded(tmp_path: Path) -> None:
+    first = _artifact(generation=1, object_name="knowledge/pdf-artifacts/1580/1/broken.pdf")
+    repaired = _artifact(generation=2, object_name="knowledge/pdf-artifacts/1580/2/repaired.pdf")
+    ensurer = FakeArtifactEnsurer([first, repaired])
+    storage = FakeStorage(payloads=[b"not-a-pdf", _DEFAULT_PDF_BYTES])
+    service, _ = _build_service(
+        tmp_path,
+        artifact_ensurer=ensurer,
+        storage=storage,
+    )
+
+    prepared = await service.prepare_download(_request(), _login_user())
+
+    assert storage.requested_object_names == [first.object_name, repaired.object_name]
+    assert ensurer.calls[0]["invalid_generation"] is None
+    assert ensurer.calls[1]["invalid_generation"] == 1
+    await prepared.close()
+
+
+@pytest.mark.asyncio
+async def test_repaired_artifact_still_invalid_fails_without_unwatermarked_fallback(tmp_path: Path) -> None:
+    ensurer = FakeArtifactEnsurer([_artifact(generation=1), _artifact(generation=2)])
+    storage = FakeStorage(payloads=[b"broken-one", b"broken-two"])
+    service, _ = _build_service(tmp_path, artifact_ensurer=ensurer, storage=storage)
+
+    with pytest.raises(PortalPdfDownloadGenerationError):
+        await service.prepare_download(_request(), _login_user())
+
+    assert len(ensurer.calls) == 2
+    assert ensurer.calls[1]["invalid_generation"] == 1
+    assert storage.requested_object_names == [
+        "knowledge/pdf-artifacts/1580/1/current.pdf",
+        "knowledge/pdf-artifacts/1580/1/current.pdf",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (PdfArtifactOnDemandTimeoutError(), PortalPdfDownloadTimeoutError),
+        (PdfArtifactOnDemandGenerationError(), PortalPdfDownloadGenerationError),
+    ],
+)
+async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, error, expected) -> None:
+    ensurer = FakeArtifactEnsurer([error])
+    service, fakes = _build_service(tmp_path, artifact_ensurer=ensurer)
+
+    with pytest.raises(expected):
+        await service.prepare_download(_request(), _login_user())
+
+    assert fakes["storage"].requested_object_names == []
+    assert fakes["lock"].release_calls == [(5, 7, "owner-token")]
 
 
 @pytest.mark.asyncio

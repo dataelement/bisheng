@@ -568,11 +568,15 @@ class KnowledgePdfArtifactConf(BaseModel):
     retry_base_seconds: int = Field(default=30, ge=1, description="Initial retry countdown")
     retry_max_seconds: int = Field(default=300, ge=1, description="Maximum retry countdown")
     conversion_timeout_seconds: int = Field(default=300, ge=10, description="Per conversion timeout")
+    on_demand_timeout_seconds: int = Field(default=300, ge=10, le=600, description="On-demand readiness deadline")
+    generation_lock_ttl_seconds: int = Field(default=330, ge=11, le=900, description="Per-file generation lock TTL")
 
     @model_validator(mode="after")
     def validate_retry_window(self):
         if self.retry_max_seconds < self.retry_base_seconds:
             raise ValueError("retry_max_seconds must be greater than or equal to retry_base_seconds")
+        if self.generation_lock_ttl_seconds <= self.on_demand_timeout_seconds:
+            raise ValueError("generation_lock_ttl_seconds must be greater than on_demand_timeout_seconds")
         return self
 
 
@@ -581,7 +585,7 @@ class KnowledgePdfWatermarkConf(BaseModel):
 
     timeout_seconds: int = Field(default=60, ge=1, le=300, description="Watermark generation deadline")
     max_concurrency: int = Field(default=2, ge=1, le=16, description="Per-process generation concurrency")
-    user_lock_ttl_seconds: int = Field(default=90, ge=2, le=600, description="Per-user Redis lock TTL")
+    user_lock_ttl_seconds: int = Field(default=390, ge=2, le=900, description="Per-user Redis lock TTL")
     process_terminate_grace_seconds: float = Field(
         default=2,
         gt=0,

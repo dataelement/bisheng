@@ -9,7 +9,9 @@ import { useLocalize } from "~/hooks";
 import { TopBar } from "./TopBar";
 import { HtmlViewer } from "./viewers/HtmlViewer";
 import { MarkdownViewer } from "./viewers/MarkdownViewer";
-import KnowledgePreviewWatermark from "./KnowledgePreviewWatermark";
+import KnowledgePreviewWatermark, {
+    KnowledgePreviewWatermarkProvider,
+} from "./KnowledgePreviewWatermark";
 
 interface RichKnowledgePreviewProps {
     fileName: string;
@@ -66,7 +68,10 @@ function MarkdownBlock({ content }: { content: string }) {
     return (
         <div className="flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="flex justify-center px-4 py-6">
-                <div className="w-full max-w-[800px] rounded-sm bg-white shadow-md">
+                <div
+                    data-preview-watermark-surface
+                    className="relative w-full max-w-[800px] overflow-hidden rounded-sm bg-white shadow-md"
+                >
                     <div className="prose prose-sm max-w-none p-8 text-[#1d2129]">
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
@@ -75,6 +80,7 @@ function MarkdownBlock({ content }: { content: string }) {
                             {content}
                         </ReactMarkdown>
                     </div>
+                    <KnowledgePreviewWatermark />
                 </div>
             </div>
         </div>
@@ -169,8 +175,6 @@ export function RichKnowledgePreview({
     const sourceUrl = preview.final_url || preview.source_url;
     const htmlUrl = preview.html_preview_url;
     const textUrl = preview.preview_url || preview.original_url;
-    const hasMediaContent = Boolean(preview.original_url || textUrl);
-    const hasActiveWebContent = webTab === "html" ? Boolean(htmlUrl) : Boolean(textUrl);
 
     const title = useMemo(() => {
         if (preview.file_source === "web_link") {
@@ -181,6 +185,47 @@ export function RichKnowledgePreview({
 
     if (isMedia) {
         return (
+            <KnowledgePreviewWatermarkProvider>
+                <div className="flex h-full w-full flex-col overflow-hidden bg-[#f5f7fb]">
+                    {!compactMode && (
+                        <TopBar
+                            fileName={fileName}
+                            showZoom={false}
+                            onDownload={allowDownload ? onDownloadFile : undefined}
+                            downloadPending={downloadPending}
+                            actions={actions}
+                        />
+                    )}
+                    <div className="relative min-h-0 flex-1 overflow-hidden">
+                        <div className="h-full overflow-auto p-5">
+                            <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+                                <section
+                                    data-preview-watermark-surface
+                                    className="relative overflow-hidden rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm"
+                                >
+                                    <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
+                                    {isVideo ? (
+                                        <video
+                                            className="max-h-[420px] w-full rounded-[6px] bg-black"
+                                            src={preview.original_url}
+                                            controls
+                                        />
+                                    ) : (
+                                        <audio className="w-full" src={preview.original_url} controls />
+                                    )}
+                                    <KnowledgePreviewWatermark />
+                                </section>
+                                {textUrl ? <MediaTranscriptTabs fileUrl={textUrl} /> : null}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </KnowledgePreviewWatermarkProvider>
+        );
+    }
+
+    return (
+        <KnowledgePreviewWatermarkProvider>
             <div className="flex h-full w-full flex-col overflow-hidden bg-[#f5f7fb]">
                 {!compactMode && (
                     <TopBar
@@ -191,88 +236,53 @@ export function RichKnowledgePreview({
                         actions={actions}
                     />
                 )}
-                <div className="relative min-h-0 flex-1 overflow-hidden">
-                    <div className="h-full overflow-auto p-5">
-                        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
-                            <section className="rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
-                                <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
-                                {isVideo ? (
-                                    <video
-                                        className="max-h-[420px] w-full rounded-[6px] bg-black"
-                                        src={preview.original_url}
-                                        controls
-                                    />
-                                ) : (
-                                    <audio className="w-full" src={preview.original_url} controls />
-                                )}
-                            </section>
-                            {textUrl ? <MediaTranscriptTabs fileUrl={textUrl} /> : null}
-                        </div>
+                <div className="flex shrink-0 items-center justify-between border-b border-[#e5e6eb] bg-white px-5 py-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setWebTab("html")}
+                            className={`h-8 rounded-[6px] px-3 text-sm ${webTab === "html" ? "bg-primary text-white" : "bg-[#f2f3f5] text-[#4e5969]"}`}
+                        >
+                            {localize("com_knowledge.web_page_preview")}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setWebTab("text")}
+                            className={`h-8 rounded-[6px] px-3 text-sm ${webTab === "text" ? "bg-primary text-white" : "bg-[#f2f3f5] text-[#4e5969]"}`}
+                        >
+                            {localize("com_knowledge.knowledge_entry_text")}
+                        </button>
                     </div>
-                    {hasMediaContent ? <KnowledgePreviewWatermark /> : null}
+                    {sourceUrl ? (
+                        <a
+                            className="flex min-w-0 items-center gap-1 text-sm text-primary hover:underline"
+                            href={sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            <ExternalLink className="size-4 shrink-0" />
+                            <span className="truncate">{localize("com_knowledge.open_original_page")}</span>
+                        </a>
+                    ) : null}
                 </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex h-full w-full flex-col overflow-hidden bg-[#f5f7fb]">
-            {!compactMode && (
-                <TopBar
-                    fileName={fileName}
-                    showZoom={false}
-                    onDownload={allowDownload ? onDownloadFile : undefined}
-                    downloadPending={downloadPending}
-                    actions={actions}
-                />
-            )}
-            <div className="flex shrink-0 items-center justify-between border-b border-[#e5e6eb] bg-white px-5 py-3">
-                <div className="flex min-w-0 items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setWebTab("html")}
-                        className={`h-8 rounded-[6px] px-3 text-sm ${webTab === "html" ? "bg-primary text-white" : "bg-[#f2f3f5] text-[#4e5969]"}`}
-                    >
-                        {localize("com_knowledge.web_page_preview")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setWebTab("text")}
-                        className={`h-8 rounded-[6px] px-3 text-sm ${webTab === "text" ? "bg-primary text-white" : "bg-[#f2f3f5] text-[#4e5969]"}`}
-                    >
-                        {localize("com_knowledge.knowledge_entry_text")}
-                    </button>
-                </div>
-                {sourceUrl ? (
-                    <a
-                        className="flex min-w-0 items-center gap-1 text-sm text-primary hover:underline"
-                        href={sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        <ExternalLink className="size-4 shrink-0" />
-                        <span className="truncate">{localize("com_knowledge.open_original_page")}</span>
-                    </a>
-                ) : null}
-            </div>
-            <div className="relative flex min-h-0 flex-1 overflow-hidden">
-                {webTab === "html" ? (
-                    htmlUrl ? (
-                        <HtmlViewer fileUrl={htmlUrl} zoomLevel={100} />
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                    {webTab === "html" ? (
+                        htmlUrl ? (
+                            <HtmlViewer fileUrl={htmlUrl} zoomLevel={100} />
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-sm text-[#86909c]">
+                                {localize("com_knowledge.web_snapshot_unavailable")}
+                            </div>
+                        )
+                    ) : textUrl ? (
+                        <MarkdownViewer fileUrl={textUrl} zoomLevel={100} />
                     ) : (
                         <div className="flex h-full items-center justify-center text-sm text-[#86909c]">
-                            {localize("com_knowledge.web_snapshot_unavailable")}
+                            {localize("com_knowledge.fetch_preview_link_failed")}
                         </div>
-                    )
-                ) : textUrl ? (
-                    <MarkdownViewer fileUrl={textUrl} zoomLevel={100} />
-                ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-[#86909c]">
-                        {localize("com_knowledge.fetch_preview_link_failed")}
-                    </div>
-                )}
-                {hasActiveWebContent ? <KnowledgePreviewWatermark /> : null}
+                    )}
+                </div>
             </div>
-        </div>
+        </KnowledgePreviewWatermarkProvider>
     );
 }

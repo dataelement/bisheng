@@ -27,10 +27,15 @@ from bisheng.common.errcode.knowledge_space import (
 from bisheng.common.schemas.telemetry.event_data_schema import PortalDocumentDownloadEventData
 from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
 from bisheng.core.config.settings import KnowledgePdfWatermarkConf
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileType
 from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import (
     PortalPdfDownloadRequest,
     PreparedPortalPdfDownload,
+)
+from bisheng.knowledge.domain.services.pdf_artifact_on_demand_service import (
+    PdfArtifactOnDemandGenerationError,
+    PdfArtifactOnDemandServiceUnavailableError,
+    PdfArtifactOnDemandTimeoutError,
 )
 from bisheng.knowledge.pdf.validator import PdfValidationError, validate_pdf
 from bisheng.knowledge.pdf.watermark import PdfWatermarkSpec
@@ -136,7 +141,8 @@ class PortalPdfDownloadService:
         file_repository: Any,
         user_repository: Any,
         authorization_service: Any,
-        artifact_accessor: Callable[[KnowledgeFile], Awaitable[Any]],
+        artifact_ensurer: Callable[..., Awaitable[Any]],
+        artifact_readiness_timeout_seconds: int,
         storage: Any,
         share_grant_service: Any,
         user_lock: Any,
@@ -151,7 +157,12 @@ class PortalPdfDownloadService:
         self.file_repository = file_repository
         self.user_repository = user_repository
         self.authorization_service = authorization_service
-        self.artifact_accessor = artifact_accessor
+        self.artifact_ensurer = artifact_ensurer
+        self.artifact_readiness_timeout_seconds = max(int(artifact_readiness_timeout_seconds), 1)
+        self.user_lock_ttl_seconds = max(
+            int(config.user_lock_ttl_seconds),
+            self.artifact_readiness_timeout_seconds + int(config.timeout_seconds) + 30,
+        )
         self.storage = storage
         self.share_grant_service = share_grant_service
         self.user_lock = user_lock
@@ -207,19 +218,10 @@ class PortalPdfDownloadService:
         if not employee_id:
             employee_id = str(getattr(user_record, "user_name", "") or user_id).strip()
 
-        artifact = await self.artifact_accessor(file_record)
-        if (
-            artifact is None
-            or int(getattr(artifact, "tenant_id", 0) or 0) != tenant_id
-            or int(getattr(artifact, "knowledge_file_id", 0) or 0) != int(request.file_id)
-            or not str(getattr(artifact, "object_name", "") or "")
-        ):
-            raise PortalPdfArtifactUnavailableError()
-
         lock_token = await self.user_lock.acquire(
             tenant_id=tenant_id,
             user_id=user_id,
-            ttl_seconds=self.config.user_lock_ttl_seconds,
+            ttl_seconds=self.user_lock_ttl_seconds,
         )
         if not lock_token:
             raise PortalPdfDownloadBusyError()
@@ -228,6 +230,7 @@ class PortalPdfDownloadService:
             raise PortalPdfDownloadBusyError()
 
         temp_dir: Path | None = None
+        capacity_acquired = True
         try:
             if self.temp_root is not None:
                 self.temp_root.mkdir(parents=True, exist_ok=True)
@@ -237,16 +240,38 @@ class PortalPdfDownloadService:
                     dir=str(self.temp_root) if self.temp_root is not None else None,
                 )
             ).resolve()
-            deadline = self.monotonic() + float(self.config.timeout_seconds)
             input_path = temp_dir / "artifact.pdf"
             output_path = temp_dir / "watermarked.pdf"
-            await self._run_with_deadline(
-                self._copy_artifact,
-                deadline,
-                str(artifact.object_name),
-                input_path,
-                deadline,
+            readiness_deadline = self.monotonic() + float(self.artifact_readiness_timeout_seconds)
+            artifact = await self.artifact_ensurer(
+                file_record,
+                timeout_seconds=self._remaining(readiness_deadline),
             )
+            self._validate_artifact_reference(artifact, tenant_id, request.file_id)
+            try:
+                await self._copy_and_validate_artifact(artifact, input_path, readiness_deadline)
+            except asyncio.CancelledError:
+                raise
+            except PortalPdfDownloadTimeoutError:
+                raise
+            except Exception:
+                if self.monotonic() >= readiness_deadline:
+                    raise PortalPdfDownloadTimeoutError() from None
+                invalid_generation = int(getattr(artifact, "generation", 0) or 0)
+                artifact = await self.artifact_ensurer(
+                    file_record,
+                    invalid_generation=invalid_generation,
+                    timeout_seconds=self._remaining(readiness_deadline),
+                )
+                self._validate_artifact_reference(
+                    artifact,
+                    tenant_id,
+                    request.file_id,
+                    invalid_generation=invalid_generation,
+                )
+                await self._copy_and_validate_artifact(artifact, input_path, readiness_deadline)
+
+            deadline = self.monotonic() + float(self.config.timeout_seconds)
             spec = PdfWatermarkSpec(
                 lines=(
                     f"姓名: {display_name}",
@@ -274,6 +299,18 @@ class PortalPdfDownloadService:
         except (PortalPdfDownloadTimeoutError, PdfWatermarkWorkerTimeout):
             await self._cleanup_failed_request(temp_dir, tenant_id, user_id, lock_token)
             raise PortalPdfDownloadTimeoutError() from None
+        except PdfArtifactOnDemandTimeoutError:
+            await self._cleanup_failed_request(temp_dir, tenant_id, user_id, lock_token)
+            raise PortalPdfDownloadTimeoutError() from None
+        except PdfArtifactOnDemandServiceUnavailableError:
+            await self._cleanup_failed_request(temp_dir, tenant_id, user_id, lock_token)
+            raise PortalPdfDownloadServiceUnavailableError() from None
+        except PdfArtifactOnDemandGenerationError:
+            await self._cleanup_failed_request(temp_dir, tenant_id, user_id, lock_token)
+            raise PortalPdfDownloadGenerationError() from None
+        except PortalPdfDownloadBusyError:
+            await self._cleanup_failed_request(temp_dir, tenant_id, user_id, lock_token)
+            raise
         except PortalPdfArtifactUnavailableError:
             await self._cleanup_failed_request(temp_dir, tenant_id, user_id, lock_token)
             raise
@@ -291,7 +328,8 @@ class PortalPdfDownloadService:
             )
             raise PortalPdfDownloadGenerationError() from None
         finally:
-            self.capacity_limiter.release()
+            if capacity_acquired:
+                self.capacity_limiter.release()
 
         async def cleanup() -> None:
             if temp_dir is not None:
@@ -347,6 +385,45 @@ class PortalPdfDownloadService:
             if response is not None:
                 response.close()
                 response.release_conn()
+
+    async def _copy_and_validate_artifact(self, artifact: Any, input_path: Path, deadline: float) -> None:
+        input_path.unlink(missing_ok=True)
+        await self._run_with_deadline(
+            self._copy_artifact,
+            deadline,
+            str(artifact.object_name),
+            input_path,
+            deadline,
+        )
+        validation = await self._run_with_deadline(validate_pdf, deadline, input_path)
+        if (
+            validation.artifact_sha256 != str(getattr(artifact, "artifact_sha256", "") or "")
+            or validation.artifact_size != int(getattr(artifact, "artifact_size", 0) or 0)
+            or validation.page_count != int(getattr(artifact, "page_count", 0) or 0)
+        ):
+            raise PdfValidationError("PDF artifact metadata does not match the stored object")
+
+    @staticmethod
+    def _validate_artifact_reference(
+        artifact: Any,
+        tenant_id: int,
+        knowledge_file_id: int,
+        *,
+        invalid_generation: int | None = None,
+    ) -> None:
+        generation = int(getattr(artifact, "generation", 0) or 0)
+        if (
+            artifact is None
+            or int(getattr(artifact, "tenant_id", 0) or 0) != tenant_id
+            or int(getattr(artifact, "knowledge_file_id", 0) or 0) != knowledge_file_id
+            or not str(getattr(artifact, "object_name", "") or "")
+            or not str(getattr(artifact, "artifact_sha256", "") or "")
+            or int(getattr(artifact, "page_count", 0) or 0) <= 0
+            or int(getattr(artifact, "artifact_size", 0) or 0) <= 0
+            or generation <= 0
+            or (invalid_generation is not None and generation == invalid_generation)
+        ):
+            raise PortalPdfArtifactUnavailableError()
 
     async def _cleanup_failed_request(
         self,

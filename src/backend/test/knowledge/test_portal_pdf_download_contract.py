@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from bisheng.common.errcode import knowledge_space as knowledge_space_errcode
-from bisheng.core.config.settings import KnowledgeConf, KnowledgePdfWatermarkConf
+from bisheng.core.config.settings import KnowledgeConf, KnowledgePdfArtifactConf, KnowledgePdfWatermarkConf
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkVerifyReq,
@@ -23,9 +23,17 @@ def test_pdf_watermark_config_defaults_and_knowledge_binding() -> None:
 
     assert config.timeout_seconds == 60
     assert config.max_concurrency == 2
-    assert config.user_lock_ttl_seconds == 90
+    assert config.user_lock_ttl_seconds == 390
     assert config.process_terminate_grace_seconds == 2
     assert KnowledgeConf().pdf_watermark == config
+
+
+def test_pdf_artifact_on_demand_config_defaults_and_deadline_binding() -> None:
+    config = KnowledgePdfArtifactConf()
+
+    assert config.on_demand_timeout_seconds == 300
+    assert config.generation_lock_ttl_seconds == 330
+    assert KnowledgeConf().pdf_artifact == config
 
 
 @pytest.mark.parametrize(
@@ -40,6 +48,13 @@ def test_pdf_watermark_config_defaults_and_knowledge_binding() -> None:
 def test_pdf_watermark_config_rejects_unsafe_limits(payload: dict) -> None:
     with pytest.raises(ValidationError):
         KnowledgePdfWatermarkConf.model_validate(payload)
+
+
+def test_pdf_artifact_config_rejects_short_generation_lock() -> None:
+    with pytest.raises(ValidationError):
+        KnowledgePdfArtifactConf.model_validate(
+            {"on_demand_timeout_seconds": 300, "generation_lock_ttl_seconds": 300}
+        )
 
 
 def test_portal_download_entry_points_preserve_all_supported_values() -> None:

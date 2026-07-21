@@ -259,7 +259,7 @@ class PortalHotSearchDisabledError(BaseErrorCode):
 
 class PortalPdfArtifactUnavailableError(BaseErrorCode):
     Code: int = 18085
-    Msg: str = "该文档 PDF 产物暂不可用"
+    Msg: str = "PDF 生成失败, 请稍后重试"
 
 
 class PortalPdfDownloadBusyError(BaseErrorCode):
@@ -269,7 +269,7 @@ class PortalPdfDownloadBusyError(BaseErrorCode):
 
 class PortalPdfDownloadTimeoutError(BaseErrorCode):
     Code: int = 18087
-    Msg: str = "文档处理超时, 请稍后重试"
+    Msg: str = "PDF 生成超时, 请稍后重试"
 
 
 class PortalShareDownloadGrantInvalidError(BaseErrorCode):
@@ -279,7 +279,7 @@ class PortalShareDownloadGrantInvalidError(BaseErrorCode):
 
 class PortalPdfDownloadGenerationError(BaseErrorCode):
     Code: int = 18089
-    Msg: str = "文档下载生成失败"
+    Msg: str = "PDF 生成失败, 请稍后重试"
 
 
 class PortalPdfDownloadServiceUnavailableError(BaseErrorCode):

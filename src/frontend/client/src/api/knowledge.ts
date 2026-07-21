@@ -2815,10 +2815,11 @@ async function toWatermarkedDownloadError(error: unknown): Promise<Error> {
         401: "登录状态已失效，请重新登录",
         403: "无权下载该文档",
         404: "文档不存在或已删除",
-        409: "PDF 产物暂不可用",
+        409: "PDF 生成失败，请稍后重试",
         429: "下载任务繁忙，请稍后重试",
+        500: "PDF 生成失败，请稍后重试",
         503: "下载服务暂不可用，请稍后重试",
-        504: "生成水印 PDF 超时，请稍后重试",
+        504: "PDF 生成超时，请稍后重试",
     };
     const message = statusMessage
         || detail

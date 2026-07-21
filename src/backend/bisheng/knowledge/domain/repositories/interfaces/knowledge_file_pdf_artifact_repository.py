@@ -51,6 +51,13 @@ class PdfArtifactCompleteResult:
 class KnowledgeFilePdfArtifactRepository(Protocol):
     async def request_generation(self, snapshot: PdfArtifactSourceSnapshot) -> PdfArtifactGenerationRequest: ...
 
+    async def request_on_demand_generation(
+        self,
+        snapshot: PdfArtifactSourceSnapshot,
+        *,
+        invalid_generation: int | None = None,
+    ) -> PdfArtifactGenerationRequest: ...
+
     async def find_available(
         self,
         tenant_id: int,

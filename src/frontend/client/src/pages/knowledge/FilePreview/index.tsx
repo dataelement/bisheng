@@ -18,7 +18,7 @@ import { TextViewer } from "./viewers/TextViewer";
 import { XlsxViewer } from "./viewers/XlsxViewer";
 import { useLocalize } from "~/hooks";
 import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
-import KnowledgePreviewWatermark from "./KnowledgePreviewWatermark";
+import { KnowledgePreviewWatermarkProvider } from "./KnowledgePreviewWatermark";
 
 export interface FilePreviewProps {
     /** File display name (with extension) */
@@ -256,41 +256,42 @@ export default function FilePreview({
     };
 
     return (
-        <div className="w-full h-full flex flex-col overflow-hidden">
-            {!compactMode && (
-                <TopBar
-                    fileName={fileName}
-                    showSidebar={hasSidebar}
-                    sidebarOpen={sidebarOpen}
-                    onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-                    showZoom={hasZoom}
-                    zoomLevel={zoomLevel}
-                    onZoomIn={handleZoomIn}
-                    onZoomOut={handleZoomOut}
-                    showPagination={hasPagination}
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={handlePageChange}
-                    onDownload={topBarDownload}
-                    downloadPending={downloadPending}
-                    actions={actions}
-                />
-            )}
-            <div className="flex flex-1 min-h-0">
-                {hasSidebar && (
-                    <Sidebar
-                        key={fileUrl}
-                        open={sidebarOpen}
-                        pdfDoc={pdfDoc}
+        <KnowledgePreviewWatermarkProvider>
+            <div className="w-full h-full flex flex-col overflow-hidden">
+                {!compactMode && (
+                    <TopBar
+                        fileName={fileName}
+                        showSidebar={hasSidebar}
+                        sidebarOpen={sidebarOpen}
+                        onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                        showZoom={hasZoom}
+                        zoomLevel={zoomLevel}
+                        onZoomIn={handleZoomIn}
+                        onZoomOut={handleZoomOut}
+                        showPagination={hasPagination}
                         currentPage={currentPage}
-                        onPageClick={handleSidebarPageClick}
+                        totalPages={totalPages}
+                        onPageChange={handlePageChange}
+                        onDownload={topBarDownload}
+                        downloadPending={downloadPending}
+                        actions={actions}
                     />
                 )}
-                <div className="relative flex min-w-0 flex-1 overflow-hidden">
-                    {renderViewer()}
-                    <KnowledgePreviewWatermark />
+                <div className="flex flex-1 min-h-0">
+                    {hasSidebar && (
+                        <Sidebar
+                            key={fileUrl}
+                            open={sidebarOpen}
+                            pdfDoc={pdfDoc}
+                            currentPage={currentPage}
+                            onPageClick={handleSidebarPageClick}
+                        />
+                    )}
+                    <div className="flex min-w-0 flex-1 overflow-hidden">
+                        {renderViewer()}
+                    </div>
                 </div>
             </div>
-        </div>
+        </KnowledgePreviewWatermarkProvider>
     );
 }

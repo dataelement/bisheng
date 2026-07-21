@@ -168,6 +168,41 @@ class KnowledgePdfArtifactService:
             return None
         return await self.repository.request_generation(snapshot)
 
+    async def request_on_demand_generation(
+        self,
+        file: KnowledgeFile,
+        *,
+        invalid_generation: int | None = None,
+    ) -> PdfArtifactGenerationRequest | None:
+        """创建或复用下载请求需要的 generation; 不向 Celery 重复投递。"""
+
+        snapshot = self._source_snapshot(
+            file,
+            source_object_name=file.object_name,
+            source_md5=file.md5,
+        )
+        if snapshot is None:
+            return None
+        return await self.repository.request_on_demand_generation(
+            snapshot,
+            invalid_generation=invalid_generation,
+        )
+
+    async def fail_generation(
+        self,
+        *,
+        tenant_id: int,
+        knowledge_file_id: int,
+        generation: int,
+        error: str,
+    ) -> bool:
+        return await self.repository.fail_generation(
+            tenant_id,
+            knowledge_file_id,
+            generation,
+            error[:2000],
+        )
+
     @staticmethod
     def _build_available_reference(
         file: KnowledgeFile,

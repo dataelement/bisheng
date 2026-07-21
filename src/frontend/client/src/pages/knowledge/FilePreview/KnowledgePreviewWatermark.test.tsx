@@ -5,6 +5,7 @@ import { RecoilRoot } from "recoil";
 
 import store from "~/store";
 import KnowledgePreviewWatermark, {
+    KnowledgePreviewWatermarkProvider,
     buildKnowledgePreviewWatermarkLines,
     formatKnowledgePreviewWatermarkTime,
 } from "./KnowledgePreviewWatermark";
@@ -24,9 +25,11 @@ const currentUser = {
 function renderWatermark(user = currentUser) {
     return render(
         <RecoilRoot initializeState={({ set }) => set(store.user, user)}>
-            <div className="relative">
-                <KnowledgePreviewWatermark />
-            </div>
+            <KnowledgePreviewWatermarkProvider>
+                <div className="relative">
+                    <KnowledgePreviewWatermark />
+                </div>
+            </KnowledgePreviewWatermarkProvider>
         </RecoilRoot>,
     );
 }
@@ -57,16 +60,18 @@ describe("KnowledgePreviewWatermark", () => {
         jest.setSystemTime(new Date("2026-07-21T04:10:06.000Z"));
         rerender(
             <RecoilRoot initializeState={({ set }) => set(store.user, currentUser)}>
-                <div className="relative">
-                    <KnowledgePreviewWatermark />
-                </div>
+                <KnowledgePreviewWatermarkProvider>
+                    <div className="relative">
+                        <KnowledgePreviewWatermark />
+                    </div>
+                </KnowledgePreviewWatermarkProvider>
             </RecoilRoot>,
         );
         expect(container.textContent).toContain("北京时间：2026-07-21 12:05:06");
         expect(container.textContent).not.toContain("北京时间：2026-07-21 12:10:06");
     });
 
-    test("falls back to username and remains visual-only in both knowledge preview bases", () => {
+    test("falls back to username and clips overlays to document surfaces", () => {
         expect(buildKnowledgePreviewWatermarkLines(
             { ...currentUser, name: "", username: "lisi" },
             new Date(),
@@ -84,11 +89,27 @@ describe("KnowledgePreviewWatermark", () => {
             path.resolve(process.cwd(), "src/pages/knowledge/FilePreview/RichKnowledgePreview.tsx"),
             "utf8",
         );
+        const viewerSources = [
+            "PdfViewer.tsx",
+            "DocxViewer.tsx",
+            "MarkdownViewer.tsx",
+            "HtmlViewer.tsx",
+            "TextViewer.tsx",
+            "ImageViewer.tsx",
+            "XlsxViewer.tsx",
+        ].map((fileName) => readFileSync(
+            path.resolve(process.cwd(), `src/pages/knowledge/FilePreview/viewers/${fileName}`),
+            "utf8",
+        )).join("\n");
 
         expect(styleSource).toMatch(/pointer-events:\s*none/);
         expect(styleSource).toMatch(/user-select:\s*none/);
         expect(styleSource).toMatch(/transform:\s*rotate\(-\d+deg\)/);
-        expect(filePreviewSource).toContain("<KnowledgePreviewWatermark />");
-        expect(richPreviewSource).toContain("<KnowledgePreviewWatermark />");
+        expect(filePreviewSource).toContain("<KnowledgePreviewWatermarkProvider>");
+        expect(filePreviewSource).not.toContain("<KnowledgePreviewWatermark />");
+        expect(richPreviewSource).toContain("<KnowledgePreviewWatermarkProvider>");
+        expect(viewerSources).toContain("data-preview-watermark-surface");
+        expect(viewerSources).toContain("<KnowledgePreviewWatermark />");
+        expect(viewerSources).toMatch(/relative[^"\n]*overflow-hidden|overflow-hidden[^"\n]*relative/);
     });
 });

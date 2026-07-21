@@ -404,7 +404,7 @@ describe("downloadWatermarkedKnowledgeFileApi", () => {
       response: {
         status: 409,
         data: new Blob([
-          JSON.stringify({ status_code: 18085, status_message: "PDF 产物暂不可用" }),
+          JSON.stringify({ status_code: 18085, status_message: "PDF 生成失败，请稍后重试" }),
         ], { type: "application/json" }),
       },
     });
@@ -414,9 +414,26 @@ describe("downloadWatermarkedKnowledgeFileApi", () => {
       fileId: "1580",
       entryPoint: "bisheng_version_history",
       fallbackFileName: "历史版本.docx",
-    })).rejects.toThrow("PDF 产物暂不可用");
+    })).rejects.toThrow("PDF 生成失败，请稍后重试");
     expect(createObjectURL).not.toHaveBeenCalled();
     expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows a stable message when on-demand PDF generation times out", async () => {
+    mockGetResponse.mockRejectedValue({
+      response: {
+        status: 504,
+        data: new Blob(["gateway timeout"], { type: "text/plain" }),
+      },
+    });
+
+    await expect(downloadWatermarkedKnowledgeFileApi({
+      spaceId: "12",
+      fileId: "1580",
+      entryPoint: "bisheng_knowledge_list",
+      fallbackFileName: "设备检修.docx",
+    })).rejects.toThrow("PDF 生成超时，请稍后重试");
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 });
 

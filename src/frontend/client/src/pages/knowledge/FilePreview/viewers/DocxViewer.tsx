@@ -2,6 +2,7 @@ import * as mammoth from "mammoth";
 import { useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { sanitizeDocxForPreview } from "~/utils/docxSanitizer";
+import KnowledgePreviewWatermark from "../KnowledgePreviewWatermark";
 
 interface DocxViewerProps {
     fileUrl: string;
@@ -60,7 +61,8 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
             <div className="box-border flex w-full justify-center py-6 px-3 sm:px-4">
                 <div
                     ref={containerRef}
-                    className="w-full max-w-[800px] rounded-sm bg-white shadow-md"
+                    data-preview-watermark-surface
+                    className="relative w-full max-w-[800px] overflow-hidden rounded-sm bg-white shadow-md"
                     style={{
                         transform: `scale(${scale})`,
                         transformOrigin: "top center",
@@ -103,6 +105,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
                         className="docx-content"
                         dangerouslySetInnerHTML={{ __html: htmlContent }}
                     />
+                    <KnowledgePreviewWatermark />
                 </div>
             </div>
         </div>
