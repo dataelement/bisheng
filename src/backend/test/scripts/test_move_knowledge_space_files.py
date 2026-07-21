@@ -720,9 +720,7 @@ def test_planner_detects_existing_file_conflict_in_fully_reused_preserved_direct
     )
 
     assert plan.selected_units == []
-    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {
-        (101, "target_name_conflict")
-    }
+    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {(101, "target_name_conflict")}
 
 
 def test_planner_applies_folder_and_category_filters_as_an_intersection():
@@ -749,10 +747,33 @@ def test_planner_applies_folder_and_category_filters_as_an_intersection():
     )
 
     assert [unit.source_files[0].id for unit in plan.selected_units] == [101]
-    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {
-        (102, "source_filter_mismatch"),
-        (103, "source_filter_mismatch"),
-    }
+    assert plan.skipped_files == []
+    assert plan.scanned_file_count == 3
+    assert plan.source_selected_file_count == 1
+
+
+def test_eligible_source_file_query_limits_rows_to_selected_folder_subtree():
+    statement = script_mod._eligible_source_file_statement([10], ["/201"])
+
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "knowledgefile.knowledge_id IN (10)" in sql
+    assert "knowledgefile.file_type = 1" in sql
+    assert "knowledgefile.status = 2" in sql
+    assert "knowledgefile.file_level_path = '/201'" in sql
+    assert "knowledgefile.file_level_path LIKE '/201/%'" in sql
+
+
+def test_migration_plan_rejects_inconsistent_source_selection_counts():
+    with pytest.raises(ValueError, match="source-selected files must equal"):
+        script_mod.MigrationPlan(
+            tenant_id=1,
+            source_spaces={10: _space(10, "source")},
+            selected_units=[],
+            skipped_files=[],
+            scanned_file_count=3,
+            source_selected_file_count=2,
+        )
 
 
 def test_planner_skips_whole_version_chain_when_one_version_misses_source_filter():
@@ -775,7 +796,11 @@ def test_planner_skips_whole_version_chain_when_one_version_misses_source_filter
     )
 
     assert plan.selected_units == []
-    assert {item.reason_code for item in plan.skipped_files} == {"version_chain_filter_mismatch"}
+    assert [(item.source_file_id, item.reason_code) for item in plan.skipped_files] == [
+        (101, "version_chain_filter_mismatch")
+    ]
+    assert plan.scanned_file_count == 2
+    assert plan.source_selected_file_count == 1
 
 
 def test_planner_uses_explicit_target_without_relaxing_classification_rules():
@@ -1018,7 +1043,6 @@ def test_version_chain_target_skip_preserves_category_and_route_failure_detail()
         assert item.subcategory_code == "STD-A"
         assert item.subcategory_label == "制度文件"
         assert item.reason == ("target_folder_not_found: no direct root folder matches the second-level category label")
-        assert script_mod._skipped_to_result(item).error == item.reason
 
 
 @pytest.mark.parametrize(
@@ -1307,6 +1331,20 @@ async def test_target_folder_manager_reuses_existing_and_creates_missing_directo
     assert store.deleted_ids == [301]
 
 
+async def test_target_folder_manager_prepare_is_idempotent_for_the_same_unit():
+    store = _FakeTargetFolderStore()
+    manager = script_mod.TargetFolderManager(store)
+    unit = _folder_structure_unit()
+
+    first = await manager.prepare_unit(unit)
+    second = await manager.prepare_unit(unit)
+
+    assert int(first.target.folder.id) == 302
+    assert int(second.target.folder.id) == 302
+    assert second.target.file_level_path == "/200/301/302"
+    assert store.permission_calls == [(301, 200), (302, 301)]
+
+
 async def test_target_folder_manager_preserves_new_nonempty_directory_during_cleanup():
     store = _FakeTargetFolderStore()
     manager = script_mod.TargetFolderManager(store)
@@ -1332,6 +1370,67 @@ async def test_target_folder_manager_keeps_created_mapping_when_permission_write
     assert mappings[0].action == "created"
     assert await manager.cleanup_unit_folders("file:101") == []
     assert store.deleted_ids == [301]
+
+
+async def test_database_target_folder_store_creates_target_owned_folder_record(monkeypatch):
+    target = _target_index().resolve("标准规范", "制度文件").target
+    created = _folder(301, 20, "A", path="/200", level=1)
+    add_file = AsyncMock(return_value=created)
+    monkeypatch.setattr(script_mod.KnowledgeFileDao, "aadd_file", add_file)
+
+    result = await script_mod.DatabaseTargetFolderStore().create_folder_record(
+        script_mod.SourceFolderRef(201, "A", "/201", 0),
+        target.folder,
+        target,
+    )
+
+    assert result is created
+    record = add_file.await_args.args[0]
+    assert record.tenant_id == 1
+    assert record.knowledge_id == 20
+    assert record.user_id == 30
+    assert record.user_name == "target-owner"
+    assert record.updater_id == 30
+    assert record.updater_name == "target-owner"
+    assert record.file_name == "A"
+    assert record.file_type == FileType.DIR.value
+    assert record.file_level_path == "/200"
+    assert record.level == 1
+    assert record.status == KnowledgeFileStatus.SUCCESS.value
+
+
+async def test_database_target_folder_store_writes_owner_and_parent_permissions(monkeypatch):
+    target = _target_index().resolve("标准规范", "制度文件").target
+    folder = _folder(301, 20, "A", path="/200", level=1)
+    replace_permissions = AsyncMock()
+    monkeypatch.setattr(script_mod, "_replace_resource_permission_tuples", replace_permissions)
+
+    await script_mod.DatabaseTargetFolderStore().write_folder_permissions(
+        folder,
+        target.folder,
+        target,
+    )
+
+    replace_permissions.assert_awaited_once_with(
+        "folder:301",
+        (
+            {"user": "user:30", "relation": "owner", "object": "folder:301"},
+            {"user": "folder:200", "relation": "parent", "object": "folder:301"},
+        ),
+    )
+
+
+async def test_database_target_folder_store_deletes_permissions_before_folder_record(monkeypatch):
+    folder = _folder(301, 20, "A", path="/200", level=1)
+    replace_permissions = AsyncMock()
+    delete_batch = AsyncMock()
+    monkeypatch.setattr(script_mod, "_replace_resource_permission_tuples", replace_permissions)
+    monkeypatch.setattr(script_mod.KnowledgeFileDao, "adelete_batch", delete_batch)
+
+    await script_mod.DatabaseTargetFolderStore().delete_folder(folder)
+
+    replace_permissions.assert_awaited_once_with("folder:301", ())
+    delete_batch.assert_awaited_once_with([301])
 
 
 async def test_copy_file_sets_target_owner_and_folder_context(monkeypatch):
@@ -1683,6 +1782,11 @@ def test_write_json_report_contains_version_traceability(tmp_path):
         run_id="run-1",
         parameters={"source_space_ids": [10, 11]},
         tenant_id=1,
+        scanned_file_count=4,
+        source_selected_file_count=3,
+        ready_to_move_file_count=2,
+        preflight_skipped_file_count=1,
+        skip_reasons={"target_name_conflict": 1},
         results=[
             script_mod.FileMoveResult(
                 source_file_id=101,
@@ -1705,7 +1809,15 @@ def test_write_json_report_contains_version_traceability(tmp_path):
     output = script_mod.write_json_report(report, tmp_path)
     payload = json.loads(output.read_text(encoding="utf-8"))
 
-    assert payload["summary"] == {"failed": 0, "skipped": 0, "success": 1, "total": 1}
+    assert payload["summary"] == {
+        "failed": 0,
+        "ready_to_move": 2,
+        "scanned": 4,
+        "skip_reasons": {"target_name_conflict": 1},
+        "skipped": 1,
+        "source_selected": 3,
+        "success": 1,
+    }
     assert payload["results"][0]["unit_type"] == "version_chain"
     assert payload["results"][0]["source_document_id"] == 500
     assert payload["results"][0]["target_document_id"] == 800
@@ -1801,7 +1913,7 @@ def test_rollback_payload_contains_full_source_and_target_traceability():
     assert succeeded["results"][0]["source_deleted"] is True
 
 
-async def test_run_defaults_to_dry_run_without_constructing_write_operations(monkeypatch, tmp_path):
+async def test_run_defaults_to_dry_run_without_constructing_write_operations(monkeypatch, tmp_path, capsys):
     args = script_mod.parse_args(
         [
             "--source-space-id",
@@ -1825,7 +1937,17 @@ async def test_run_defaults_to_dry_run_without_constructing_write_operations(mon
                 subcategory_label="制度文件",
             )
         ],
-        skipped_files=[],
+        skipped_files=[
+            script_mod.SkippedFile(
+                source_file_id=102,
+                source_space_id=10,
+                source_file_name="conflict.pdf",
+                reason_code="target_name_conflict",
+                reason="target folder contains the same file name",
+            )
+        ],
+        scanned_file_count=3,
+        source_selected_file_count=2,
     )
     initialize = AsyncMock()
     close = AsyncMock()
@@ -1845,7 +1967,25 @@ async def test_run_defaults_to_dry_run_without_constructing_write_operations(mon
     assert len(reports) == 1
     payload = json.loads(reports[0].read_text(encoding="utf-8"))
     assert payload["mode"] == "dry-run"
-    assert payload["results"][0]["reason_code"] == "dry_run_selected"
+    assert len(payload["results"]) == 1
+    assert payload["results"][0]["source_file_id"] == 101
+    assert payload["results"][0]["status"] == "ready"
+    assert payload["results"][0]["reason_code"] == ""
+    assert payload["summary"] == {
+        "failed": 0,
+        "ready_to_move": 1,
+        "scanned": 3,
+        "skip_reasons": {"target_name_conflict": 1},
+        "skipped": 1,
+        "source_selected": 2,
+        "success": 0,
+    }
+    stdout = capsys.readouterr().out
+    assert "[SKIPPED]" not in stdout
+    assert (
+        "Summary: scanned=3 source_selected=2 ready_to_move=1 skipped=1 success=0 failed=0 "
+        'skip_reasons={"target_name_conflict": 1}'
+    ) in stdout
 
 
 async def test_run_returns_input_error_before_writes_when_preflight_fails(monkeypatch, tmp_path):
@@ -1887,7 +2027,17 @@ async def test_apply_returns_nonzero_when_any_migration_unit_fails(monkeypatch, 
                 subcategory_label="制度文件",
             )
         ],
-        skipped_files=[],
+        skipped_files=[
+            script_mod.SkippedFile(
+                source_file_id=102,
+                source_space_id=10,
+                source_file_name="conflict.pdf",
+                reason_code="target_name_conflict",
+                reason="target folder contains the same file name",
+            )
+        ],
+        scanned_file_count=3,
+        source_selected_file_count=2,
     )
     failed_result = script_mod.FileMoveResult(
         source_file_id=101,
@@ -1904,7 +2054,16 @@ async def test_apply_returns_nonzero_when_any_migration_unit_fails(monkeypatch, 
 
     assert await script_mod.run(args) == script_mod.EXIT_APPLY_ERROR
     payload = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
-    assert payload["summary"]["failed"] == 1
+    assert [result["source_file_id"] for result in payload["results"]] == [101]
+    assert payload["summary"] == {
+        "failed": 1,
+        "ready_to_move": 1,
+        "scanned": 3,
+        "skip_reasons": {"target_name_conflict": 1},
+        "skipped": 1,
+        "source_selected": 2,
+        "success": 0,
+    }
 
 
 def _single_file_plan(*file_ids: int):
@@ -1938,7 +2097,6 @@ class _FolderAwareMoveOperations(_FakeMoveOperations):
 
     async def prepare_unit_target(self, unit):
         self.calls.append(f"prepare:{unit.unit_id}")
-        folder_a = _folder(300, 20, "A", path="/200", level=1)
         folder_b = _folder(301, 20, "B", path="/200/300", level=2)
         self.folder_mappings[unit.unit_id] = (
             script_mod.FolderMapping(201, "A", "/201", 300, "A", "/200", "/200/300", 1, "created"),
@@ -2012,9 +2170,7 @@ async def test_apply_prepares_preserved_folders_before_copy_and_records_mapping(
     assert operations.copy_target_paths == ["/200/300/301"]
     rows = [
         json.loads(line)
-        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl"))
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl")).read_text(encoding="utf-8").splitlines()
     ]
     started = next(row for row in rows if row["event_type"] == "unit_started")
     succeeded = next(row for row in rows if row["event_type"] == "unit_succeeded")
@@ -2049,9 +2205,7 @@ async def test_failed_unit_cleans_new_folders_and_records_actual_mapping(monkeyp
     assert operations.folder_cleanup_calls == ["file:101"]
     rows = [
         json.loads(line)
-        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl"))
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl")).read_text(encoding="utf-8").splitlines()
     ]
     failed = next(row for row in rows if row["event_type"] == "unit_failed")
     assert [mapping["target_folder_id"] for mapping in failed["payload"]["folder_mappings"]] == [300, 301]
@@ -2194,6 +2348,50 @@ async def test_rollback_record_checkpoint_failure_compensates_unpersisted_batch(
     assert moved["status"] == "failed"
     assert moved["source_deleted"] is False
     assert moved["reason_code"] == "rollback_record_write_failed"
+
+
+async def test_checkpoint_failure_also_cleans_created_target_folders(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--preserve-folder-structure",
+            "--report-dir",
+            str(tmp_path),
+            "--batch-size",
+            "1",
+            "--apply",
+        ]
+    )
+    operations = _FolderAwareMoveOperations()
+
+    class FailingCheckpointJournal(script_mod.RollbackJournal):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.flush_calls = 0
+
+        def flush(self):
+            self.flush_calls += 1
+            if self.flush_calls == 2:
+                raise script_mod.RollbackRecordError("checkpoint failed")
+            return super().flush()
+
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_preserved_folder_plan()))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+    monkeypatch.setattr(script_mod, "RollbackJournal", FailingCheckpointJournal)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_APPLY_ERROR
+
+    assert "restore:101" in operations.calls
+    assert "cleanup:900" in operations.calls
+    assert operations.folder_cleanup_calls == ["file:101"]
+    payload = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
+    moved = next(result for result in payload["results"] if result["source_file_id"] == 101)
+    assert moved["reason_code"] == "rollback_record_write_failed"
+    assert [mapping["target_folder_id"] for mapping in moved["folder_mappings"]] == [300, 301]
 
 
 async def test_apply_rejects_existing_rollback_record_before_write_operations(monkeypatch, tmp_path):
