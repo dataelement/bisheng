@@ -3,16 +3,19 @@ from bisheng.core.config.celery_redis import build_celery_redis_config
 
 _celery_redis_config = build_celery_redis_config(settings.celery_redis_url)
 
-broker_url = _celery_redis_config['broker_url']
-broker_transport_options = _celery_redis_config.get('broker_transport_options', {})
+broker_url = _celery_redis_config["broker_url"]
+broker_transport_options = _celery_redis_config.get("broker_transport_options", {})
 
-task_serializer = 'json'
-result_serializer = 'json'
-accept_content = ['json']
-timezone = 'Asia/Shanghai'
+task_serializer = "json"
+result_serializer = "json"
+accept_content = ["json"]
+timezone = "Asia/Shanghai"
 enable_utc = False
 _DEFAULT_ROUTES = {
-    'bisheng.worker.approval.*': {'queue': 'workflow_celery'},
+    "bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery": {
+        "queue": "knowledge_pdf_celery"
+    },
+    "bisheng.worker.approval.*": {"queue": "workflow_celery"},
 }
 task_routes = {**_DEFAULT_ROUTES, **settings.celery_task.task_routers}
 # redisHealth check interval, unit sec

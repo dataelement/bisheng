@@ -78,6 +78,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.mark_task",
     "bisheng.user.domain.models.user_role",
     "bisheng.knowledge.domain.models.knowledge_file",
+    "bisheng.knowledge.domain.models.knowledge_file_pdf_artifact",
     "bisheng.knowledge.domain.models.knowledge_file_similarity_candidate",
     "bisheng.knowledge.domain.models.portal_recommendation_file_projection",
     "bisheng.knowledge.domain.models.portal_hot_search_snapshot",

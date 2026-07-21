@@ -43,6 +43,7 @@ class ExtraFileTransformer(BaseDocumentTransformer):
         self.knowledge_file.user_metadata = {
             **(self.knowledge_file.user_metadata or {}),
             "pdf_preview_object_name": pdf_object_name,
+            "pdf_preview_source_md5": self.knowledge_file.md5,
         }
 
     def transform_documents(

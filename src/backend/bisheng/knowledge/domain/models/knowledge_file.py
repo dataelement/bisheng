@@ -220,7 +220,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.query(KnowledgeFile.id, KnowledgeFile.object_name,
                                  KnowledgeFile.preview_file_object_name,
                                  KnowledgeFile.bbox_object_name,
-                                 KnowledgeFile.thumbnails).filter(
+                                 KnowledgeFile.thumbnails,
+                                 KnowledgeFile.user_metadata,
+                                 KnowledgeFile.file_name).filter(
                 KnowledgeFile.knowledge_id == knowledge_id).order_by(
                 KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
 
