@@ -1,5 +1,6 @@
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
 import {
@@ -212,8 +213,14 @@ export default function KnowledgeSpaceItem({
                 onClick={() => onSelect(space)}
                 onContextMenu={handleRowContextMenu}
             >
-                {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
-                {!hideMoreMenu && (
+                {/* Right-click menu: an invisible cursor-anchored trigger drives the same
+                    items as the "..." menu. Portaled to <body> so the trigger's
+                    `position: fixed` anchors to the viewport — the sidebar scroll container
+                    has `container-type: inline-size`, which would otherwise become the
+                    trigger's containing block and offset the popup from the cursor (visible
+                    in the WeCom WebView). React events still bubble through the component
+                    tree, so the stopPropagation calls below still guard the row's onClick. */}
+                {!hideMoreMenu && createPortal(
                     <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -228,7 +235,8 @@ export default function KnowledgeSpaceItem({
                         <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
                             {moreMenuItems}
                         </SidebarListMoreMenuContent>
-                    </DropdownMenu>
+                    </DropdownMenu>,
+                    document.body,
                 )}
                 <div className="flex items-center flex-1">
                     {/* Expand/collapse chevron — only shown when treeEnabled.
