@@ -2,6 +2,16 @@ FROM dataelement/bisheng-backend:base.v8
 
 WORKDIR /app
 
+# CJK fonts for LibreOffice document->PDF preview. Without them the base image has no
+# Song/Hei fonts, so a Chinese .doc/.docx/.ppt requesting 宋体/黑体/仿宋 gets a Latin
+# substitute and the PDF preview shows the wrong typeface. fonts-noto-cjk provides
+# Source Han Serif/Sans; the fontconfig alias (applied after the code copy) maps the
+# Windows office family names onto them. Placed before COPY so the large font layer
+# caches across app-code changes.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY ./ ./
 
 # 从 uv.lock 导出并安装依赖，避免构建时重新解析到不兼容版本。
@@ -37,5 +47,10 @@ RUN SITE=$(python -c "import site; print(site.getsitepackages()[0])") && \
     fi
 
 ENV DM_HOME="/usr/local/lib/python3.10/site-packages/dmssl/"
+
+# Apply the office-font aliases (copied into /app by "COPY ./ ./") and rebuild the
+# font cache so LibreOffice resolves 宋体/黑体/仿宋 to the installed Noto CJK faces.
+RUN cp /app/docker/99-office-cjk.conf /etc/fonts/conf.d/99-office-cjk.conf && \
+    fc-cache -f
 
 CMD ["sh entrypoint.sh"]
