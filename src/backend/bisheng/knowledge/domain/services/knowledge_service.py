@@ -2229,13 +2229,25 @@ class KnowledgeService(KnowledgeUtils):
         html_snapshot_object_name = metadata.get("html_snapshot_object_name")
         if html_snapshot_object_name:
             html_preview_url = cls.get_file_share_url_with_empty(html_snapshot_object_name)
-        # PDF rendition of a Word preview. Empty when the conversion failed or the file
-        # was parsed before this existed, which is the frontend's cue to fall back to
-        # preview_url (the .docx).
+        # PDF rendition for previewing office documents. Prefer the inline/backfilled
+        # copy (pdf_preview_object_name); when absent, fall back to the unified
+        # PDF-artifact pipeline, which reliably converts every file — the inline path
+        # only fires for .doc, not .docx. Scoped to office types so images/text/html
+        # keep their native viewers instead of being forced through a PDF.
         pdf_preview_url = ""
         pdf_preview_object_name = metadata.get("pdf_preview_object_name")
         if pdf_preview_object_name:
             pdf_preview_url = cls.get_file_share_url_with_empty(pdf_preview_object_name)
+        elif (file.file_name or "").rsplit(".", 1)[-1].lower() in {
+            "doc", "docx", "wps", "ppt", "pptx", "dps",
+        }:
+            # Imported locally to avoid a domain-service import cycle.
+            from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+                get_available_pdf_artifact_reference_sync,
+            )
+            artifact_reference = get_available_pdf_artifact_reference_sync(file)
+            if artifact_reference is not None:
+                pdf_preview_url = cls.get_file_share_url_with_empty(artifact_reference.object_name)
         return {
             "original_url": original_url,
             "preview_url": preview_url,
