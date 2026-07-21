@@ -26,9 +26,8 @@ def _create_source(path: Path) -> None:
 def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
-            "姓名: 敏感姓名",
-            "工号: SECRET-001",
-            "下载时间: 2026-07-21 17:00:00",
+            "敏感部门-敏感姓名",
+            "2026-07-21",
             "首钢集团内部资料",
         )
     )

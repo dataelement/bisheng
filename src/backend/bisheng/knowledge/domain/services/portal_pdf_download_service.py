@@ -214,9 +214,10 @@ class PortalPdfDownloadService:
         display_name = str(getattr(user_record, "user_name", "") or "").strip()
         if not display_name:
             display_name = str(getattr(login_user, "user_name", "") or user_id).strip()
-        employee_id = str(getattr(user_record, "external_id", "") or "").strip()
-        if not employee_id:
-            employee_id = str(getattr(user_record, "user_name", "") or user_id).strip()
+        department_name = str(
+            await self.user_repository.get_primary_department_name(user_id) or ""
+        ).strip()
+        identity_line = f"{department_name}-{display_name}" if department_name else display_name
 
         lock_token = await self.user_lock.acquire(
             tenant_id=tenant_id,
@@ -274,9 +275,8 @@ class PortalPdfDownloadService:
             deadline = self.monotonic() + float(self.config.timeout_seconds)
             spec = PdfWatermarkSpec(
                 lines=(
-                    f"姓名: {display_name}",
-                    f"工号: {employee_id}",
-                    f"下载时间: {self.now_provider().strftime('%Y-%m-%d %H:%M:%S')}",
+                    identity_line,
+                    self.now_provider().strftime("%Y-%m-%d"),
                     "首钢集团内部资料",
                 )
             )
