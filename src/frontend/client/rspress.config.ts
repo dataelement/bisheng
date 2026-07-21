@@ -1,6 +1,8 @@
 import * as path from 'path';
 import { defineConfig } from 'rspress/config';
 import { pluginPreview } from '@rspress/plugin-preview';
+import tailwindcss from 'tailwindcss';
+import autoprefixer from 'autoprefixer';
 
 /**
  * Component-library docs site (rspress).
@@ -125,6 +127,18 @@ export default defineConfig({
       },
     },
     tools: {
+      // The docs build consumes design-token.js through a docs-only Tailwind
+      // config (tailwind.docs.config.cjs) — proving the SSOT drives a real
+      // Tailwind theme while the app's tailwind.config.cjs stays untouched.
+      // Replacing the plugins array here supersedes the app's postcss.config.cjs
+      // (which would otherwise resolve the app config), so Tailwind runs once.
+      postcss: (config: any) => {
+        config.postcssOptions = config.postcssOptions || {};
+        config.postcssOptions.plugins = [
+          tailwindcss(path.join(__dirname, 'tailwind.docs.config.cjs')),
+          autoprefixer(),
+        ];
+      },
       cssLoader: {
         url: {
           // Leave root-relative (/workspace/...) and $fonts urls untouched —
@@ -160,6 +174,9 @@ export default defineConfig({
         config.module = config.module || { rules: [] };
         config.module.rules = config.module.rules || [];
         config.module.rules.push({
+          // .md only: rspress precompiles .mdx Node-side before webpack loaders
+          // run, and MDX rejects the `<!-- site-hide -->` HTML comments this
+          // loader relies on. Spec .mdx pages are authored reader-clean instead.
           test: /\.md$/,
           include: [path.join(__dirname, '../../../docs-ui-refactor')],
           enforce: 'pre',

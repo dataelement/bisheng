@@ -13,3 +13,255 @@ body,
 #root {
   height: auto !important;
 }
+
+/* Page background = the SAME token the chrome uses (--rp-c-bg is mapped to
+   --bg-page). Without this, the app's own `.dark body` rule (a hardcoded
+   rgba(33,33,33) in style.css) leaks into the docs site and the content
+   column shows #212121 against the #121212 nav/sidebar. */
+html,
+body {
+  background-color: rgb(var(--bg-page)) !important;
+}
+
+/* Chrome: sidebar sits on gray-1 (auto-flips: #F7F8FA / #17171A) to separate
+   from the content column; the nav shares the page background and separates
+   via a downward shadow instead. Shadow color is the ramp's INK end + alpha —
+   the dark end is gray-10 in light mode but flips to gray-1 on the dark
+   ramp, so each theme picks its own token (still 100% token-driven). */
+.rspress-sidebar {
+  background-color: rgb(var(--arco-gray-1)) !important;
+}
+.rspress-nav {
+  background-color: rgb(var(--bg-page)) !important;
+  border-bottom: 0.5px solid rgb(var(--border-base)) !important;
+  box-shadow: 0 2px 8px rgb(var(--arco-gray-10) / 0.06);
+}
+/* Ink end of the dark ramp is gray-1 (the ramp flips); the resulting shadow
+   is intentionally near-invisible on the #121212 bg — kept for consistency. */
+.dark .rspress-nav {
+  box-shadow: 0 2px 8px rgb(var(--arco-gray-1) / 0.6);
+}
+
+/**
+ * Docs content typography = the BiSheng type spec, applied to itself.
+ *
+ * This spec site must render by its own rules, so the doc body pulls the SAME
+ * semantic type tokens (defined in src/style.css :root, driven by
+ * design-token.cjs) the app ships — instead of rspress's theme defaults
+ * (16px body, #213547 text). Result: the page demonstrates the 14px
+ * `text-body` baseline, 主文字色 #1D2129 (--text-1), and the medium-weight
+ * (500) heading ramp it documents. `important` because rspress's own
+ * `.rspress-doc h*` rules share the same specificity.
+ */
+.rspress-doc {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  color: rgb(var(--text-1)) !important;
+  font-size: var(--text-body) !important;
+  line-height: var(--leading-body) !important;
+}
+
+.rspress-doc p,
+.rspress-doc li,
+.rspress-doc td,
+.rspress-doc th {
+  font-size: var(--text-body) !important;
+  line-height: var(--leading-body) !important;
+  /* Base text color only (NOT !important): tables set per-cell muted colors
+     (text-2/3/4) via inline style — those must win. This rule still provides
+     the --text-1 default and beats rspress's non-important theme color. */
+  color: rgb(var(--text-1));
+  font-weight: 400;
+}
+
+/* Blockquote = supplementary note: body size, muted (secondary) text so it
+   reads as a softer aside beside the main copy. */
+.rspress-doc blockquote,
+.rspress-doc blockquote p {
+  font-size: var(--text-body) !important;
+  line-height: var(--leading-body) !important;
+  color: rgb(var(--text-2)) !important;
+  font-weight: 400;
+}
+
+/* Heading ramp — spec sizes + medium (500) weight (600/700 are banned). */
+.rspress-doc h1 {
+  font-size: var(--text-h1) !important;
+  line-height: var(--leading-h1) !important;
+  font-weight: 500 !important;
+  color: rgb(var(--text-1)) !important;
+}
+.rspress-doc h2 {
+  font-size: var(--text-h2) !important;
+  line-height: var(--leading-h2) !important;
+  font-weight: 500 !important;
+  color: rgb(var(--text-1)) !important;
+}
+.rspress-doc h3 {
+  font-size: var(--text-h3) !important;
+  line-height: var(--leading-h3) !important;
+  font-weight: 500 !important;
+  color: rgb(var(--text-1)) !important;
+}
+.rspress-doc h4,
+.rspress-doc h5,
+.rspress-doc h6 {
+  font-size: var(--text-h4) !important;
+  line-height: var(--leading-h4) !important;
+  font-weight: 500 !important;
+  color: rgb(var(--text-1)) !important;
+}
+
+/* IDs / code / logs use the mono stack (font-family-mono). */
+.rspress-doc code,
+.rspress-doc pre,
+.rspress-doc kbd {
+  font-family:
+    ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono",
+    monospace;
+}
+
+/* Spec tables span the full content column. rspress ships the doc table as
+   display:block with a max-content cap, which shrinks these narrow token
+   tables to their content width; force them back to the column width. */
+.rspress-doc table {
+  display: table !important;
+  width: 100% !important;
+}
+
+/* No zebra striping: rspress paints even rows with --rp-c-bg-soft. Invisible
+   on white (#F7F8FA) but obvious on the dark ramp (#17171A vs #121212 page).
+   Spec tables use uniform row backgrounds in BOTH themes. */
+.rspress-doc table tr,
+.rspress-doc table tr:nth-child(2n) {
+  background-color: transparent !important;
+}
+
+/* ONE border color for every table rule line. rspress's MDX component map
+   re-renders th/td with a Tailwind `border` class whose default color comes
+   from a different palette (#d1d1d1 in light) — mixing with our token'd
+   inline borders inside the same table. Force everything to --border-base. */
+.rspress-doc table,
+.rspress-doc tr,
+.rspress-doc th,
+.rspress-doc td {
+  border-color: rgb(var(--border-base)) !important;
+  /* rspress puts a color transition on `tr` (th/td have none), so the row
+     border lags ~0.2s behind on theme switch and reads as a flicker on the
+     header rule line. Flip in lockstep instead. */
+  transition: none !important;
+}
+
+/* Palette strips on the color spec page — same look & interaction as the
+   gallery PaletteRow (src/pages/_gallery/sections/ColorSection.tsx): seamless
+   flat swatches, hover lifts (scale + shadow), role label fades in on hover.
+   Own classes (not Tailwind JIT utilities) so the docs build never depends on
+   which app files the content scan happened to pick up. */
+.bs-swatch {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  height: 144px;
+  padding: 14px;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: default;
+  transition:
+    transform 0.2s ease-out,
+    box-shadow 0.2s ease-out;
+}
+.bs-swatch:hover {
+  z-index: 10;
+  transform: scale(1.06);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+.bs-swatch-usage {
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.bs-swatch:hover .bs-swatch-usage {
+  opacity: 1;
+}
+/* Dual-theme hex label: only the CURRENT theme's value is shown; flips with
+   the .dark class instantly (pure CSS, no re-render). */
+.bs-hex-dark {
+  display: none;
+}
+.dark .bs-hex-light {
+  display: none;
+}
+.dark .bs-hex-dark {
+  display: inline;
+}
+
+/**
+ * Site chrome (top nav / left sidebar / right TOC) — drive rspress's own
+ * theme tokens (--rp-*) from the BiSheng design tokens instead of rspress
+ * defaults (#213547 text, #0095ff brand, Inter, #fff bg).
+ *
+ * `!important` because rspress redeclares --rp-* under its dark theme; our
+ * source tokens (--text-*, --brand-*, --arco-gray-*, --background) ALREADY
+ * adapt light/dark (and blue⇄green brand), so one value wins in every theme
+ * and the chrome follows the same system the app + docs body use.
+ */
+:root {
+  /* Side rails narrowed (rspress defaults: sidebar 320, aside/TOC 268) to
+     hand the freed width to the center content column. */
+  --rp-sidebar-width: 256px !important;
+  --rp-aside-width: 232px !important;
+
+  /* Neutral text */
+  --rp-c-text-1: rgb(var(--text-1)) !important;
+  --rp-c-text-2: rgb(var(--text-2)) !important;
+  --rp-c-text-3: rgb(var(--text-3)) !important;
+  --rp-c-text-4: rgb(var(--text-4)) !important;
+
+  /* Surfaces (page + nav/sidebar share --rp-c-bg; separated by dividers) */
+  --rp-c-bg: rgb(var(--bg-page)) !important;
+  --rp-c-bg-alt: rgb(var(--arco-gray-1)) !important;
+  --rp-c-bg-soft: rgb(var(--arco-gray-1)) !important;
+  --rp-c-bg-mute: rgb(var(--arco-gray-2)) !important;
+
+  /* Dividers / borders — ONE color for every rule line (spec: tables must
+     not mix border grays; gray-2 vs gray-3 diverge visibly on the dark ramp) */
+  --rp-c-divider: rgb(var(--border-base)) !important;
+  --rp-c-divider-light: rgb(var(--border-base)) !important;
+
+  /* Brand — active sidebar/TOC item, links: follows blue⇄green theme */
+  --rp-c-brand: rgb(var(--brand-500)) !important;
+  --rp-c-brand-dark: rgb(var(--brand-600)) !important;
+  --rp-c-brand-darker: rgb(var(--brand-700)) !important;
+  --rp-c-brand-light: rgb(var(--brand-400)) !important;
+  --rp-c-brand-lighter: rgb(var(--brand-300)) !important;
+  --rp-c-brand-tint: rgb(var(--brand-500) / 0.12) !important;
+
+  /* Type stacks = BiSheng font-family tokens (system + CJK) */
+  --rp-font-family-base:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif !important;
+  --rp-font-family-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono",
+    monospace !important;
+}
+
+/* Chrome font sizes → BiSheng type scale (rspress hardcodes 16px). Containers
+   + the stable rspress link classes; sizes flow to inner text that inherits. */
+.rspress-nav,
+.rspress-nav a,
+.rspress-nav span {
+  font-size: var(--text-body) !important;
+}
+.rspress-sidebar {
+  font-size: var(--text-body) !important;
+}
+.rspress-sidebar-section-header {
+  font-size: var(--text-body-sm) !important;
+}
+.rspress-aside,
+.aside-link-text {
+  font-size: var(--text-body-sm) !important;
+}
