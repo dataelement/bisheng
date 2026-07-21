@@ -9,6 +9,7 @@ import { useLocalize } from "~/hooks";
 import { TopBar } from "./TopBar";
 import { HtmlViewer } from "./viewers/HtmlViewer";
 import { MarkdownViewer } from "./viewers/MarkdownViewer";
+import KnowledgePreviewWatermark from "./KnowledgePreviewWatermark";
 
 interface RichKnowledgePreviewProps {
     fileName: string;
@@ -168,6 +169,8 @@ export function RichKnowledgePreview({
     const sourceUrl = preview.final_url || preview.source_url;
     const htmlUrl = preview.html_preview_url;
     const textUrl = preview.preview_url || preview.original_url;
+    const hasMediaContent = Boolean(preview.original_url || textUrl);
+    const hasActiveWebContent = webTab === "html" ? Boolean(htmlUrl) : Boolean(textUrl);
 
     const title = useMemo(() => {
         if (preview.file_source === "web_link") {
@@ -188,22 +191,25 @@ export function RichKnowledgePreview({
                         actions={actions}
                     />
                 )}
-                <div className="flex-1 overflow-auto p-5">
-                    <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
-                        <section className="rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
-                            <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
-                            {isVideo ? (
-                                <video
-                                    className="max-h-[420px] w-full rounded-[6px] bg-black"
-                                    src={preview.original_url}
-                                    controls
-                                />
-                            ) : (
-                                <audio className="w-full" src={preview.original_url} controls />
-                            )}
-                        </section>
-                        {textUrl ? <MediaTranscriptTabs fileUrl={textUrl} /> : null}
+                <div className="relative min-h-0 flex-1 overflow-hidden">
+                    <div className="h-full overflow-auto p-5">
+                        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+                            <section className="rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
+                                <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
+                                {isVideo ? (
+                                    <video
+                                        className="max-h-[420px] w-full rounded-[6px] bg-black"
+                                        src={preview.original_url}
+                                        controls
+                                    />
+                                ) : (
+                                    <audio className="w-full" src={preview.original_url} controls />
+                                )}
+                            </section>
+                            {textUrl ? <MediaTranscriptTabs fileUrl={textUrl} /> : null}
+                        </div>
                     </div>
+                    {hasMediaContent ? <KnowledgePreviewWatermark /> : null}
                 </div>
             </div>
         );
@@ -249,7 +255,7 @@ export function RichKnowledgePreview({
                     </a>
                 ) : null}
             </div>
-            <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="relative flex min-h-0 flex-1 overflow-hidden">
                 {webTab === "html" ? (
                     htmlUrl ? (
                         <HtmlViewer fileUrl={htmlUrl} zoomLevel={100} />
@@ -265,6 +271,7 @@ export function RichKnowledgePreview({
                         {localize("com_knowledge.fetch_preview_link_failed")}
                     </div>
                 )}
+                {hasActiveWebContent ? <KnowledgePreviewWatermark /> : null}
             </div>
         </div>
     );

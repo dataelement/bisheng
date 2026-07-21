@@ -1,0 +1,33 @@
+.overlay {
+    position: absolute;
+    z-index: 20;
+    inset: -18%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(210px, 1fr));
+    align-content: space-around;
+    gap: 64px 42px;
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+    transform: rotate(-20deg);
+    transform-origin: center;
+}
+
+.tile {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: rgba(79, 96, 122, 0.2);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+    text-align: center;
+    white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+    .overlay {
+        grid-template-columns: repeat(3, minmax(190px, 1fr));
+        gap: 56px 32px;
+    }
+}

@@ -18,6 +18,7 @@ import { TextViewer } from "./viewers/TextViewer";
 import { XlsxViewer } from "./viewers/XlsxViewer";
 import { useLocalize } from "~/hooks";
 import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
+import KnowledgePreviewWatermark from "./KnowledgePreviewWatermark";
 
 export interface FilePreviewProps {
     /** File display name (with extension) */
@@ -285,7 +286,10 @@ export default function FilePreview({
                         onPageClick={handleSidebarPageClick}
                     />
                 )}
-                {renderViewer()}
+                <div className="relative flex min-w-0 flex-1 overflow-hidden">
+                    {renderViewer()}
+                    <KnowledgePreviewWatermark />
+                </div>
             </div>
         </div>
     );
