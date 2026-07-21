@@ -288,6 +288,58 @@ export function isLibrarySpaceTag(tag: SpaceTag): boolean {
     return tag.business_type === "tag_library";
 }
 
+export interface SpaceTagLibraryGroup {
+    libraryId: number | null;
+    libraryName: string;
+    tags: SpaceTag[];
+}
+
+const UNGROUPED_SPACE_TAG_LIBRARY_KEY = "__ungrouped__";
+
+export function getSpaceTagLibraryGroupKey(tag: SpaceTag): string {
+    if (tag.tag_library_id != null) {
+        return `lib:${tag.tag_library_id}`;
+    }
+    const libraryName = (tag.tag_library_name || "").trim();
+    if (libraryName) {
+        return `name:${libraryName}`;
+    }
+    return UNGROUPED_SPACE_TAG_LIBRARY_KEY;
+}
+
+/** Group space tags by tag library for display (e.g. search dropdown). */
+export function groupSpaceTagsByLibrary(tags: SpaceTag[]): SpaceTagLibraryGroup[] {
+    const groupMap = new Map<string, SpaceTagLibraryGroup>();
+
+    for (const tag of tags) {
+        const key = getSpaceTagLibraryGroupKey(tag);
+        let group = groupMap.get(key);
+        if (!group) {
+            group = {
+                libraryId: tag.tag_library_id ?? null,
+                libraryName: (tag.tag_library_name || "").trim(),
+                tags: [],
+            };
+            groupMap.set(key, group);
+        }
+        group.tags.push(tag);
+    }
+
+    const groups = Array.from(groupMap.values());
+    for (const group of groups) {
+        group.tags.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    groups.sort((a, b) => {
+        const aUngrouped = getSpaceTagLibraryGroupKey(a.tags[0]) === UNGROUPED_SPACE_TAG_LIBRARY_KEY;
+        const bUngrouped = getSpaceTagLibraryGroupKey(b.tags[0]) === UNGROUPED_SPACE_TAG_LIBRARY_KEY;
+        if (aUngrouped !== bUngrouped) {
+            return aUngrouped ? 1 : -1;
+        }
+        return a.libraryName.localeCompare(b.libraryName);
+    });
+    return groups;
+}
+
 export function isBoundLibraryTagName(
     tagName: string,
     recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],

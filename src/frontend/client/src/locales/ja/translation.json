@@ -1387,6 +1387,7 @@
     "edit_space": "ナレッジスペースを編集",
     "edit_tags": "タグを編集",
     "existing_tags": "既存のタグ",
+    "unnamed_tag_library": "名称未設定タグライブラリ",
     "recommended_tags": "おすすめタグ",
     "tag_type_system": "システムタグ",
     "tag_type_ai": "AIタグ",

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import {
     DropdownMenu,
@@ -8,7 +8,7 @@ import {
 } from '~/components/ui/DropdownMenu';
 import { knowledgeSpaceDropdownSurfaceClassName } from '~/components/SidebarListMoreMenu';
 import { cn } from '~/utils';
-import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
+import { SpaceTag, getSpaceTagLibraryGroupKey, getSpaceTagsApi, groupSpaceTagsByLibrary } from '~/api/knowledge';
 import { useLocalize } from "~/hooks";
 
 export interface SearchParams {
@@ -145,6 +145,35 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
     const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
+    const groupedSpaceTags = useMemo(() => groupSpaceTagsByLibrary(spaceTags), [spaceTags]);
+
+    const renderTagButton = (tag: SpaceTag) => {
+        const isSelected = selectedTags.some((t) => t.id === tag.id);
+        return (
+            <button
+                key={tag.id}
+                className={cn(
+                    "px-2 rounded text-sm transition-colors border outline-none",
+                    isSelected
+                        ? "bg-primary/10 text-primary border-transparent cursor-default"
+                        : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] hover:bg-[#e5e6eb]"
+                )}
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                }}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!isSelected) handleAddTag(tag);
+                }}
+                disabled={isSelected || selectedTags.length >= 5}
+                type="button"
+            >
+                {tag.name}
+            </button>
+        );
+    };
+
     return (
         <div ref={containerRef} data-expanded={isExpanded ? 'true' : 'false'} className={cn("relative w-full", className)}>
             <div
@@ -244,35 +273,20 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             {isFocused && !isScopeMenuOpen && (
                 <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3 max-[767px]:min-w-0 max-[767px]:w-full">
                     <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex max-h-[280px] flex-col gap-3 overflow-y-auto">
                         {spaceTags.length === 0 && (
                             <span className="text-sm text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
                         )}
-                        {spaceTags.map((tag) => {
-                            const isSelected = selectedTags.some((t) => t.id === tag.id);
+                        {groupedSpaceTags.map((group) => {
+                            const groupKey = getSpaceTagLibraryGroupKey(group.tags[0]);
+                            const groupLabel = group.libraryName || localize("com_knowledge.unnamed_tag_library");
                             return (
-                                <button
-                                    key={tag.id}
-                                    className={cn(
-                                        "px-2 rounded text-sm transition-colors border outline-none",
-                                        isSelected
-                                            ? "bg-primary/10 text-primary border-transparent cursor-default"
-                                            : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] hover:bg-[#e5e6eb]"
-                                    )}
-                                    onMouseDown={(e) => {
-                                        // Keep focus on input to avoid focus-within width flicker.
-                                        e.preventDefault();
-                                    }}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (!isSelected) handleAddTag(tag);
-                                    }}
-                                    disabled={isSelected || selectedTags.length >= 5}
-                                    type="button"
-                                >
-                                    {tag.name}
-                                </button>
+                                <div key={groupKey} className="flex flex-col gap-1.5">
+                                    <div className="text-[12px] leading-5 text-[#86909c]">{groupLabel}</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {group.tags.map(renderTagButton)}
+                                    </div>
+                                </div>
                             );
                         })}
                     </div>

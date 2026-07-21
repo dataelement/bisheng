@@ -9651,10 +9651,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return updated_folder
 
     async def delete_folder(self, space_id: int, folder_id: int):
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             get_pdf_artifact_deletion_snapshots,
         )
+        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         folder = await self._get_folder_for_action(space_id, folder_id)
         await self._require_permission_id("folder", folder_id, "delete_folder", space_id=space_id)
@@ -9698,9 +9698,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "file_ids": expanded_file_ids,
                     "knowledge_id": folder.knowledge_id,
                     "clear_minio": True,
-                    "pdf_artifact_snapshots": [
-                        snapshot.to_dict() for snapshot in pdf_artifact_snapshots
-                    ],
+                    "pdf_artifact_snapshots": [snapshot.to_dict() for snapshot in pdf_artifact_snapshots],
                     "knowledge_file_snapshots": minio_file_snapshots,
                 },
                 headers={"tenant_id": int(space_tenant_id or self.login_user.tenant_id)},
@@ -11036,10 +11034,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
     async def delete_file(self, file_id: int):
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             get_pdf_artifact_deletion_snapshots,
         )
+        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         file_record = await self._get_file_for_action(file_id)
         await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id)
@@ -11071,9 +11069,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "file_ids": expanded_ids,
                 "knowledge_id": file_record.knowledge_id,
                 "clear_minio": True,
-                "pdf_artifact_snapshots": [
-                    snapshot.to_dict() for snapshot in pdf_artifact_snapshots
-                ],
+                "pdf_artifact_snapshots": [snapshot.to_dict() for snapshot in pdf_artifact_snapshots],
                 "knowledge_file_snapshots": minio_file_snapshots,
             },
             headers={"tenant_id": int(space_tenant_id or self.login_user.tenant_id)},
@@ -11181,8 +11177,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     # ──────────────────────────── Tags ───────────────────────────────────
-    async def get_space_tags(self, space_id: int) -> list[Tag | ReviewTag]:
-        """Return bound library tags plus pending review tags for the knowledge space."""
+    async def get_space_tags(self, space_id: int) -> list[dict[str, Any]]:
+        """Return approved tags from bound libraries for the knowledge space."""
         await self._require_read_permission(space_id)
 
         merged: list[Tag] = []
@@ -11199,33 +11195,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 merged.extend(library_tags)
             merged = TagLibraryTagService.dedupe_library_tags_by_name(merged)
 
-        library_names = {(tag.name or "").strip().lower() for tag in merged if (tag.name or "").strip()}
-
-        pending_review_tags: list[ReviewTag] = []
+        library_name_by_id: dict[int, str] = {}
         for library_id in library_ids:
-            library_pending = await ReviewTagDao.get_tags_by_business(
-                TagBusinessTypeEnum.TAG_LIBRARY,
-                str(library_id),
+            library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
+            if library and library.name:
+                library_name_by_id[int(library_id)] = library.name
+
+        bound_library_ids = {int(library_id) for library_id in library_ids}
+        result: list[dict[str, Any]] = []
+        for tag in merged:
+            payload = await self._build_tag_lookup_resp(
+                space_id,
+                tag,
+                library_name_by_id=library_name_by_id,
+                bound_library_ids=bound_library_ids,
             )
-            pending_review_tags.extend(library_pending)
-        # Legacy pending tags scoped to the space (pre tag-library-only migration).
-        pending_review_tags.extend(
-            await ReviewTagDao.get_tags_by_business(
-                TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-                str(space_id),
-            )
-        )
-        result: list[Tag | ReviewTag] = list(merged)
-        seen_pending_names: set[str] = set()
-        for review_tag in pending_review_tags:
-            if review_tag.is_deleted or review_tag.review_status != 0:
-                continue
-            name = (review_tag.name or "").strip()
-            name_key = name.lower()
-            if not name or name_key in library_names or name_key in seen_pending_names:
-                continue
-            seen_pending_names.add(name_key)
-            result.append(review_tag)
+            if payload:
+                result.append(payload)
         return result
 
     async def _resolve_primary_library_for_space(self, space_id: int) -> int:
@@ -11377,11 +11363,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         space_id: int,
         tag: Tag | ReviewTag | None,
+        *,
+        library_name_by_id: dict[int, str] | None = None,
+        bound_library_ids: set[int] | None = None,
     ) -> dict[str, Any] | None:
         if tag is None:
             return None
 
-        bound_ids = set(await KnowledgeSpaceTagLibraryService.resolve_bound_library_ids(space_id))
+        bound_ids = (
+            bound_library_ids
+            if bound_library_ids is not None
+            else set(await KnowledgeSpaceTagLibraryService.resolve_bound_library_ids(space_id))
+        )
 
         business_type = getattr(tag, "business_type", None)
         if hasattr(business_type, "value"):
@@ -11397,8 +11390,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         tag_library_name: str | None = None
         if tag_library_id is not None:
-            library = await KnowledgeSpaceTagLibraryDao.aget(tag_library_id)
-            tag_library_name = library.name if library else None
+            if library_name_by_id is not None:
+                tag_library_name = library_name_by_id.get(tag_library_id)
+            else:
+                library = await KnowledgeSpaceTagLibraryDao.aget(tag_library_id)
+                tag_library_name = library.name if library else None
 
         is_bound_to_space: bool | None = None
         if tag_library_id is not None:
@@ -11685,10 +11681,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return []
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: list[int]):
-        from bisheng.worker import retry_knowledge_file_celery
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
         )
+        from bisheng.worker import retry_knowledge_file_celery
 
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
@@ -11742,10 +11738,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
     # ──────────────────────────── Batch Ops ───────────────────────────────────
 
     async def batch_delete(self, knowledge_id: int, file_ids: list[int], folder_ids: list[int]):
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             get_pdf_artifact_deletion_snapshots,
         )
+        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
@@ -11787,9 +11783,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "file_ids": expanded_file_ids,
                     "knowledge_id": knowledge.id,
                     "clear_minio": True,
-                    "pdf_artifact_snapshots": [
-                        snapshot.to_dict() for snapshot in pdf_artifact_snapshots
-                    ],
+                    "pdf_artifact_snapshots": [snapshot.to_dict() for snapshot in pdf_artifact_snapshots],
                     "knowledge_file_snapshots": minio_file_snapshots,
                 },
                 headers={"tenant_id": int(knowledge_tenant_id or self.login_user.tenant_id)},
