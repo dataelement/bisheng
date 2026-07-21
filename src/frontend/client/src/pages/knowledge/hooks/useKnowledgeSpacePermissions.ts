@@ -20,7 +20,7 @@ const PERMISSION_RELATION: Record<KnowledgeSpaceActionPermission, string> = {
     manage_space_relation: "can_manage",
 };
 
-function isSystemAdmin(role?: string) {
+export function isSystemAdmin(role?: string) {
     return role === SystemRoles.ADMIN || String(role ?? "").toLowerCase() === "admin";
 }
 
