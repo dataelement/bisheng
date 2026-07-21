@@ -1323,6 +1323,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def _dedupe_ids(resource_ids: list[int]) -> list[int]:
         return list(dict.fromkeys(resource_ids))
 
+    @staticmethod
+    def _build_minio_deletion_snapshots(files: list[KnowledgeFile]) -> list[dict]:
+        return [
+            {
+                "id": file.id,
+                "file_name": file.file_name,
+                "object_name": file.object_name,
+                "preview_file_object_name": file.preview_file_object_name,
+                "bbox_object_name": file.bbox_object_name,
+                "thumbnails": file.thumbnails,
+                "user_metadata": file.user_metadata or {},
+            }
+            for file in files
+        ]
+
+    @classmethod
+    async def _load_minio_deletion_snapshots(
+        cls,
+        file_ids: list[int],
+        known_files: list[KnowledgeFile],
+    ) -> list[dict]:
+        files_by_id = {int(file.id): file for file in known_files if file.id is not None}
+        missing_ids = [file_id for file_id in file_ids if int(file_id) not in files_by_id]
+        if missing_ids:
+            for file in await KnowledgeFileDao.aget_file_by_ids(missing_ids):
+                files_by_id[int(file.id)] = file
+        return cls._build_minio_deletion_snapshots(
+            [files_by_id[int(file_id)] for file_id in file_ids if int(file_id) in files_by_id]
+        )
+
     def _check_name_sensitive_words(self, name: str) -> None:
         """Raise SpaceNameSensitiveWordError if name hits the knowledge-space sensitive-word policy."""
         result = SensitiveWordPolicyService.check_text(
@@ -6964,7 +6994,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
 
         # CleanedminioData
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
+        await asyncio.to_thread(
+            KnowledgeService.delete_knowledge_file_in_minio,
+            space_id,
+            int(space.tenant_id),
+        )
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
         await KnowledgeSpacePinService.delete_space_pins(space_id)
@@ -9618,6 +9652,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_folder(self, space_id: int, folder_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            get_pdf_artifact_deletion_snapshots,
+        )
 
         folder = await self._get_folder_for_action(space_id, folder_id)
         await self._require_permission_id("folder", folder_id, "delete_folder", space_id=space_id)
@@ -9642,11 +9679,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 resource_tuples_to_cleanup.append(("knowledge_file", child.id))
 
         expanded_file_ids = await self._cascade_version_links_on_delete(file_ids) if file_ids else []
+        minio_file_snapshots = await self._load_minio_deletion_snapshots(
+            expanded_file_ids,
+            [child for child in children if child.file_type == FileType.FILE.value],
+        )
+        space_tenant_id = getattr(space, "tenant_id", None)
+        pdf_artifact_snapshots = (
+            await get_pdf_artifact_deletion_snapshots(
+                int(space_tenant_id),
+                expanded_file_ids,
+            )
+            if space_tenant_id is not None
+            else []
+        )
         if expanded_file_ids:
-            delete_knowledge_file_celery.delay(
-                file_ids=expanded_file_ids,
-                knowledge_id=folder.knowledge_id,
-                clear_minio=True,
+            delete_knowledge_file_celery.apply_async(
+                kwargs={
+                    "file_ids": expanded_file_ids,
+                    "knowledge_id": folder.knowledge_id,
+                    "clear_minio": True,
+                    "pdf_artifact_snapshots": [
+                        snapshot.to_dict() for snapshot in pdf_artifact_snapshots
+                    ],
+                    "knowledge_file_snapshots": minio_file_snapshots,
+                },
+                headers={"tenant_id": int(space_tenant_id or self.login_user.tenant_id)},
             )
             # Sibling files pulled in via primary-of-multi-version expansion
             # also need their tuples cleaned up.
@@ -10213,6 +10270,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_category_code: str | None = None,
         overwrite: bool = False,
     ) -> KnowledgeFile:
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation,
+        )
+
         if parent_id:
             await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
         else:
@@ -10364,6 +10425,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 parent_type,
                 parent_resource_id,
             )
+            await request_pdf_artifact_generation(db_file)
         except Exception:
             try:
                 if getattr(db_file, "object_name", None):
@@ -10400,6 +10462,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         new_parent_type: str,
         new_parent_id: int,
     ) -> KnowledgeFile:
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation,
+        )
+
         old_file_level_path = db_file.file_level_path or ""
         old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(
             old_file_level_path,
@@ -10410,6 +10476,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, file_name)
         html_snapshot_object_name = f"preview/{db_file.id}.html" if result.html_snapshot else ""
 
+        await request_pdf_artifact_generation(
+            db_file,
+            source_object_name=object_name,
+            source_md5=result.content_hash,
+        )
         minio_client.put_object_sync(
             bucket_name=minio_client.bucket,
             object_name=object_name,
@@ -10555,6 +10626,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_approval: bool = False,
         enqueue_processing: bool = True,
     ) -> list[KnowledgeSpaceFileResponse]:
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            enqueue_current_pdf_artifact,
+        )
+
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
@@ -10743,6 +10818,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise
         if enqueue_processing:
             self.enqueue_file_processing(process_files, preview_cache_keys)
+        if not enqueue_processing:
+            for process_file in process_files:
+                await enqueue_current_pdf_artifact(
+                    tenant_id=int(process_file.tenant_id),
+                    knowledge_file_id=int(process_file.id),
+                )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return failed_files + process_files
@@ -10956,6 +11037,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            get_pdf_artifact_deletion_snapshots,
+        )
 
         file_record = await self._get_file_for_action(file_id)
         await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id)
@@ -10965,14 +11049,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(space, "delete_file")
 
         expanded_ids = await self._cascade_version_links_on_delete([file_id])
+        minio_file_snapshots = await self._load_minio_deletion_snapshots(
+            expanded_ids,
+            [file_record],
+        )
+        space_tenant_id = getattr(space, "tenant_id", None)
+        pdf_artifact_snapshots = (
+            await get_pdf_artifact_deletion_snapshots(
+                int(space_tenant_id),
+                expanded_ids,
+            )
+            if space_tenant_id is not None
+            else []
+        )
         await self._delete_similarity_candidate_cache_by_file_ids(expanded_ids)
         await KnowledgeFileDao.adelete_batch(expanded_ids)
         if expanded_ids:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_ids)
-        delete_knowledge_file_celery.delay(
-            file_ids=expanded_ids,
-            knowledge_id=file_record.knowledge_id,
-            clear_minio=True,
+        delete_knowledge_file_celery.apply_async(
+            kwargs={
+                "file_ids": expanded_ids,
+                "knowledge_id": file_record.knowledge_id,
+                "clear_minio": True,
+                "pdf_artifact_snapshots": [
+                    snapshot.to_dict() for snapshot in pdf_artifact_snapshots
+                ],
+                "knowledge_file_snapshots": minio_file_snapshots,
+            },
+            headers={"tenant_id": int(space_tenant_id or self.login_user.tenant_id)},
         )
         await self._cleanup_resource_tuples([("knowledge_file", fid) for fid in expanded_ids])
         await self.update_folder_update_time(file_record.file_level_path)
@@ -11582,6 +11686,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: list[int]):
         from bisheng.worker import retry_knowledge_file_celery
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation,
+        )
 
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
@@ -11591,6 +11698,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
+        retry_file_map: dict[int, KnowledgeFile] = {}
         all_file_level_path = set()
         retryable_status = {
             KnowledgeFileStatus.FAILED.value,
@@ -11601,8 +11709,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 continue
             if file.file_type == FileType.FILE.value and file.status in retryable_status:
                 await self._require_resource_permission("can_edit", "knowledge_file", file.id)
-                retry_knowledge_file_celery.delay(file.id)
                 all_file_ids.append(file.id)
+                retry_file_map[file.id] = file
                 all_file_level_path.add(file.file_level_path)
             elif file.file_type == FileType.DIR.value:
                 await self._require_resource_permission("can_edit", "folder", file.id)
@@ -11612,13 +11720,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 for item in all_failed_files:
                     if item.status in retryable_status and item.file_type == FileType.FILE.value:
                         await self._require_resource_permission("can_edit", "knowledge_file", item.id)
-                        retry_knowledge_file_celery.delay(item.id)
                         all_file_ids.append(item.id)
+                        retry_file_map[item.id] = item
                         all_file_level_path.add(file.file_level_path)
         if all_file_ids:
+            all_file_ids = list(dict.fromkeys(all_file_ids))
             await KnowledgeFileDao.aupdate_file_status(
                 all_file_ids, KnowledgeFileStatus.WAITING, "batch_retry_failed_files"
             )
+            for file_id in all_file_ids:
+                await request_pdf_artifact_generation(retry_file_map[file_id])
+            for file_id in all_file_ids:
+                retry_knowledge_file_celery.delay(file_id)
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(all_file_ids)
             await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         for one in all_file_level_path:
@@ -11630,6 +11743,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def batch_delete(self, knowledge_id: int, file_ids: list[int], folder_ids: list[int]):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            get_pdf_artifact_deletion_snapshots,
+        )
 
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
@@ -11649,14 +11765,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 direct_files.append(file_record)
             direct_file_ids = [file.id for file in direct_files]
             expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
+            minio_file_snapshots = await self._load_minio_deletion_snapshots(
+                expanded_file_ids,
+                direct_files,
+            )
+            knowledge_tenant_id = getattr(knowledge, "tenant_id", None)
+            pdf_artifact_snapshots = (
+                await get_pdf_artifact_deletion_snapshots(
+                    int(knowledge_tenant_id),
+                    expanded_file_ids,
+                )
+                if knowledge_tenant_id is not None
+                else []
+            )
             await self._delete_similarity_candidate_cache_by_file_ids(expanded_file_ids)
             await KnowledgeFileDao.adelete_batch(expanded_file_ids)
             if expanded_file_ids:
                 await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_file_ids)
-            delete_knowledge_file_celery.delay(
-                file_ids=expanded_file_ids,
-                knowledge_id=knowledge.id,
-                clear_minio=True,
+            delete_knowledge_file_celery.apply_async(
+                kwargs={
+                    "file_ids": expanded_file_ids,
+                    "knowledge_id": knowledge.id,
+                    "clear_minio": True,
+                    "pdf_artifact_snapshots": [
+                        snapshot.to_dict() for snapshot in pdf_artifact_snapshots
+                    ],
+                    "knowledge_file_snapshots": minio_file_snapshots,
+                },
+                headers={"tenant_id": int(knowledge_tenant_id or self.login_user.tenant_id)},
             )
             await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_file_ids])
 

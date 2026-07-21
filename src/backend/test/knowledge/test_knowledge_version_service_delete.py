@@ -209,7 +209,14 @@ async def test_delete_version_calls_vector_and_minio_cleanup(monkeypatch):
     svc = _build_mock_svc()
 
     # Fake version and knowledge file
-    fake_kf = KnowledgeFile(id=10, knowledge_id=5, file_name="report.pdf", file_type=1, status=2)
+    fake_kf = KnowledgeFile(
+        id=10,
+        tenant_id=7,
+        knowledge_id=5,
+        file_name="report.pdf",
+        file_type=1,
+        status=2,
+    )
     fake_version = MagicMock()
     fake_version.id = 42
     fake_version.is_primary = False
@@ -239,8 +246,15 @@ async def test_delete_version_calls_vector_and_minio_cleanup(monkeypatch):
     # Patch at source module; deferred `from ... import` binds the name at call time.
     mock_dvf = MagicMock(return_value=True)
     mock_dmf = MagicMock(return_value=None)
+    artifact_snapshot = MagicMock()
+    mock_get_artifact_snapshots = AsyncMock(return_value=[artifact_snapshot])
     monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_vector_files", mock_dvf)
     monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_minio_files", mock_dmf)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_pdf_artifact_service."
+        "get_pdf_artifact_deletion_snapshots",
+        mock_get_artifact_snapshots,
+    )
 
     result = await svc.delete_version(version_id=42)
 
@@ -250,7 +264,8 @@ async def test_delete_version_calls_vector_and_minio_cleanup(monkeypatch):
 
     # Cleanup functions invoked once each
     mock_dvf.assert_called_once_with([fake_kf.id], fake_knowledge)
-    mock_dmf.assert_called_once_with(fake_kf)
+    mock_get_artifact_snapshots.assert_awaited_once_with(7, [10])
+    mock_dmf.assert_called_once_with(fake_kf, [artifact_snapshot])
 
     assert result.deleted_version_no == 2
     assert result.document_id == 7

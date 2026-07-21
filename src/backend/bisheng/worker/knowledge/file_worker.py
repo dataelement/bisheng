@@ -6,8 +6,12 @@ from langchain_elasticsearch import ElasticsearchStore
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
-from bisheng.api.services.knowledge_imp import process_file_task, delete_knowledge_file_vectors, \
-    KnowledgeUtils, delete_vector_files
+from bisheng.api.services.knowledge_imp import (
+    KnowledgeUtils,
+    delete_knowledge_file_vectors,
+    delete_vector_files,
+    process_file_task,
+)
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.ai import FakeEmbeddings
@@ -24,6 +28,45 @@ from bisheng.telemetry.domain.mid_table.knowledge_space_content import Knowledge
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus
+
+
+def _request_pdf_artifact_generation_sync(file: KnowledgeFile, *, enqueue: bool) -> None:
+    """PDF 调度是复制主流程的 best-effort 副作用。"""
+
+    if file.tenant_id is None or not file.object_name:
+        return
+    try:
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation_sync,
+        )
+
+        request_pdf_artifact_generation_sync(file, enqueue=enqueue)
+    except Exception as exc:
+        logger.error(
+            "knowledge_pdf_artifact_copy_schedule_failed tenant_id={} file_id={} error_type={}",
+            file.tenant_id,
+            file.id,
+            type(exc).__name__,
+        )
+
+
+def _enqueue_current_pdf_artifact_sync(*, tenant_id: int, knowledge_file_id: int) -> None:
+    try:
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            enqueue_current_pdf_artifact_sync,
+        )
+
+        enqueue_current_pdf_artifact_sync(
+            tenant_id=tenant_id,
+            knowledge_file_id=knowledge_file_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "knowledge_pdf_artifact_parse_schedule_failed tenant_id={} file_id={} error_type={}",
+            tenant_id,
+            knowledge_file_id,
+            type(exc).__name__,
+        )
 
 
 def _enqueue_recommendation_projection_refresh(file_id: int) -> None:
@@ -119,6 +162,14 @@ def copy_normal(
         one_dict["level"] = target_level
     if target_file_level_path is not None:
         one_dict["file_level_path"] = target_file_level_path
+    # 目标文件必须只引用目标自己的物理对象, 不继承源文件的固定路径。
+    one_dict["object_name"] = None
+    one_dict["preview_file_object_name"] = None
+    one_dict["bbox_object_name"] = ""
+    copied_metadata = dict(one_dict.get("user_metadata") or {})
+    copied_metadata.pop("pdf_preview_object_name", None)
+    copied_metadata.pop("pdf_preview_source_md5", None)
+    one_dict["user_metadata"] = copied_metadata
     if extra_user_metadata:
         one_dict["user_metadata"] = {
             **(one_dict.get("user_metadata") or {}),
@@ -143,7 +194,7 @@ def copy_normal(
         if source_file and minio_client.object_exists_sync(minio_client.bucket, source_file):
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=source_file,
                                           dest_object=target_source_file, dest_bucket=minio_client.bucket)
-        knowledge_new.object_name = target_source_file
+            knowledge_new.object_name = target_source_file
 
         # Copy GeneratedpdfDoc.
         if minio_client.object_exists_sync(minio_client.bucket, f"{source_file_pdf}"):
@@ -168,6 +219,7 @@ def copy_normal(
             if minio_client.object_exists_sync(minio_client.bucket, preview_file):
                 minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=preview_file,
                                               dest_object=target_preview_file, dest_bucket=minio_client.bucket)
+                knowledge_new.preview_file_object_name = target_preview_file
 
     except Exception as e:
         logger.exception(f"copy_file_error file_id={knowledge_new.id}")
@@ -175,6 +227,7 @@ def copy_normal(
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
         _enqueue_recommendation_projection_refresh(knowledge_new.id)
+        _request_pdf_artifact_generation_sync(knowledge_new, enqueue=True)
         return knowledge_new
 
     # copy vector
@@ -194,6 +247,7 @@ def copy_normal(
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
     _enqueue_recommendation_projection_refresh(knowledge_new.id)
+    _request_pdf_artifact_generation_sync(knowledge_new, enqueue=True)
     return knowledge_new
 
 
@@ -364,6 +418,10 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if db_file:
             _enqueue_recommendation_projection_refresh(file_id)
+            _enqueue_current_pdf_artifact_sync(
+                tenant_id=int(db_file[0].tenant_id),
+                knowledge_file_id=file_id,
+            )
         elif knowledge:
             logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
             # If it does not exist, it may have been deleted during the parsing process,
@@ -418,6 +476,12 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED,
                                             KnowledgeFileFailedError(exception=e).to_json_str())
         _enqueue_recommendation_projection_refresh(file_id)
+        db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+        if db_file:
+            _enqueue_current_pdf_artifact_sync(
+                tenant_id=int(db_file[0].tenant_id),
+                knowledge_file_id=file_id,
+            )
         return
     knowledge = None
     try:
@@ -428,6 +492,10 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if db_file:
             _enqueue_recommendation_projection_refresh(file_id)
+            _enqueue_current_pdf_artifact_sync(
+                tenant_id=int(db_file[0].tenant_id),
+                knowledge_file_id=file_id,
+            )
         elif knowledge:
             logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
             # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
@@ -435,7 +503,13 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
 
 
 @bisheng_celery.task(acks_late=True)
-def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
+def delete_knowledge_file_celery(
+    file_ids: list[int],
+    knowledge_id: int,
+    clear_minio: bool = True,
+    pdf_artifact_snapshots: list[dict] | None = None,
+    knowledge_file_snapshots: list[dict] | None = None,
+):
     """ Asynchronous deletion of knowledge files and their vectors """
     trace_id_var.set(f'delete_knowledge_file_{file_ids}')
     logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
@@ -447,3 +521,11 @@ def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_m
         delete_vector_files(file_ids, knowledge)
     except Exception as e:
         logger.error("delete_knowledge_file_celery error: {}", str(e))
+    finally:
+        if clear_minio and (knowledge_file_snapshots or pdf_artifact_snapshots):
+            from bisheng.api.services.knowledge_imp import delete_minio_file_snapshot_objects
+
+            delete_minio_file_snapshot_objects(
+                knowledge_file_snapshots,
+                pdf_artifact_snapshots,
+            )

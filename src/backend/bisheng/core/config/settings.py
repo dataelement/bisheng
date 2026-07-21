@@ -559,6 +559,23 @@ class VersionManagementConf(BaseModel):
     )
 
 
+class KnowledgePdfArtifactConf(BaseModel):
+    """统一 PDF 派生产物配置。"""
+
+    enabled: bool = Field(default=True, description="Enable unified PDF artifact scheduling")
+    queue_name: str = Field(default="knowledge_pdf_celery", min_length=1, description="Dedicated Celery queue")
+    max_retries: int = Field(default=3, ge=0, le=10, description="Retries after the initial attempt")
+    retry_base_seconds: int = Field(default=30, ge=1, description="Initial retry countdown")
+    retry_max_seconds: int = Field(default=300, ge=1, description="Maximum retry countdown")
+    conversion_timeout_seconds: int = Field(default=300, ge=10, description="Per conversion timeout")
+
+    @model_validator(mode="after")
+    def validate_retry_window(self):
+        if self.retry_max_seconds < self.retry_base_seconds:
+            raise ValueError("retry_max_seconds must be greater than or equal to retry_base_seconds")
+        return self
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -569,6 +586,10 @@ class KnowledgeConf(BaseModel):
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
         description="Version Management Configure",
+    )
+    pdf_artifact: KnowledgePdfArtifactConf = Field(
+        default_factory=KnowledgePdfArtifactConf,
+        description="Unified PDF Artifact Configure",
     )
 
     @property

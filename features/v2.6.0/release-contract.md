@@ -22,6 +22,7 @@
 | PortalCourse / PortalCourseVideo | F062-portal-course-management | 首钢门户课程目录、课程内标签值对象、视频来源及其创建、更新、启停、排序和删除行为；标签不作为独立领域实体 |
 | PortalCourseVideoProgress | F062-portal-course-management | 按租户、登录用户和视频唯一覆盖的播放进度及完成终态 |
 | PortalCourseMediaCleanup | F062-portal-course-management | 课程上传对象的 provisional、替换、删除清理任务及最终一致重试 |
+| KnowledgeFilePdfArtifact | F063-unified-pdf-artifact | 知识文件统一 PDF 派生产物的当前 generation、独立处理状态、对象引用、重试信息和删除清理；不拥有 KnowledgeFile 解析状态、预览或下载行为 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -58,6 +59,7 @@
 | F027-rebac-list-perf-optim | F004, F008, F011/F012/F013 | 性能优化型；不新增领域对象，仅修改高频列表接口分页协议与部门树 member_count |
 | F054-file-publish-submit-performance | F025 | 复用统一审批事实和任务模型；新增独立通知 outbox，不修改业务执行 outbox 语义 |
 | F062-portal-course-management | F012, F017, F019 | 依赖租户解析、租户共享存储与管理员租户范围基线；复用现有首钢门户会话/BFF |
+| F063-unified-pdf-artifact | F017, F056 | 依赖租户共享存储路径与 Celery 单循环运行时基线；新增独立 PDF Artifact，不修改知识解析、预览或下载契约 |
 
 ---
 
@@ -84,3 +86,4 @@
 | 2026-06-10 | 登记 F044 开发者 Token 管理与认证模块错误码 198 | F044 |
 | 2026-07-14 | 登记 F054 发布申请提交性能优化及 `ApprovalNotificationOutbox` 领域归属 | F054 |
 | 2026-07-18 | 登记 F062 门户课程、视频、学习进度、媒体清理领域归属，依赖关系及 250 模块错误码；标签确认为 PortalCourse 内值对象，不建立独立实体/表 | F062 |
+| 2026-07-20 | 登记 F063 知识文件统一 PDF 产物的领域归属与 F017/F056 依赖；明确其不拥有解析状态、预览和下载行为 | F063 |

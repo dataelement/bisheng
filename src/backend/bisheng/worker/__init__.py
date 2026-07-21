@@ -13,6 +13,9 @@ from bisheng.worker.knowledge.file_worker import (
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
 )
+from bisheng.worker.knowledge.pdf_artifact_worker import (
+    generate_knowledge_file_pdf_celery,
+)
 from bisheng.worker.knowledge.portal_hot_search import (
     fanout_portal_hot_search_rebuild,
     rebuild_portal_hot_search_snapshot_celery,

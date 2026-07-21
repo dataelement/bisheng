@@ -236,6 +236,7 @@ Independent Worker process, decoupled from API via Redis queue.
 | Queue | Concurrency | Responsibility |
 |-------|-------------|----------------|
 | `knowledge_celery` | 20 threads | Document parsing, embedding, vector writes |
+| `knowledge_pdf_celery` | 2 threads | Unified PDF validation/conversion; independent low-concurrency Worker (`sh entrypoint.sh pdf`) |
 | `workflow_celery` | 100 threads | Workflow DAG execution |
 | `celery` (default) | 100 threads | Telemetry stats |
 

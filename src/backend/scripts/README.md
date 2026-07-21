@@ -110,6 +110,33 @@ Operational notes:
 - `--apply` 会产生 Elasticsearch 读取压力和 AI 调用成本，并修改历史数据。脚本不提供自动回滚，
   正式全库执行前应依次完成 dry-run、单文件烟测和小批量灰度。
 
+### `backfill_knowledge_space_auto_tags.py`
+
+扫描知识空间文件，对**可见标签总数少于 3** 且解析成功的文件补跑 Link A / Link B AI 打标签流程；补打后单文件可见标签总数不超过 **6**。
+内容优先从 Elasticsearch 分块读取，缺失时回退到 `abstract`。默认 dry-run，传入 `--apply` 后才会调用 LLM。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py --apply --space-id 10
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py --apply --batch-size 20 --concurrency 2 --limit 100
+
+bash scripts/backfill_knowledge_space_auto_tags.sh --apply --batch-size 20
+
+# Docker 容器内（WORKDIR /app，使用系统 python，无 .venv）：
+PYTHONPATH=./ python scripts/backfill_knowledge_space_auto_tags.py --apply --min-tags 3 --max-tags 6
+bash scripts/backfill_knowledge_space_auto_tags.sh --apply --min-tags 3 --max-tags 6
+```
+
+说明：
+
+- 只处理 `status=SUCCESS` 的真实文件；默认 `--min-tags 3`（少于 3 个才处理）、`--max-tags 6`（补打后总数上限）。
+- 默认沿用线上 Link A/B 的 `_should_run` 门禁，可用 `--force` 绕过。
+- `--scan-batch-size` 控制标签统计分批大小；`--batch-size` 控制实际打标签分批大小。
+- Link B 是否执行仍受 `review_tag_visible`、空间 `auto_tag_enabled`、Link A 应用标签数上限，以及 `--max-tags` 剩余额度约束。
+
 ### `reparse_knowledge_space_files.py`
 
 重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。
