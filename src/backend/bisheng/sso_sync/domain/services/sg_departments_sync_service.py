@@ -154,6 +154,12 @@ class SgDepartmentsSyncService:
             ts = int(time.time())
             parent_id = int(parent.id) if parent is not None and parent.id is not None else None
             parent_path = parent.path if parent is not None else ""
+            if existing is not None and (existing.parent_id or 0) != (parent_id or 0):
+                from bisheng.department.domain.services.department_root_guard import (
+                    aassert_default_root_parent_immutable,
+                )
+
+                await aassert_default_root_parent_immutable(existing.id, parent_id)
             dept = await DepartmentDao.aupsert_by_external_id(
                 source=cls.SOURCE,
                 external_id=row.code,
@@ -346,6 +352,11 @@ class SgDepartmentsSyncService:
         old_parent_id = int(child.parent_id) if getattr(child, "parent_id", None) is not None else None
         was_archived = getattr(child, "status", "") == "archived" or getattr(child, "is_deleted", 0) == 1
         ts = int(time.time())
+        from bisheng.department.domain.services.department_root_guard import (
+            aassert_default_root_parent_immutable,
+        )
+
+        await aassert_default_root_parent_immutable(int(child.id), int(parent.id))
         dept = await DepartmentDao.aupdate_parent_link(
             dept_id=int(child.id),
             parent_id=int(parent.id),

@@ -13,6 +13,8 @@ export interface DepartmentTreeNode {
   is_tenant_root: boolean
   /** Tenant.id this department mounts; null when is_tenant_root is false. */
   mounted_tenant_id: number | null
+  /** True for tenant(root).root_dept_id — the canonical default organization. */
+  is_default_root?: boolean
   children: DepartmentTreeNode[]
 }
 
@@ -32,6 +34,8 @@ export interface DepartmentDetail {
   status: string
   default_role_ids: number[] | null
   member_count: number
+  /** True for tenant(root).root_dept_id — the canonical default organization. */
+  is_default_root?: boolean
 }
 
 export interface DepartmentMember {
