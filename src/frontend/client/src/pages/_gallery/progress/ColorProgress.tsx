@@ -8,8 +8,8 @@ import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
 export function ColorProgress() {
   return (
     <ComponentPage
-      title="色彩 · 迁移"
-      eng="Color Progress"
+      title="色彩 · 现状"
+      eng="Color Inventory"
       description={
         <>
           两层 token + Tailwind 接线已落地（2026-07-15）。现状：裸 hex <b>2469 处 / 215 个值</b>
