@@ -180,6 +180,7 @@ def test_parse_args_accepts_source_filters_explicit_target_and_record_options():
             "20",
             "--target-folder-id",
             "200",
+            "--force-overwrite",
             "--rollback-record-file",
             "/tmp/move-record.jsonl",
             "--batch-size",
@@ -193,6 +194,7 @@ def test_parse_args_accepts_source_filters_explicit_target_and_record_options():
     assert args.source_subcategory_codes == ["STD-A"]
     assert args.target_space_id == 20
     assert args.target_folder_id == 200
+    assert args.force_overwrite is True
     assert args.rollback_record_file == Path("/tmp/move-record.jsonl")
     assert args.batch_size == 10
 
@@ -235,6 +237,47 @@ def test_parse_args_rejects_folder_root_mode_without_structure_flag():
 def test_parse_args_requires_explicit_target_pair(target_args):
     with pytest.raises(SystemExit):
         script_mod.parse_args(["--source-space-id", "10", *target_args])
+
+
+def test_parse_args_defaults_force_overwrite_to_false():
+    args = script_mod.parse_args(["--source-space-id", "10"])
+
+    assert args.force_overwrite is False
+
+
+@pytest.mark.parametrize(
+    "target_args",
+    [
+        [],
+        ["--target-space-id", "20"],
+        ["--target-folder-id", "200"],
+    ],
+)
+def test_parse_args_force_overwrite_requires_explicit_target_pair(target_args):
+    with pytest.raises(SystemExit):
+        script_mod.parse_args(
+            [
+                "--source-space-id",
+                "10",
+                *target_args,
+                "--force-overwrite",
+            ]
+        )
+
+
+def test_parse_args_force_overwrite_rejects_same_source_and_target_space():
+    with pytest.raises(SystemExit):
+        script_mod.parse_args(
+            [
+                "--source-space-id",
+                "10",
+                "--target-space-id",
+                "10",
+                "--target-folder-id",
+                "200",
+                "--force-overwrite",
+            ]
+        )
 
 
 async def test_load_source_spaces_rejects_missing_space_before_planning(monkeypatch):
@@ -1146,6 +1189,161 @@ def test_planner_skips_model_name_and_md5_conflicts_deterministically():
     }
 
 
+def test_force_overwrite_plans_one_legacy_target_document():
+    source = _file(101, file_name="existing-name.pdf", md5="source-md5")
+    existing = _file(
+        900,
+        knowledge_id=20,
+        file_name="existing-name.pdf",
+        file_level_path="/200",
+        md5="target-md5",
+    )
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[source],
+        all_files_by_id={source.id: source},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[existing],
+        force_overwrite=True,
+    )
+
+    assert len(plan.selected_units) == 1
+    overwrite = plan.selected_units[0].overwrite_target
+    assert overwrite is not None
+    assert overwrite.logical_id == "file:900"
+    assert overwrite.document is None
+    assert [item.id for item in overwrite.files] == [900]
+    assert overwrite.matched_file_ids == (900,)
+    assert overwrite.match_reasons == ("name",)
+
+
+def test_force_overwrite_expands_one_matching_target_to_its_complete_version_chain():
+    source = _file(101, file_name="incoming.pdf", md5="same-md5")
+    target_files = [
+        _file(900, knowledge_id=20, file_name="old-v1.pdf", file_level_path="/200", md5="same-md5"),
+        _file(901, knowledge_id=20, file_name="old-v2.pdf", file_level_path="/200", md5="old-v2"),
+    ]
+    target_versions = [
+        KnowledgeDocumentVersion(
+            id=801,
+            document_id=800,
+            knowledge_file_id=900,
+            version_no=1,
+            is_primary=False,
+        ),
+        KnowledgeDocumentVersion(
+            id=802,
+            document_id=800,
+            knowledge_file_id=901,
+            version_no=2,
+            is_primary=True,
+        ),
+    ]
+    target_document = KnowledgeDocument(id=800, knowledge_id=20, primary_version_id=802)
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[source],
+        all_files_by_id={source.id: source},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=target_files,
+        target_documents_by_id={800: target_document},
+        target_versions=target_versions,
+        force_overwrite=True,
+    )
+
+    overwrite = plan.selected_units[0].overwrite_target
+    assert overwrite is not None
+    assert overwrite.logical_id == "document:800"
+    assert overwrite.document == target_document
+    assert [item.id for item in overwrite.files] == [900, 901]
+    assert [item.id for item in overwrite.versions] == [801, 802]
+    assert overwrite.matched_file_ids == (900,)
+    assert overwrite.match_reasons == ("md5",)
+
+
+def test_force_overwrite_skips_when_conflicts_span_multiple_logical_documents():
+    source = _file(101, file_name="conflict.pdf", md5="same-md5")
+    target_files = [
+        _file(900, knowledge_id=20, file_name="conflict.pdf", file_level_path="/200", md5="other"),
+        _file(901, knowledge_id=20, file_name="elsewhere.pdf", file_level_path="/999", md5="same-md5"),
+    ]
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[source],
+        all_files_by_id={source.id: source},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=target_files,
+        force_overwrite=True,
+    )
+
+    assert plan.selected_units == []
+    assert [(item.source_file_id, item.reason_code) for item in plan.skipped_files] == [
+        (101, "target_overwrite_ambiguous")
+    ]
+
+
+def test_force_overwrite_reserves_one_target_document_for_the_first_source_unit():
+    source_files = [
+        _file(101, file_name="incoming-a.pdf", md5="old-v1"),
+        _file(102, file_name="incoming-b.pdf", md5="old-v2"),
+    ]
+    target_files = [
+        _file(900, knowledge_id=20, file_name="old-v1.pdf", file_level_path="/200", md5="old-v1"),
+        _file(901, knowledge_id=20, file_name="old-v2.pdf", file_level_path="/200", md5="old-v2"),
+    ]
+    target_versions = [
+        KnowledgeDocumentVersion(
+            id=801,
+            document_id=800,
+            knowledge_file_id=900,
+            version_no=1,
+            is_primary=False,
+        ),
+        KnowledgeDocumentVersion(
+            id=802,
+            document_id=800,
+            knowledge_file_id=901,
+            version_no=2,
+            is_primary=True,
+        ),
+    ]
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=source_files,
+        all_files_by_id={item.id: item for item in source_files},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=target_files,
+        target_documents_by_id={800: KnowledgeDocument(id=800, knowledge_id=20, primary_version_id=802)},
+        target_versions=target_versions,
+        force_overwrite=True,
+    )
+
+    assert [unit.source_files[0].id for unit in plan.selected_units] == [101]
+    assert [(item.source_file_id, item.reason_code) for item in plan.skipped_files] == [
+        (102, "batch_overwrite_conflict")
+    ]
+
+
 def test_target_preview_object_name_preserves_custom_preview_suffix(monkeypatch):
     source = _file(101, file_name="portal-page.md")
     source.preview_file_object_name = "preview/101.html"
@@ -1193,6 +1391,34 @@ def test_storage_exists_uses_managed_minio_storage(monkeypatch):
         ("knowledge", "missing-bbox.json"),
         ("knowledge", "preview.html"),
     ]
+
+
+def test_overwrite_object_names_only_uses_legacy_file_metadata(monkeypatch):
+    file = _file(101).model_copy(
+        update={
+            "thumbnails": "thumbnails/101.png",
+            "user_metadata": {"pdf_preview_object_name": "preview/101.pdf"},
+        }
+    )
+    monkeypatch.setattr(
+        script_mod,
+        "_storage_object_names",
+        lambda _file: {
+            "original": "source.pdf",
+            "converted": "101",
+            "bbox": "101.bbox",
+            "preview": "preview/101.html",
+        },
+    )
+
+    assert script_mod._overwrite_object_names(file) == (
+        "101",
+        "101.bbox",
+        "preview/101.html",
+        "preview/101.pdf",
+        "source.pdf",
+        "thumbnails/101.png",
+    )
 
 
 def test_copy_object_if_present_uses_managed_minio_storage(monkeypatch):
@@ -1538,6 +1764,119 @@ async def test_verify_target_tag_mismatch_reports_source_and_target_ids(monkeypa
     assert "target=approved=[], pending=[4402]" in error
 
 
+async def test_delete_overwrite_target_attempts_every_component_and_collects_failures(monkeypatch):
+    class EmptySession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def exec(self, _statement):
+            return SimpleNamespace(all=lambda: [])
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+    class Minio:
+        bucket = "bucket"
+
+        def __init__(self):
+            self.removed = []
+
+        def remove_object_sync(self, *, bucket_name, object_name):
+            self.removed.append((bucket_name, object_name))
+
+        def object_exists_sync(self, _bucket, _object_name):
+            return False
+
+    minio = Minio()
+    monkeypatch.setattr(script_mod, "get_async_db_session", EmptySession)
+    monkeypatch.setattr(script_mod, "get_minio_storage_sync", lambda: minio)
+    monkeypatch.setattr(script_mod, "delete_vector_files", lambda *_args: True)
+    monkeypatch.setattr(
+        script_mod,
+        "_index_snapshot",
+        lambda *_args: script_mod.IndexSnapshot(milvus_count=0, es_count=0),
+    )
+    monkeypatch.setattr(
+        script_mod,
+        "_clear_tag_links",
+        AsyncMock(side_effect=RuntimeError("tag cleanup failed")),
+    )
+    monkeypatch.setattr(
+        script_mod,
+        "_tag_snapshot",
+        AsyncMock(return_value=script_mod.TagSnapshot()),
+    )
+    monkeypatch.setattr(script_mod, "_replace_permission_tuples", AsyncMock())
+    monkeypatch.setattr(script_mod, "_read_permission_tuples", AsyncMock(return_value=()))
+    delete_file = AsyncMock(return_value=True)
+    monkeypatch.setattr(script_mod.KnowledgeFileDao, "adelete_batch", delete_file)
+    monkeypatch.setattr(script_mod.KnowledgeFileDao, "query_by_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        script_mod.KnowledgeDao,
+        "async_update_knowledge_update_time_by_id",
+        AsyncMock(),
+    )
+    existing = _file(700, knowledge_id=20, file_name="old.pdf", file_level_path="/200")
+    overwrite = script_mod.OverwriteTarget(logical_id="file:700", files=(existing,))
+    target = _target_index().resolve("标准规范", "制度文件").target
+    operations = script_mod.BishengMoveOperations(1, {10: _space(10, "source")})
+
+    steps = await operations.delete_overwrite_target(overwrite, target)
+
+    assert [step.component for step in steps] == [
+        "indexes",
+        "objects",
+        "tags",
+        "permissions",
+        "associations",
+        "version_graph",
+        "database_record",
+    ]
+    assert next(step for step in steps if step.component == "tags").status == "failed"
+    assert all(step.status == "success" for step in steps if step.component != "tags")
+    delete_file.assert_awaited_once_with([700])
+    assert minio.removed
+
+
+async def test_revalidate_overwrite_target_rejects_changed_file(monkeypatch):
+    expected = _file(700, knowledge_id=20, file_name="old.pdf", file_level_path="/200", md5="old")
+    changed = expected.model_copy(update={"md5": "changed"})
+
+    class Session:
+        def __init__(self):
+            self.results = iter(
+                [
+                    SimpleNamespace(all=lambda: [changed]),
+                    SimpleNamespace(all=lambda: []),
+                ]
+            )
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def exec(self, _statement):
+            return next(self.results)
+
+    monkeypatch.setattr(script_mod, "get_async_db_session", Session)
+    operations = script_mod.BishengMoveOperations(1, {10: _space(10, "source")})
+    target = _target_index().resolve("标准规范", "制度文件").target
+
+    with pytest.raises(script_mod.OverwritePreconditionError, match="changed after planning"):
+        await operations.revalidate_overwrite_target(
+            script_mod.OverwriteTarget(logical_id="file:700", files=(expected,)),
+            target,
+        )
+
+
 class _FakeMoveOperations:
     def __init__(self, *, fail_at: str | None = None, fail_source_id: int | None = None) -> None:
         self.fail_at = fail_at
@@ -1677,6 +2016,55 @@ async def test_move_one_file_verifies_before_deleting_source():
     assert operations.calls == ["copy:101", "tags:101", "permissions:900", "verify:101", "delete:101"]
 
 
+async def test_move_one_file_runs_overwrite_after_verification_and_continues_on_cleanup_warning():
+    operations = _FakeMoveOperations()
+    source = _file(101)
+    target = _target_index().resolve("标准规范", "制度文件").target
+
+    async def overwrite():
+        operations.calls.append("overwrite")
+        return ["objects: RuntimeError: old object remains"]
+
+    result = await script_mod.move_one_file(
+        source,
+        target,
+        operations,
+        before_source_delete=overwrite,
+    )
+
+    assert result.status == "success"
+    assert result.reason_code == "overwrite_cleanup_failed"
+    assert result.overwrite_cleanup_errors == ["objects: RuntimeError: old object remains"]
+    assert operations.calls == [
+        "copy:101",
+        "tags:101",
+        "permissions:900",
+        "verify:101",
+        "overwrite",
+        "delete:101",
+    ]
+
+
+async def test_move_one_file_keeps_source_when_overwrite_precondition_fails():
+    operations = _FakeMoveOperations()
+    target = _target_index().resolve("标准规范", "制度文件").target
+
+    async def overwrite():
+        raise script_mod.OverwritePreconditionError("old target changed")
+
+    result = await script_mod.move_one_file(
+        _file(101),
+        target,
+        operations,
+        before_source_delete=overwrite,
+    )
+
+    assert result.status == "failed"
+    assert "old target changed" in result.error
+    assert "delete:101" not in operations.calls
+    assert operations.calls[-1] == "cleanup:900"
+
+
 async def test_move_one_file_cleans_target_and_keeps_source_when_verification_fails():
     operations = _FakeMoveOperations(fail_at="verify", fail_source_id=101)
     target = _target_index().resolve("标准规范", "制度文件").target
@@ -1702,6 +2090,28 @@ async def test_version_chain_saga_rebuilds_graph_before_deleting_sources():
     assert [result.target_version_id for result in results] == [801, 802]
     assert graph_store.calls == ["create_target_graph", "verify_target_graph", "delete_source_graph"]
     assert operations.calls.index("verify:102") < operations.calls.index("delete:101")
+
+
+async def test_version_chain_runs_overwrite_once_before_deleting_source_graph():
+    operations = _FakeMoveOperations()
+    graph_store = _FakeVersionGraphStore()
+
+    async def overwrite():
+        operations.calls.append("overwrite")
+        return ["indexes: RuntimeError: old vectors remain"]
+
+    results = await script_mod.move_version_chain(
+        _version_unit(),
+        operations,
+        graph_store,
+        before_source_delete=overwrite,
+    )
+
+    assert [result.status for result in results] == ["success", "success"]
+    assert all(result.reason_code == "overwrite_cleanup_failed" for result in results)
+    assert operations.calls.count("overwrite") == 1
+    assert operations.calls.index("verify:102") < operations.calls.index("overwrite")
+    assert operations.calls.index("overwrite") < operations.calls.index("delete:101")
 
 
 async def test_version_chain_saga_cleans_all_targets_when_copy_phase_fails():
@@ -1811,6 +2221,10 @@ def test_write_json_report_contains_version_traceability(tmp_path):
 
     assert payload["summary"] == {
         "failed": 0,
+        "overwrite_cleanup_failed": 0,
+        "overwrite_documents": 0,
+        "overwrite_files": 0,
+        "overwrite_units": 0,
         "ready_to_move": 2,
         "scanned": 4,
         "skip_reasons": {"target_name_conflict": 1},
@@ -1821,6 +2235,62 @@ def test_write_json_report_contains_version_traceability(tmp_path):
     assert payload["results"][0]["unit_type"] == "version_chain"
     assert payload["results"][0]["source_document_id"] == 500
     assert payload["results"][0]["target_document_id"] == 800
+
+
+def test_planned_overwrite_report_contains_target_details_and_summary(tmp_path):
+    source = _file(101, file_name="incoming.pdf", md5="same-md5")
+    existing = _file(
+        900,
+        knowledge_id=20,
+        file_name="existing.pdf",
+        file_level_path="/200",
+        md5="same-md5",
+    )
+    target = _target_index().resolve("标准规范", "制度文件").target
+    unit = script_mod.MigrationUnit(
+        unit_id="file:101",
+        unit_type="file",
+        source_files=(source,),
+        target=target,
+        category_code="STD",
+        category_label="标准规范",
+        subcategory_code="STD-A",
+        subcategory_label="制度文件",
+        overwrite_target=script_mod.OverwriteTarget(
+            logical_id="file:900",
+            files=(existing,),
+            matched_file_ids=(900,),
+            match_reasons=("md5",),
+        ),
+    )
+    plan = script_mod.MigrationPlan(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        selected_units=[unit],
+        skipped_files=[],
+    )
+    overwrites = script_mod._planned_overwrite_reports(plan)
+    report = script_mod.MoveRunReport(
+        mode="dry-run",
+        run_id="run-overwrite",
+        parameters={"force_overwrite": True},
+        tenant_id=1,
+        ready_to_move_file_count=1,
+        overwrites=overwrites,
+    )
+
+    output = script_mod.write_json_report(report, tmp_path)
+    payload = json.loads(output.read_text(encoding="utf-8"))
+
+    assert payload["summary"]["overwrite_units"] == 1
+    assert payload["summary"]["overwrite_documents"] == 1
+    assert payload["summary"]["overwrite_files"] == 1
+    assert payload["summary"]["overwrite_cleanup_failed"] == 0
+    assert payload["overwrites"][0]["logical_id"] == "file:900"
+    assert payload["overwrites"][0]["match_reasons"] == ["md5"]
+    assert payload["overwrites"][0]["matched_file_ids"] == [900]
+    assert payload["overwrites"][0]["target_files"][0]["record"]["id"] == 900
+    assert payload["overwrites"][0]["status"] == "planned"
 
 
 def test_rollback_journal_exclusively_creates_and_appends_jsonl_events(tmp_path):
@@ -1973,6 +2443,10 @@ async def test_run_defaults_to_dry_run_without_constructing_write_operations(mon
     assert payload["results"][0]["reason_code"] == ""
     assert payload["summary"] == {
         "failed": 0,
+        "overwrite_cleanup_failed": 0,
+        "overwrite_documents": 0,
+        "overwrite_files": 0,
+        "overwrite_units": 0,
         "ready_to_move": 1,
         "scanned": 3,
         "skip_reasons": {"target_name_conflict": 1},
@@ -1984,6 +2458,7 @@ async def test_run_defaults_to_dry_run_without_constructing_write_operations(mon
     assert "[SKIPPED]" not in stdout
     assert (
         "Summary: scanned=3 source_selected=2 ready_to_move=1 skipped=1 success=0 failed=0 "
+        "overwrite_units=0 overwrite_documents=0 overwrite_files=0 overwrite_cleanup_failed=0 "
         'skip_reasons={"target_name_conflict": 1}'
     ) in stdout
 
@@ -2057,6 +2532,10 @@ async def test_apply_returns_nonzero_when_any_migration_unit_fails(monkeypatch, 
     assert [result["source_file_id"] for result in payload["results"]] == [101]
     assert payload["summary"] == {
         "failed": 1,
+        "overwrite_cleanup_failed": 0,
+        "overwrite_documents": 0,
+        "overwrite_files": 0,
+        "overwrite_units": 0,
         "ready_to_move": 1,
         "scanned": 3,
         "skip_reasons": {"target_name_conflict": 1},
@@ -2086,6 +2565,162 @@ def _single_file_plan(*file_ids: int):
         ],
         skipped_files=[],
     )
+
+
+def _single_file_overwrite_plan():
+    plan = _single_file_plan(101)
+    existing = _file(
+        700,
+        knowledge_id=20,
+        file_name="old.pdf",
+        file_level_path="/200",
+        md5="old-md5",
+    )
+    plan.selected_units[0] = script_mod.replace(
+        plan.selected_units[0],
+        overwrite_target=script_mod.OverwriteTarget(
+            logical_id="file:700",
+            files=(existing,),
+            matched_file_ids=(700,),
+            match_reasons=("md5",),
+        ),
+    )
+    return plan
+
+
+class _OverwriteAwareMoveOperations(_FakeMoveOperations):
+    def __init__(self, report_dir: Path, *, fail_cleanup: bool = False):
+        super().__init__()
+        self.report_dir = report_dir
+        self.fail_cleanup = fail_cleanup
+
+    async def revalidate_overwrite_target(self, overwrite, target):
+        self.calls.append(f"overwrite-revalidate:{overwrite.logical_id}")
+
+    async def snapshot_overwrite_target(self, overwrite, target):
+        self.calls.append(f"overwrite-snapshot:{overwrite.logical_id}")
+        return [
+            {
+                "record": overwrite.files[0].model_dump(mode="json"),
+                "storage_object_names": [overwrite.files[0].object_name],
+                "storage_exists": {"original": True},
+                "indexes": {"milvus_count": 1, "es_count": 1},
+                "tags": {"approved_ids": [], "pending_review_ids": []},
+                "permissions": [],
+            }
+        ]
+
+    async def delete_overwrite_target(self, overwrite, target):
+        rows = [
+            json.loads(line)
+            for line in next(self.report_dir.glob("knowledge-file-move-rollback-*.jsonl"))
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        assert rows[-1]["event_type"] == "overwrite_started"
+        self.calls.append(f"overwrite-delete:{overwrite.logical_id}")
+        if self.fail_cleanup:
+            return [
+                script_mod.OverwriteDeletionStep(
+                    component="objects",
+                    status="failed",
+                    target_file_id=700,
+                    error="RuntimeError: object remains",
+                )
+            ]
+        return [
+            script_mod.OverwriteDeletionStep(
+                component="objects",
+                status="success",
+                target_file_id=700,
+            )
+        ]
+
+
+async def test_apply_flushes_overwrite_lifecycle_before_source_delete(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--target-space-id",
+            "20",
+            "--target-folder-id",
+            "200",
+            "--force-overwrite",
+            "--report-dir",
+            str(tmp_path),
+            "--apply",
+        ]
+    )
+    operations = _OverwriteAwareMoveOperations(tmp_path)
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(
+        script_mod,
+        "build_migration_plan",
+        AsyncMock(return_value=_single_file_overwrite_plan()),
+    )
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_OK
+
+    assert operations.calls.index("verify:101") < operations.calls.index("overwrite-delete:file:700")
+    assert operations.calls.index("overwrite-delete:file:700") < operations.calls.index("delete:101")
+    rows = [
+        json.loads(line)
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl")).read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["event_type"] for row in rows] == [
+        "run_started",
+        "unit_started",
+        "overwrite_started",
+        "overwrite_finished",
+        "unit_succeeded",
+        "run_completed",
+    ]
+
+
+async def test_apply_returns_nonzero_when_overwrite_cleanup_is_partial(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--target-space-id",
+            "20",
+            "--target-folder-id",
+            "200",
+            "--force-overwrite",
+            "--report-dir",
+            str(tmp_path),
+            "--apply",
+        ]
+    )
+    operations = _OverwriteAwareMoveOperations(tmp_path, fail_cleanup=True)
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(
+        script_mod,
+        "build_migration_plan",
+        AsyncMock(return_value=_single_file_overwrite_plan()),
+    )
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_APPLY_ERROR
+
+    payload = json.loads(next(tmp_path.glob("knowledge-file-move-*.json")).read_text(encoding="utf-8"))
+    assert payload["run_status"] == "completed_with_warnings"
+    assert payload["summary"]["success"] == 1
+    assert payload["summary"]["failed"] == 0
+    assert payload["summary"]["overwrite_cleanup_failed"] == 1
+    assert payload["results"][0]["reason_code"] == "overwrite_cleanup_failed"
+    assert payload["overwrites"][0]["status"] == "cleanup_failed"
+    rows = [
+        json.loads(line)
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl")).read_text(encoding="utf-8").splitlines()
+    ]
+    assert rows[-1]["event_type"] == "run_completed_with_warnings"
 
 
 class _FolderAwareMoveOperations(_FakeMoveOperations):

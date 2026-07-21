@@ -8,7 +8,7 @@ import styles from "./KnowledgePreviewWatermark.module.css";
 const BEIJING_TIME_ZONE = "Asia/Shanghai";
 const WATERMARK_TILE_COUNT = 24;
 
-type KnowledgePreviewWatermarkUser = Pick<TUser, "name" | "username">;
+type KnowledgePreviewWatermarkUser = Pick<TUser, "name" | "username" | "departmentName">;
 
 const KnowledgePreviewWatermarkContext = createContext<string[] | null>(null);
 
@@ -18,25 +18,20 @@ export function formatKnowledgePreviewWatermarkTime(value: Date): string {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hourCycle: "h23",
     }).formatToParts(value);
     const values = new Map(parts.map((part) => [part.type, part.value]));
-    return `${values.get("year")}-${values.get("month")}-${values.get("day")} ${values.get("hour")}:${values.get("minute")}:${values.get("second")}`;
+    return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
 }
 
 export function buildKnowledgePreviewWatermarkLines(
     user: KnowledgePreviewWatermarkUser,
     viewedAt: Date,
 ): string[] {
-    const account = user.username.trim();
-    const name = user.name.trim() || account || "未知用户";
+    const name = user.name.trim() || user.username.trim() || "未知用户";
+    const departmentName = user.departmentName?.trim() || "";
     return [
-        `姓名：${name}`,
-        `工号/账号：${account || "—"}`,
-        `北京时间：${formatKnowledgePreviewWatermarkTime(viewedAt)}`,
+        departmentName ? `${departmentName}-${name}` : name,
+        formatKnowledgePreviewWatermarkTime(viewedAt),
         "首钢集团内部资料",
     ];
 }

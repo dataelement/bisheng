@@ -66,6 +66,11 @@ class FakeUserRepository:
     async def find_by_id(self, user_id: int):
         return self.user if self.user and self.user.user_id == user_id else None
 
+    async def get_primary_department_name(self, user_id: int) -> str | None:
+        if not self.user or self.user.user_id != user_id:
+            return None
+        return getattr(self.user, "primary_department_name", None)
+
 
 class FakeAuthorizationService:
     def __init__(self, *, deny_normal: bool = False) -> None:
@@ -206,7 +211,13 @@ def _artifact(**overrides) -> PdfArtifactReference:
 
 
 def _user(**overrides):
-    payload = {"user_id": 7, "user_name": "张三", "external_id": "SG001", "external_code": "CODE001"}
+    payload = {
+        "user_id": 7,
+        "user_name": "张三",
+        "external_id": "SG001",
+        "external_code": "CODE001",
+        "primary_department_name": "设备管理部",
+    }
     payload.update(overrides)
     return SimpleNamespace(**payload)
 
@@ -464,18 +475,17 @@ async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, err
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("user", "expected_name", "expected_employee_id"),
+    ("user", "expected_identity"),
     [
-        (_user(), "张三", "SG001"),
-        (_user(external_id=""), "张三", "张三"),
-        (_user(user_name="", external_id=""), "client-name-must-not-be-used", "7"),
+        (_user(), "设备管理部-张三"),
+        (_user(primary_department_name=""), "张三"),
+        (_user(user_name="", primary_department_name=None), "client-name-must-not-be-used"),
     ],
 )
 async def test_watermark_identity_comes_from_server_user_record(
     tmp_path: Path,
     user,
-    expected_name: str,
-    expected_employee_id: str,
+    expected_identity: str,
 ) -> None:
     runner = CapturingRunner()
     service, _ = _build_service(tmp_path, user=user, runner=runner)
@@ -484,12 +494,11 @@ async def test_watermark_identity_comes_from_server_user_record(
 
     lines = runner.calls[0]["spec"].lines
     assert lines == (
-        f"姓名: {expected_name}",
-        f"工号: {expected_employee_id}",
-        "下载时间: 2026-07-21 17:30:00",
+        expected_identity,
+        "2026-07-21",
         "首钢集团内部资料",
     )
-    assert all("client-name-must-not-be-used" not in line for line in lines) if user.user_name else True
+    assert all("SG001" not in line for line in lines)
     await prepared.close()
 
 

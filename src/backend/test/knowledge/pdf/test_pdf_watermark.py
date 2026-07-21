@@ -57,9 +57,8 @@ def _create_zero_page_pdf(path: Path) -> None:
 def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
-            "姓名: 张三",
-            "工号: SG001",
-            "下载时间: 2026-07-21 16:30:00",
+            "设备管理部-张三",
+            "2026-07-21",
             "首钢集团内部资料",
         )
     )
@@ -86,7 +85,7 @@ def test_watermark_preserves_source_and_pages_while_tiling_each_page(tmp_path: P
             assert watermarked_page.rect == original_page.rect
             text = watermarked_page.get_text()
             assert original_page.get_text().strip() in text
-            assert text.count("SG001") >= 4
+            assert text.count("设备管理部-张三") >= 4
             assert text.count("首钢集团内部资料") >= 4
 
 
@@ -100,7 +99,11 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
     with fitz.open(output) as document:
         page = document.load_page(0)
         traces = page.get_texttrace()
-        watermark_traces = [trace for trace in traces if "SG001" in "".join(chr(char[0]) for char in trace["chars"])]
+        watermark_traces = [
+            trace
+            for trace in traces
+            if "设备管理部-张三" in "".join(chr(char[0]) for char in trace["chars"])
+        ]
         assert watermark_traces
         assert any(trace["dir"] != (1.0, 0.0) for trace in watermark_traces)
         assert any(0 < trace["opacity"] < 1 for trace in watermark_traces)

@@ -126,6 +126,18 @@ class UserService:
         return UserRead(**user_data)
 
     @classmethod
+    async def get_primary_department_name(cls, user_id: int) -> str | None:
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+        primary_department = await UserDepartmentDao.aget_user_primary_department(user_id)
+        if primary_department is None:
+            return None
+        department = await DepartmentDao.aget_by_id(primary_department.department_id)
+        if department is None:
+            return None
+        return str(department.name or "").strip() or None
+
+    @classmethod
     def build_user_read_sync(cls, user: User, **kwargs) -> UserRead:
         user_data = user.model_dump()
         user_data.update(kwargs)

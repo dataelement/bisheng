@@ -4,10 +4,12 @@ r"""迁移多个来源知识空间中已分类的文件。
 
 可通过来源文件夹 ID 及门户一、二级分类 code 缩小来源范围。默认根据分类 label
 路由到公共知识空间及其根目录直属文件夹；也可同时传入两个显式目标 ID，将所有
-选中文件迁移至指定的公共或部门文件夹。完整版本链作为一个迁移单元，且必须
-整链命中每个已启用的过滤条件。
+选中文件迁移至指定的公共或部门文件夹。可选保留来源目录层级，仅在文件实际迁移时按需
+复用或创建目标目录。显式目标可用 ``--force-overwrite`` 永久删除唯一冲突的旧目标逻辑文档。
+完整版本链作为一个迁移单元，且必须整链命中每个已启用的过滤条件。
 
-默认为只读 dry-run。apply 模式排他创建 JSONL 回溯记录，按迁移单元数量分批落盘，
+默认为只读 dry-run：范围外文件只计入扫描总数，报告明细只输出最终可迁移的 ``ready`` 文件。
+apply 模式排他创建 JSONL 回溯记录，按迁移单元数量分批落盘，
 并在第一个失败单元后停止。SIGINT 会等待当前单元结束、落盘记录，然后以退出码 130 结束。
 
 在 ``src/backend`` 目录运行::
@@ -17,10 +19,12 @@ r"""迁移多个来源知识空间中已分类的文件。
 
     PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
       --source-space-id 10 --source-folder-id 100 \
-      --source-category-code A --source-subcategory-code A01
+      --source-category-code A --source-subcategory-code A01 \
+      --preserve-folder-structure --folder-root-mode contents
 
     PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
       --source-space-id 10 --target-space-id 20 --target-folder-id 200 \
+      --force-overwrite \
       --rollback-record-file migration_reports/move-10-to-20.jsonl \
       --batch-size 10 --apply
 """
@@ -35,15 +39,15 @@ import os
 import signal
 import sys
 import uuid
-from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from sqlmodel import col, delete, select
+from sqlmodel import col, delete, func, or_, select
 
 _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_ROOT not in sys.path:
@@ -81,13 +85,23 @@ from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (  # noqa: E402
+    KnowledgeFileSimilarityCandidate,
+)
 from bisheng.knowledge.domain.models.knowledge_space_scope import (  # noqa: E402
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScope,
 )
+from bisheng.knowledge.domain.models.portal_recommendation_file_projection import (  # noqa: E402
+    PortalRecommendationFileProjection,
+)
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils  # noqa: E402
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation  # noqa: E402
 from bisheng.permission.domain.services.permission_service import PermissionService  # noqa: E402
+from bisheng.share_link.domain.models.share_link import (  # noqa: E402
+    ResourceTypeEnum as ShareResourceTypeEnum,
+)
+from bisheng.share_link.domain.models.share_link import ShareLink  # noqa: E402
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (  # noqa: E402
     ShougangPortalConfigService,
 )
@@ -118,6 +132,10 @@ class TargetCopyError(RuntimeError):
 
 class RollbackRecordError(RuntimeError):
     """JSONL 回溯记录无法持久化。"""
+
+
+class OverwritePreconditionError(RuntimeError):
+    """覆盖目标在执行前发生变化，禁止继续删除。"""
 
 
 ROLLBACK_RECORD_SCHEMA_VERSION = 1
@@ -231,15 +249,19 @@ class SourceSelection:
     category_codes: frozenset[str] = frozenset()
     subcategory_codes: frozenset[str] = frozenset()
 
-    def matches(self, record: KnowledgeFile, category: CategoryResolution) -> bool:
+    def matches_folder(self, record: KnowledgeFile) -> bool:
         file_level_path = (record.file_level_path or "").rstrip("/")
-        if self.folder_prefixes and not any(
+        return not self.folder_prefixes or any(
             file_level_path == prefix or file_level_path.startswith(f"{prefix}/") for prefix in self.folder_prefixes
-        ):
-            return False
+        )
+
+    def matches_category(self, category: CategoryResolution) -> bool:
         if self.category_codes and category.category_code not in self.category_codes:
             return False
         return not self.subcategory_codes or category.subcategory_code in self.subcategory_codes
+
+    def matches(self, record: KnowledgeFile, category: CategoryResolution) -> bool:
+        return self.matches_folder(record) and self.matches_category(category)
 
 
 @dataclass(frozen=True)
@@ -586,12 +608,29 @@ class SkippedFile:
     target_folder_id: int | None = None
 
 
+@dataclass(frozen=True)
+class OverwriteTarget:
+    logical_id: str
+    files: tuple[KnowledgeFile, ...]
+    document: KnowledgeDocument | None = None
+    versions: tuple[KnowledgeDocumentVersion, ...] = ()
+    matched_file_ids: tuple[int, ...] = ()
+    match_reasons: tuple[Literal["name", "md5"], ...] = ()
+
+
+@dataclass(frozen=True)
+class OverwriteResolution:
+    target: OverwriteTarget | None = None
+    reason_code: str = ""
+    reason: str = ""
+
+
 @dataclass
 class FileMoveResult:
     source_file_id: int
     source_space_id: int
     source_file_name: str
-    status: Literal["success", "skipped", "failed"]
+    status: Literal["ready", "success", "failed"]
     unit_id: str = ""
     unit_type: Literal["file", "version_chain"] = "file"
     source_document_id: int | None = None
@@ -610,7 +649,32 @@ class FileMoveResult:
     reason_code: str = ""
     error: str = ""
     cleanup_errors: list[str] = field(default_factory=list)
+    overwrite_cleanup_errors: list[str] = field(default_factory=list)
     folder_mappings: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class OverwriteDeletionStep:
+    component: str
+    status: Literal["success", "failed"]
+    target_file_id: int | None = None
+    detail: dict[str, Any] = field(default_factory=dict)
+    error: str = ""
+
+
+@dataclass
+class OverwriteReport:
+    unit_id: str
+    logical_id: str
+    target_space_id: int
+    match_reasons: list[str]
+    matched_file_ids: list[int]
+    target_document: dict[str, Any] | None
+    target_versions: list[dict[str, Any]]
+    target_files: list[dict[str, Any]]
+    status: Literal["planned", "deleted", "cleanup_failed"] = "planned"
+    deletion_steps: list[OverwriteDeletionStep] = field(default_factory=list)
+    cleanup_errors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -619,20 +683,46 @@ class MoveRunReport:
     run_id: str
     parameters: dict[str, Any]
     tenant_id: int
+    scanned_file_count: int = 0
+    source_selected_file_count: int = 0
+    ready_to_move_file_count: int = 0
+    preflight_skipped_file_count: int = 0
+    skip_reasons: dict[str, int] = field(default_factory=dict)
     results: list[FileMoveResult] = field(default_factory=list)
+    overwrites: list[OverwriteReport] = field(default_factory=list)
     started_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
     finished_at: str = ""
     report_path: str = ""
-    run_status: Literal["running", "completed", "failed", "interrupted"] = "running"
+    run_status: Literal["running", "completed", "completed_with_warnings", "failed", "interrupted"] = "running"
     termination_reason: str = ""
     rollback_record_path: str = ""
     pending_units: int = 0
 
-    def summary(self) -> dict[str, int]:
-        counts = {"total": len(self.results), "success": 0, "skipped": 0, "failed": 0}
+    def summary(self) -> dict[str, Any]:
+        counts = {"success": 0, "failed": 0}
         for result in self.results:
-            counts[result.status] += 1
-        return counts
+            if result.status in counts:
+                counts[result.status] += 1
+        return {
+            "scanned": self.scanned_file_count,
+            "source_selected": self.source_selected_file_count,
+            "ready_to_move": self.ready_to_move_file_count,
+            "skipped": self.preflight_skipped_file_count,
+            "success": counts["success"],
+            "failed": counts["failed"],
+            "overwrite_units": len(self.overwrites),
+            "overwrite_documents": len({item.logical_id for item in self.overwrites}),
+            "overwrite_files": len(
+                {
+                    int(target_file["record"]["id"])
+                    for item in self.overwrites
+                    for target_file in item.target_files
+                    if target_file.get("record", {}).get("id") is not None
+                }
+            ),
+            "overwrite_cleanup_failed": sum(item.status == "cleanup_failed" for item in self.overwrites),
+            "skip_reasons": dict(sorted(self.skip_reasons.items())),
+        }
 
 
 @dataclass(frozen=True)
@@ -647,6 +737,7 @@ class MigrationUnit:
     subcategory_label: str
     source_folder_chain: tuple[SourceFolderRef, ...] = ()
     target_folder_plan: tuple[TargetFolderPlanStep, ...] = ()
+    overwrite_target: OverwriteTarget | None = None
     source_document: KnowledgeDocument | None = None
     source_versions: tuple[KnowledgeDocumentVersion, ...] = ()
 
@@ -766,6 +857,27 @@ class MigrationPlan:
     source_spaces: dict[int, Knowledge]
     selected_units: list[MigrationUnit]
     skipped_files: list[SkippedFile]
+    scanned_file_count: int = -1
+    source_selected_file_count: int = -1
+
+    def __post_init__(self) -> None:
+        accounted_file_count = self.ready_to_move_file_count + len(self.skipped_files)
+        if self.source_selected_file_count < 0:
+            self.source_selected_file_count = accounted_file_count
+        if self.scanned_file_count < 0:
+            self.scanned_file_count = self.source_selected_file_count
+        if self.source_selected_file_count != accounted_file_count:
+            raise ValueError("source-selected files must equal ready and preflight-skipped files")
+        if self.scanned_file_count < self.source_selected_file_count:
+            raise ValueError("scanned files cannot be fewer than source-selected files")
+
+    @property
+    def ready_to_move_file_count(self) -> int:
+        return sum(len(unit.source_files) for unit in self.selected_units)
+
+    @property
+    def skip_reasons(self) -> dict[str, int]:
+        return dict(sorted(Counter(item.reason_code for item in self.skipped_files).items()))
 
 
 @dataclass(frozen=True)
@@ -898,9 +1010,7 @@ class TargetFolderManager:
             return cached
         folders = list(await self.store.list_folders(space_id))
         self._folders_by_space[space_id] = folders
-        self._folders_by_id.update(
-            {int(folder.id): folder for folder in folders if folder.id is not None}
-        )
+        self._folders_by_id.update({int(folder.id): folder for folder in folders if folder.id is not None})
         return folders
 
     @staticmethod
@@ -928,7 +1038,12 @@ class TargetFolderManager:
 
         space_id = int(unit.target.space.id or 0)
         folders = await self._folders_for_space(space_id)
-        parent_folder = unit.target.folder
+        if mappings:
+            parent_folder = self._folders_by_id.get(mappings[-1].target_folder_id)
+            if parent_folder is None:
+                raise RuntimeError(f"prepared target folder {mappings[-1].target_folder_id} is no longer available")
+        else:
+            parent_folder = unit.target.folder
         for source_folder in unit.source_folder_chain[len(mappings) :]:
             parent_path = _folder_child_path(parent_folder)
             candidates = [
@@ -991,17 +1106,13 @@ class TargetFolderManager:
             if folder is None:
                 continue
             if descendant_preserved:
-                errors.append(
-                    f"target folder {mapping.target_folder_id} was preserved because a descendant remains"
-                )
+                errors.append(f"target folder {mapping.target_folder_id} was preserved because a descendant remains")
                 continue
             try:
                 is_empty = await self.store.is_folder_empty(folder)
             except Exception as exc:
                 descendant_preserved = True
-                errors.append(
-                    f"check target folder {mapping.target_folder_id}: {type(exc).__name__}: {exc}"
-                )
+                errors.append(f"check target folder {mapping.target_folder_id}: {type(exc).__name__}: {exc}")
                 continue
             if not is_empty:
                 descendant_preserved = True
@@ -1011,9 +1122,7 @@ class TargetFolderManager:
                 await self.store.delete_folder(folder)
             except Exception as exc:
                 descendant_preserved = True
-                errors.append(
-                    f"delete target folder {mapping.target_folder_id}: {type(exc).__name__}: {exc}"
-                )
+                errors.append(f"delete target folder {mapping.target_folder_id}: {type(exc).__name__}: {exc}")
                 continue
             self._folders_by_id.pop(mapping.target_folder_id, None)
             space_folders = self._folders_by_space.get(int(folder.knowledge_id), [])
@@ -1098,6 +1207,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="显式指定任意层级的目标文件夹 ID；必须与 --target-space-id 同时传入",
     )
     parser.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        help="覆盖显式目标库中的唯一冲突逻辑文档；会永久删除旧目标数据",
+    )
+    parser.add_argument(
         "--report-dir",
         type=Path,
         default=Path("migration_reports/knowledge_file_move"),
@@ -1126,6 +1240,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args.folder_root_mode = args.folder_root_mode or "include"
     if (args.target_space_id is None) != (args.target_folder_id is None):
         parser.error("--target-space-id and --target-folder-id must be provided together")
+    if args.force_overwrite and (args.target_space_id is None or args.target_folder_id is None):
+        parser.error("--force-overwrite requires --target-space-id and --target-folder-id")
+    if args.force_overwrite and int(args.target_space_id) in args.source_space_ids:
+        parser.error("--force-overwrite requires the target space to differ from every source space")
     return args
 
 
@@ -1277,6 +1395,151 @@ def _skip_unit(unit: MigrationUnit, reason_code: str, reason: str) -> list[Skipp
     ]
 
 
+class TargetConflictIndex:
+    def __init__(
+        self,
+        files: Sequence[KnowledgeFile],
+        documents_by_id: dict[int, KnowledgeDocument],
+        versions: Sequence[KnowledgeDocumentVersion],
+    ) -> None:
+        self.files_by_id = {
+            int(record.id): record
+            for record in files
+            if record.id is not None and int(record.file_type) == FileType.FILE.value
+        }
+        self.documents_by_id = documents_by_id
+        self.versions_by_file: dict[int, list[KnowledgeDocumentVersion]] = defaultdict(list)
+        self.versions_by_document: dict[int, list[KnowledgeDocumentVersion]] = defaultdict(list)
+        for version in versions:
+            self.versions_by_file[int(version.knowledge_file_id)].append(version)
+            self.versions_by_document[int(version.document_id)].append(version)
+
+        self.files_by_name: dict[tuple[int, str, str], list[KnowledgeFile]] = defaultdict(list)
+        self.files_by_md5: dict[tuple[int, str], list[KnowledgeFile]] = defaultdict(list)
+        for record in self.files_by_id.values():
+            self.files_by_name[(int(record.knowledge_id), record.file_level_path or "", record.file_name)].append(
+                record
+            )
+            if record.md5:
+                self.files_by_md5[(int(record.knowledge_id), str(record.md5))].append(record)
+
+    @staticmethod
+    def _valid_version_graph(
+        document: KnowledgeDocument,
+        versions: Sequence[KnowledgeDocumentVersion],
+    ) -> bool:
+        primary_versions = [version for version in versions if version.is_primary]
+        version_ids = [version.id for version in versions]
+        version_numbers = [int(version.version_no) for version in versions]
+        file_ids = [int(version.knowledge_file_id) for version in versions]
+        return bool(
+            len(primary_versions) == 1
+            and all(version_id is not None for version_id in version_ids)
+            and len(set(version_ids)) == len(version_ids)
+            and all(version_no > 0 for version_no in version_numbers)
+            and len(set(version_numbers)) == len(version_numbers)
+            and len(set(file_ids)) == len(file_ids)
+            and document.primary_version_id is not None
+            and int(document.primary_version_id) == int(primary_versions[0].id or 0)
+        )
+
+    def resolve(
+        self,
+        unit: MigrationUnit,
+        *,
+        target_path: str | None,
+    ) -> OverwriteResolution:
+        space_id = int(unit.target.space.id or 0)
+        matched_reasons_by_file: dict[int, set[Literal["name", "md5"]]] = defaultdict(set)
+        for source_file in unit.source_files:
+            if target_path is not None:
+                for target_file in self.files_by_name.get(
+                    (space_id, target_path, source_file.file_name),
+                    (),
+                ):
+                    matched_reasons_by_file[int(target_file.id or 0)].add("name")
+            if source_file.md5:
+                for target_file in self.files_by_md5.get((space_id, str(source_file.md5)), ()):
+                    matched_reasons_by_file[int(target_file.id or 0)].add("md5")
+
+        if not matched_reasons_by_file:
+            return OverwriteResolution()
+
+        logical_keys: set[tuple[str, int]] = set()
+        for file_id in matched_reasons_by_file:
+            file_versions = self.versions_by_file.get(file_id, [])
+            if len(file_versions) > 1:
+                return OverwriteResolution(
+                    reason_code="target_overwrite_invalid_graph",
+                    reason=f"target file {file_id} belongs to multiple version rows",
+                )
+            if file_versions:
+                logical_keys.add(("document", int(file_versions[0].document_id)))
+            else:
+                logical_keys.add(("file", file_id))
+
+        if len(logical_keys) != 1:
+            logical_ids = [f"{kind}:{identifier}" for kind, identifier in sorted(logical_keys)]
+            return OverwriteResolution(
+                reason_code="target_overwrite_ambiguous",
+                reason=f"target conflicts span multiple logical documents: {logical_ids}",
+            )
+
+        logical_kind, logical_identifier = next(iter(logical_keys))
+        matched_file_ids = tuple(sorted(matched_reasons_by_file))
+        match_reasons = tuple(
+            reason
+            for reason in ("name", "md5")
+            if any(reason in reasons for reasons in matched_reasons_by_file.values())
+        )
+        if logical_kind == "file":
+            target_file = self.files_by_id.get(logical_identifier)
+            if target_file is None:
+                return OverwriteResolution(
+                    reason_code="target_overwrite_incomplete",
+                    reason=f"target file {logical_identifier} is missing",
+                )
+            return OverwriteResolution(
+                target=OverwriteTarget(
+                    logical_id=f"file:{logical_identifier}",
+                    files=(target_file,),
+                    matched_file_ids=matched_file_ids,
+                    match_reasons=match_reasons,
+                )
+            )
+
+        document = self.documents_by_id.get(logical_identifier)
+        ordered_versions = tuple(
+            sorted(
+                self.versions_by_document.get(logical_identifier, ()),
+                key=lambda version: (int(version.version_no), int(version.id or 0)),
+            )
+        )
+        chain_files = tuple(self.files_by_id.get(int(version.knowledge_file_id)) for version in ordered_versions)
+        if (
+            document is None
+            or not ordered_versions
+            or any(record is None for record in chain_files)
+            or not self._valid_version_graph(document, ordered_versions)
+            or int(document.knowledge_id) != space_id
+            or any(int(record.knowledge_id) != space_id for record in chain_files if record is not None)
+        ):
+            return OverwriteResolution(
+                reason_code="target_overwrite_invalid_graph",
+                reason=f"target version graph document:{logical_identifier} is incomplete or invalid",
+            )
+        return OverwriteResolution(
+            target=OverwriteTarget(
+                logical_id=f"document:{logical_identifier}",
+                files=tuple(record for record in chain_files if record is not None),
+                document=document,
+                versions=ordered_versions,
+                matched_file_ids=matched_file_ids,
+                match_reasons=match_reasons,
+            )
+        )
+
+
 def _resolve_single_unit(
     record: KnowledgeFile,
     source_spaces: dict[int, Knowledge],
@@ -1364,6 +1627,7 @@ def _resolve_chain_unit(
     source_selection: SourceSelection,
     explicit_target: TargetContext | None,
     folder_structure: FolderStructureOptions,
+    reportable_file_ids: frozenset[int],
 ) -> tuple[MigrationUnit | None, list[SkippedFile]]:
     ordered_versions = tuple(sorted(versions, key=lambda item: (int(item.version_no), int(item.id or 0))))
     document = documents_by_id.get(document_id)
@@ -1392,6 +1656,7 @@ def _resolve_chain_unit(
                 target=target,
             )
             for record in traceable_files
+            if int(record.id or 0) in reportable_file_ids
         ]
 
     if document is None or any(record is None for record in known_files):
@@ -1497,9 +1762,7 @@ def _resolve_chain_unit(
             category=category,
             target=target,
         )
-    if folder_structure.enabled and len(
-        {resolution.source_directory_key for resolution in folder_resolutions}
-    ) != 1:
+    if folder_structure.enabled and len({resolution.source_directory_key for resolution in folder_resolutions}) != 1:
         return None, skip_known(
             "version_chain_folder_mismatch",
             "versions in one document belong to different source directories",
@@ -1543,13 +1806,22 @@ def plan_migration_units(
     category_index: CategoryLabelIndex,
     target_index: TargetRouteIndex,
     target_files: Sequence[KnowledgeFile],
+    target_documents_by_id: dict[int, KnowledgeDocument] | None = None,
+    target_versions: Sequence[KnowledgeDocumentVersion] = (),
     target_folders: Sequence[KnowledgeFile] = (),
     source_selection: SourceSelection | None = None,
     explicit_target: TargetContext | None = None,
     folder_structure: FolderStructureOptions | None = None,
+    scanned_file_count: int | None = None,
+    force_overwrite: bool = False,
 ) -> MigrationPlan:
     source_selection = source_selection or SourceSelection()
     folder_structure = folder_structure or FolderStructureOptions()
+    target_conflicts = TargetConflictIndex(
+        target_files,
+        target_documents_by_id or {},
+        target_versions,
+    )
     eligible = sorted(
         (
             record
@@ -1559,6 +1831,12 @@ def plan_migration_units(
         ),
         key=lambda item: (int(item.knowledge_id), int(item.id or 0)),
     )
+    source_selected_records = [
+        record
+        for record in eligible
+        if source_selection.matches_folder(record) and source_selection.matches_category(category_index.resolve(record))
+    ]
+    source_selected_file_ids = frozenset(int(record.id or 0) for record in source_selected_records)
     versions_by_file = {int(version.knowledge_file_id): version for version in versions}
     versions_by_document: dict[int, list[KnowledgeDocumentVersion]] = defaultdict(list)
     for version in versions:
@@ -1567,7 +1845,7 @@ def plan_migration_units(
     preliminary: list[MigrationUnit] = []
     skipped: list[SkippedFile] = []
     handled_documents: set[int] = set()
-    for record in eligible:
+    for record in source_selected_records:
         version = versions_by_file.get(int(record.id or 0))
         if version is not None:
             document_id = int(version.document_id)
@@ -1585,6 +1863,7 @@ def plan_migration_units(
                 source_selection,
                 explicit_target,
                 folder_structure,
+                source_selected_file_ids,
             )
             if unit is not None:
                 preliminary.append(unit)
@@ -1633,6 +1912,7 @@ def plan_migration_units(
     }
     reserved_names: set[tuple[tuple[int, int, tuple[str, ...]], str]] = set()
     reserved_md5s: set[tuple[int, str]] = set()
+    reserved_overwrite_targets: set[str] = set()
     selected: list[MigrationUnit] = []
     for unit in preliminary:
         space_id = int(unit.target.space.id or 0)
@@ -1646,19 +1926,43 @@ def plan_migration_units(
         else:
             existing_target_path = unit.target_folder_plan[-1].target_full_path
         existing_unit_names = (
-            {
-                (space_id, existing_target_path, record.file_name)
-                for record in unit.source_files
-            }
+            {(space_id, existing_target_path, record.file_name) for record in unit.source_files}
             if existing_target_path is not None
             else set()
         )
-        if existing_unit_names & existing_names:
-            skipped.extend(_skip_unit(unit, "target_name_conflict", "target folder contains the same file name"))
-            continue
-        if unit_md5s & existing_md5s:
-            skipped.extend(_skip_unit(unit, "target_md5_conflict", "target space contains the same MD5"))
-            continue
+        name_conflict = bool(existing_unit_names & existing_names)
+        md5_conflict = bool(unit_md5s & existing_md5s)
+        if not force_overwrite:
+            if name_conflict:
+                skipped.extend(_skip_unit(unit, "target_name_conflict", "target folder contains the same file name"))
+                continue
+            if md5_conflict:
+                skipped.extend(_skip_unit(unit, "target_md5_conflict", "target space contains the same MD5"))
+                continue
+        elif name_conflict or md5_conflict:
+            overwrite_resolution = target_conflicts.resolve(unit, target_path=existing_target_path)
+            if overwrite_resolution.reason_code:
+                skipped.extend(_skip_unit(unit, overwrite_resolution.reason_code, overwrite_resolution.reason))
+                continue
+            if overwrite_resolution.target is None:
+                skipped.extend(
+                    _skip_unit(
+                        unit,
+                        "target_overwrite_incomplete",
+                        "target conflict could not be resolved to a logical document",
+                    )
+                )
+                continue
+            unit = replace(unit, overwrite_target=overwrite_resolution.target)
+            if overwrite_resolution.target.logical_id in reserved_overwrite_targets:
+                skipped.extend(
+                    _skip_unit(
+                        unit,
+                        "batch_overwrite_conflict",
+                        "an earlier source unit reserved the same target logical document",
+                    )
+                )
+                continue
         if unit_names & reserved_names:
             skipped.extend(
                 _skip_unit(unit, "batch_name_conflict", "an earlier source unit reserved the same target name")
@@ -1672,6 +1976,8 @@ def plan_migration_units(
         selected.append(unit)
         reserved_names.update(unit_names)
         reserved_md5s.update(unit_md5s)
+        if unit.overwrite_target is not None:
+            reserved_overwrite_targets.add(unit.overwrite_target.logical_id)
 
     skipped.sort(key=lambda item: (item.source_space_id, item.source_file_id, item.reason_code))
     return MigrationPlan(
@@ -1679,6 +1985,8 @@ def plan_migration_units(
         source_spaces=dict(sorted(source_spaces.items())),
         selected_units=selected,
         skipped_files=skipped,
+        scanned_file_count=len(eligible) if scanned_file_count is None else scanned_file_count,
+        source_selected_file_count=len(source_selected_records),
     )
 
 
@@ -1740,6 +2048,28 @@ async def _load_source_spaces(source_space_ids: Sequence[int]) -> tuple[int, dic
     return next(iter(tenant_ids)), dict(sorted(spaces.items()))
 
 
+def _eligible_source_file_statement(
+    source_space_ids: Sequence[int],
+    folder_prefixes: Sequence[str],
+) -> Any:
+    statement = select(KnowledgeFile).where(
+        col(KnowledgeFile.knowledge_id).in_(source_space_ids),
+        KnowledgeFile.file_type == FileType.FILE.value,
+        KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+    )
+    if folder_prefixes:
+        folder_conditions = []
+        for prefix in folder_prefixes:
+            folder_conditions.extend(
+                (
+                    KnowledgeFile.file_level_path == prefix,
+                    col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                )
+            )
+        statement = statement.where(or_(*folder_conditions))
+    return statement.order_by(col(KnowledgeFile.knowledge_id), col(KnowledgeFile.id))
+
+
 async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
     tenant_id, source_spaces = await _load_source_spaces(args.source_space_ids)
     source_ids = sorted(source_spaces)
@@ -1747,24 +2077,42 @@ async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
         portal_config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
         category_index = CategoryLabelIndex.from_config(portal_config)
         async with get_async_db_session() as session:
-            source_records = list(
+            source_folders = list(
                 (
                     await session.exec(
                         select(KnowledgeFile)
-                        .where(col(KnowledgeFile.knowledge_id).in_(source_ids))
+                        .where(
+                            col(KnowledgeFile.knowledge_id).in_(source_ids),
+                            KnowledgeFile.file_type == FileType.DIR.value,
+                        )
                         .order_by(col(KnowledgeFile.knowledge_id), col(KnowledgeFile.id))
                     )
                 ).all()
             )
-            source_selection = build_source_selection(args, source_records, category_index)
-            folder_structure = build_folder_structure_options(args, source_records)
-            eligible_ids = [
-                int(record.id)
-                for record in source_records
-                if record.id is not None
-                and int(record.file_type) == FileType.FILE.value
-                and int(record.status or 0) == KnowledgeFileStatus.SUCCESS.value
+            source_selection = build_source_selection(args, source_folders, category_index)
+            folder_structure = build_folder_structure_options(args, source_folders)
+            scanned_file_count = int(
+                await session.scalar(
+                    select(func.count(KnowledgeFile.id)).where(
+                        col(KnowledgeFile.knowledge_id).in_(source_ids),
+                        KnowledgeFile.file_type == FileType.FILE.value,
+                        KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                    )
+                )
+                or 0
+            )
+            folder_scoped_files = list(
+                (
+                    await session.exec(_eligible_source_file_statement(source_ids, source_selection.folder_prefixes))
+                ).all()
+            )
+            source_files = [
+                record
+                for record in folder_scoped_files
+                if source_selection.matches_category(category_index.resolve(record))
             ]
+            source_records = [*source_folders, *source_files]
+            eligible_ids = [int(record.id) for record in source_files if record.id is not None]
             initial_versions: list[KnowledgeDocumentVersion] = []
             if eligible_ids:
                 initial_versions = list(
@@ -1813,6 +2161,8 @@ async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
             public_space_ids = sorted({int(scope.space_id) for scope in public_scopes})
             public_spaces: list[Knowledge] = []
             target_records: list[KnowledgeFile] = []
+            target_versions: list[KnowledgeDocumentVersion] = []
+            target_documents: list[KnowledgeDocument] = []
             target_space_ids = set(public_space_ids)
             if args.target_space_id is not None:
                 target_space_ids.add(int(args.target_space_id))
@@ -1834,6 +2184,44 @@ async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
                         )
                     ).all()
                 )
+            if args.force_overwrite:
+                target_file_ids = [
+                    int(record.id)
+                    for record in target_records
+                    if record.id is not None and int(record.file_type) == FileType.FILE.value
+                ]
+                initial_target_versions: list[KnowledgeDocumentVersion] = []
+                if target_file_ids:
+                    initial_target_versions = list(
+                        (
+                            await session.exec(
+                                select(KnowledgeDocumentVersion).where(
+                                    col(KnowledgeDocumentVersion.knowledge_file_id).in_(target_file_ids)
+                                )
+                            )
+                        ).all()
+                    )
+                target_document_ids = sorted({int(version.document_id) for version in initial_target_versions})
+                if target_document_ids:
+                    target_versions = list(
+                        (
+                            await session.exec(
+                                select(KnowledgeDocumentVersion)
+                                .where(col(KnowledgeDocumentVersion.document_id).in_(target_document_ids))
+                                .order_by(
+                                    col(KnowledgeDocumentVersion.document_id),
+                                    col(KnowledgeDocumentVersion.version_no),
+                                )
+                            )
+                        ).all()
+                    )
+                    target_documents = list(
+                        (
+                            await session.exec(
+                                select(KnowledgeDocument).where(col(KnowledgeDocument.id).in_(target_document_ids))
+                            )
+                        ).all()
+                    )
             spaces_by_id = {int(space.id): space for space in public_spaces if space.id is not None}
             explicit_scope: KnowledgeSpaceScope | None = None
             if args.target_space_id is not None:
@@ -1884,10 +2272,16 @@ async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
             category_index=category_index,
             target_index=target_index,
             target_files=[record for record in target_records if int(record.file_type) == FileType.FILE.value],
+            target_documents_by_id={
+                int(document.id): document for document in target_documents if document.id is not None
+            },
+            target_versions=target_versions,
             target_folders=[record for record in target_records if int(record.file_type) == FileType.DIR.value],
             source_selection=source_selection,
             explicit_target=explicit_target,
             folder_structure=folder_structure,
+            scanned_file_count=scanned_file_count,
+            force_overwrite=args.force_overwrite,
         )
 
 
@@ -1909,6 +2303,20 @@ def _storage_exists(file: KnowledgeFile) -> dict[str, bool]:
         key: bool(name) and bool(client.object_exists_sync(client.bucket, name))
         for key, name in _storage_object_names(file).items()
     }
+
+
+def _overwrite_object_names(file: KnowledgeFile) -> tuple[str, ...]:
+    metadata = file.user_metadata or {}
+    names = {
+        name
+        for name in (
+            *_storage_object_names(file).values(),
+            str(file.thumbnails or ""),
+            str(metadata.get("pdf_preview_object_name") or ""),
+        )
+        if name
+    }
+    return tuple(sorted(names))
 
 
 def _copy_object_if_present(source_name: str, target_name: str) -> None:
@@ -2424,6 +2832,266 @@ class BishengMoveOperations:
         )
         return errors
 
+    @staticmethod
+    def _model_fingerprint(model: Any) -> dict[str, Any]:
+        payload = _model_payload(model)
+        if payload is None:
+            raise OverwritePreconditionError("overwrite snapshot model is missing")
+        return payload
+
+    async def revalidate_overwrite_target(
+        self,
+        overwrite: OverwriteTarget,
+        target: TargetContext,
+    ) -> None:
+        expected_file_ids = sorted(int(file.id or 0) for file in overwrite.files)
+        if not expected_file_ids or any(file_id <= 0 for file_id in expected_file_ids):
+            raise OverwritePreconditionError("overwrite target contains an invalid file ID")
+        async with get_async_db_session() as session:
+            current_files = list(
+                (await session.exec(select(KnowledgeFile).where(col(KnowledgeFile.id).in_(expected_file_ids)))).all()
+            )
+            current_versions_by_file = list(
+                (
+                    await session.exec(
+                        select(KnowledgeDocumentVersion).where(
+                            col(KnowledgeDocumentVersion.knowledge_file_id).in_(expected_file_ids)
+                        )
+                    )
+                ).all()
+            )
+            current_document: KnowledgeDocument | None = None
+            current_versions: list[KnowledgeDocumentVersion] = []
+            if overwrite.document is not None:
+                document_id = int(overwrite.document.id or 0)
+                current_document = (
+                    await session.exec(select(KnowledgeDocument).where(KnowledgeDocument.id == document_id))
+                ).first()
+                current_versions = list(
+                    (
+                        await session.exec(
+                            select(KnowledgeDocumentVersion)
+                            .where(KnowledgeDocumentVersion.document_id == document_id)
+                            .order_by(col(KnowledgeDocumentVersion.version_no))
+                        )
+                    ).all()
+                )
+
+        expected_files = {int(file.id or 0): self._model_fingerprint(file) for file in overwrite.files}
+        actual_files = {int(file.id or 0): self._model_fingerprint(file) for file in current_files}
+        if expected_files != actual_files:
+            raise OverwritePreconditionError(
+                f"overwrite target files changed after planning: expected={expected_file_ids} "
+                f"actual={sorted(actual_files)}"
+            )
+        if any(int(file.knowledge_id) != int(target.space.id or 0) for file in current_files):
+            raise OverwritePreconditionError("overwrite target file moved to another knowledge space")
+
+        if overwrite.document is None:
+            if current_versions_by_file:
+                raise OverwritePreconditionError("legacy overwrite target joined a version chain after planning")
+            return
+
+        if current_document is None:
+            raise OverwritePreconditionError("overwrite target document no longer exists")
+        if self._model_fingerprint(overwrite.document) != self._model_fingerprint(current_document):
+            raise OverwritePreconditionError("overwrite target document changed after planning")
+        expected_versions = [self._model_fingerprint(version) for version in overwrite.versions]
+        actual_versions = [self._model_fingerprint(version) for version in current_versions]
+        if expected_versions != actual_versions:
+            raise OverwritePreconditionError("overwrite target version graph changed after planning")
+        if len(current_versions_by_file) != len(expected_file_ids):
+            raise OverwritePreconditionError("overwrite target files have inconsistent version links")
+
+    async def snapshot_overwrite_target(
+        self,
+        overwrite: OverwriteTarget,
+        target: TargetContext,
+    ) -> list[dict[str, Any]]:
+        snapshots: list[dict[str, Any]] = []
+        for file in overwrite.files:
+            file_id = int(file.id or 0)
+            snapshots.append(
+                {
+                    "record": _model_payload(file),
+                    "storage_object_names": list(_overwrite_object_names(file)),
+                    "storage_exists": await asyncio.to_thread(_storage_exists, file),
+                    "indexes": asdict(await asyncio.to_thread(_index_snapshot, target.space, file_id)),
+                    "tags": asdict(await _tag_snapshot(file_id, self.tenant_id)),
+                    "permissions": list(await _read_permission_tuples(file_id)),
+                }
+            )
+        return snapshots
+
+    async def delete_overwrite_target(
+        self,
+        overwrite: OverwriteTarget,
+        target: TargetContext,
+    ) -> list[OverwriteDeletionStep]:
+        steps: list[OverwriteDeletionStep] = []
+        file_ids = [int(file.id or 0) for file in overwrite.files]
+
+        async def attempt(
+            component: str,
+            operation: Callable[[], Any],
+            *,
+            target_file_id: int | None = None,
+            detail: dict[str, Any] | None = None,
+        ) -> None:
+            try:
+                value = operation()
+                if asyncio.iscoroutine(value):
+                    value = await value
+                step_detail = dict(detail or {})
+                if isinstance(value, dict):
+                    step_detail.update(value)
+                steps.append(
+                    OverwriteDeletionStep(
+                        component=component,
+                        status="success",
+                        target_file_id=target_file_id,
+                        detail=step_detail,
+                    )
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Overwrite target cleanup failed: component=%s target_file_id=%s",
+                    component,
+                    target_file_id,
+                )
+                steps.append(
+                    OverwriteDeletionStep(
+                        component=component,
+                        status="failed",
+                        target_file_id=target_file_id,
+                        detail=dict(detail or {}),
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+
+        def delete_indexes(file_id: int) -> dict[str, Any]:
+            delete_vector_files([file_id], target.space)
+            remaining = _index_snapshot(target.space, file_id)
+            if remaining.milvus_count or remaining.es_count:
+                raise RuntimeError(f"index records remain after deletion: {asdict(remaining)}")
+            return {"remaining": asdict(remaining)}
+
+        def delete_objects(file: KnowledgeFile) -> dict[str, Any]:
+            object_names = _overwrite_object_names(file)
+            client = get_minio_storage_sync()
+            for object_name in object_names:
+                client.remove_object_sync(bucket_name=client.bucket, object_name=object_name)
+            remaining = [
+                object_name for object_name in object_names if client.object_exists_sync(client.bucket, object_name)
+            ]
+            if remaining:
+                raise RuntimeError(f"MinIO objects remain after deletion: {remaining}")
+            return {"object_names": list(object_names), "remaining": remaining}
+
+        async def clear_tags(file: KnowledgeFile) -> dict[str, Any]:
+            file_id = int(file.id or 0)
+            await _clear_tag_links(
+                file_id,
+                int(file.user_id or target.owner.user_id),
+                self.tenant_id,
+            )
+            remaining = await _tag_snapshot(file_id, self.tenant_id)
+            if remaining.approved_ids or remaining.pending_review_ids:
+                raise RuntimeError(f"tag links remain after deletion: {asdict(remaining)}")
+            return {"remaining": asdict(remaining)}
+
+        async def clear_permissions(file_id: int) -> dict[str, Any]:
+            await _replace_permission_tuples(file_id, ())
+            remaining = await _read_permission_tuples(file_id)
+            if remaining:
+                raise RuntimeError(f"permission tuples remain after deletion: {remaining}")
+            return {"remaining": list(remaining)}
+
+        async def delete_associations() -> dict[str, Any]:
+            resource_ids = [str(file_id) for file_id in file_ids]
+            conditions = [
+                col(KnowledgeFileSimilarityCandidate.source_file_id).in_(file_ids),
+                col(KnowledgeFileSimilarityCandidate.candidate_file_id).in_(file_ids),
+            ]
+            if overwrite.document is not None:
+                conditions.append(
+                    KnowledgeFileSimilarityCandidate.candidate_document_id == int(overwrite.document.id or 0)
+                )
+            async with get_async_db_session() as session:
+                try:
+                    await session.exec(delete(KnowledgeFileSimilarityCandidate).where(or_(*conditions)))
+                    await session.exec(
+                        delete(PortalRecommendationFileProjection).where(
+                            col(PortalRecommendationFileProjection.file_id).in_(file_ids)
+                        )
+                    )
+                    await session.exec(
+                        delete(ShareLink).where(
+                            ShareLink.resource_type == ShareResourceTypeEnum.KNOWLEDGE_SPACE_FILE,
+                            col(ShareLink.resource_id).in_(resource_ids),
+                        )
+                    )
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+            return {"file_ids": file_ids}
+
+        async def delete_version_graph() -> dict[str, Any]:
+            if overwrite.document is None:
+                return {"document_id": None, "version_ids": []}
+            document_id = int(overwrite.document.id or 0)
+            version_ids = [int(version.id or 0) for version in overwrite.versions]
+            async with get_async_db_session() as session:
+                try:
+                    await session.exec(
+                        delete(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.document_id == document_id)
+                    )
+                    await session.exec(delete(KnowledgeDocument).where(KnowledgeDocument.id == document_id))
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+            return {"document_id": document_id, "version_ids": version_ids}
+
+        async def delete_file_record(file_id: int) -> dict[str, Any]:
+            await KnowledgeFileDao.adelete_batch([file_id])
+            if await KnowledgeFileDao.query_by_id(file_id) is not None:
+                raise RuntimeError(f"target file record {file_id} remains after deletion")
+            return {"file_id": file_id}
+
+        for file in overwrite.files:
+            file_id = int(file.id or 0)
+            await attempt(
+                "indexes",
+                lambda file_id=file_id: asyncio.to_thread(delete_indexes, file_id),
+                target_file_id=file_id,
+            )
+            await attempt(
+                "objects",
+                lambda file=file: asyncio.to_thread(delete_objects, file),
+                target_file_id=file_id,
+            )
+            await attempt("tags", lambda file=file: clear_tags(file), target_file_id=file_id)
+            await attempt(
+                "permissions",
+                lambda file_id=file_id: clear_permissions(file_id),
+                target_file_id=file_id,
+            )
+        await attempt("associations", delete_associations, detail={"file_ids": file_ids})
+        await attempt("version_graph", delete_version_graph)
+        for file_id in file_ids:
+            await attempt(
+                "database_record",
+                lambda file_id=file_id: delete_file_record(file_id),
+                target_file_id=file_id,
+            )
+        try:
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(int(target.space.id or 0))
+        except Exception:
+            logger.exception("Failed to refresh overwritten target knowledge-space update time")
+        return steps
+
 
 def _model_payload(model: Any | None) -> dict[str, Any] | None:
     if model is None:
@@ -2452,6 +3120,32 @@ def _target_context_payload(target: TargetContext) -> dict[str, Any]:
         "file_level_path": target.file_level_path,
         "level": target.level,
     }
+
+
+def _overwrite_report_for_unit(unit: MigrationUnit) -> OverwriteReport | None:
+    overwrite = unit.overwrite_target
+    if overwrite is None:
+        return None
+    return OverwriteReport(
+        unit_id=unit.unit_id,
+        logical_id=overwrite.logical_id,
+        target_space_id=int(unit.target.space.id or 0),
+        match_reasons=list(overwrite.match_reasons),
+        matched_file_ids=list(overwrite.matched_file_ids),
+        target_document=_model_payload(overwrite.document),
+        target_versions=[payload for version in overwrite.versions if (payload := _model_payload(version)) is not None],
+        target_files=[
+            {
+                "record": _model_payload(target_file),
+                "storage_object_names": _storage_object_names(target_file),
+            }
+            for target_file in overwrite.files
+        ],
+    )
+
+
+def _planned_overwrite_reports(plan: MigrationPlan) -> list[OverwriteReport]:
+    return [report for unit in plan.selected_units if (report := _overwrite_report_for_unit(unit)) is not None]
 
 
 def _unit_folder_mappings_payload(operations: Any, unit_id: str) -> list[dict[str, Any]]:
@@ -2682,7 +3376,7 @@ def _result_for_source(
     source_file: KnowledgeFile,
     target: TargetContext,
     *,
-    status: Literal["success", "skipped", "failed"],
+    status: Literal["ready", "success", "failed"],
     unit: MigrationUnit | None = None,
 ) -> FileMoveResult:
     version_number = None
@@ -2714,6 +3408,8 @@ async def move_one_file(
     source_file: KnowledgeFile,
     target: TargetContext,
     operations: MoveOperations,
+    *,
+    before_source_delete: Callable[[], Awaitable[list[str]]] | None = None,
 ) -> FileMoveResult:
     result = _result_for_source(source_file, target, status="failed")
     target_file: KnowledgeFile | None = None
@@ -2723,9 +3419,13 @@ async def move_one_file(
         await operations.copy_tags(source_file, target_file, target)
         await operations.write_permissions(target_file, target)
         await operations.verify_target(source_file, target_file, target)
+        overwrite_cleanup_errors = await before_source_delete() if before_source_delete is not None else []
         await operations.delete_source(source_file, target_file, target)
         result.status = "success"
         result.source_deleted = True
+        if overwrite_cleanup_errors:
+            result.reason_code = "overwrite_cleanup_failed"
+            result.overwrite_cleanup_errors = list(overwrite_cleanup_errors)
         return result
     except TargetCopyError as exc:
         target_file = exc.target_file
@@ -2744,6 +3444,8 @@ async def move_version_chain(
     unit: MigrationUnit,
     operations: MoveOperations,
     graph_store: VersionGraphStore,
+    *,
+    before_source_delete: Callable[[], Awaitable[list[str]]] | None = None,
 ) -> list[FileMoveResult]:
     if unit.unit_type != "version_chain" or unit.source_document is None:
         raise ValueError("move_version_chain requires a version_chain unit")
@@ -2769,6 +3471,7 @@ async def move_version_chain(
         get_target_graph_payload = getattr(graph_store, "get_target_graph_payload", None)
         if callable(get_target_graph_payload):
             target_graph_payload = get_target_graph_payload(target_document_id)
+        overwrite_cleanup_errors = await before_source_delete() if before_source_delete is not None else []
         await graph_store.delete_source_graph(unit)
         source_graph_deleted = True
         for source_file, target_file in zip(unit.source_files, target_files, strict=True):
@@ -2816,38 +3519,18 @@ async def move_version_chain(
         result.target_document_id = target_document_id
         result.target_version_id = target_version_ids.get(int(target_file.id))
         result.source_deleted = True
+        if overwrite_cleanup_errors:
+            result.reason_code = "overwrite_cleanup_failed"
+            result.overwrite_cleanup_errors = list(overwrite_cleanup_errors)
         results.append(result)
     return results
-
-
-def _skipped_to_result(item: SkippedFile) -> FileMoveResult:
-    return FileMoveResult(
-        source_file_id=item.source_file_id,
-        source_space_id=item.source_space_id,
-        source_file_name=item.source_file_name,
-        status="skipped",
-        unit_id=item.unit_id,
-        unit_type=item.unit_type,
-        source_document_id=item.source_document_id,
-        version_no=item.version_no,
-        target_space_id=item.target_space_id,
-        target_folder_id=item.target_folder_id,
-        category_code=item.category_code,
-        category_label=item.category_label,
-        subcategory_code=item.subcategory_code,
-        subcategory_label=item.subcategory_label,
-        reason_code=item.reason_code,
-        error=item.reason,
-    )
 
 
 def _dry_run_results(plan: MigrationPlan) -> list[FileMoveResult]:
     results: list[FileMoveResult] = []
     for unit in plan.selected_units:
         for source_file in unit.source_files:
-            result = _result_for_source(source_file, unit.target, status="skipped", unit=unit)
-            result.reason_code = "dry_run_selected"
-            result.error = "selected by dry-run; no writes performed"
+            result = _result_for_source(source_file, unit.target, status="ready", unit=unit)
             result.folder_mappings = [asdict(step) for step in unit.target_folder_plan]
             results.append(result)
     return results
@@ -2871,6 +3554,7 @@ def write_json_report(report: MoveRunReport, report_dir: Path) -> Path:
         "pending_units": report.pending_units,
         "summary": report.summary(),
         "results": [asdict(result) for result in report.results],
+        "overwrites": [asdict(overwrite) for overwrite in report.overwrites],
     }
     output_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
@@ -2889,6 +3573,7 @@ def _parameters_for_report(args: argparse.Namespace) -> dict[str, Any]:
         "folder_root_mode": args.folder_root_mode,
         "target_space_id": args.target_space_id,
         "target_folder_id": args.target_folder_id,
+        "force_overwrite": args.force_overwrite,
         "rollback_record_file": str(args.rollback_record_file) if args.rollback_record_file else None,
         "batch_size": args.batch_size,
     }
@@ -2898,15 +3583,40 @@ def _print_preflight(plan: MigrationPlan, apply: bool) -> None:
     print(f"Mode: {'APPLY' if apply else 'DRY-RUN'}")
     print(f"Tenant: {plan.tenant_id}")
     print(f"Source spaces: {sorted(plan.source_spaces)}")
-    print(f"Selected units: {len(plan.selected_units)}; skipped files: {len(plan.skipped_files)}")
+    print(f"Scanned files: {plan.scanned_file_count}; source-selected files: {plan.source_selected_file_count}")
+    print(
+        f"Ready units: {len(plan.selected_units)}; ready files: {plan.ready_to_move_file_count}; "
+        f"preflight-skipped files: {len(plan.skipped_files)}"
+    )
     for unit in plan.selected_units:
         print(
             f"[SELECTED] unit={unit.unit_id} type={unit.unit_type} "
             f"files={[int(file.id) for file in unit.source_files]} "
             f"target={unit.target.space.id}/{unit.target.folder.id}"
         )
-    for item in plan.skipped_files:
-        print(f"[SKIPPED] file_id={item.source_file_id} code={item.reason_code} reason={item.reason}")
+        if unit.overwrite_target is not None:
+            print(
+                f"[OVERWRITE] unit={unit.unit_id} logical_id={unit.overwrite_target.logical_id} "
+                f"reasons={list(unit.overwrite_target.match_reasons)} "
+                f"files={[int(file.id or 0) for file in unit.overwrite_target.files]}"
+            )
+    if plan.skip_reasons:
+        print(f"Skip reasons: {json.dumps(plan.skip_reasons, ensure_ascii=False, sort_keys=True)}")
+
+
+def _print_summary(report: MoveRunReport) -> None:
+    summary = report.summary()
+    print(
+        "Summary: "
+        f"scanned={summary['scanned']} source_selected={summary['source_selected']} "
+        f"ready_to_move={summary['ready_to_move']} skipped={summary['skipped']} "
+        f"success={summary['success']} failed={summary['failed']} "
+        f"overwrite_units={summary['overwrite_units']} "
+        f"overwrite_documents={summary['overwrite_documents']} "
+        f"overwrite_files={summary['overwrite_files']} "
+        f"overwrite_cleanup_failed={summary['overwrite_cleanup_failed']} "
+        f"skip_reasons={json.dumps(summary['skip_reasons'], ensure_ascii=False, sort_keys=True)}"
+    )
 
 
 def _failed_results_for_unit(unit: MigrationUnit, exc: Exception) -> list[FileMoveResult]:
@@ -2928,6 +3638,40 @@ def _target_graph_payload(
     if target_document_id is None or not callable(get_target_graph_payload):
         return None
     return get_target_graph_payload(int(target_document_id))
+
+
+async def _execute_unit_overwrite(
+    unit: MigrationUnit,
+    operations: BishengMoveOperations,
+    journal: RollbackJournal,
+    overwrite_report: OverwriteReport,
+) -> list[str]:
+    overwrite = unit.overwrite_target
+    if overwrite is None:
+        return []
+    await operations.revalidate_overwrite_target(overwrite, unit.target)
+    overwrite_report.target_files = await operations.snapshot_overwrite_target(
+        overwrite,
+        unit.target,
+    )
+    journal.append_event("overwrite_started", {"overwrite": asdict(overwrite_report)})
+    journal.flush()
+
+    deletion_steps = await operations.delete_overwrite_target(overwrite, unit.target)
+    overwrite_report.deletion_steps = list(deletion_steps)
+    overwrite_report.cleanup_errors = [
+        (
+            f"{step.component}"
+            f"{f' target_file_id={step.target_file_id}' if step.target_file_id is not None else ''}: "
+            f"{step.error}"
+        )
+        for step in deletion_steps
+        if step.status == "failed"
+    ]
+    overwrite_report.status = "cleanup_failed" if overwrite_report.cleanup_errors else "deleted"
+    journal.append_event("overwrite_finished", {"overwrite": asdict(overwrite_report)})
+    journal.flush()
+    return list(overwrite_report.cleanup_errors)
 
 
 async def compensate_completed_migration(
@@ -3081,15 +3825,21 @@ async def run(
             run_id=run_id,
             parameters=_parameters_for_report(args),
             tenant_id=plan.tenant_id,
-            results=[_skipped_to_result(item) for item in plan.skipped_files],
+            scanned_file_count=plan.scanned_file_count,
+            source_selected_file_count=plan.source_selected_file_count,
+            ready_to_move_file_count=plan.ready_to_move_file_count,
+            preflight_skipped_file_count=len(plan.skipped_files),
+            skip_reasons=plan.skip_reasons,
+            overwrites=_planned_overwrite_reports(plan),
             pending_units=len(plan.selected_units),
         )
         if not args.apply:
-            report.results.extend(_dry_run_results(plan))
+            report.results = _dry_run_results(plan)
             report.run_status = "completed"
             report.pending_units = 0
             output = write_json_report(report, args.report_dir)
             print(f"Dry-run only. Re-run with --apply after reviewing: {output.resolve()}")
+            _print_summary(report)
             return EXIT_OK
 
         rollback_record_path = resolve_rollback_record_path(args, run_id)
@@ -3112,6 +3862,7 @@ async def run(
 
         operations = BishengMoveOperations(plan.tenant_id, plan.source_spaces)
         graph_store = DatabaseVersionGraphStore()
+        overwrite_reports_by_unit = {item.unit_id: item for item in report.overwrites}
         with _tenant_scope(plan.tenant_id), _sigint_stop_scope(controller, enabled=install_signal_handlers):
             for unit_index, unit in enumerate(plan.selected_units):
                 if controller.requested:
@@ -3121,14 +3872,36 @@ async def run(
                     await operations.snapshot_unit(unit)
                     journal.append_event("unit_started", build_unit_started_payload(unit, operations))
                     prepared_unit = await _prepare_unit_target(unit, operations)
+                    before_source_delete: Callable[[], Awaitable[list[str]]] | None = None
+                    if prepared_unit.overwrite_target is not None:
+                        overwrite_report = overwrite_reports_by_unit[prepared_unit.unit_id]
+
+                        async def execute_overwrite(
+                            prepared_unit: MigrationUnit = prepared_unit,
+                            overwrite_report: OverwriteReport = overwrite_report,
+                        ) -> list[str]:
+                            return await _execute_unit_overwrite(
+                                prepared_unit,
+                                operations,
+                                journal,
+                                overwrite_report,
+                            )
+
+                        before_source_delete = execute_overwrite
                     if prepared_unit.unit_type == "version_chain":
-                        unit_results = await move_version_chain(prepared_unit, operations, graph_store)
+                        unit_results = await move_version_chain(
+                            prepared_unit,
+                            operations,
+                            graph_store,
+                            before_source_delete=before_source_delete,
+                        )
                     else:
                         unit_results = [
                             await move_one_file(
                                 prepared_unit.source_files[0],
                                 prepared_unit.target,
                                 operations,
+                                before_source_delete=before_source_delete,
                             )
                         ]
                         result = unit_results[0]
@@ -3185,6 +3958,7 @@ async def run(
                     journal.flush()
                     release_completed_migrations(unpersisted, operations)
                     unpersisted.clear()
+                    _print_summary(report)
                     return EXIT_APPLY_ERROR
 
                 completed = CompletedMigration(unit=prepared_unit, results=list(unit_results))
@@ -3223,22 +3997,25 @@ async def run(
                 journal.flush()
                 release_completed_migrations(unpersisted, operations)
                 unpersisted.clear()
+                _print_summary(report)
                 return EXIT_INTERRUPTED
 
-        report.run_status = "completed"
+        summary = report.summary()
+        has_overwrite_cleanup_failures = summary["overwrite_cleanup_failed"] > 0
+        report.run_status = "completed_with_warnings" if has_overwrite_cleanup_failures else "completed"
         report.pending_units = 0
-        journal.append_event("run_completed", {"summary": report.summary(), "pending_units": 0})
+        journal.append_event(
+            "run_completed_with_warnings" if has_overwrite_cleanup_failures else "run_completed",
+            {"summary": report.summary(), "pending_units": 0},
+        )
         journal.flush()
         release_completed_migrations(unpersisted, operations)
         unpersisted.clear()
         output = write_json_report(report, args.report_dir)
         print(f"Report: {output.resolve()}")
         summary = report.summary()
-        print(
-            f"Summary: total={summary['total']} success={summary['success']} "
-            f"skipped={summary['skipped']} failed={summary['failed']}"
-        )
-        return EXIT_APPLY_ERROR if summary["failed"] else EXIT_OK
+        _print_summary(report)
+        return EXIT_APPLY_ERROR if summary["failed"] or summary["overwrite_cleanup_failed"] else EXIT_OK
     except PreflightError as exc:
         logger.error("Preflight failed: %s", exc)
         print(f"Preflight failed: {exc}", file=sys.stderr)

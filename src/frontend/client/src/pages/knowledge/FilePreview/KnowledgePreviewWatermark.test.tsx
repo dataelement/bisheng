@@ -17,6 +17,7 @@ const currentUser = {
     name: "张三",
     avatar: "",
     role: "member",
+    departmentName: "设备管理部",
     provider: "local",
     createdAt: "",
     updatedAt: "",
@@ -45,17 +46,18 @@ describe("KnowledgePreviewWatermark", () => {
     });
 
     test("uses the current Bisheng user and keeps the mount-time Beijing clock", () => {
-        expect(formatKnowledgePreviewWatermarkTime(new Date())).toBe("2026-07-21 12:05:06");
+        expect(formatKnowledgePreviewWatermarkTime(new Date())).toBe("2026-07-21");
         expect(buildKnowledgePreviewWatermarkLines(currentUser, new Date())).toEqual([
-            "姓名：张三",
-            "工号/账号：zhangsan",
-            "北京时间：2026-07-21 12:05:06",
+            "设备管理部-张三",
+            "2026-07-21",
             "首钢集团内部资料",
         ]);
 
         const { container, rerender } = renderWatermark();
         expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
-        expect(container.textContent).toContain("北京时间：2026-07-21 12:05:06");
+        expect(container.textContent).toContain("设备管理部-张三");
+        expect(container.textContent).toContain("2026-07-21");
+        expect(container.textContent).not.toContain("工号/账号");
 
         jest.setSystemTime(new Date("2026-07-21T04:10:06.000Z"));
         rerender(
@@ -67,15 +69,15 @@ describe("KnowledgePreviewWatermark", () => {
                 </KnowledgePreviewWatermarkProvider>
             </RecoilRoot>,
         );
-        expect(container.textContent).toContain("北京时间：2026-07-21 12:05:06");
-        expect(container.textContent).not.toContain("北京时间：2026-07-21 12:10:06");
+        expect(container.textContent).toContain("2026-07-21");
+        expect(container.textContent).not.toContain("12:10:06");
     });
 
     test("falls back to username and clips overlays to document surfaces", () => {
         expect(buildKnowledgePreviewWatermarkLines(
-            { ...currentUser, name: "", username: "lisi" },
+            { ...currentUser, name: "", username: "lisi", departmentName: "" },
             new Date(),
-        )[0]).toBe("姓名：lisi");
+        )[0]).toBe("lisi");
 
         const styleSource = readFileSync(
             path.resolve(process.cwd(), "src/pages/knowledge/FilePreview/KnowledgePreviewWatermark.module.css"),
@@ -87,6 +89,10 @@ describe("KnowledgePreviewWatermark", () => {
         );
         const richPreviewSource = readFileSync(
             path.resolve(process.cwd(), "src/pages/knowledge/FilePreview/RichKnowledgePreview.tsx"),
+            "utf8",
+        );
+        const userDataSource = readFileSync(
+            path.resolve(process.cwd(), "src/api/chat/data-service.ts"),
             "utf8",
         );
         const viewerSources = [
@@ -108,6 +114,8 @@ describe("KnowledgePreviewWatermark", () => {
         expect(filePreviewSource).toContain("<KnowledgePreviewWatermarkProvider>");
         expect(filePreviewSource).not.toContain("<KnowledgePreviewWatermark />");
         expect(richPreviewSource).toContain("<KnowledgePreviewWatermarkProvider>");
+        expect(userDataSource).toContain("department_name");
+        expect(userDataSource).toContain('"departmentName"');
         expect(viewerSources).toContain("data-preview-watermark-surface");
         expect(viewerSources).toContain("<KnowledgePreviewWatermark />");
         expect(viewerSources).toMatch(/relative[^"\n]*overflow-hidden|overflow-hidden[^"\n]*relative/);
