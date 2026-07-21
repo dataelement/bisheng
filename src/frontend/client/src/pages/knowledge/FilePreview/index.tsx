@@ -38,6 +38,8 @@ export interface FilePreviewProps {
     compactMode?: boolean;
     /** Whether to expose download actions. */
     allowDownload?: boolean;
+    /** True while a business-level download is being prepared. */
+    downloadPending?: boolean;
     /** Optional business-level download handler. Defaults to downloading fileUrl. */
     onDownloadFile?: () => void;
 }
@@ -52,6 +54,7 @@ export default function FilePreview({
     targetBBox = null,
     compactMode = false,
     allowDownload = true,
+    downloadPending = false,
     onDownloadFile,
 }: FilePreviewProps) {
     const localize = useLocalize();
@@ -156,7 +159,7 @@ export default function FilePreview({
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} downloadPending={downloadPending} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
@@ -164,9 +167,13 @@ export default function FilePreview({
                         {allowDownload && (
                             <button
                                 onClick={handleDownload}
-                                className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
+                                disabled={downloadPending}
+                                aria-busy={downloadPending}
+                                className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                {localize("com_knowledge.download_file")}</button>
+                                {downloadPending
+                                    ? localize("com_knowledge_processing")
+                                    : localize("com_knowledge.download_file")}</button>
                         )}
                     </div>
                 </div>
@@ -186,6 +193,7 @@ export default function FilePreview({
                         onZoomIn={handleZoomIn}
                         onZoomOut={handleZoomOut}
                         onDownload={fileUrl ? topBarDownload : undefined}
+                        downloadPending={downloadPending}
                         actions={actions}
                     />
                 )}
@@ -203,7 +211,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} downloadPending={downloadPending} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-4xl">📄</div>
@@ -263,6 +271,7 @@ export default function FilePreview({
                     totalPages={totalPages}
                     onPageChange={handlePageChange}
                     onDownload={topBarDownload}
+                    downloadPending={downloadPending}
                     actions={actions}
                 />
             )}

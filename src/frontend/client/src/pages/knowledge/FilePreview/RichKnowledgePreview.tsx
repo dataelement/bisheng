@@ -15,6 +15,7 @@ interface RichKnowledgePreviewProps {
     preview: KnowledgeFilePreview;
     actions?: ReactNode;
     allowDownload?: boolean;
+    downloadPending?: boolean;
     onDownloadFile?: () => void;
     compactMode?: boolean;
 }
@@ -156,6 +157,7 @@ export function RichKnowledgePreview({
     preview,
     actions,
     allowDownload = true,
+    downloadPending = false,
     onDownloadFile,
     compactMode = false,
 }: RichKnowledgePreviewProps) {
@@ -182,6 +184,7 @@ export function RichKnowledgePreview({
                         fileName={fileName}
                         showZoom={false}
                         onDownload={allowDownload ? onDownloadFile : undefined}
+                        downloadPending={downloadPending}
                         actions={actions}
                     />
                 )}
@@ -213,6 +216,7 @@ export function RichKnowledgePreview({
                     fileName={fileName}
                     showZoom={false}
                     onDownload={allowDownload ? onDownloadFile : undefined}
+                    downloadPending={downloadPending}
                     actions={actions}
                 />
             )}

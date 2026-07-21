@@ -17,6 +17,10 @@ class PortalPdfDownloadEntryPoint(str, Enum):
     SHARE = "share"
     EXPERT_QA = "expert_qa"
     QA_CITATION = "qa_citation"
+    BISHENG_KNOWLEDGE_LIST = "bisheng_knowledge_list"
+    BISHENG_PREVIEW = "bisheng_preview"
+    BISHENG_FAVORITE = "bisheng_favorite"
+    BISHENG_VERSION_HISTORY = "bisheng_version_history"
     OTHER = "other"
 
     @classmethod

@@ -6,12 +6,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Shield } from "lucide-react";
-import { getFileDownloadApi, getFilePreviewApi, getSpaceInfoApi } from "~/api/knowledge";
+import { downloadWatermarkedKnowledgeFileApi, getFilePreviewApi, getSpaceInfoApi } from "~/api/knowledge";
 import type { KnowledgeFilePreview, SpaceLevel } from "~/api/knowledge";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
+import { NotificationSeverity } from "~/common";
 import { Button } from "~/components";
 import { AiChatIcon } from "~/components/icons";
 import { PermissionDialog } from "~/components/permission";
+import { useToastContext } from "~/Providers";
 import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
 import { useResizablePanel } from "~/pages/Subscription/hooks/useResizablePanel";
 import FilePreview from "./index";
@@ -67,6 +69,7 @@ function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
 
 export default function FilePreviewPage() {
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     const { fileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
     const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
@@ -79,6 +82,8 @@ export default function FilePreviewPage() {
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
     const [canDownload, setCanDownload] = useState(false);
+    const [downloadPending, setDownloadPending] = useState(false);
+    const downloadPendingRef = useRef(false);
     const [canManagePermission, setCanManagePermission] = useState(false);
     const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel | undefined>();
@@ -213,23 +218,28 @@ export default function FilePreviewPage() {
     }, [fileId]);
 
     const handleDownloadFile = useCallback(async () => {
-        if (!fileId || !spaceId || !canDownload) return;
+        if (!fileId || !spaceId || !canDownload || downloadPendingRef.current) return;
+        downloadPendingRef.current = true;
+        setDownloadPending(true);
         try {
-            const downloadData = await getFileDownloadApi(spaceId, fileId);
-            const downloadUrl = downloadData.original_url || downloadData.preview_url;
-            if (!downloadUrl) return;
-
-            const link = document.createElement("a");
-            link.href = downloadUrl;
-            link.download = fileName;
-            link.target = "_blank";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            await downloadWatermarkedKnowledgeFileApi({
+                spaceId,
+                fileId,
+                entryPoint: "bisheng_preview",
+                fallbackFileName: fileName,
+            });
         } catch (err) {
-            console.error("Failed to download file:", err);
+            showToast({
+                message: err instanceof Error && err.message
+                    ? err.message
+                    : localize("com_knowledge.download_failed"),
+                severity: NotificationSeverity.ERROR,
+            });
+        } finally {
+            downloadPendingRef.current = false;
+            setDownloadPending(false);
         }
-    }, [canDownload, fileId, fileName, spaceId]);
+    }, [canDownload, fileId, fileName, localize, showToast, spaceId]);
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -346,6 +356,7 @@ export default function FilePreviewPage() {
                         preview={previewData}
                         actions={topBarActions}
                         allowDownload={canDownload}
+                        downloadPending={downloadPending}
                         onDownloadFile={handleDownloadFile}
                     />
                 ) : (
@@ -356,6 +367,7 @@ export default function FilePreviewPage() {
                         actions={topBarActions}
                         conversionFailed={conversionFailed}
                         allowDownload={canDownload}
+                        downloadPending={downloadPending}
                         onDownloadFile={handleDownloadFile}
                     />
                 )}

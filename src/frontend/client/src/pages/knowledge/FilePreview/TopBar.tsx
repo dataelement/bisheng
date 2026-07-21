@@ -1,4 +1,4 @@
-import { DownloadIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
+import { DownloadIcon, Loader2, ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components";
 import { cn } from "~/utils";
@@ -44,6 +44,7 @@ interface TopBarProps {
     onPageChange?: (page: number) => void;
     /** Download */
     onDownload?: () => void;
+    downloadPending?: boolean;
     /** Slot: extra actions rendered at the right side (before download button) */
     actions?: React.ReactNode;
 }
@@ -62,6 +63,7 @@ export function TopBar({
     totalPages = 0,
     onPageChange,
     onDownload,
+    downloadPending = false,
     actions,
 }: TopBarProps) {
     const [pageInput, setPageInput] = useState(String(currentPage));
@@ -199,9 +201,12 @@ export function TopBar({
                 <div className="content-stretch flex gap-[12px] items-center justify-end relative shrink-0 flex-1">
                     {actions}
                     {onDownload && (
-                        <Button onClick={onDownload}
+                        <Button
+                            onClick={onDownload}
+                            disabled={downloadPending}
+                            aria-busy={downloadPending}
                             variant="outline" className="w-8 h-8 p-2">
-                            <DownloadIcon />
+                            {downloadPending ? <Loader2 className="animate-spin" /> : <DownloadIcon />}
                         </Button>
                     )}
                 </div>

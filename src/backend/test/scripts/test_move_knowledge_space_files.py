@@ -135,6 +135,8 @@ def test_parse_args_accepts_multiple_source_spaces_and_defaults_to_dry_run():
 
     assert args.apply is False
     assert args.source_space_ids == [10, 11]
+    assert args.preserve_folder_structure is False
+    assert args.folder_root_mode == "include"
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "x"])
@@ -193,6 +195,34 @@ def test_parse_args_accepts_source_filters_explicit_target_and_record_options():
     assert args.target_folder_id == 200
     assert args.rollback_record_file == Path("/tmp/move-record.jsonl")
     assert args.batch_size == 10
+
+
+@pytest.mark.parametrize("root_mode", ["include", "contents"])
+def test_parse_args_accepts_folder_structure_options(root_mode: str):
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--preserve-folder-structure",
+            "--folder-root-mode",
+            root_mode,
+        ]
+    )
+
+    assert args.preserve_folder_structure is True
+    assert args.folder_root_mode == root_mode
+
+
+def test_parse_args_rejects_folder_root_mode_without_structure_flag():
+    with pytest.raises(SystemExit):
+        script_mod.parse_args(
+            [
+                "--source-space-id",
+                "10",
+                "--folder-root-mode",
+                "contents",
+            ]
+        )
 
 
 @pytest.mark.parametrize(
@@ -439,6 +469,260 @@ def test_build_source_selection_rejects_missing_folder_or_invalid_category_pair(
             [],
             category_index,
         )
+
+
+@pytest.mark.parametrize(
+    "root_mode,expected_folder_ids",
+    [
+        ("include", [201, 202]),
+        ("contents", [202]),
+    ],
+)
+def test_folder_structure_resolves_relative_chain_from_selected_root(
+    root_mode: str,
+    expected_folder_ids: list[int],
+):
+    folders = [
+        _folder(201, 10, "A"),
+        _folder(202, 10, "B", path="/201", level=1),
+    ]
+    options = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode=root_mode,
+            source_folder_ids=[201],
+        ),
+        folders,
+    )
+
+    resolution = options.resolve(_file(101, file_level_path="/201/202"))
+
+    assert resolution.reason_code == ""
+    assert [folder.source_folder_id for folder in resolution.folders] == expected_folder_ids
+    assert [folder.folder_name for folder in resolution.folders] == (["A", "B"] if root_mode == "include" else ["B"])
+
+
+def test_folder_structure_without_selected_root_preserves_from_space_root():
+    folders = [
+        _folder(201, 10, "A"),
+        _folder(202, 10, "B", path="/201", level=1),
+    ]
+    options = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="contents",
+            source_folder_ids=[],
+        ),
+        folders,
+    )
+
+    resolution = options.resolve(_file(101, file_level_path="/201/202"))
+
+    assert [folder.source_folder_id for folder in resolution.folders] == [201, 202]
+
+
+def test_folder_structure_uses_outermost_overlapping_selected_root():
+    folders = [
+        _folder(201, 10, "A"),
+        _folder(202, 10, "B", path="/201", level=1),
+    ]
+    options = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="contents",
+            source_folder_ids=[201, 202],
+        ),
+        folders,
+    )
+
+    resolution = options.resolve(_file(101, file_level_path="/201/202"))
+
+    assert [folder.source_folder_id for folder in resolution.folders] == [202]
+
+
+def test_planner_skips_file_when_preserved_target_folder_depth_exceeds_ten():
+    folders = [
+        _folder(201, 10, "A"),
+        _folder(202, 10, "B", path="/201", level=1),
+    ]
+    source_file = _file(101, file_level_path="/201/202")
+    base_folder = _folder(200, 20, "target", path="/150/151/152/153/154/155/156/157/158", level=9)
+    explicit_target = script_mod.TargetContext(
+        tenant_id=1,
+        space=_space(20, "target"),
+        folder=base_folder,
+        owner=SimpleNamespace(user_id=30, user_name="target-owner", delete=0),
+        file_level_path=f"{base_folder.file_level_path}/200",
+        level=10,
+    )
+    folder_structure = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="include",
+            source_folder_ids=[],
+        ),
+        folders,
+    )
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[*folders, source_file],
+        all_files_by_id={item.id: item for item in [*folders, source_file]},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=script_mod.TargetRouteIndex.from_records(1, [], [], {}),
+        target_files=[],
+        explicit_target=explicit_target,
+        folder_structure=folder_structure,
+    )
+
+    assert plan.selected_units == []
+    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {
+        (101, "target_folder_depth_exceeded")
+    }
+
+
+def test_planner_skips_version_chain_spanning_different_source_directories():
+    folders = [_folder(201, 10, "A"), _folder(202, 10, "B")]
+    files = [
+        _file(101, file_name="same.pdf", file_level_path="/201"),
+        _file(102, file_name="same.pdf", file_level_path="/202"),
+    ]
+    versions = [
+        KnowledgeDocumentVersion(id=701, document_id=500, knowledge_file_id=101, version_no=1, is_primary=False),
+        KnowledgeDocumentVersion(id=702, document_id=500, knowledge_file_id=102, version_no=2, is_primary=True),
+    ]
+    folder_structure = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="include",
+            source_folder_ids=[],
+        ),
+        folders,
+    )
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[*folders, *files],
+        all_files_by_id={item.id: item for item in [*folders, *files]},
+        documents_by_id={500: KnowledgeDocument(id=500, knowledge_id=10, primary_version_id=702)},
+        versions=versions,
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[],
+        folder_structure=folder_structure,
+    )
+
+    assert plan.selected_units == []
+    assert {item.reason_code for item in plan.skipped_files} == {"version_chain_folder_mismatch"}
+
+
+def test_planner_marks_reused_and_planned_target_folders_for_dry_run():
+    source_folders = [
+        _folder(201, 10, "A"),
+        _folder(202, 10, "B", path="/201", level=1),
+    ]
+    source_file = _file(101, file_level_path="/201/202")
+    target_folder_a = _folder(300, 20, "A", path="/200", level=1)
+    folder_structure = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="include",
+            source_folder_ids=[],
+        ),
+        source_folders,
+    )
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[*source_folders, source_file],
+        all_files_by_id={item.id: item for item in [*source_folders, source_file]},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[],
+        target_folders=[target_folder_a],
+        folder_structure=folder_structure,
+    )
+
+    unit = plan.selected_units[0]
+    assert [(step.source_folder_id, step.target_folder_id, step.action) for step in unit.target_folder_plan] == [
+        (201, 300, "reused"),
+        (202, None, "planned"),
+    ]
+    dry_run_result = script_mod._dry_run_results(plan)[0]
+    assert [mapping["action"] for mapping in dry_run_result.folder_mappings] == ["reused", "planned"]
+
+
+def test_planner_allows_same_file_name_in_different_preserved_directories():
+    source_folders = [_folder(201, 10, "A"), _folder(202, 10, "B")]
+    files = [
+        _file(101, file_name="same.pdf", file_level_path="/201"),
+        _file(102, file_name="same.pdf", file_level_path="/202"),
+    ]
+    folder_structure = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="include",
+            source_folder_ids=[],
+        ),
+        source_folders,
+    )
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[*source_folders, *files],
+        all_files_by_id={item.id: item for item in [*source_folders, *files]},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[],
+        target_folders=[],
+        folder_structure=folder_structure,
+    )
+
+    assert [unit.source_files[0].id for unit in plan.selected_units] == [101, 102]
+
+
+def test_planner_detects_existing_file_conflict_in_fully_reused_preserved_directory():
+    source_folder = _folder(201, 10, "A")
+    source_file = _file(101, file_name="same.pdf", file_level_path="/201")
+    target_folder = _folder(300, 20, "A", path="/200", level=1)
+    existing_file = _file(900, knowledge_id=20, file_name="same.pdf", file_level_path="/200/300")
+    folder_structure = script_mod.build_folder_structure_options(
+        SimpleNamespace(
+            preserve_folder_structure=True,
+            folder_root_mode="include",
+            source_folder_ids=[],
+        ),
+        [source_folder],
+    )
+
+    plan = script_mod.plan_migration_units(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        source_records=[source_folder, source_file],
+        all_files_by_id={201: source_folder, 101: source_file},
+        documents_by_id={},
+        versions=[],
+        category_index=script_mod.CategoryLabelIndex.from_config(_portal_config()),
+        target_index=_target_index(),
+        target_files=[existing_file],
+        target_folders=[target_folder],
+        folder_structure=folder_structure,
+    )
+
+    assert plan.selected_units == []
+    assert {(item.source_file_id, item.reason_code) for item in plan.skipped_files} == {
+        (101, "target_name_conflict")
+    }
 
 
 def test_planner_applies_folder_and_category_filters_as_an_intersection():
@@ -929,6 +1213,127 @@ def test_target_permissions_contain_only_owner_and_parent_relations():
     )
 
 
+def test_new_folder_permissions_contain_target_owner_and_parent_relations():
+    target = _target_index().resolve("标准规范", "制度文件").target
+    folder = _folder(300, 20, "A", path="/200", level=1)
+
+    rows = script_mod._target_folder_permission_rows(folder, target.folder, target)
+
+    assert rows == (
+        {"user": "user:30", "relation": "owner", "object": "folder:300"},
+        {"user": "folder:200", "relation": "parent", "object": "folder:300"},
+    )
+
+
+class _FakeTargetFolderStore:
+    def __init__(self, folders=()):
+        self.folders = list(folders)
+        self.next_id = 301
+        self.permission_calls: list[tuple[int, int]] = []
+        self.deleted_ids: list[int] = []
+        self.nonempty_ids: set[int] = set()
+        self.fail_permissions = False
+
+    async def list_folders(self, space_id):
+        return [folder for folder in self.folders if int(folder.knowledge_id) == int(space_id)]
+
+    async def create_folder_record(self, source_folder, parent_folder, target):
+        created = _folder(
+            self.next_id,
+            int(target.space.id),
+            source_folder.folder_name,
+            path=script_mod._folder_child_path(parent_folder),
+            level=int(parent_folder.level or 0) + 1,
+        ).model_copy(
+            update={
+                "user_id": int(target.owner.user_id),
+                "user_name": target.owner.user_name,
+                "updater_id": int(target.owner.user_id),
+                "updater_name": target.owner.user_name,
+            }
+        )
+        self.next_id += 1
+        self.folders.append(created)
+        return created
+
+    async def write_folder_permissions(self, folder, parent_folder, target):
+        self.permission_calls.append((int(folder.id), int(parent_folder.id)))
+        if self.fail_permissions:
+            raise RuntimeError("folder permission failed")
+
+    async def is_folder_empty(self, folder):
+        return int(folder.id) not in self.nonempty_ids
+
+    async def delete_folder(self, folder):
+        self.deleted_ids.append(int(folder.id))
+        self.folders = [item for item in self.folders if int(item.id) != int(folder.id)]
+
+
+def _folder_structure_unit():
+    return script_mod.MigrationUnit(
+        unit_id="file:101",
+        unit_type="file",
+        source_files=(_file(101, file_level_path="/201/202"),),
+        target=_target_index().resolve("标准规范", "制度文件").target,
+        category_code="STD",
+        category_label="标准规范",
+        subcategory_code="STD-A",
+        subcategory_label="制度文件",
+        source_folder_chain=(
+            script_mod.SourceFolderRef(201, "A", "/201", 0),
+            script_mod.SourceFolderRef(202, "B", "/201/202", 1),
+        ),
+    )
+
+
+async def test_target_folder_manager_reuses_existing_and_creates_missing_directories():
+    existing = _folder(300, 20, "A", path="/200", level=1)
+    store = _FakeTargetFolderStore([existing])
+    manager = script_mod.TargetFolderManager(store)
+
+    prepared = await manager.prepare_unit(_folder_structure_unit())
+    mappings = manager.get_unit_mappings("file:101")
+
+    assert int(prepared.target.folder.id) == 301
+    assert prepared.target.file_level_path == "/200/300/301"
+    assert prepared.target.level == 3
+    assert [(mapping.source_folder_id, mapping.target_folder_id, mapping.action) for mapping in mappings] == [
+        (201, 300, "reused"),
+        (202, 301, "created"),
+    ]
+    assert store.permission_calls == [(301, 300)]
+
+    assert await manager.cleanup_unit_folders("file:101") == []
+    assert store.deleted_ids == [301]
+
+
+async def test_target_folder_manager_preserves_new_nonempty_directory_during_cleanup():
+    store = _FakeTargetFolderStore()
+    manager = script_mod.TargetFolderManager(store)
+    await manager.prepare_unit(_folder_structure_unit())
+    mappings = manager.get_unit_mappings("file:101")
+    store.nonempty_ids.add(mappings[-1].target_folder_id)
+
+    errors = await manager.cleanup_unit_folders("file:101")
+
+    assert "not empty" in errors[0]
+    assert store.deleted_ids == []
+
+
+async def test_target_folder_manager_keeps_created_mapping_when_permission_write_fails():
+    store = _FakeTargetFolderStore()
+    store.fail_permissions = True
+    manager = script_mod.TargetFolderManager(store)
+
+    with pytest.raises(RuntimeError, match="folder permission failed"):
+        await manager.prepare_unit(_folder_structure_unit())
+
+    mappings = manager.get_unit_mappings("file:101")
+    assert mappings[0].action == "created"
+    assert await manager.cleanup_unit_folders("file:101") == []
+    assert store.deleted_ids == [301]
+
+
 async def test_copy_file_sets_target_owner_and_folder_context(monkeypatch):
     source = _file(101)
     target = _target_index().resolve("标准规范", "制度文件").target
@@ -1059,7 +1464,12 @@ class _FakeMoveOperations:
         self.calls.append(f"copy:{source_file.id}")
         if self.fail_at == "copy" and self.fail_source_id == source_file.id:
             raise RuntimeError("copy failed")
-        target_file = _file(self.next_target_id, knowledge_id=target.space.id, file_name=source_file.file_name)
+        target_file = _file(
+            self.next_target_id,
+            knowledge_id=target.space.id,
+            file_name=source_file.file_name,
+            file_level_path=target.file_level_path,
+        )
         self.next_target_id += 1
         self.target_source_ids[int(target_file.id)] = int(source_file.id)
         self.target_files_by_source_id[int(source_file.id)] = target_file
@@ -1517,6 +1927,134 @@ def _single_file_plan(*file_ids: int):
         ],
         skipped_files=[],
     )
+
+
+class _FolderAwareMoveOperations(_FakeMoveOperations):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.folder_mappings: dict[str, tuple[script_mod.FolderMapping, ...]] = {}
+        self.folder_cleanup_calls: list[str] = []
+        self.copy_target_paths: list[str] = []
+
+    async def prepare_unit_target(self, unit):
+        self.calls.append(f"prepare:{unit.unit_id}")
+        folder_a = _folder(300, 20, "A", path="/200", level=1)
+        folder_b = _folder(301, 20, "B", path="/200/300", level=2)
+        self.folder_mappings[unit.unit_id] = (
+            script_mod.FolderMapping(201, "A", "/201", 300, "A", "/200", "/200/300", 1, "created"),
+            script_mod.FolderMapping(
+                202,
+                "B",
+                "/201/202",
+                301,
+                "B",
+                "/200/300",
+                "/200/300/301",
+                2,
+                "created",
+            ),
+        )
+        target = script_mod.TargetContext(
+            tenant_id=unit.target.tenant_id,
+            space=unit.target.space,
+            folder=folder_b,
+            owner=unit.target.owner,
+            file_level_path="/200/300/301",
+            level=3,
+        )
+        return script_mod.replace(unit, target=target)
+
+    def get_unit_folder_mappings(self, unit_id):
+        return self.folder_mappings.get(unit_id, ())
+
+    async def cleanup_unit_folders(self, unit_id):
+        self.folder_cleanup_calls.append(unit_id)
+        return []
+
+    def release_unit_folders(self, unit_id):
+        self.folder_mappings.pop(unit_id, None)
+
+    async def copy_file(self, source_file, target):
+        self.copy_target_paths.append(target.file_level_path)
+        return await super().copy_file(source_file, target)
+
+
+def _preserved_folder_plan():
+    unit = _folder_structure_unit()
+    return script_mod.MigrationPlan(
+        tenant_id=1,
+        source_spaces={10: _space(10, "source")},
+        selected_units=[unit],
+        skipped_files=[],
+    )
+
+
+async def test_apply_prepares_preserved_folders_before_copy_and_records_mapping(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--preserve-folder-structure",
+            "--report-dir",
+            str(tmp_path),
+            "--apply",
+        ]
+    )
+    operations = _FolderAwareMoveOperations()
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_preserved_folder_plan()))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_OK
+
+    assert operations.copy_target_paths == ["/200/300/301"]
+    rows = [
+        json.loads(line)
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl"))
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    started = next(row for row in rows if row["event_type"] == "unit_started")
+    succeeded = next(row for row in rows if row["event_type"] == "unit_succeeded")
+    assert [folder["folder_name"] for folder in started["payload"]["source_folder_chain"]] == ["A", "B"]
+    assert [mapping["action"] for mapping in succeeded["payload"]["folder_mappings"]] == [
+        "created",
+        "created",
+    ]
+    assert succeeded["payload"]["target"]["folder"]["id"] == 301
+
+
+async def test_failed_unit_cleans_new_folders_and_records_actual_mapping(monkeypatch, tmp_path):
+    args = script_mod.parse_args(
+        [
+            "--source-space-id",
+            "10",
+            "--preserve-folder-structure",
+            "--report-dir",
+            str(tmp_path),
+            "--apply",
+        ]
+    )
+    operations = _FolderAwareMoveOperations(fail_at="verify", fail_source_id=101)
+    monkeypatch.setattr(script_mod, "initialize_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "close_app_context", AsyncMock())
+    monkeypatch.setattr(script_mod, "build_migration_plan", AsyncMock(return_value=_preserved_folder_plan()))
+    monkeypatch.setattr(script_mod, "BishengMoveOperations", lambda *_args: operations)
+    monkeypatch.setattr(script_mod, "DatabaseVersionGraphStore", _FakeVersionGraphStore)
+
+    assert await script_mod.run(args, install_signal_handlers=False) == script_mod.EXIT_APPLY_ERROR
+
+    assert operations.folder_cleanup_calls == ["file:101"]
+    rows = [
+        json.loads(line)
+        for line in next(tmp_path.glob("knowledge-file-move-rollback-*.jsonl"))
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    failed = next(row for row in rows if row["event_type"] == "unit_failed")
+    assert [mapping["target_folder_id"] for mapping in failed["payload"]["folder_mappings"]] == [300, 301]
 
 
 async def test_apply_writes_complete_rollback_lifecycle(monkeypatch, tmp_path):

@@ -27,9 +27,9 @@ import {
     createFolderApi,
     createSpaceApi,
     deleteSpaceApi,
+    downloadWatermarkedKnowledgeFileApi,
     getCreateSpaceOptionsApi,
     getDepartmentSpacesApi,
-    getFileDownloadApi,
     getFilePreviewApi,
     getFileStatsApi,
     getGroupedSpacesApi,
@@ -418,9 +418,10 @@ jest.mock("~/api/knowledge", () => ({
     batchDeleteApi: jest.fn(),
     batchRetryApi: jest.fn(),
     checkSensitiveWordsApi: jest.fn(),
-    getFileDownloadApi: jest.fn(),
+    downloadWatermarkedKnowledgeFileApi: jest.fn(),
     getFilePreviewApi: jest.fn(),
     getFileStatsApi: jest.fn(),
+    groupSpaceTagsByLibrary: jest.fn(() => []),
     updateFileEncoding: jest.fn(),
     updateFileTagsApi: (...args: any[]) => mockUpdateFileTagsApi(...args),
     fileStatusToNumber: jest.fn((status) => {
@@ -652,10 +653,7 @@ describe("PortalKnowledgeWorkbench", () => {
             role: SpaceRole.CREATOR,
             spaceLevel: SpaceLevel.PERSONAL,
         }) as any);
-        jest.mocked(getFileDownloadApi).mockResolvedValue({
-            preview_url: "/preview.md",
-            original_url: "/origin.md",
-        } as any);
+        jest.mocked(downloadWatermarkedKnowledgeFileApi).mockResolvedValue(undefined);
         jest.mocked(batchDownloadApi).mockResolvedValue("/download.zip");
         jest.mocked(batchDeleteApi).mockResolvedValue(undefined as any);
         jest.mocked(batchRetryApi).mockResolvedValue(undefined as any);
@@ -810,6 +808,17 @@ describe("PortalKnowledgeWorkbench", () => {
                 file_ids: ["301"],
                 page_size: 1,
             }));
+        });
+
+        const favoriteActions = await screen.findByTestId("portal-document-actions");
+        fireEvent.click(within(favoriteActions).getByRole("button", { name: "下载" }));
+        await waitFor(() => {
+            expect(downloadWatermarkedKnowledgeFileApi).toHaveBeenCalledWith({
+                spaceId: "source-1",
+                fileId: "301",
+                entryPoint: "bisheng_favorite",
+                fallbackFileName: "源文档.pdf",
+            });
         });
 
         const rail = await screen.findByTestId("portal-tool-rail");
@@ -1816,7 +1825,6 @@ describe("PortalKnowledgeWorkbench", () => {
             data: [file],
             total: 1,
         } as any);
-
         renderWorkbench();
 
         const workspace = await screen.findByTestId("portal-file-workspace");
@@ -2092,7 +2100,6 @@ describe("PortalKnowledgeWorkbench", () => {
             data: [file],
             total: 1,
         } as any);
-
         renderWorkbench();
 
         const fileName = await screen.findByText("平铺昨日文档.md");
@@ -2709,7 +2716,11 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(batchDownloadApi).not.toHaveBeenCalled();
     });
 
-    test("keeps row-level file and folder downloads available", async () => {
+    test("keeps the row-level file download and hides the folder download", async () => {
+        let resolveDownload!: () => void;
+        jest.mocked(downloadWatermarkedKnowledgeFileApi).mockImplementation(() => new Promise<void>((resolve) => {
+            resolveDownload = resolve;
+        }));
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -2737,18 +2748,74 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.mouseEnter(folderRow);
         fireEvent.mouseEnter(fileRow);
         await waitFor(() => {
-            expect(screen.getAllByRole("button", { name: /下载|download|com_knowledge\.download/i })).toHaveLength(2);
-        });
-        fireEvent.click(within(folderRow).getByRole("button", { name: /下载|download|com_knowledge\.download/i }));
-        await waitFor(() => {
-            expect(batchDownloadApi).toHaveBeenCalledWith("personal-1", {
-                folder_ids: [101],
-            });
+            expect(within(folderRow).queryByRole("button", { name: /下载|download|com_knowledge\.download/i })).not.toBeInTheDocument();
+            expect(within(fileRow).getByRole("button", { name: /下载|download|com_knowledge\.download/i })).toBeInTheDocument();
         });
 
-        fireEvent.click(within(fileRow).getByRole("button", { name: /下载|download|com_knowledge\.download/i }));
+        const fileDownloadButton = within(fileRow).getByRole("button", { name: /下载|download|com_knowledge\.download/i });
+        fireEvent.click(fileDownloadButton);
+        fireEvent.click(fileDownloadButton);
         await waitFor(() => {
-            expect(getFileDownloadApi).toHaveBeenCalledWith("personal-1", "201");
+            expect(downloadWatermarkedKnowledgeFileApi).toHaveBeenCalledWith({
+                spaceId: "personal-1",
+                fileId: "201",
+                entryPoint: "bisheng_knowledge_list",
+                fallbackFileName: "后端开发.md",
+            });
+            expect(downloadWatermarkedKnowledgeFileApi).toHaveBeenCalledTimes(1);
+            expect(fileDownloadButton).toBeDisabled();
+        });
+        await act(async () => resolveDownload());
+        await waitFor(() => expect(fileDownloadButton).toBeEnabled());
+        expect(batchDownloadApi).not.toHaveBeenCalled();
+    });
+
+    test("hides the folder download in portal card view", async () => {
+        class MockResizeObserver {
+            observe = jest.fn();
+            unobserve = jest.fn();
+            disconnect = jest.fn();
+        }
+        Object.defineProperty(window, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: MockResizeObserver,
+        });
+        Object.defineProperty(global, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: MockResizeObserver,
+        });
+        localStorage.setItem("knowledge-view-mode", "card");
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "检修资料", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 1,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const folderName = await screen.findByText("检修资料");
+        const folderCard = folderName.closest("[data-knowledge-file-item]");
+        expect(folderCard).not.toBeNull();
+        fireEvent.mouseEnter(folderCard!);
+        await waitFor(() => {
+            expect(within(folderCard as HTMLElement).queryByRole("button", {
+                name: /下载|download|com_knowledge\.download/i,
+            })).not.toBeInTheDocument();
         });
     });
 
@@ -2959,6 +3026,10 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("renders document preview actions with the share action hidden", async () => {
+        let resolveDownload!: () => void;
+        jest.mocked(downloadWatermarkedKnowledgeFileApi).mockImplementation(() => new Promise<void>((resolve) => {
+            resolveDownload = resolve;
+        }));
         const teamSpace = makeSpace("team-1", "我的技术文档", {
             spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.ADMIN,
@@ -2979,8 +3050,9 @@ describe("PortalKnowledgeWorkbench", () => {
             data: [file],
             total: 1,
         } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(teamSpace as any);
 
-        renderWorkbench();
+        renderWorkbench("/knowledge-portal?spaceId=team-1");
 
         const fileRow = await screen.findByTestId("file-tree-row-201");
         fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
@@ -3000,9 +3072,30 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(within(actions).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
 
-        fireEvent.click(within(actions).getByRole("button", { name: "下载" }));
+        const downloadButton = within(actions).getByRole("button", { name: "下载" });
+        fireEvent.click(downloadButton);
+        fireEvent.click(downloadButton);
         await waitFor(() => {
-            expect(getFileDownloadApi).toHaveBeenCalledWith("team-1", "201");
+            expect(downloadWatermarkedKnowledgeFileApi).toHaveBeenCalledWith({
+                spaceId: "team-1",
+                fileId: "201",
+                entryPoint: "bisheng_preview",
+                fallbackFileName: "后端开发.md",
+            });
+            expect(downloadWatermarkedKnowledgeFileApi).toHaveBeenCalledTimes(1);
+            expect(downloadButton).toBeDisabled();
+        });
+        await act(async () => resolveDownload());
+        await waitFor(() => expect(downloadButton).toBeEnabled());
+
+        jest.mocked(downloadWatermarkedKnowledgeFileApi).mockRejectedValueOnce(new Error("水印 PDF 生成失败"));
+        fireEvent.click(downloadButton);
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+                message: "水印 PDF 生成失败",
+                severity: NotificationSeverity.ERROR,
+            }));
+            expect(downloadButton).toBeEnabled();
         });
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
@@ -3119,6 +3212,24 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(stripComments(previewSource)).not.toContain('title="分享"');
         expect(previewWorkspaceSource).toContain('onOpenShare={() => setActivePanel("share")}');
         expect(stripComments(previewWorkspaceSource)).not.toContain('onOpenShare={() => setActivePanel("share")}');
+    });
+
+    test("wires every BiSheng knowledge download entry to the watermarked PDF helper", () => {
+        const workbenchSource = stripComments(readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8"));
+        const spaceDetailSource = stripComments(readFileSync(path.join(__dirname, "../SpaceDetail/index.tsx"), "utf8"));
+        const filePreviewSource = stripComments(readFileSync(path.join(__dirname, "../FilePreview/FilePreviewPage.tsx"), "utf8"));
+
+        expect(workbenchSource).toContain("downloadWatermarkedKnowledgeFileApi");
+        expect(workbenchSource).toContain('"bisheng_favorite"');
+        expect(workbenchSource).toContain('"bisheng_preview"');
+        expect(workbenchSource).toContain("hideFolderDownload");
+        expect(spaceDetailSource).toContain("downloadWatermarkedKnowledgeFileApi");
+        expect(spaceDetailSource).toContain("hideFolderDownload = false");
+        expect(spaceDetailSource).toContain('entryPoint: "bisheng_knowledge_list"');
+        expect(spaceDetailSource).toContain('entryPoint: "bisheng_version_history"');
+        expect(filePreviewSource).toContain("downloadWatermarkedKnowledgeFileApi");
+        expect(filePreviewSource).toContain('entryPoint: "bisheng_preview"');
+        expect(`${workbenchSource}\n${spaceDetailSource}\n${filePreviewSource}`).not.toContain("getFileDownloadApi");
     });
 
     test("hides document preview permission action without file management permission", async () => {

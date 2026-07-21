@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, typ
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -115,6 +115,8 @@ interface KnowledgeSpaceContentProps {
     hideShareButton?: boolean;
     /** 宿主可隐藏多选操作中的批量下载，默认保留现有行为。 */
     hideBatchDownload?: boolean;
+    /** Allows a host to hide folder-row downloads without changing file downloads. */
+    hideFolderDownload?: boolean;
     hideFilePermissionActions?: boolean;
     /** Public portal supplies a single batch result and skips legacy per-file probes. */
     externalFileActionPermissions?: ExternalFileActionPermissions;
@@ -175,6 +177,7 @@ export function KnowledgeSpaceContent({
     hideSpaceInfoTooltip = false,
     hideShareButton = false,
     hideBatchDownload = false,
+    hideFolderDownload = false,
     hideFilePermissionActions = false,
     externalFileActionPermissions,
     enableEncodingClassification = false,
@@ -397,6 +400,8 @@ export function KnowledgeSpaceContent({
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    const [downloadingFileIds, setDownloadingFileIds] = useState<Set<string>>(new Set());
+    const downloadingFileIdsRef = useRef<Set<string>>(new Set());
     const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const hasExternalFileActionPermissions = externalFileActionPermissions !== undefined;
@@ -422,6 +427,15 @@ export function KnowledgeSpaceContent({
     const effectiveRenameEntryIds = externalFileActionPermissions?.renameEntryIds ?? renameEntryIds;
     const effectiveDeleteEntryIds = externalFileActionPermissions?.deleteEntryIds ?? deleteEntryIds;
     const effectiveDownloadEntryIds = externalFileActionPermissions?.downloadEntryIds ?? downloadEntryIds;
+    const visibleDownloadEntryIds = useMemo(() => {
+        if (!hideFolderDownload) return effectiveDownloadEntryIds;
+        const folderIds = new Set(
+            displayFiles
+                .filter((file) => file.type === FileType.FOLDER)
+                .map((file) => file.id),
+        );
+        return new Set(Array.from(effectiveDownloadEntryIds).filter((fileId) => !folderIds.has(fileId)));
+    }, [effectiveDownloadEntryIds, hideFolderDownload, permissionEntryProbeKey]);
     const effectiveMoveEntryIds = externalFileActionPermissions?.moveEntryIds ?? moveEntryIds;
     const canUseAddActions = canCreateFolder && !isSearching;
 
@@ -1049,10 +1063,14 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
-        if (!effectiveDownloadEntryIds.has(fileId)) {
+        if (!file || (hideFolderDownload && isFolder)) return;
+        if (!visibleDownloadEntryIds.has(fileId)) {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
             return;
         }
+        if (downloadingFileIdsRef.current.has(fileId)) return;
+        downloadingFileIdsRef.current.add(fileId);
+        setDownloadingFileIds(new Set(downloadingFileIdsRef.current));
         try {
             if (isFolder) {
                 // Folders must use batch download (returns zip)
@@ -1062,16 +1080,23 @@ export function KnowledgeSpaceContent({
                 if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
             } else {
-                // Single file: use preview_url for channel files, original_url for others
-                const downloadData = await getFileDownloadApi(String(space.id), fileId);
-                const downloadUrl = file?.fileSource === 'channel'
-                    ? downloadData.preview_url || downloadData.original_url
-                    : downloadData.original_url;
-                if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-                triggerUrlDownload(downloadUrl, file?.name);
+                await downloadWatermarkedKnowledgeFileApi({
+                    spaceId: String(space.id),
+                    fileId,
+                    entryPoint: "bisheng_knowledge_list",
+                    fallbackFileName: file.name,
+                });
             }
-        } catch {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+        } catch (error) {
+            showToast({
+                message: error instanceof Error && error.message
+                    ? error.message
+                    : localize("com_knowledge.download_failed"),
+                status: "error",
+            });
+        } finally {
+            downloadingFileIdsRef.current.delete(fileId);
+            setDownloadingFileIds(new Set(downloadingFileIdsRef.current));
         }
     };
 
@@ -1451,7 +1476,8 @@ export function KnowledgeSpaceContent({
                                             onRequestPermissions={hasExternalFileActionPermissions ? undefined : () => requestFilePermissions(file.id)}
                                             canRename={effectiveRenameEntryIds.has(file.id)}
                                             canDelete={effectiveDeleteEntryIds.has(file.id)}
-                                            canDownload={effectiveDownloadEntryIds.has(file.id)}
+                                            canDownload={visibleDownloadEntryIds.has(file.id)}
+                                            downloadPending={downloadingFileIds.has(file.id)}
                                             canPublish={publishEntryIds.has(file.id)}
                                             onPublishFile={setPublishingFile}
                                             mobileListMode={isH5 && viewMode === "list"}
@@ -1494,7 +1520,8 @@ export function KnowledgeSpaceContent({
                                     onRequestPermissions={hasExternalFileActionPermissions ? undefined : requestFilePermissions}
                                     renameEntryIds={effectiveRenameEntryIds}
                                     deleteEntryIds={effectiveDeleteEntryIds}
-                                    downloadEntryIds={effectiveDownloadEntryIds}
+                                    downloadEntryIds={visibleDownloadEntryIds}
+                                    downloadingEntryIds={downloadingFileIds}
                                     publishEntryIds={publishEntryIds}
                                     onManagePermission={hideFilePermissionActions ? undefined : handleManagePermission}
                                     onMove={onMoveFile ? (file) => setMovingFile(file) : undefined}
@@ -1719,22 +1746,17 @@ export function KnowledgeSpaceContent({
                         onPreview={(versionFileId, fileName) => handlePreviewFile(String(versionFileId), fileName)}
                         onDownload={async (versionFileId, fileName) => {
                             try {
-                                const downloadData = await getFileDownloadApi(
-                                    String(space.id),
-                                    String(versionFileId),
-                                );
-                                const downloadUrl = downloadData.original_url;
-                                if (!downloadUrl) {
-                                    showToast({
-                                        message: localize("com_knowledge.get_download_link_failed"),
-                                        status: "error",
-                                    });
-                                    return;
-                                }
-                                triggerUrlDownload(downloadUrl, fileName);
-                            } catch {
+                                await downloadWatermarkedKnowledgeFileApi({
+                                    spaceId: String(space.id),
+                                    fileId: String(versionFileId),
+                                    entryPoint: "bisheng_version_history",
+                                    fallbackFileName: fileName,
+                                });
+                            } catch (error) {
                                 showToast({
-                                    message: localize("com_knowledge.download_failed"),
+                                    message: error instanceof Error && error.message
+                                        ? error.message
+                                        : localize("com_knowledge.download_failed"),
                                     status: "error",
                                 });
                             }

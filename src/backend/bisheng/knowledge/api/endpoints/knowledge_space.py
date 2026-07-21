@@ -17,7 +17,9 @@ from bisheng.common.stream_errors import (
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
+    get_portal_pdf_download_service,
 )
+from bisheng.knowledge.api.portal_pdf_download_response import prepare_portal_pdf_download_response
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
@@ -42,6 +44,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationReq,
     WebLinkCreateReq,
 )
+from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
@@ -841,10 +844,20 @@ async def get_file_preview(
 async def get_file_download(
     space_id: int,
     file_id: int,
-    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    entry_point: str = Query(default="bisheng_knowledge_list"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    svc: Any = Depends(get_portal_pdf_download_service),
 ) -> Any:
-    urls = await svc.get_file_download(file_id, space_id=space_id)
-    return resp_200(urls)
+    request = PortalPdfDownloadRequest(
+        space_id=space_id,
+        file_id=file_id,
+        entry_point=entry_point,
+    )
+    return await prepare_portal_pdf_download_response(
+        service=svc,
+        request=request,
+        login_user=login_user,
+    )
 
 
 @router.post("/{space_id}/files/{file_id}/tag")

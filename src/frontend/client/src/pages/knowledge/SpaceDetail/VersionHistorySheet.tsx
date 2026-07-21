@@ -1,5 +1,6 @@
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { CheckCircle, Download, Eye, Loader2, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -32,7 +33,7 @@ interface VersionHistoryDialogProps {
     /** User has owner/manager role on this space */
     canManage: boolean;
     onPreview?: (versionFileId: number, fileName: string) => void;
-    onDownload?: (versionFileId: number, fileName: string) => void;
+    onDownload?: (versionFileId: number, fileName: string) => void | Promise<void>;
     onPrimaryChanged?: () => void;
     onDeleted?: () => void;
 }
@@ -143,6 +144,7 @@ function ActionButton({ label, onClick, disabled, className, children }: ActionB
             <TooltipTrigger asChild>
                 <button
                     type="button"
+                    aria-label={label}
                     disabled={disabled}
                     onClick={onClick}
                     className={cn(
@@ -172,6 +174,7 @@ interface VersionTableRowProps {
     canManage: boolean;
     setPrimaryPending: boolean;
     deletePending: boolean;
+    downloadPending: boolean;
     onPreview?: (versionFileId: number, fileName: string) => void;
     onDownload?: (versionFileId: number, fileName: string) => void;
     onSetPrimary: (versionId: number, versionNo: number) => void;
@@ -183,6 +186,7 @@ function VersionTableRow({
     canManage,
     setPrimaryPending,
     deletePending,
+    downloadPending,
     onPreview,
     onDownload,
     onSetPrimary,
@@ -192,7 +196,7 @@ function VersionTableRow({
     const isSuccess = numericStatusToEnum(version.status ?? 0) === FileStatus.SUCCESS;
     const canSetPrimary = canManage && !version.is_primary && isSuccess;
     const canDelete = canManage && !version.is_primary;
-    const anyPending = setPrimaryPending || deletePending;
+    const anyPending = setPrimaryPending || deletePending || downloadPending;
 
     return (
         <tr className="border-b border-[#F2F3F5] last:border-b-0 hover:bg-[#FAFAFA]">
@@ -255,7 +259,9 @@ function VersionTableRow({
                             onClick={() => onDownload(version.knowledge_file_id, version.original_file_name)}
                             disabled={anyPending}
                         >
-                            <Download className="size-4" />
+                            {downloadPending
+                                ? <Loader2 className="size-4 animate-spin" />
+                                : <Download className="size-4" />}
                         </ActionButton>
                     )}
                     {canSetPrimary && (
@@ -319,6 +325,7 @@ export function VersionHistorySheet({
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const queryClient = useQueryClient();
+    const [downloadPendingFileId, setDownloadPendingFileId] = useState<number | null>(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ["file-versions", fileId],
@@ -389,6 +396,16 @@ export function VersionHistorySheet({
         });
         if (!ok) return;
         deleteMutation.mutate(versionId);
+    };
+
+    const handleDownload = async (versionFileId: number, fileName: string) => {
+        if (!onDownload || downloadPendingFileId !== null) return;
+        setDownloadPendingFileId(versionFileId);
+        try {
+            await onDownload(versionFileId, fileName);
+        } finally {
+            setDownloadPendingFileId(null);
+        }
     };
 
     return (
@@ -474,8 +491,9 @@ export function VersionHistorySheet({
                                             canManage={canManage}
                                             setPrimaryPending={setPrimaryMutation.isPending}
                                             deletePending={deleteMutation.isPending}
+                                            downloadPending={downloadPendingFileId === v.knowledge_file_id}
                                             onPreview={onPreview}
-                                            onDownload={onDownload}
+                                            onDownload={onDownload ? handleDownload : undefined}
                                             onSetPrimary={handleSetPrimary}
                                             onDelete={handleDelete}
                                         />

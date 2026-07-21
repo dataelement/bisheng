@@ -38,7 +38,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -240,6 +240,101 @@ class SourceSelection:
         if self.category_codes and category.category_code not in self.category_codes:
             return False
         return not self.subcategory_codes or category.subcategory_code in self.subcategory_codes
+
+
+@dataclass(frozen=True)
+class SourceFolderRef:
+    source_folder_id: int
+    folder_name: str
+    source_file_level_path: str
+    source_level: int
+
+
+@dataclass(frozen=True)
+class FolderChainResolution:
+    folders: tuple[SourceFolderRef, ...] = ()
+    source_directory_key: tuple[int, tuple[int, ...]] | None = None
+    reason_code: str = ""
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class FolderStructureOptions:
+    enabled: bool = False
+    root_mode: Literal["include", "contents"] = "include"
+    selected_root_ids: frozenset[int] = frozenset()
+    folders_by_id: dict[int, KnowledgeFile] = field(default_factory=dict)
+
+    def resolve(self, record: KnowledgeFile) -> FolderChainResolution:
+        if not self.enabled:
+            return FolderChainResolution()
+        folder_ids, path_error = _parse_folder_path_ids(record.file_level_path)
+        if path_error:
+            return FolderChainResolution(
+                reason_code="source_folder_structure_invalid",
+                reason=path_error,
+            )
+
+        source_directory_key = (int(record.knowledge_id), folder_ids)
+        folders: list[KnowledgeFile] = []
+        for index, folder_id in enumerate(folder_ids):
+            folder = self.folders_by_id.get(folder_id)
+            expected_path = f"/{'/'.join(str(value) for value in folder_ids[:index])}" if index else ""
+            if (
+                folder is None
+                or int(folder.knowledge_id) != int(record.knowledge_id)
+                or int(folder.file_type) != FileType.DIR.value
+                or (folder.file_level_path or "").rstrip("/") != expected_path
+            ):
+                return FolderChainResolution(
+                    source_directory_key=source_directory_key,
+                    reason_code="source_folder_structure_invalid",
+                    reason=f"source folder chain is missing or inconsistent at folder ID {folder_id}",
+                )
+            folders.append(folder)
+
+        start_index = 0
+        if self.selected_root_ids:
+            selected_indexes = [
+                index for index, folder_id in enumerate(folder_ids) if folder_id in self.selected_root_ids
+            ]
+            if not selected_indexes:
+                return FolderChainResolution(
+                    source_directory_key=source_directory_key,
+                    reason_code="source_folder_structure_invalid",
+                    reason="file does not descend from a selected source folder",
+                )
+            start_index = min(selected_indexes)
+            if self.root_mode == "contents":
+                start_index += 1
+
+        return FolderChainResolution(
+            folders=tuple(
+                SourceFolderRef(
+                    source_folder_id=int(folder.id or 0),
+                    folder_name=folder.file_name,
+                    source_file_level_path=_folder_child_path(folder),
+                    source_level=int(folder.level or 0),
+                )
+                for folder in folders[start_index:]
+            ),
+            source_directory_key=source_directory_key,
+        )
+
+
+def _parse_folder_path_ids(file_level_path: str | None) -> tuple[tuple[int, ...], str]:
+    normalized = (file_level_path or "").rstrip("/")
+    if not normalized:
+        return (), ""
+    if not normalized.startswith("/"):
+        return (), f"source file_level_path must start with '/': {file_level_path}"
+    parts = normalized.split("/")[1:]
+    if any(not part.isdigit() or int(part) <= 0 for part in parts):
+        return (), f"source file_level_path contains a non-positive folder ID: {file_level_path}"
+    folder_ids = tuple(int(part) for part in parts)
+    if len(folder_ids) != len(set(folder_ids)):
+        return (), f"source file_level_path contains a folder cycle: {file_level_path}"
+    return folder_ids, ""
 
 
 @dataclass(frozen=True)
@@ -515,6 +610,7 @@ class FileMoveResult:
     reason_code: str = ""
     error: str = ""
     cleanup_errors: list[str] = field(default_factory=list)
+    folder_mappings: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -549,8 +645,119 @@ class MigrationUnit:
     category_label: str
     subcategory_code: str
     subcategory_label: str
+    source_folder_chain: tuple[SourceFolderRef, ...] = ()
+    target_folder_plan: tuple[TargetFolderPlanStep, ...] = ()
     source_document: KnowledgeDocument | None = None
     source_versions: tuple[KnowledgeDocumentVersion, ...] = ()
+
+
+@dataclass(frozen=True)
+class TargetFolderPlanStep:
+    source_folder_id: int
+    source_folder_name: str
+    source_file_level_path: str
+    target_folder_id: int | None
+    target_parent_folder_id: int | None
+    target_folder_name: str
+    target_file_level_path: str | None
+    target_full_path: str | None
+    target_relative_name_path: str
+    target_level: int
+    action: Literal["planned", "reused"]
+
+
+@dataclass(frozen=True)
+class TargetFolderPlanResolution:
+    steps: tuple[TargetFolderPlanStep, ...] = ()
+    reason_code: str = ""
+    reason: str = ""
+
+
+class TargetFolderPlanningIndex:
+    def __init__(self, folders: Sequence[KnowledgeFile]) -> None:
+        self.folders = tuple(folder for folder in folders if int(folder.file_type) == FileType.DIR.value)
+
+    def plan(
+        self,
+        target: TargetContext,
+        source_folders: Sequence[SourceFolderRef],
+    ) -> TargetFolderPlanResolution:
+        steps: list[TargetFolderPlanStep] = []
+        parent_folder: KnowledgeFile | None = target.folder
+        relative_names: list[str] = []
+        for offset, source_folder in enumerate(source_folders, start=1):
+            relative_names.append(source_folder.folder_name)
+            target_level = int(target.folder.level or 0) + offset
+            candidates: list[KnowledgeFile] = []
+            if parent_folder is not None:
+                parent_path = _folder_child_path(parent_folder)
+                candidates = [
+                    folder
+                    for folder in self.folders
+                    if int(folder.knowledge_id) == int(target.space.id or 0)
+                    and (folder.file_level_path or "").rstrip("/") == parent_path
+                    and _normalize_label(folder.file_name) == _normalize_label(source_folder.folder_name)
+                ]
+            if len(candidates) > 1:
+                return TargetFolderPlanResolution(
+                    reason_code="target_folder_ambiguous",
+                    reason=(
+                        "multiple target folders match the same parent and normalized name: "
+                        f"parent={parent_folder.id if parent_folder else None}, "
+                        f"name={source_folder.folder_name}"
+                    ),
+                )
+            if candidates:
+                target_folder = candidates[0]
+                if int(target_folder.status or 0) != KnowledgeFileStatus.SUCCESS.value:
+                    return TargetFolderPlanResolution(
+                        reason_code="target_folder_invalid",
+                        reason=f"target folder {target_folder.id} is not in SUCCESS status",
+                    )
+                step = TargetFolderPlanStep(
+                    source_folder_id=source_folder.source_folder_id,
+                    source_folder_name=source_folder.folder_name,
+                    source_file_level_path=source_folder.source_file_level_path,
+                    target_folder_id=int(target_folder.id or 0),
+                    target_parent_folder_id=int(parent_folder.id or 0) if parent_folder else None,
+                    target_folder_name=target_folder.file_name,
+                    target_file_level_path=target_folder.file_level_path or "",
+                    target_full_path=_folder_child_path(target_folder),
+                    target_relative_name_path="/".join(relative_names),
+                    target_level=int(target_folder.level or 0),
+                    action="reused",
+                )
+                parent_folder = target_folder
+            else:
+                step = TargetFolderPlanStep(
+                    source_folder_id=source_folder.source_folder_id,
+                    source_folder_name=source_folder.folder_name,
+                    source_file_level_path=source_folder.source_file_level_path,
+                    target_folder_id=None,
+                    target_parent_folder_id=int(parent_folder.id or 0) if parent_folder else None,
+                    target_folder_name=source_folder.folder_name,
+                    target_file_level_path=None,
+                    target_full_path=None,
+                    target_relative_name_path="/".join(relative_names),
+                    target_level=target_level,
+                    action="planned",
+                )
+                parent_folder = None
+            steps.append(step)
+        return TargetFolderPlanResolution(steps=tuple(steps))
+
+
+@dataclass(frozen=True)
+class FolderMapping:
+    source_folder_id: int
+    source_folder_name: str
+    source_file_level_path: str
+    target_folder_id: int
+    target_folder_name: str
+    target_file_level_path: str
+    target_full_path: str
+    target_level: int
+    action: Literal["created", "reused"]
 
 
 @dataclass
@@ -656,6 +863,166 @@ class VersionGraphStore(Protocol):
     def get_target_graph_payload(self, target_document_id: int) -> dict[str, Any] | None: ...
 
 
+class TargetFolderStore(Protocol):
+    async def list_folders(self, space_id: int) -> Sequence[KnowledgeFile]: ...
+
+    async def create_folder_record(
+        self,
+        source_folder: SourceFolderRef,
+        parent_folder: KnowledgeFile,
+        target: TargetContext,
+    ) -> KnowledgeFile: ...
+
+    async def write_folder_permissions(
+        self,
+        folder: KnowledgeFile,
+        parent_folder: KnowledgeFile,
+        target: TargetContext,
+    ) -> None: ...
+
+    async def is_folder_empty(self, folder: KnowledgeFile) -> bool: ...
+
+    async def delete_folder(self, folder: KnowledgeFile) -> None: ...
+
+
+class TargetFolderManager:
+    def __init__(self, store: TargetFolderStore) -> None:
+        self.store = store
+        self._folders_by_space: dict[int, list[KnowledgeFile]] = {}
+        self._folders_by_id: dict[int, KnowledgeFile] = {}
+        self._mappings_by_unit_id: dict[str, list[FolderMapping]] = {}
+
+    async def _folders_for_space(self, space_id: int) -> list[KnowledgeFile]:
+        cached = self._folders_by_space.get(space_id)
+        if cached is not None:
+            return cached
+        folders = list(await self.store.list_folders(space_id))
+        self._folders_by_space[space_id] = folders
+        self._folders_by_id.update(
+            {int(folder.id): folder for folder in folders if folder.id is not None}
+        )
+        return folders
+
+    @staticmethod
+    def _mapping(
+        source_folder: SourceFolderRef,
+        target_folder: KnowledgeFile,
+        action: Literal["created", "reused"],
+    ) -> FolderMapping:
+        return FolderMapping(
+            source_folder_id=source_folder.source_folder_id,
+            source_folder_name=source_folder.folder_name,
+            source_file_level_path=source_folder.source_file_level_path,
+            target_folder_id=int(target_folder.id or 0),
+            target_folder_name=target_folder.file_name,
+            target_file_level_path=target_folder.file_level_path or "",
+            target_full_path=_folder_child_path(target_folder),
+            target_level=int(target_folder.level or 0),
+            action=action,
+        )
+
+    async def prepare_unit(self, unit: MigrationUnit) -> MigrationUnit:
+        mappings = self._mappings_by_unit_id.setdefault(unit.unit_id, [])
+        if not unit.source_folder_chain:
+            return unit
+
+        space_id = int(unit.target.space.id or 0)
+        folders = await self._folders_for_space(space_id)
+        parent_folder = unit.target.folder
+        for source_folder in unit.source_folder_chain[len(mappings) :]:
+            parent_path = _folder_child_path(parent_folder)
+            candidates = [
+                folder
+                for folder in folders
+                if (folder.file_level_path or "").rstrip("/") == parent_path
+                and _normalize_label(folder.file_name) == _normalize_label(source_folder.folder_name)
+            ]
+            if len(candidates) > 1:
+                raise RuntimeError(
+                    "multiple target folders match the same parent and normalized name: "
+                    f"parent={parent_folder.id}, name={source_folder.folder_name}"
+                )
+            if candidates:
+                target_folder = candidates[0]
+                if int(target_folder.status or 0) != KnowledgeFileStatus.SUCCESS.value:
+                    raise RuntimeError(f"target folder {target_folder.id} is not in SUCCESS status")
+                action: Literal["created", "reused"] = "reused"
+            else:
+                target_folder = await self.store.create_folder_record(
+                    source_folder,
+                    parent_folder,
+                    unit.target,
+                )
+                if target_folder.id is None:
+                    raise RuntimeError("target folder creation returned no ID")
+                folders.append(target_folder)
+                self._folders_by_id[int(target_folder.id)] = target_folder
+                action = "created"
+
+            mapping = self._mapping(source_folder, target_folder, action)
+            mappings.append(mapping)
+            if action == "created":
+                await self.store.write_folder_permissions(target_folder, parent_folder, unit.target)
+            parent_folder = target_folder
+
+        final_target = TargetContext(
+            tenant_id=unit.target.tenant_id,
+            space=unit.target.space,
+            folder=parent_folder,
+            owner=unit.target.owner,
+            file_level_path=_folder_child_path(parent_folder),
+            level=int(parent_folder.level or 0) + 1,
+        )
+        return replace(unit, target=final_target)
+
+    def get_unit_mappings(self, unit_id: str) -> tuple[FolderMapping, ...]:
+        return tuple(self._mappings_by_unit_id.get(unit_id, ()))
+
+    def release_unit(self, unit_id: str) -> None:
+        self._mappings_by_unit_id.pop(unit_id, None)
+
+    async def cleanup_unit_folders(self, unit_id: str) -> list[str]:
+        errors: list[str] = []
+        descendant_preserved = False
+        for mapping in reversed(self._mappings_by_unit_id.get(unit_id, ())):
+            if mapping.action != "created":
+                continue
+            folder = self._folders_by_id.get(mapping.target_folder_id)
+            if folder is None:
+                continue
+            if descendant_preserved:
+                errors.append(
+                    f"target folder {mapping.target_folder_id} was preserved because a descendant remains"
+                )
+                continue
+            try:
+                is_empty = await self.store.is_folder_empty(folder)
+            except Exception as exc:
+                descendant_preserved = True
+                errors.append(
+                    f"check target folder {mapping.target_folder_id}: {type(exc).__name__}: {exc}"
+                )
+                continue
+            if not is_empty:
+                descendant_preserved = True
+                errors.append(f"target folder {mapping.target_folder_id} was preserved because it is not empty")
+                continue
+            try:
+                await self.store.delete_folder(folder)
+            except Exception as exc:
+                descendant_preserved = True
+                errors.append(
+                    f"delete target folder {mapping.target_folder_id}: {type(exc).__name__}: {exc}"
+                )
+                continue
+            self._folders_by_id.pop(mapping.target_folder_id, None)
+            space_folders = self._folders_by_space.get(int(folder.knowledge_id), [])
+            self._folders_by_space[int(folder.knowledge_id)] = [
+                item for item in space_folders if int(item.id or 0) != mapping.target_folder_id
+            ]
+        return errors
+
+
 def _positive_int(value: str) -> int:
     try:
         parsed = int(value)
@@ -708,6 +1075,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="按门户二级分类 code 过滤；可重复传入",
     )
     parser.add_argument(
+        "--preserve-folder-structure",
+        action="store_true",
+        help="在目标文件夹下重建来源目录结构；默认使用扁平迁移",
+    )
+    parser.add_argument(
+        "--folder-root-mode",
+        choices=("include", "contents"),
+        default=None,
+        help="目录结构是否包含所选来源文件夹本身；默认 include",
+    )
+    parser.add_argument(
         "--target-space-id",
         type=_positive_int,
         default=None,
@@ -743,6 +1121,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args.source_folder_ids = sorted(set(args.source_folder_ids))
     args.source_category_codes = sorted(set(args.source_category_codes))
     args.source_subcategory_codes = sorted(set(args.source_subcategory_codes))
+    if args.folder_root_mode is not None and not args.preserve_folder_structure:
+        parser.error("--folder-root-mode requires --preserve-folder-structure")
+    args.folder_root_mode = args.folder_root_mode or "include"
     if (args.target_space_id is None) != (args.target_folder_id is None):
         parser.error("--target-space-id and --target-folder-id must be provided together")
     return args
@@ -814,6 +1195,29 @@ def build_source_selection(
     )
 
 
+def build_folder_structure_options(
+    args: argparse.Namespace,
+    source_records: Sequence[KnowledgeFile],
+) -> FolderStructureOptions:
+    folders_by_id = {
+        int(record.id): record
+        for record in source_records
+        if record.id is not None and int(record.file_type) == FileType.DIR.value
+    }
+    selected_root_ids = frozenset(getattr(args, "source_folder_ids", []) or [])
+    missing_root_ids = sorted(selected_root_ids - set(folders_by_id))
+    if missing_root_ids:
+        raise PreflightError(
+            f"source folders not found, not directories, or outside the requested spaces: {missing_root_ids}"
+        )
+    return FolderStructureOptions(
+        enabled=bool(getattr(args, "preserve_folder_structure", False)),
+        root_mode=getattr(args, "folder_root_mode", "include"),
+        selected_root_ids=selected_root_ids,
+        folders_by_id=folders_by_id,
+    )
+
+
 def _skip_for_file(
     record: KnowledgeFile,
     reason_code: str,
@@ -880,6 +1284,7 @@ def _resolve_single_unit(
     target_index: TargetRouteIndex,
     source_selection: SourceSelection,
     explicit_target: TargetContext | None,
+    folder_structure: FolderStructureOptions,
 ) -> tuple[MigrationUnit | None, SkippedFile | None]:
     category = category_index.resolve(record)
     if category.reason_code:
@@ -915,6 +1320,23 @@ def _resolve_single_unit(
             category=category,
             target=route.target,
         )
+    folder_resolution = folder_structure.resolve(record)
+    if folder_resolution.reason_code:
+        return None, _skip_for_file(
+            record,
+            folder_resolution.reason_code,
+            folder_resolution.reason,
+            category=category,
+            target=route.target,
+        )
+    if int(route.target.folder.level or 0) + len(folder_resolution.folders) > 10:
+        return None, _skip_for_file(
+            record,
+            "target_folder_depth_exceeded",
+            "preserved folder structure would exceed the maximum target folder depth of 10",
+            category=category,
+            target=route.target,
+        )
     return (
         MigrationUnit(
             unit_id=f"file:{record.id}",
@@ -925,6 +1347,7 @@ def _resolve_single_unit(
             category_label=category.category_label,
             subcategory_code=category.subcategory_code,
             subcategory_label=category.subcategory_label,
+            source_folder_chain=folder_resolution.folders,
         ),
         None,
     )
@@ -940,6 +1363,7 @@ def _resolve_chain_unit(
     target_index: TargetRouteIndex,
     source_selection: SourceSelection,
     explicit_target: TargetContext | None,
+    folder_structure: FolderStructureOptions,
 ) -> tuple[MigrationUnit | None, list[SkippedFile]]:
     ordered_versions = tuple(sorted(versions, key=lambda item: (int(item.version_no), int(item.id or 0))))
     document = documents_by_id.get(document_id)
@@ -953,6 +1377,7 @@ def _resolve_chain_unit(
         reason: str,
         *,
         category: CategoryResolution | None = None,
+        target: TargetContext | None = None,
     ) -> list[SkippedFile]:
         return [
             _skip_for_file(
@@ -964,6 +1389,7 @@ def _resolve_chain_unit(
                 source_document_id=document_id,
                 version_no=version_numbers.get(int(record.id or 0)),
                 category=category,
+                target=target,
             )
             for record in traceable_files
         ]
@@ -1059,6 +1485,35 @@ def _resolve_chain_unit(
             "embedding_model_mismatch",
             "source and target knowledge spaces use different embedding models",
         )
+    folder_resolutions = [folder_structure.resolve(record) for record in traceable_files]
+    invalid_folder_resolution = next(
+        (resolution for resolution in folder_resolutions if resolution.reason_code),
+        None,
+    )
+    if invalid_folder_resolution is not None:
+        return None, skip_known(
+            "version_chain_folder_structure_invalid",
+            invalid_folder_resolution.reason,
+            category=category,
+            target=target,
+        )
+    if folder_structure.enabled and len(
+        {resolution.source_directory_key for resolution in folder_resolutions}
+    ) != 1:
+        return None, skip_known(
+            "version_chain_folder_mismatch",
+            "versions in one document belong to different source directories",
+            category=category,
+            target=target,
+        )
+    source_folder_chain = folder_resolutions[0].folders if folder_resolutions else ()
+    if int(target.folder.level or 0) + len(source_folder_chain) > 10:
+        return None, skip_known(
+            "target_folder_depth_exceeded",
+            "preserved folder structure would exceed the maximum target folder depth of 10",
+            category=category,
+            target=target,
+        )
     return (
         MigrationUnit(
             unit_id=unit_id,
@@ -1069,6 +1524,7 @@ def _resolve_chain_unit(
             category_label=category.category_label,
             subcategory_code=category.subcategory_code,
             subcategory_label=category.subcategory_label,
+            source_folder_chain=source_folder_chain,
             source_document=document,
             source_versions=ordered_versions,
         ),
@@ -1087,10 +1543,13 @@ def plan_migration_units(
     category_index: CategoryLabelIndex,
     target_index: TargetRouteIndex,
     target_files: Sequence[KnowledgeFile],
+    target_folders: Sequence[KnowledgeFile] = (),
     source_selection: SourceSelection | None = None,
     explicit_target: TargetContext | None = None,
+    folder_structure: FolderStructureOptions | None = None,
 ) -> MigrationPlan:
     source_selection = source_selection or SourceSelection()
+    folder_structure = folder_structure or FolderStructureOptions()
     eligible = sorted(
         (
             record
@@ -1125,6 +1584,7 @@ def plan_migration_units(
                 target_index,
                 source_selection,
                 explicit_target,
+                folder_structure,
             )
             if unit is not None:
                 preliminary.append(unit)
@@ -1137,11 +1597,22 @@ def plan_migration_units(
             target_index,
             source_selection,
             explicit_target,
+            folder_structure,
         )
         if unit is not None:
             preliminary.append(unit)
         elif file_skip is not None:
             skipped.append(file_skip)
+
+    target_folder_planning = TargetFolderPlanningIndex(target_folders)
+    planned_preliminary: list[MigrationUnit] = []
+    for unit in preliminary:
+        folder_plan = target_folder_planning.plan(unit.target, unit.source_folder_chain)
+        if folder_plan.reason_code:
+            skipped.extend(_skip_unit(unit, folder_plan.reason_code, folder_plan.reason))
+            continue
+        planned_preliminary.append(replace(unit, target_folder_plan=folder_plan.steps))
+    preliminary = planned_preliminary
 
     preliminary.sort(
         key=lambda unit: min((int(record.knowledge_id), int(record.id or 0)) for record in unit.source_files)
@@ -1160,14 +1631,29 @@ def plan_migration_units(
         for record in target_files
         if int(record.file_type) == FileType.FILE.value and record.md5
     }
-    reserved_names: set[tuple[int, str, str]] = set()
+    reserved_names: set[tuple[tuple[int, int, tuple[str, ...]], str]] = set()
     reserved_md5s: set[tuple[int, str]] = set()
     selected: list[MigrationUnit] = []
     for unit in preliminary:
         space_id = int(unit.target.space.id or 0)
-        unit_names = {(space_id, unit.target.file_level_path, record.file_name) for record in unit.source_files}
+        relative_folder_names = tuple(_normalize_label(folder.folder_name) for folder in unit.source_folder_chain)
+        logical_folder_key = (space_id, int(unit.target.folder.id or 0), relative_folder_names)
+        unit_names = {(logical_folder_key, record.file_name) for record in unit.source_files}
         unit_md5s = {(space_id, str(record.md5)) for record in unit.source_files if record.md5}
-        if unit_names & existing_names:
+        existing_target_path: str | None
+        if not unit.target_folder_plan:
+            existing_target_path = unit.target.file_level_path
+        else:
+            existing_target_path = unit.target_folder_plan[-1].target_full_path
+        existing_unit_names = (
+            {
+                (space_id, existing_target_path, record.file_name)
+                for record in unit.source_files
+            }
+            if existing_target_path is not None
+            else set()
+        )
+        if existing_unit_names & existing_names:
             skipped.extend(_skip_unit(unit, "target_name_conflict", "target folder contains the same file name"))
             continue
         if unit_md5s & existing_md5s:
@@ -1271,6 +1757,7 @@ async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
                 ).all()
             )
             source_selection = build_source_selection(args, source_records, category_index)
+            folder_structure = build_folder_structure_options(args, source_records)
             eligible_ids = [
                 int(record.id)
                 for record in source_records
@@ -1397,8 +1884,10 @@ async def build_migration_plan(args: argparse.Namespace) -> MigrationPlan:
             category_index=category_index,
             target_index=target_index,
             target_files=[record for record in target_records if int(record.file_type) == FileType.FILE.value],
+            target_folders=[record for record in target_records if int(record.file_type) == FileType.DIR.value],
             source_selection=source_selection,
             explicit_target=explicit_target,
+            folder_structure=folder_structure,
         )
 
 
@@ -1520,19 +2009,26 @@ async def _tag_snapshot(file_id: int, tenant_id: int) -> TagSnapshot:
     )
 
 
-async def _read_permission_tuples(file_id: int) -> tuple[dict[str, str], ...]:
+async def _read_resource_permission_tuples(object_ref: str) -> tuple[dict[str, str], ...]:
     fga = PermissionService._get_fga()
     if fga is None:
         raise PreflightError("OpenFGA is unavailable")
-    rows = await fga.read_tuples(object=f"knowledge_file:{file_id}")
+    rows = await fga.read_tuples(object=object_ref)
     return tuple(
         {"user": str(row["user"]), "relation": str(row["relation"]), "object": str(row["object"])}
         for row in (rows or [])
     )
 
 
-async def _replace_permission_tuples(file_id: int, desired: Sequence[dict[str, str]]) -> None:
-    existing = await _read_permission_tuples(file_id)
+async def _read_permission_tuples(file_id: int) -> tuple[dict[str, str], ...]:
+    return await _read_resource_permission_tuples(f"knowledge_file:{file_id}")
+
+
+async def _replace_resource_permission_tuples(
+    object_ref: str,
+    desired: Sequence[dict[str, str]],
+) -> None:
+    existing = await _read_resource_permission_tuples(object_ref)
     operations = [
         TupleOperation(action="delete", user=row["user"], relation=row["relation"], object=row["object"])
         for row in existing
@@ -1548,6 +2044,10 @@ async def _replace_permission_tuples(file_id: int, desired: Sequence[dict[str, s
             raise_on_failure=True,
             stop_on_failure=True,
         )
+
+
+async def _replace_permission_tuples(file_id: int, desired: Sequence[dict[str, str]]) -> None:
+    await _replace_resource_permission_tuples(f"knowledge_file:{file_id}", desired)
 
 
 async def _clear_tag_links(file_id: int, owner_id: int, tenant_id: int) -> None:
@@ -1581,12 +2081,93 @@ def _target_permission_rows(
     )
 
 
+def _target_folder_permission_rows(
+    folder: KnowledgeFile,
+    parent_folder: KnowledgeFile,
+    target: TargetContext,
+) -> tuple[dict[str, str], ...]:
+    object_ref = f"folder:{folder.id}"
+    return (
+        {"user": f"user:{target.owner.user_id}", "relation": "owner", "object": object_ref},
+        {"user": f"folder:{parent_folder.id}", "relation": "parent", "object": object_ref},
+    )
+
+
+class DatabaseTargetFolderStore:
+    async def list_folders(self, space_id: int) -> Sequence[KnowledgeFile]:
+        return await KnowledgeFileDao.aget_folders_by_space(space_id)
+
+    async def create_folder_record(
+        self,
+        source_folder: SourceFolderRef,
+        parent_folder: KnowledgeFile,
+        target: TargetContext,
+    ) -> KnowledgeFile:
+        return await KnowledgeFileDao.aadd_file(
+            KnowledgeFile(
+                tenant_id=target.tenant_id,
+                knowledge_id=int(target.space.id or 0),
+                user_id=int(target.owner.user_id),
+                user_name=target.owner.user_name,
+                updater_id=int(target.owner.user_id),
+                updater_name=target.owner.user_name,
+                file_name=source_folder.folder_name,
+                file_type=FileType.DIR.value,
+                level=int(parent_folder.level or 0) + 1,
+                file_level_path=_folder_child_path(parent_folder),
+                status=KnowledgeFileStatus.SUCCESS.value,
+            )
+        )
+
+    async def write_folder_permissions(
+        self,
+        folder: KnowledgeFile,
+        parent_folder: KnowledgeFile,
+        target: TargetContext,
+    ) -> None:
+        await _replace_resource_permission_tuples(
+            f"folder:{folder.id}",
+            _target_folder_permission_rows(folder, parent_folder, target),
+        )
+
+    async def is_folder_empty(self, folder: KnowledgeFile) -> bool:
+        async with get_async_db_session() as session:
+            child = (
+                await session.exec(
+                    select(KnowledgeFile.id)
+                    .where(
+                        KnowledgeFile.knowledge_id == int(folder.knowledge_id),
+                        KnowledgeFile.file_level_path == _folder_child_path(folder),
+                    )
+                    .limit(1)
+                )
+            ).first()
+        return child is None
+
+    async def delete_folder(self, folder: KnowledgeFile) -> None:
+        await _replace_resource_permission_tuples(f"folder:{folder.id}", ())
+        await KnowledgeFileDao.adelete_batch([int(folder.id or 0)])
+
+
 class BishengMoveOperations:
     def __init__(self, tenant_id: int, source_spaces: dict[int, Knowledge]) -> None:
         self.tenant_id = tenant_id
         self.source_spaces = source_spaces
         self.snapshots: dict[int, SourceSnapshot] = {}
         self.target_files_by_source_id: dict[int, KnowledgeFile] = {}
+        self.folder_manager = TargetFolderManager(DatabaseTargetFolderStore())
+
+    async def prepare_unit_target(self, unit: MigrationUnit) -> MigrationUnit:
+        return await self.folder_manager.prepare_unit(unit)
+
+    def get_unit_folder_mappings(self, unit_id: str) -> tuple[FolderMapping, ...]:
+        return self.folder_manager.get_unit_mappings(unit_id)
+
+    async def cleanup_unit_folders(self, unit_id: str) -> list[str]:
+        return await self.folder_manager.cleanup_unit_folders(unit_id)
+
+    def release_unit_folders(self, unit_id: str) -> None:
+        self.folder_manager.release_unit(unit_id)
 
     def _source_space(self, source_file: KnowledgeFile) -> Knowledge:
         try:
@@ -1873,6 +2454,13 @@ def _target_context_payload(target: TargetContext) -> dict[str, Any]:
     }
 
 
+def _unit_folder_mappings_payload(operations: Any, unit_id: str) -> list[dict[str, Any]]:
+    getter = getattr(operations, "get_unit_folder_mappings", None)
+    if not callable(getter):
+        return []
+    return [asdict(mapping) for mapping in getter(unit_id)]
+
+
 def build_unit_started_payload(
     unit: MigrationUnit,
     operations: BishengMoveOperations,
@@ -1906,7 +2494,8 @@ def build_unit_started_payload(
         "source_files": source_files,
         "source_document": _model_payload(unit.source_document),
         "source_versions": [_model_payload(version) for version in unit.source_versions],
-        "target": _target_context_payload(unit.target),
+        "source_folder_chain": [asdict(folder) for folder in unit.source_folder_chain],
+        "target_base": _target_context_payload(unit.target),
     }
 
 
@@ -1940,6 +2529,7 @@ def build_unit_succeeded_payload(
         "unit_type": unit.unit_type,
         "results": [asdict(result) for result in results],
         "target": _target_context_payload(unit.target),
+        "folder_mappings": _unit_folder_mappings_payload(operations, unit.unit_id),
         "target_files": target_files,
         "target_graph": target_graph,
     }
@@ -2258,6 +2848,7 @@ def _dry_run_results(plan: MigrationPlan) -> list[FileMoveResult]:
             result = _result_for_source(source_file, unit.target, status="skipped", unit=unit)
             result.reason_code = "dry_run_selected"
             result.error = "selected by dry-run; no writes performed"
+            result.folder_mappings = [asdict(step) for step in unit.target_folder_plan]
             results.append(result)
     return results
 
@@ -2294,6 +2885,8 @@ def _parameters_for_report(args: argparse.Namespace) -> dict[str, Any]:
         "source_folder_ids": list(args.source_folder_ids),
         "source_category_codes": list(args.source_category_codes),
         "source_subcategory_codes": list(args.source_subcategory_codes),
+        "preserve_folder_structure": args.preserve_folder_structure,
+        "folder_root_mode": args.folder_root_mode,
         "target_space_id": args.target_space_id,
         "target_folder_id": args.target_folder_id,
         "rollback_record_file": str(args.rollback_record_file) if args.rollback_record_file else None,
@@ -2392,6 +2985,8 @@ async def compensate_completed_migration(
         except Exception as exc:
             errors.append(f"cleanup target file {target_file.id}: {type(exc).__name__}: {exc}")
 
+    errors.extend(await _cleanup_unit_folder_mappings(operations, completed.unit.unit_id))
+
     for result in completed.results:
         result.status = "failed"
         result.source_deleted = False
@@ -2400,6 +2995,34 @@ async def compensate_completed_migration(
         result.cleanup_errors = list(errors)
         result.target_cleanup_succeeded = not errors
     return errors
+
+
+async def _prepare_unit_target(
+    unit: MigrationUnit,
+    operations: Any,
+) -> MigrationUnit:
+    if not unit.source_folder_chain:
+        return unit
+    prepare = getattr(operations, "prepare_unit_target", None)
+    if not callable(prepare):
+        raise RuntimeError("move operations do not support preserved folder structures")
+    return await prepare(unit)
+
+
+async def _cleanup_unit_folder_mappings(operations: Any, unit_id: str) -> list[str]:
+    cleanup = getattr(operations, "cleanup_unit_folders", None)
+    if not callable(cleanup):
+        return []
+    try:
+        return list(await cleanup(unit_id))
+    except Exception as exc:
+        return [f"cleanup target folders for {unit_id}: {type(exc).__name__}: {exc}"]
+
+
+def _release_unit_folder_mappings(operations: Any, unit_id: str) -> None:
+    release = getattr(operations, "release_unit_folders", None)
+    if callable(release):
+        release(unit_id)
 
 
 async def compensate_unpersisted_migrations(
@@ -2431,6 +3054,7 @@ def release_completed_migrations(
             source_file_id = int(source_file.id or 0)
             operations.snapshots.pop(source_file_id, None)
             operations.target_files_by_source_id.pop(source_file_id, None)
+        _release_unit_folder_mappings(operations, completed.unit.unit_id)
 
 
 async def run(
@@ -2492,21 +3116,42 @@ async def run(
             for unit_index, unit in enumerate(plan.selected_units):
                 if controller.requested:
                     break
+                prepared_unit = unit
                 try:
                     await operations.snapshot_unit(unit)
                     journal.append_event("unit_started", build_unit_started_payload(unit, operations))
-                    if unit.unit_type == "version_chain":
-                        unit_results = await move_version_chain(unit, operations, graph_store)
+                    prepared_unit = await _prepare_unit_target(unit, operations)
+                    if prepared_unit.unit_type == "version_chain":
+                        unit_results = await move_version_chain(prepared_unit, operations, graph_store)
                     else:
-                        unit_results = [await move_one_file(unit.source_files[0], unit.target, operations)]
+                        unit_results = [
+                            await move_one_file(
+                                prepared_unit.source_files[0],
+                                prepared_unit.target,
+                                operations,
+                            )
+                        ]
                         result = unit_results[0]
-                        result.unit_id = unit.unit_id
-                        result.category_label = unit.category_label
-                        result.subcategory_label = unit.subcategory_label
+                        result.unit_id = prepared_unit.unit_id
+                        result.category_label = prepared_unit.category_label
+                        result.subcategory_label = prepared_unit.subcategory_label
                 except RollbackRecordError:
                     raise
                 except Exception as exc:
-                    unit_results = _failed_results_for_unit(unit, exc)
+                    unit_results = _failed_results_for_unit(prepared_unit, exc)
+
+                folder_mapping_payload = _unit_folder_mappings_payload(operations, unit.unit_id)
+                for result in unit_results:
+                    result.folder_mappings = list(folder_mapping_payload)
+                if any(result.status == "failed" for result in unit_results):
+                    folder_cleanup_errors = await _cleanup_unit_folder_mappings(
+                        operations,
+                        unit.unit_id,
+                    )
+                    if folder_cleanup_errors:
+                        for result in unit_results:
+                            result.cleanup_errors.extend(folder_cleanup_errors)
+                            result.target_cleanup_succeeded = False
 
                 report.results.extend(unit_results)
                 report.pending_units = len(plan.selected_units) - unit_index - 1
@@ -2524,6 +3169,8 @@ async def run(
                         {
                             "unit_id": unit.unit_id,
                             "unit_type": unit.unit_type,
+                            "target": _target_context_payload(prepared_unit.target),
+                            "folder_mappings": _unit_folder_mappings_payload(operations, unit.unit_id),
                             "results": [asdict(result) for result in unit_results],
                         },
                     )
@@ -2540,11 +3187,11 @@ async def run(
                     unpersisted.clear()
                     return EXIT_APPLY_ERROR
 
-                completed = CompletedMigration(unit=unit, results=list(unit_results))
+                completed = CompletedMigration(unit=prepared_unit, results=list(unit_results))
                 unpersisted.append(completed)
                 try:
                     succeeded_payload = build_unit_succeeded_payload(
-                        unit,
+                        prepared_unit,
                         unit_results,
                         operations,
                         target_graph=_target_graph_payload(graph_store, unit_results),

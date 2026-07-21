@@ -8,6 +8,7 @@ import {
   createFolderApi,
   deleteFolderApi,
   deleteSpaceApi,
+  downloadWatermarkedKnowledgeFileApi,
   getSpaceInfoApi,
   getSquareSpacesApi,
   getSpaceFolderStatsApi,
@@ -26,6 +27,7 @@ jest.mock("~/api/request", () => ({
   __esModule: true,
   default: {
     get: jest.fn(),
+    getResponse: jest.fn(),
     post: jest.fn(),
     postMultiPart: jest.fn(),
     put: jest.fn(),
@@ -34,6 +36,7 @@ jest.mock("~/api/request", () => ({
 }));
 
 const mockGet = request.get as jest.Mock;
+const mockGetResponse = request.getResponse as jest.Mock;
 const mockPost = request.post as jest.Mock;
 const mockPostMultiPart = request.postMultiPart as jest.Mock;
 const mockPut = request.put as jest.Mock;
@@ -318,6 +321,102 @@ describe("batchDownloadApi", () => {
     });
 
     await expect(batchDownloadApi("101", { folder_ids: [202] })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("downloadWatermarkedKnowledgeFileApi", () => {
+  const createObjectURL = jest.fn(() => "blob:watermarked-pdf");
+  const revokeObjectURL = jest.fn();
+  let clickSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockGetResponse.mockReset();
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
+    clickSpy = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    clickSpy.mockRestore();
+  });
+
+  it("downloads the binary PDF with its RFC 5987 filename and entry point", async () => {
+    mockGetResponse.mockResolvedValue({
+      data: new Blob(["%PDF-1.7"], { type: "application/pdf" }),
+      headers: {
+        "content-disposition": "attachment; filename=\"document.pdf\"; filename*=UTF-8''%E8%AE%BE%E5%A4%87%E6%A3%80%E4%BF%AE.pdf",
+        "content-type": "application/pdf",
+      },
+      status: 200,
+    });
+
+    await downloadWatermarkedKnowledgeFileApi({
+      spaceId: "12",
+      fileId: "1580",
+      entryPoint: "bisheng_knowledge_list",
+      fallbackFileName: "设备检修.docx",
+    });
+
+    expect(mockGetResponse).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/12/files/1580/download",
+      {
+        params: { entry_point: "bisheng_knowledge_list" },
+        responseType: "blob",
+      },
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:watermarked-pdf");
+  });
+
+  it("falls back to a sanitized PDF filename", async () => {
+    mockGetResponse.mockResolvedValue({
+      data: new Blob(["%PDF-1.7"], { type: "application/pdf" }),
+      headers: { "content-type": "application/pdf" },
+      status: 200,
+    });
+    const createdAnchors: HTMLAnchorElement[] = [];
+    const originalCreateElement = document.createElement.bind(document);
+    const createElementSpy = jest.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+      const element = originalCreateElement(tagName);
+      if (tagName.toLowerCase() === "a") createdAnchors.push(element as HTMLAnchorElement);
+      return element;
+    }) as typeof document.createElement);
+
+    try {
+      await downloadWatermarkedKnowledgeFileApi({
+        spaceId: "12",
+        fileId: "1580",
+        entryPoint: "bisheng_preview",
+        fallbackFileName: "../检修\n方案.docx",
+      });
+    } finally {
+      createElementSpy.mockRestore();
+    }
+
+    expect(createdAnchors[0].download).toBe("检修方案.pdf");
+  });
+
+  it("parses JSON blob errors without starting a browser download", async () => {
+    mockGetResponse.mockRejectedValue({
+      response: {
+        status: 409,
+        data: new Blob([
+          JSON.stringify({ status_code: 18085, status_message: "PDF 产物暂不可用" }),
+        ], { type: "application/json" }),
+      },
+    });
+
+    await expect(downloadWatermarkedKnowledgeFileApi({
+      spaceId: "12",
+      fileId: "1580",
+      entryPoint: "bisheng_version_history",
+      fallbackFileName: "历史版本.docx",
+    })).rejects.toThrow("PDF 产物暂不可用");
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(clickSpy).not.toHaveBeenCalled();
   });
 });
 

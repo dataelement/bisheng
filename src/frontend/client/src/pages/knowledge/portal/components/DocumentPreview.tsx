@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, Loader2, ShieldCheck, SquarePen } from "lucide-react";
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
@@ -41,6 +41,7 @@ interface DocumentPreviewProps {
     // onOpenShare: () => void;
     onDownload: () => void;
     canDownload: boolean;
+    downloadPending: boolean;
     canManagePermission: boolean;
     onOpenPermission: () => void;
     onToggleSummary: () => void;
@@ -56,6 +57,7 @@ export function DocumentPreview({
     // onOpenShare,
     onDownload,
     canDownload,
+    downloadPending,
     canManagePermission,
     onOpenPermission,
     onToggleSummary,
@@ -84,8 +86,18 @@ export function DocumentPreview({
                                 <Share2 size={16} />
                             </button> */}
                             {canDownload ? (
-                                <button type="button" className={s.iconAction} title="下载" aria-label="下载" onClick={onDownload}>
-                                    <Download size={16} />
+                                <button
+                                    type="button"
+                                    className={s.iconAction}
+                                    title="下载"
+                                    aria-label="下载"
+                                    aria-busy={downloadPending}
+                                    disabled={downloadPending}
+                                    onClick={onDownload}
+                                >
+                                    {downloadPending
+                                        ? <Loader2 className="animate-spin" size={16} />
+                                        : <Download size={16} />}
                                 </button>
                             ) : null}
                             {canManagePermission ? (

@@ -52,6 +52,10 @@ def test_portal_download_entry_points_preserve_all_supported_values() -> None:
         "share",
         "expert_qa",
         "qa_citation",
+        "bisheng_knowledge_list",
+        "bisheng_preview",
+        "bisheng_favorite",
+        "bisheng_version_history",
         "other",
     }
 
