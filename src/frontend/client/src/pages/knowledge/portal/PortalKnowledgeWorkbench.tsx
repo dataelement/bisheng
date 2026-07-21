@@ -2453,6 +2453,7 @@ export default function PortalKnowledgeWorkbench() {
                         groupRefs={groupRefs}
                         createOptionsLoading={createOptionsLoading}
                         createPermissionByLevel={createPermissionByLevel}
+                        isAdminUser={isSystemAdmin}
                         spaceLoading={spaceLoading}
                         spaceMenuOpenId={spaceMenuOpenId}
                         getSpacePermissions={getSpacePermissions}

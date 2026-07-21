@@ -26,7 +26,7 @@ const createSpace = (overrides: Partial<KnowledgeSpace> = {}): KnowledgeSpace =>
         ...overrides,
     }) as KnowledgeSpace;
 
-function renderSidebar(extraGroups: SpaceGroup[] = []) {
+function renderSidebar(extraGroups: SpaceGroup[] = [], options: { isAdminUser?: boolean } = {}) {
     const groups: SpaceGroup[] = [
         ...extraGroups,
         {
@@ -53,6 +53,7 @@ function renderSidebar(extraGroups: SpaceGroup[] = []) {
         groupRefs,
         createOptionsLoading: false,
         createPermissionByLevel: { public: false, department: false, team: false, personal: false } as Record<SpaceLevel, boolean>,
+        isAdminUser: options.isAdminUser ?? false,
         spaceLoading: false,
         spaceMenuOpenId: null,
         // 收藏库是个人空间、用户即 creator，权限默认全开——正是 bug 场景
@@ -68,6 +69,7 @@ function renderSidebar(extraGroups: SpaceGroup[] = []) {
         onPinSpace: jest.fn(),
         onDeleteSpace: jest.fn(),
         onLeaveSpace: jest.fn(),
+        onGlobalSearchSelectFile: jest.fn(),
     };
     return render(<SpaceSidebar {...props} />);
 }
@@ -146,7 +148,7 @@ describe("SpaceSidebar 个人知识库不能新建（去掉 + 按钮）", () => 
         expect(screen.queryByLabelText("新增个人知识库")).not.toBeInTheDocument();
     });
 
-    it("其他分组（公共）仍渲染新增(+)按钮", () => {
+    it("其他分组（公共）管理员仍渲染新增(+)按钮", () => {
         const publicGroup: SpaceGroup = {
             key: "public",
             title: "公共知识库",
@@ -154,8 +156,28 @@ describe("SpaceSidebar 个人知识库不能新建（去掉 + 按钮）", () => 
             iconSrc: { collapsed: "", expanded: "" },
             spaces: [],
         };
-        renderSidebar([publicGroup]);
+        renderSidebar([publicGroup], { isAdminUser: true });
         expect(screen.getByLabelText("新增公共知识库")).toBeInTheDocument();
         expect(screen.queryByLabelText("新增个人知识库")).not.toBeInTheDocument();
+    });
+
+    it("公共/部门知识库非管理员不渲染新增(+)按钮", () => {
+        const publicGroup: SpaceGroup = {
+            key: "public",
+            title: "公共知识库",
+            level: SpaceLevel.PUBLIC,
+            iconSrc: { collapsed: "", expanded: "" },
+            spaces: [],
+        };
+        const departmentGroup: SpaceGroup = {
+            key: "department",
+            title: "部门知识库",
+            level: SpaceLevel.DEPARTMENT,
+            iconSrc: { collapsed: "", expanded: "" },
+            spaces: [],
+        };
+        renderSidebar([publicGroup, departmentGroup], { isAdminUser: false });
+        expect(screen.queryByLabelText("新增公共知识库")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("新增部门知识库")).not.toBeInTheDocument();
     });
 });
