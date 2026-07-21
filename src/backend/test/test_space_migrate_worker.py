@@ -20,6 +20,7 @@ attributes directly on the loaded module object (or the real DAO classes it
 imported) via ``monkeypatch`` instead of string-based ``patch()``.
 """
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -66,15 +67,29 @@ from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
 )
 
 
-def _kfile(id, md5, status=2, file_type=FileType.FILE.value):
-    return SimpleNamespace(id=id, md5=md5, status=status, file_type=file_type)
+def _kfile(id, md5, status=2, file_type=FileType.FILE.value, file_level_path="", level=0):
+    return SimpleNamespace(
+        id=id,
+        md5=md5,
+        status=status,
+        file_type=file_type,
+        file_level_path=file_level_path,
+        level=level,
+    )
 
 
 def test_migrate_skips_duplicate_md5_and_copies_rest(monkeypatch):
-    source = SimpleNamespace(id=1, state=1, update_time=None, model="e")
+    source = SimpleNamespace(id=1, name="自由库", state=1, update_time=None, model="e")
     target = SimpleNamespace(id=2, state=1, update_time=None, model="e")
-    a_dir = SimpleNamespace(id=12, md5="z", status=KnowledgeFileStatus.SUCCESS.value,
-                            file_type=FileType.DIR.value)
+    a_dir = _kfile(12, "z", file_type=FileType.DIR.value)
+    target_folder = SimpleNamespace(
+        id=99,
+        file_name="自由库",
+        file_type=FileType.DIR.value,
+        file_level_path="",
+        level=0,
+        md5=None,
+    )
     pages = [[_kfile(10, "a"), _kfile(11, "b"), a_dir], []]
 
     monkeypatch.setattr(
@@ -87,7 +102,7 @@ def test_migrate_skips_duplicate_md5_and_copies_rest(monkeypatch):
     monkeypatch.setattr(
         m.KnowledgeFileDao,
         "get_file_by_condition",
-        staticmethod(lambda kid: [_kfile(99, "a")]),
+        staticmethod(lambda kid: [_kfile(98, "a"), target_folder] if kid == 2 else []),
     )
     monkeypatch.setattr(
         m.KnowledgeFileDao,
@@ -105,13 +120,17 @@ def test_migrate_skips_duplicate_md5_and_copies_rest(monkeypatch):
 
     copied_ids = [c.args[0].id for c in copy_normal.call_args_list]
     assert copied_ids == [11]          # md5 "a" 已存在于目标，跳过 id=10；目录 id=12 被跳过
+    assert copy_normal.call_args.kwargs == {
+        "target_level": 1,
+        "target_file_level_path": "/99",
+    }
     del_src.assert_called_once()        # 成功后删源库
     assert result == "space migrate done"
     update_state.assert_not_called()    # 成功路径不应触发回滚
 
 
 def test_migrate_failure_rolls_back_state_and_keeps_source(monkeypatch):
-    source = SimpleNamespace(id=1, state=1, update_time=None, model="e")
+    source = SimpleNamespace(id=1, name="自由库", state=1, update_time=None, model="e")
     target = SimpleNamespace(id=2, state=1, update_time=None, model="e")
 
     monkeypatch.setattr(
@@ -125,6 +144,11 @@ def test_migrate_failure_rolls_back_state_and_keeps_source(monkeypatch):
         m.KnowledgeFileDao,
         "get_file_by_condition",
         staticmethod(lambda kid: []),
+    )
+    monkeypatch.setattr(
+        m,
+        "_get_or_create_target_folder",
+        lambda **_kwargs: SimpleNamespace(id=99, file_level_path="", level=0),
     )
 
     def _boom(*args, **kwargs):
@@ -150,7 +174,7 @@ def test_migrate_aborts_and_keeps_source_when_copy_fails(monkeypatch):
     迁移必须整体中止：不删源库、状态回滚为 PUBLISHED、返回失败文案。
     这防止「复制失败仍删源库」导致的丢文件（Imp-1）。
     """
-    source = SimpleNamespace(id=1, state=1, update_time=None, model="e")
+    source = SimpleNamespace(id=1, name="自由库", state=1, update_time=None, model="e")
     target = SimpleNamespace(id=2, state=1, update_time=None, model="e")
     pages = [[_kfile(10, "a"), _kfile(11, "b")], []]
 
@@ -165,6 +189,11 @@ def test_migrate_aborts_and_keeps_source_when_copy_fails(monkeypatch):
         m.KnowledgeFileDao,
         "get_file_by_condition",
         staticmethod(lambda kid: []),
+    )
+    monkeypatch.setattr(
+        m,
+        "_get_or_create_target_folder",
+        lambda **_kwargs: SimpleNamespace(id=99, file_level_path="", level=0),
     )
     monkeypatch.setattr(
         m.KnowledgeFileDao,
@@ -186,6 +215,122 @@ def test_migrate_aborts_and_keeps_source_when_copy_fails(monkeypatch):
     assert last.kwargs.get("state") == KnowledgeState.PUBLISHED or (
         last.args[1:] and last.args[1] == KnowledgeState.PUBLISHED
     )
+
+
+def test_migrate_reuses_same_named_root_folder(monkeypatch):
+    folder = SimpleNamespace(
+        id=99,
+        file_name="自由库",
+        file_type=FileType.DIR.value,
+        file_level_path=None,
+        level=0,
+    )
+    create = MagicMock()
+    monkeypatch.setattr(m, "run_async_safe", create)
+
+    result = m._get_or_create_target_folder(
+        target_id=2,
+        folder_name="自由库",
+        target_files=[folder],
+        op_user_id=5,
+    )
+
+    assert result is folder
+    create.assert_not_called()
+
+
+def test_migrate_creates_root_folder_when_name_is_absent(monkeypatch):
+    created_folder = SimpleNamespace(id=100, file_name="自由库", file_level_path="", level=0)
+
+    async def create_folder(*_args):
+        return created_folder
+
+    monkeypatch.setattr(m, "_create_target_folder", create_folder)
+    monkeypatch.setattr(m, "run_async_safe", lambda coro, *, timeout: asyncio.run(coro))
+
+    result = m._get_or_create_target_folder(
+        target_id=2,
+        folder_name="自由库",
+        target_files=[],
+        op_user_id=5,
+    )
+
+    assert result is created_folder
+
+
+def test_migrate_rebuilds_source_folder_tree_for_copied_files(monkeypatch):
+    source = SimpleNamespace(id=1, name="自由库", state=1, update_time=None, model="e")
+    target = SimpleNamespace(id=2, state=1, update_time=None, model="e")
+    source_folder_a = SimpleNamespace(
+        id=12,
+        file_name="资料",
+        file_type=FileType.DIR.value,
+        file_level_path="",
+        level=0,
+    )
+    source_folder_b = SimpleNamespace(
+        id=13,
+        file_name="规范",
+        file_type=FileType.DIR.value,
+        file_level_path="/12",
+        level=1,
+    )
+    migration_root = SimpleNamespace(
+        id=99,
+        file_name="自由库",
+        file_type=FileType.DIR.value,
+        file_level_path="",
+        level=0,
+        md5=None,
+    )
+    target_folder_a = SimpleNamespace(id=101, file_level_path="/99", level=1)
+    target_folder_b = SimpleNamespace(id=102, file_level_path="/99/101", level=2)
+    pages = [[
+        source_folder_a,
+        source_folder_b,
+        _kfile(20, "nested", file_level_path="/12/13", level=2),
+        _kfile(21, "root", file_level_path="", level=0),
+    ], []]
+
+    monkeypatch.setattr(
+        m.KnowledgeDao,
+        "query_by_id",
+        staticmethod(lambda kid: source if kid == 1 else target),
+    )
+    monkeypatch.setattr(
+        m.KnowledgeFileDao,
+        "get_file_by_condition",
+        staticmethod(lambda kid: [migration_root] if kid == 2 else [source_folder_a, source_folder_b]),
+    )
+    monkeypatch.setattr(
+        m.KnowledgeFileDao,
+        "get_file_by_filters",
+        staticmethod(lambda _kid, status=None, page=1, page_size=20: pages[page - 1]),
+    )
+
+    def get_folder(*, folder_name, parent_folder=None, **_kwargs):
+        if parent_folder is None:
+            return migration_root
+        if folder_name == "资料":
+            assert parent_folder is migration_root
+            return target_folder_a
+        assert folder_name == "规范"
+        assert parent_folder is target_folder_a
+        return target_folder_b
+
+    monkeypatch.setattr(m, "_get_or_create_target_folder", get_folder)
+    copy_normal = MagicMock(return_value=SimpleNamespace(status=KnowledgeFileStatus.SUCCESS.value))
+    monkeypatch.setattr(m, "copy_normal", copy_normal)
+    monkeypatch.setattr(m, "_delete_source_space", AsyncMock())
+
+    result = m.space_migrate_celery({"source_id": 1, "target_id": 2, "op_user_id": 5})
+
+    assert result == "space migrate done"
+    assert [call.args[0].id for call in copy_normal.call_args_list] == [20, 21]
+    assert [call.kwargs for call in copy_normal.call_args_list] == [
+        {"target_level": 3, "target_file_level_path": "/99/101/102"},
+        {"target_level": 1, "target_file_level_path": "/99"},
+    ]
 
 
 def test_worker_request_supports_get_request_ip():
