@@ -116,6 +116,7 @@
   --fill-4: var(--arco-gray-4);       /* filled active */
   --border-base: var(--arco-gray-3);  /* regular border ("border" in the spec) */
   --border-deep: var(--arco-gray-4);  /* emphasized divider / hover border */
+  --bg-page: 255 255 255;             /* page surface: white, darkens in .dark */
 
   /* Semantic — functional (never themed) */
   --success: 0 180 42;          /* #00B42A (Arco green-6) */
@@ -412,6 +413,24 @@ html {
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
   --switch-unchecked: 0 0% 40%;
+
+  /* Arco gray ramp — dark theme (official @arco-design/color gray.dark).
+   * Lightness inverts (gray-1 darkest, gray-10 lightest), so the semantic
+   * text / fill / border tokens defined in :root as var(--arco-gray-N)
+   * auto-flip under .dark (custom props resolve lazily at use time).
+   * Neutral + semantic only this round; brand and functional dark ramps
+   * are still pending (they keep light values in dark — known debt). */
+  --arco-gray-1: 23 23 26;      /* #17171A */
+  --arco-gray-2: 46 46 48;      /* #2E2E30 */
+  --arco-gray-3: 72 72 73;      /* #484849 */
+  --arco-gray-4: 95 95 96;      /* #5F5F60 */
+  --arco-gray-5: 120 120 122;   /* #78787A */
+  --arco-gray-6: 146 146 147;   /* #929293 */
+  --arco-gray-7: 171 171 172;   /* #ABABAC */
+  --arco-gray-8: 197 197 197;   /* #C5C5C5 */
+  --arco-gray-9: 223 223 223;   /* #DFDFDF */
+  --arco-gray-10: 246 246 246;  /* #F6F6F6 */
+  --bg-page: 18 18 18;          /* #121212 — page surface, dark */
 }
 
 .gizmo {

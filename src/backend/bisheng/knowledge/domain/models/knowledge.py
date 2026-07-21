@@ -841,11 +841,11 @@ class KnowledgeDao(KnowledgeBase):
 
         kid_str = col(Knowledge.id).cast(String)
 
-        # Subquery: count subscribers (status=ACTIVE) per space
+        # Subquery: count unique active subscribers per space
         subscriber_subq = (
             select(
                 SpaceChannelMember.business_id,
-                func.count().label("subscriber_count"),
+                func.count(func.distinct(SpaceChannelMember.user_id)).label("subscriber_count"),
             )
             .where(
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -890,7 +890,10 @@ class KnowledgeDao(KnowledgeBase):
                 )
             )
 
-        # Sort: not-subscribed first, then by update_time DESC
+        subscriber_count = func.coalesce(subscriber_subq.c.subscriber_count, 0)
+
+        # Sort by lightweight membership facts only. Permission evaluation remains
+        # a response-layer concern and does not affect SQL pagination.
         subscription_order = case(
             (SpaceChannelMember.status.is_(None), 0),
             (
@@ -902,7 +905,9 @@ class KnowledgeDao(KnowledgeBase):
         )
         query = query.order_by(
             subscription_order.asc(),
+            subscriber_count.desc(),
             func.coalesce(Knowledge.update_time, Knowledge.create_time).desc(),
+            Knowledge.id.asc(),
         )
 
         # Pagination
