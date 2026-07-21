@@ -11,30 +11,71 @@ import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
 export function ButtonProgress() {
   return (
     <ComponentPage
-      title="Button · 迁移"
-      eng="Button Progress"
+      title="Button 按钮 · 现状"
+      eng="Button Inventory"
       description={
         <>
-          基准组件已重构落地（2026-07-14）：旧入参自动映射为新双轴（已标
-          deprecated），业务零改动先跑起来，逐批迁移后删除映射层。剩余工作：设计师验收推导值 →
-          逐批迁移业务页 → 清退 <code>btn</code> 系全局类与 Generations/Button。
+          2026-07-20 全仓重扫。<b>真正的大头不是 Button 组件，而是野生原生按钮</b>：
+          <code>&lt;Button&gt;</code> 264 处，而手写 <code>&lt;button&gt;</code> 有 485 处 ——
+          后者比前者还多，且完全不受设计系统约束。
         </>
       }
       whenToUse={[
         <>
-          缺省高度 <code>h-9</code>(36px) 已归入 medium(32px)，<b>全站矮 4px</b>
-          ，迁移各批带目检回归（§6.6）。
+          新双轴 API（<code>color</code> 属性）业务里<b>仅 1 处</b>使用 ——
+          旧入参虽已自动映射为新双轴，但业务代码基本没迁。
         </>,
-        <>下表右列全部用旧 API 渲染 —— 外观应与新双轴一致，即映射验收。</>,
+        <>
+          缺省高度 <code>h-9</code>(36px) 已归入 medium(32px)，全站矮 4px，迁移各批带目检回归。
+        </>,
       ]}
-      bodyTitle="迁移台账"
+      bodyTitle="现状盘点"
     >
-      <ExampleGroup title="旧 API 兼容映射（迁移台账，§6.3）">
+      <ExampleGroup
+        title="① 按钮总盘"
+        subtitle="全站到底有多少种“按钮”——组件化的只是其中一部分。"
+      >
+        <CompareTable
+          head={['来源', '判定方式', '出现次数', '涉及文件', '受设计系统约束？']}
+          rows={[
+            [
+              <b key="a">原生 &lt;button&gt;</b>,
+              <code key="a2">&lt;button</code>,
+              <b key="a3">485</b>,
+              <b key="a4">222</b>,
+              '❌ 完全不受约束，样式各写各的',
+            ],
+            [
+              'Button 组件',
+              <code key="b">&lt;Button&gt;</code>,
+              '264',
+              '136',
+              '✅ 走 cva 档位（但 96% 仍用旧 API 入参）',
+            ],
+            [
+              '全局 CSS 类',
+              <code key="c">btn / btn-primary / btn-neutral / btn-secondary</code>,
+              '—',
+              '约 10',
+              '❌ LibreChat 遗留全局类：ToolItem、EditMessage、EditTextPart、HeaderNewChat、PluginStoreItem…',
+            ],
+          ]}
+        />
+        <p className="mt-3 text-body-sm text-muted-foreground">
+          按钮统一的真实工作量在第一行 —— 485 处原生 <code>&lt;button&gt;</code>
+          里，哪些该收进 Button 组件、哪些本就该是无样式的可点区域（icon/关闭/列表项），需要逐类甄别。
+        </p>
+      </ExampleGroup>
+
+      <ExampleGroup
+        title="② 旧 API 兼容映射"
+        subtitle="旧入参自动映射为新双轴（已标 deprecated）；右列全部用旧 API 渲染，外观应与新双轴一致。"
+      >
         <CompareTable
           head={['旧写法（用量）', '映射为', '旧 API 实渲染']}
           rows={[
             [
-              <code key="o">缺省 / variant=&quot;default&quot;（116 处）</code>,
+              <code key="o">缺省 + 显式 default（98 + 7 = 105 处）</code>,
               <code key="n">primary solid</code>,
               <Button key="b" variant="default">
                 按钮
@@ -48,14 +89,14 @@ export function ButtonProgress() {
               </Button>,
             ],
             [
-              <code key="o">variant=&quot;outline&quot;（78 处）</code>,
+              <code key="o">variant=&quot;outline&quot;（77 处）</code>,
               <code key="n">default outlined</code>,
               <Button key="b" variant="outline">
                 按钮
               </Button>,
             ],
             [
-              <code key="o">variant=&quot;secondary&quot;（17 处，原 18：知识空间侧栏“创建知识空间”已迁 primary filled）</code>,
+              <code key="o">variant=&quot;secondary&quot;（17 处）</code>,
               <code key="n">default filled</code>,
               <Button key="b" variant="secondary">
                 按钮
@@ -83,14 +124,14 @@ export function ButtonProgress() {
               </Button>,
             ],
             [
-              <code key="o">variant=&quot;link&quot;（0 处）</code>,
+              <code key="o">variant=&quot;link&quot; / secondaryBrand（0 处）</code>,
               <code key="n">primary link</code>,
               <Button key="b" variant="link">
                 按钮
               </Button>,
             ],
             [
-              <code key="o">size 缺省 / &quot;sm&quot;（249 处，旧 h-9）</code>,
+              <code key="o">size=&quot;sm&quot;（48 处，旧 h-9）</code>,
               <code key="n">medium（32px）</code>,
               <Button key="b" variant="outline" size="sm">
                 按钮
@@ -104,7 +145,7 @@ export function ButtonProgress() {
               </Button>,
             ],
             [
-              <code key="o">size=&quot;icon&quot;（18 处）</code>,
+              <code key="o">size=&quot;icon&quot;（17 处）</code>,
               <code key="n">medium + iconOnly</code>,
               <Button key="b" variant="outline" size="icon" aria-label="搜索">
                 <Outlined.Search />
