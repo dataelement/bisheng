@@ -1,10 +1,21 @@
 import importlib
+import json
 import sys
 from types import ModuleType
 
 import pytest
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.knowledge_space import (
+    PortalPdfArtifactUnavailableError,
+    PortalPdfDownloadBusyError,
+    PortalPdfDownloadGenerationError,
+    PortalPdfDownloadServiceUnavailableError,
+    PortalPdfDownloadTimeoutError,
+    PortalShareDownloadGrantInvalidError,
+    SpaceFileNotFoundError,
+    SpacePermissionDeniedError,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalSpaceInfoReq,
     ShougangPortalTelemetryEventReq,
@@ -202,13 +213,45 @@ class _FakeKnowledgeSpaceService:
         self.behavior_event = req
 
 
+class _FakePreparedDownload:
+    path = None
+    filename = "迁移指南.pdf"
+    size = 8
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def iter_bytes(self):
+        try:
+            yield b"%PDF-1."
+        finally:
+            self.closed = True
+
+
+class _FakePortalPdfDownloadService:
+    def __init__(self, *, error=None) -> None:
+        self.error = error
+        self.calls = []
+        self.prepared = _FakePreparedDownload()
+
+    async def prepare_download(self, request, login_user):
+        self.calls.append((request, login_user))
+        if self.error:
+            raise self.error
+        return self.prepared
+
+
 def _load_shougang_portal_endpoint(monkeypatch: pytest.MonkeyPatch):
     dependencies_module = ModuleType('bisheng.knowledge.api.dependencies')
 
     def _get_knowledge_space_service():
         return None
 
+    def _get_portal_pdf_download_service():
+        return None
+
     dependencies_module.get_knowledge_space_service = _get_knowledge_space_service
+    dependencies_module.get_portal_pdf_download_service = _get_portal_pdf_download_service
     monkeypatch.setitem(sys.modules, 'bisheng.knowledge.api.dependencies', dependencies_module)
     return importlib.import_module('bisheng.knowledge.api.endpoints.shougang_portal')
 
@@ -578,3 +621,124 @@ async def test_shougang_portal_home_accepts_section_batch_request(monkeypatch: p
     assert response.status_code == 200
     assert response.data["sections"]["最新精选"][0]["space_id"] == 12
     assert response.data["tags"] == ["最新精选", "热轧"]
+
+
+@pytest.mark.asyncio
+async def test_portal_pdf_download_returns_binary_safe_headers_and_chinese_filename(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    endpoint_module_name = "bisheng.knowledge.api.endpoints.shougang_portal"
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        service = _FakePortalPdfDownloadService()
+        login_user = UserPayload(user_id=7, user_name="张三", tenant_id=5)
+        response = await endpoint.download_shougang_portal_pdf(
+            space_id=12,
+            file_id=1580,
+            entry_point="detail",
+            share_access_grant="",
+            login_user=login_user,
+            svc=service,
+        )
+        body = b"".join([chunk async for chunk in response.body_iterator])
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    request, actual_user = service.calls[0]
+    assert request.space_id == 12
+    assert request.file_id == 1580
+    assert request.entry_point.value == "detail"
+    assert actual_user is login_user
+    assert response.status_code == 200
+    assert body == b"%PDF-1."
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-length"] == "8"
+    assert 'filename="document.pdf"' in response.headers["content-disposition"]
+    assert "filename*=UTF-8''%E8%BF%81%E7%A7%BB%E6%8C%87%E5%8D%97.pdf" in response.headers[
+        "content-disposition"
+    ]
+    assert response.headers["cache-control"] == "private, no-store, no-cache, must-revalidate"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert service.prepared.closed is True
+
+
+@pytest.mark.asyncio
+async def test_portal_pdf_download_passes_private_grant_and_normalizes_unknown_entry_point(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    endpoint_module_name = "bisheng.knowledge.api.endpoints.shougang_portal"
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        service = _FakePortalPdfDownloadService()
+        response = await endpoint.download_shougang_portal_pdf(
+            space_id=12,
+            file_id=1580,
+            entry_point="untrusted",
+            share_access_grant="opaque-secret-grant",
+            login_user=UserPayload(user_id=7, user_name="张三", tenant_id=5),
+            svc=service,
+        )
+        await response.body_iterator.aclose()
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    request, _ = service.calls[0]
+    assert request.entry_point.value == "other"
+    assert request.share_access_grant == "opaque-secret-grant"
+    assert "opaque-secret-grant" not in json.dumps(dict(response.headers))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "http_status", "business_code"),
+    [
+        (SpacePermissionDeniedError(), 403, 18040),
+        (PortalShareDownloadGrantInvalidError(), 403, 18088),
+        (SpaceFileNotFoundError(), 404, 18020),
+        (PortalPdfArtifactUnavailableError(), 409, 18085),
+        (PortalPdfDownloadBusyError(), 429, 18086),
+        (PortalPdfDownloadServiceUnavailableError(), 503, 18090),
+        (PortalPdfDownloadTimeoutError(), 504, 18087),
+        (PortalPdfDownloadGenerationError(), 500, 18089),
+    ],
+)
+async def test_portal_pdf_download_maps_domain_errors_to_real_http_status(
+    monkeypatch: pytest.MonkeyPatch,
+    error,
+    http_status: int,
+    business_code: int,
+):
+    endpoint_module_name = "bisheng.knowledge.api.endpoints.shougang_portal"
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        response = await endpoint.download_shougang_portal_pdf(
+            space_id=12,
+            file_id=1580,
+            entry_point="detail",
+            share_access_grant="",
+            login_user=UserPayload(user_id=7, user_name="张三", tenant_id=5),
+            svc=_FakePortalPdfDownloadService(error=error),
+        )
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    payload = json.loads(response.body)
+    assert response.status_code == http_status
+    assert payload["status_code"] == business_code
+    assert "opaque" not in response.body.decode()

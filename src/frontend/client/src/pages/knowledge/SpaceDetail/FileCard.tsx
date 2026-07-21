@@ -39,6 +39,7 @@ interface FileCardProps {
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
+    downloadPending?: boolean;
     canPublish?: boolean;
     onPublishFile?: (file: KnowledgeFile) => void;
     disableClickNavigate?: boolean;
@@ -75,6 +76,7 @@ export function FileCard({
     canRename = false,
     canDelete = false,
     canDownload = false,
+    downloadPending = false,
     canPublish = false,
     onPublishFile,
     disableClickNavigate = false,
@@ -403,8 +405,12 @@ export function FileCard({
                                     className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
                                     onClick={(e) => { e.stopPropagation(); onDownload(); }}
                                     title={localize("com_knowledge.download")}
+                                    disabled={downloadPending}
+                                    aria-busy={downloadPending}
                                 >
-                                    <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                    {downloadPending
+                                        ? <Loader2 className="size-3.5 animate-spin text-[#4e5969]" />
+                                        : <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />}
                                 </Button>
                             )}
                             {showMoreMenu && (
@@ -429,8 +435,11 @@ export function FileCard({
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDownload(); }}
                                                 className="flex items-center"
+                                                disabled={downloadPending}
                                             >
-                                                <Download className="mr-2 size-4 shrink-0" />
+                                                {downloadPending
+                                                    ? <Loader2 className="mr-2 size-4 shrink-0 animate-spin" />
+                                                    : <Download className="mr-2 size-4 shrink-0" />}
                                                 {localize("com_knowledge.download")}
                                             </DropdownMenuItem>
                                         )}
@@ -579,8 +588,12 @@ export function FileCard({
                             className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
                             onClick={(e) => { e.stopPropagation(); onDownload(); }}
                             title={localize("com_knowledge.download")}
+                            disabled={downloadPending}
+                            aria-busy={downloadPending}
                         >
-                            <Download className="size-3.5 text-[#4e5969]" />
+                            {downloadPending
+                                ? <Loader2 className="size-3.5 animate-spin text-[#4e5969]" />
+                                : <Download className="size-3.5 text-[#4e5969]" />}
                         </Button>
                     )}
                     {showMoreMenu && (
@@ -604,8 +617,11 @@ export function FileCard({
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDownload(); }}
                                                 className="flex items-center"
+                                                disabled={downloadPending}
                                             >
-                                        <Download className="mr-2 size-4 shrink-0" />
+                                        {downloadPending
+                                            ? <Loader2 className="mr-2 size-4 shrink-0 animate-spin" />
+                                            : <Download className="mr-2 size-4 shrink-0" />}
                                                 {localize("com_knowledge.download")}
                                             </DropdownMenuItem>
                                         )}

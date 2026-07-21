@@ -4,6 +4,55 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Knowledge Space Scripts
 
+### `dedupe_department_space_documents.py`
+
+删除部门知识空间中与公共知识空间重复的逻辑文档。脚本只比较两类空间当前主版本中
+`file_type = FILE`、`status = SUCCESS` 且非空的精确 MD5；命中后以逻辑文档为单位删除部门侧
+全部历史版本。没有版本关系的兼容数据以单个物理文件为删除单元。公共空间文档和目录始终保留。
+
+默认 dry-run，只读取数据并在 `migration_reports/knowledge_file_dedup/` 生成 JSON 审计报告；
+只有显式传入 `--apply` 才会依次清理部门侧 Milvus、Elasticsearch、MinIO、OpenFGA、数据库关系
+和物理文件。脚本仅支持未启用多租户的部署。
+
+用法：
+
+```bash
+# 全量只读扫描
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py
+
+# 按部门空间或当前文件收窄 dry-run 范围；参数可重复
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --department-space-id 10 --file-id 201 --limit 20
+
+# 审核 dry-run 报告并安排维护窗口后，重新扫描并执行真实删除
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --department-space-id 10 --limit 20 --apply
+
+# 仅使用先前 apply 报告恢复未完成单元；不可同时指定范围参数
+PYTHONPATH=./ .venv/bin/python scripts/dedupe_department_space_documents.py \
+  --apply --resume-report migration_reports/knowledge_file_dedup/dedupe-RUN_ID.json
+```
+
+Safety and reports:
+
+- `--department-space-id`、`--file-id` 可重复；`--limit` 在稳定排序后限制删除单元数。
+- 每个删除单元在写入前都会重新读取并校验空间级别、当前版本、精确 MD5、公共见证和版本链指纹；
+  数据漂移时跳过，不使用旧报告直接决定新的删除目标。
+- JSON 报告记录目标版本链、公共见证、关联影响计数、分步状态和删除后核验结果，并通过原子替换写入。
+- 标签、审核标签、分享、相似候选和门户推荐投影随部门文件关系清理；收藏引用与审计记录保留，报告中给出影响计数。
+- 任一单元失败后停止后续删除并返回非零退出码。`--resume-report` 只接受先前的 apply 报告，校验报告结构和指纹后
+  恢复失败或待处理单元；已完成或已安全跳过的单元不会重复处理。
+- `--apply` 是跨 MySQL、Milvus、Elasticsearch、MinIO、OpenFGA 的不可逆数据删除，不能提供原子回滚。
+  正式执行前必须完成备份、审核 dry-run 报告、单文件烟测和小批量灰度，并在维护窗口内运行。
+
+Exit codes:
+
+- `0`：dry-run 完成，或所有 apply 单元已完成/安全跳过。
+- `2`：参数、单租户约束、目标范围或恢复报告预检失败。
+- `3`：扫描或初始化失败。
+- `4`：真实删除、分步核验或恢复执行失败。
+- `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
+
 ### `backfill_file_similarity_candidates.py`
 
 回填历史知识空间文件的相似候选缓存表 `knowledge_file_similarity_candidate`。默认 dry-run，只统计将刷新的文件；传入 `--apply` 后会逐个调用相似候选刷新逻辑，写入候选明细并同步更新 `knowledgefile.similar_status`。可通过 `--sleep-ms` 降低回填期间 CPU 压力。
@@ -61,6 +110,56 @@ Operational notes:
 - `--apply` 会产生 Elasticsearch 读取压力和 AI 调用成本，并修改历史数据。脚本不提供自动回滚，
   正式全库执行前应依次完成 dry-run、单文件烟测和小批量灰度。
 
+### `backfill_knowledge_space_auto_tags.py`
+
+扫描知识空间文件，对**可见标签总数少于 3** 且解析成功的文件补跑 Link A / Link B AI 打标签流程；补打后单文件可见标签总数不超过 **6**。
+内容优先从 Elasticsearch 分块读取，缺失时回退到 `abstract`。默认 dry-run，传入 `--apply` 后才会调用 LLM。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py --apply --space-id 10
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_auto_tags.py --apply --batch-size 20 --concurrency 2 --limit 100
+
+bash scripts/backfill_knowledge_space_auto_tags.sh --apply --batch-size 20
+
+# Docker 容器内（WORKDIR /app，使用系统 python，无 .venv）：
+PYTHONPATH=./ python scripts/backfill_knowledge_space_auto_tags.py --apply --min-tags 3 --max-tags 6
+bash scripts/backfill_knowledge_space_auto_tags.sh --apply --min-tags 3 --max-tags 6
+```
+
+说明：
+
+- 只处理 `status=SUCCESS` 的真实文件；默认 `--min-tags 3`（少于 3 个才处理）、`--max-tags 6`（补打后总数上限）。
+- 默认沿用线上 Link A/B 的 `_should_run` 门禁，可用 `--force` 绕过。
+- `--scan-batch-size` 控制标签统计分批大小；`--batch-size` 控制实际打标签分批大小。
+- Link B 是否执行仍受 `review_tag_visible`、空间 `auto_tag_enabled`、Link A 应用标签数上限，以及 `--max-tags` 剩余额度约束。
+
+### `backfill_word_pdf_preview.py`
+
+给**存量 Word 文件**补生成 PDF 预览。新上传的 Word 在解析时会把 .docx 预览转成 PDF 存到 `preview/{file_id}.pdf` 并记到 `user_metadata.pdf_preview_object_name`，前端优先用它（LibreOffice 排版更接近 Word，避免电子印章/图形错位）。此功能上线前解析的旧文件没有这个字段，预览会回退到 .docx —— 本脚本离线复刻同样的步骤给这些文件补齐。串行执行，幂等（`pdf_preview_source_md5` 已匹配当前 md5 的跳过）；默认 dry-run，传 `--apply` 才转换并写库。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_word_pdf_preview.py            # dry-run，仅列出待处理文件
+PYTHONPATH=./ .venv/bin/python scripts/backfill_word_pdf_preview.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backfill_word_pdf_preview.py --apply --space-id 202 --limit 50
+bash scripts/backfill_word_pdf_preview.sh --apply --limit 50
+
+# Docker 容器内（WORKDIR /app，使用系统 python，无 .venv；容器里已装 LibreOffice）：
+PYTHONPATH=./ python scripts/backfill_word_pdf_preview.py --apply
+```
+
+说明：
+
+- 只处理 `status=SUCCESS`、扩展名为 `doc/docx/wps` 的真实文件。
+- 转换源优先取解析产出的 `preview/{id}.docx`，缺失时回退到原始 `.doc/.docx`。
+- 每个文件转换失败只记日志并继续，不中断整批（预览是尽力而为）；`--timeout` 控制单文件 LibreOffice 超时（默认 120s）。
+- `--force` 可对已有 PDF 的文件强制重转。
+
 ### `reparse_knowledge_space_files.py`
 
 重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。
@@ -73,6 +172,8 @@ PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level public
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level department --status failed --status waiting --status violation
 
 bash scripts/reparse_knowledge_space_files.sh
 bash scripts/reparse_knowledge_space_files.sh --apply --concurrency 4
@@ -84,56 +185,209 @@ Scope:
 - `--space-id`：包含指定知识空间下的所有真实文件，可重复传入
 - `--folder-id`：递归包含指定文件夹下所有层级的真实文件，可重复传入
 - `--file-id`：包含指定真实文件，可重复传入
-- 仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION` 状态，跳过 `WAITING` / `PROCESSING` / `REBUILDING`
+- `--space-level`：按空间类型过滤，可选 `public` / `department` / `team` / `personal`。该条件与
+  `--space-id` / `--folder-id` / `--file-id` 的并集取交集；未配置空间类型的知识空间不命中
+- `--status`：按文档状态过滤，可重复传入，多值之间取并集。可选 `processing` / `success` /
+  `failed` / `rebuilding` / `waiting` / `timeout` / `violation`
+- 不传 `--status` 时，仅处理 `SUCCESS` / `FAILED` / `TIMEOUT` / `VIOLATION`；显式传入后会替换该默认集合
+- `--status` 不可与兼容参数 `--include-inflight` / `--only-inflight` 同时使用
+- `--include-inflight` 在默认状态集合上增加 `WAITING` / `PROCESSING` / `REBUILDING`；
+  `--only-inflight` 仅处理这三种执行中状态
 
 ### `move_knowledge_space_files.py`
 
-将指定知识空间中的已解析文档复制到同租户、同向量模型的目标知识空间，完成数据库、
-MinIO、Milvus、Elasticsearch、标签和 OpenFGA 权限校验后，再删除来源文件。默认 dry-run；
-只有显式传入 `--apply` 才会逐文件执行迁移。每次运行都会在
-`migration_reports/knowledge_file_move/` 下生成 JSON 报告。
+扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
+门户二级分类 code 缩小范围。默认按分类 `label` 自动匹配公共知识空间及其根目录
+直属文件夹；也可显式指定目标知识库和目标文件夹。默认将文件平铺到路由后的目标文件夹，
+可通过 `--preserve-folder-structure` 按需复制来源目录层级。版本链作为一个迁移单元整体处理。
+
+脚本默认为 dry-run；只有显式传入 `--apply` 才会写入目标并删除来源。脚本会先对来源空间中的
+`SUCCESS` 真实文件做轻量计数，再按来源文件夹和分类提前缩小分析范围。每次运行都会在
+`--report-dir` 下生成 JSON 运行报告；apply 模式另外生成 JSONL 审计记录。普通移动在目标数据仍保留时
+可依据记录手工还原；强制覆盖会永久删除旧目标内容，JSONL 只能用于审计和残留清理，不能恢复旧目标。
 
 Usage:
 
 ```bash
-# 来源库全部 SUCCESS 文档；仅预检，不写数据
+# 扫描一个来源知识空间；仅预检，不写业务数据
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
-  --source-space-id 10 \
-  --target-space-id 20 \
-  --target-owner-id 30
+  --source-space-id 10
 
-# 递归选择来源文件夹，并同时匹配一级、二级分类；移动到目标文件夹
+# 一次扫描多个来源空间
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
   --source-space-id 10 \
-  --source-folder-id 11 \
-  --source-category-code STD \
-  --source-subcategory-code STD-A \
+  --source-space-id 11
+
+# 只选择文件夹 100/101 的递归子孙，且一级分类为 A/B，且二级分类为 A01/B01
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --source-folder-id 100 \
+  --source-folder-id 101 \
+  --source-category-code A \
+  --source-category-code B \
+  --source-subcategory-code A01 \
+  --source-subcategory-code B01
+
+# 将筛选结果全部移入指定目标文件夹，每 10 个迁移单元落盘一次回溯记录
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
   --target-space-id 20 \
-  --target-folder-id 21 \
-  --target-owner-id 30 \
+  --target-folder-id 200 \
+  --rollback-record-file migration_reports/move-10-to-20.jsonl \
+  --batch-size 10 \
   --apply
 
-# 指定多个文件 ID；同一参数可重复传入
+# 保留来源文件夹 100 本身及其子目录：目标/来源文件夹 100/.../文件
 PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
   --source-space-id 10 \
-  --source-file-id 101 \
-  --source-file-id 102 \
+  --source-folder-id 100 \
+  --preserve-folder-structure \
+  --folder-root-mode include
+
+# 仅保留文件夹 100 下方的层级，并迁入显式目标：目标/.../文件
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --source-folder-id 100 \
+  --preserve-folder-structure \
+  --folder-root-mode contents \
   --target-space-id 20 \
-  --target-owner-id 30 \
+  --target-folder-id 200 \
+  --apply
+
+# 预览强制覆盖：不会写数据，报告会列出待删除的目标逻辑文档、版本和文件 ID
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --source-folder-id 100 \
+  --target-space-id 20 \
+  --target-folder-id 200 \
+  --force-overwrite
+
+# 审核 dry-run 报告后执行不可恢复的强制覆盖
+PYTHONPATH=./ .venv/bin/python scripts/move_knowledge_space_files.py \
+  --source-space-id 10 \
+  --source-folder-id 100 \
+  --target-space-id 20 \
+  --target-folder-id 200 \
+  --force-overwrite \
   --apply
 ```
 
-Selection and safety:
+参数：
 
-- `--source-folder-id` 递归命中文件夹全部后代；不传时覆盖来源库全目录。
-- `--source-file-id`、`--source-category-code`、`--source-subcategory-code` 均可重复。
-  同一维度内按 OR 匹配，不同维度之间按 AND 匹配。
-- 一级分类来自 `file_encoding`，二级分类来自 `file_subcategory_code`；同时指定时会校验父子关系。
-- 仅移动 `file_type = FILE` 且 `status = SUCCESS` 的普通文档；版本链文件直接跳过。
-- 所有来源文件都会平铺到目标文件夹；不传 `--target-folder-id` 时平铺到目标库根目录。
-- 目标文件夹存在同名文件，或目标库任意位置存在相同 MD5 时，跳过该文件且保留来源。
-- 每个文件按“复制 → 校验 → 删除来源”执行。失败时保留或恢复来源，并尽力清理目标残留；
-  任一文件失败时进程返回非零退出码，跳过不计为失败。
+- `--source-space-id`：必填、可重复；多个 ID 取并集，且必须属于同一租户。
+- `--source-folder-id`：可重复；每个文件夹都递归包含所有子孙文件，多个 ID 取并集。文件夹必须
+  存在于本次来源空间中。
+- `--source-category-code`：可重复；按门户一级分类 code 过滤，多值取并集，code 不区分大小写。
+- `--source-subcategory-code`：可重复；按门户二级分类 code 过滤，多值取并集，code 不区分大小写。
+  同时指定一级分类时，二级分类必须属于所选一级分类。
+- `--preserve-folder-structure`：可选开关。开启后，在自动路由或显式目标文件夹之下保留来源目录层级；
+  未开启时保持原有平铺行为。
+- `--folder-root-mode`：仅能与 `--preserve-folder-structure` 一起使用，可选 `include` / `contents`，
+  默认 `include`。`include` 保留命中的最外层 `--source-folder-id` 本身；`contents` 从该目录下一层
+  开始保留。未指定来源文件夹时，两种模式都从来源知识空间根目录下开始保留。
+- `--target-space-id` 与 `--target-folder-id`：必须同时传入或同时省略。传入后，所有选中迁移单元
+  都进入该文件夹；目标可为公共或部门空间，文件夹可为任意层级，但必须属于目标空间且与来源
+  处于同一租户。团队和个人空间不允许作为显式目标。
+- `--force-overwrite`：默认关闭。只能与显式的 `--target-space-id`、`--target-folder-id` 一起使用，
+  且目标空间不能同时出现在 `--source-space-id` 中。开启后，唯一命中的旧目标逻辑文档会被永久删除；
+  省略 `--apply` 时只预览覆盖计划。
+- `--report-dir`：JSON 运行报告目录，默认为 `migration_reports/knowledge_file_move/`。
+- `--rollback-record-file`：apply 模式的 JSONL 回溯文件。省略时在 `--report-dir` 下按 `run_id` 自动命名。
+  文件以 `0600` 权限排他创建，如已存在则预检失败，不会覆盖或追加到旧记录。
+- `--batch-size`：每完成多少个迁移单元后 `flush + fsync` 一次普通 JSONL 成功记录，必须为正整数，默认 `10`。
+  单个文件算一个单元，整条版本链也只算一个单元。强制覆盖的 `overwrite_started` 和清理结果始终立即
+  `flush + fsync`，不受批大小延迟。
+- `--apply`：执行真实移动；省略时只生成 dry-run 计划与报告，不创建 JSONL 回溯文件。
+
+筛选组合：
+
+- 同一维度重复参数之间为 OR：多个来源空间 OR、多个来源文件夹 OR、多个一级分类 OR、
+  多个二级分类 OR。
+- 不同维度之间为 AND：`来源空间 AND 来源文件夹 AND 一级分类 AND 二级分类`。未传入的可选维度
+  不参与过滤。
+- 版本链中的每个版本都必须命中全部已启用的过滤条件，否则整条版本链跳过；一、二级分类也必须
+  在整条版本链中一致。
+- 显式目标只替代自动路由，不取消分类校验或源过滤。
+- 目录保留可与来源文件夹、一/二级分类过滤、自动路由、显式目标、dry-run 和 apply 任意组合；
+  `--folder-root-mode` 单独使用会直接报参数错误。
+- `--force-overwrite` 可与来源过滤、目录保留、dry-run 和 apply 组合，但不能用于自动分类路由。
+
+JSON 报告：
+
+- dry-run 的 `results` 只包含通过全部预检、最终可迁移的文件，每条的 `status` 为 `ready`。
+- apply 的 `results` 只包含实际尝试迁移的 `success` / `failed` 文件。
+- 来源范围外文件不进入 `results` 或 `skipped`；来源命中但未通过预检的文件只在
+  `summary.skipped` 和 `summary.skip_reasons` 中汇总，不输出逐文件明细。
+- `summary` 不再输出容易误解的 `total`，字段含义如下：
+
+```json
+{
+  "scanned": 754,
+  "source_selected": 55,
+  "ready_to_move": 50,
+  "skipped": 5,
+  "success": 0,
+  "failed": 0,
+  "overwrite_units": 2,
+  "overwrite_documents": 2,
+  "overwrite_files": 4,
+  "overwrite_cleanup_failed": 0,
+  "skip_reasons": {
+    "target_name_conflict": 3,
+    "version_chain_filter_mismatch": 2
+  }
+}
+```
+
+其中 `scanned` 是来源空间内的 `SUCCESS` 真实文件数，`source_selected` 是命中所有来源过滤的文件数，
+`ready_to_move` 是通过预检的文件数。预检结束时始终满足
+`source_selected = ready_to_move + skipped`。`success` / `failed` 只统计 apply 期间实际执行结果。
+开启强制覆盖后，顶层 `overwrites` 按迁移单元列出命中原因、旧目标逻辑文档、版本、物理文件、对象、
+索引和逐步骤清理结果；summary 的四个 `overwrite_*` 字段提供覆盖与残留统计。
+
+路由、回溯记录与安全性：
+
+- 仅处理 `file_type = FILE` 且 `status = SUCCESS` 的文档。
+- 一级分类 code 从 `file_encoding` 解析，二级分类 code 来自 `file_subcategory_code`；两级都必须
+  能在门户配置中解析出 `label`，否则跳过。
+- 一级分类 `label` 必须唯一精确匹配 `level = public` 的知识空间名称；二级分类 `label` 必须
+  唯一精确匹配该空间根目录下的直属文件夹名称。匹配前会去除普通首尾空白、`U+200B`
+  零宽空格和 `U+FEFF` BOM；自动路由不做递归或模糊匹配。
+- 开启目录保留时，脚本按父目录和规范化名称复用已有目录，仅为成功选中的文件懒创建必要祖先，
+  不复制空目录、来源目录权限或其他目录元数据。新目录的 owner 为目标知识空间 owner，parent 为目标父目录。
+- 多个来源空间的同名同层级目录会合并到同一目标目录。目标结果深度超过 10 层时，影响的文件或版本链会跳过。
+- 移动后文件所有者改为目标知识空间所有者；OpenFGA 只重建目标 owner/parent 必要关系，
+  不复制来源访问权限。
+- 已通过和待审核标签以复制前保存的来源快照为唯一依据，精确替换到新目标文件；若校验仍不一致，
+  报错会列出来源和目标双方的标签 ID，并在删除来源前清理目标残留。
+- 默认情况下，目标文件夹存在同名文件、目标空间任意位置存在相同 MD5，或来源/目标向量模型不一致时，
+  跳过文件且保留来源。多个来源文件互相冲突时按来源空间 ID、文件 ID 稳定选择第一个。
+- 开启 `--force-overwrite` 后，同名冲突和目标空间任意目录中的同 MD5 冲突都会解析到目标逻辑文档。
+  所有命中归属于同一个逻辑文档时纳入覆盖计划；命中多个逻辑文档时以
+  `target_overwrite_ambiguous` 跳过。若两个来源单元命中同一旧目标逻辑文档，只保留排序后的第一个，
+  后续单元以 `batch_overwrite_conflict` 跳过。
+- 旧目标属于版本链时整条链都会删除，最终版本图完全复制来源，不合并两边历史。复制并校验新目标后，
+  脚本会重新读取旧目标文件和版本图；与预检快照不一致时停止该迁移单元，不执行旧目标删除。
+- 版本链作为整体迁移：所有版本必须位于本次来源范围、均为 `SUCCESS`、分类完整、目标一致、
+  模型兼容且无目标冲突；开启目录保留时，各版本还必须处于同一来源目录。任一条件不满足则整条链跳过。
+  范围外的链上版本仍参与完整性检查，但不计入 `source_selected` 或 `skipped`。成功后使用新文件 ID
+  重建版本号、主版本和逻辑文档关系。
+- 普通文件按“复制 → 校验 → 删除来源”执行；强制覆盖按“复制 → 校验 → 落盘覆盖快照 → 删除旧目标
+  → 落盘清理结果 → 删除来源”执行。失败时保留或恢复来源，并尽力清理新目标残留；
+  版本链按整链 Saga 执行。任一迁移单元失败时立即停止后续单元并返回非零退出码，业务跳过不计为失败。
+- JSONL 按顺序记录 `run_started`、`unit_started`、可选的 `overwrite_started` / `overwrite_finished`、
+  `unit_succeeded` / `unit_failed`、`run_completed` / `run_completed_with_warnings` / `run_failed` /
+  `run_interrupted`；成功单元包含来源与目标文件、空间、文件夹、
+  分类、标签、权限、存储对象、索引统计和版本图元数据。目录保留还会记录完整来源目录链，以及每一级目标目录的
+  ID、路径和 `created` / `reused` 动作。当前脚本不提供自动回滚命令；被强制覆盖的旧目标数据库、
+  MinIO 对象和向量会彻底删除，审计记录无法恢复其内容。
+- 首次 `Ctrl-C` 不会在单元内强行中断；脚本完成当前单元、强制落盘 JSONL 后以退出码 `130` 结束。
+  普通异常也会尝试写入终止事件并落盘。`kill -9`、进程崩溃或断电无法保证当前未落盘批次的记录完整。
+- JSONL 写入失败时，脚本停止迁移，并尝试补偿当前尚未持久化的批次；只删除本单元新建且仍为空的目标目录，
+  复用目录、已有内容的目录和前序成功批次的目录不会被删除。之前已落盘的批次保持已迁移状态。
+- 旧目标的向量、对象、标签、权限、关联记录、版本图或数据库记录只清理一部分时，脚本记录
+  `overwrite_cleanup_failed`，继续完成来源迁移，运行状态为 `completed_with_warnings` 并返回退出码 `4`。
+  旧目标不会自动恢复，需要根据 JSONL 人工清理残留。
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
 

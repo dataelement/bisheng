@@ -24,11 +24,11 @@
 
 ### 复用对象（Owner 不变）
 
-| 领域对象 | 现有 Owner | F056 使用方式 |
+| 领域对象 | 现有 Owner | Feature 使用方式 |
 |---------|------------|--------------|
 | Department / UserDepartment | department 模块（F002） | 只读取唯一主部门及部门 ID，不修改组织树和用户部门关系 |
-| Knowledge / KnowledgeFile | knowledge 模块 | 读取文件、空间、版本和状态；文件写入事件只触发投影刷新 |
-| PermissionTuple / AuthorizationModel | permission 模块（F004） | 最终文件权限检查统一调用既有权限服务，不新增或修改授权元组 |
+| Knowledge / KnowledgeFile | knowledge 模块 | F056 读取文件、空间、版本和状态并由写入事件触发投影刷新；F057 只通过既有知识文件清理边界删除已确认的部门重复文档，不改变模型所有权 |
+| PermissionTuple / AuthorizationModel | permission 模块（F004） | F056 的最终文件权限检查统一调用既有权限服务；F057 只通过权限模块既有清理能力移除目标部门文件 tuple |
 | Config | config 模块 | 通过既有首钢门户聚合配置 Service 读写，不新建第二配置事实源 |
 | BaseTelemetryEvent | telemetry 模块 | ES 继续保存原始浏览和搜索事件；F056 只扩展门户事件类型和派生状态 |
 
@@ -37,6 +37,7 @@
 - `domains[].department_ids` 业务域映射不得写 OpenFGA tuple，也不得扩大可见空间或文件范围。
 - 推荐投影与 Redis 池是派生数据，不能成为权限事实源。
 - F056 不得为 `KnowledgeFile` 增加重复业务域源字段，必须复用现有文件编码/`split_rule` 解析。
+- F057 不取得 Knowledge、KnowledgeFile、PermissionTuple 或 PortalRecommendationFileProjection 的所有权；只能复用各 Owner 的既有删除/失效边界，不新增旁路写入协议。
 - 新增领域对象或改变 Owner 前必须先更新本表。
 
 ---
@@ -59,6 +60,9 @@
 | INV-SG-10 | 首钢门户配置只通过既有 `/api/v1/shougang-portal/config` 聚合接口同步；配置按当前租户持久化，版本由 BiSheng 服务端在租户内单调递增；`domains[].department_ids` 是唯一部门业务域事实源，不复制到独立字段或表 | ShougangPortalAdminConfig | F056 |
 | INV-SG-11 | 匿名首页保持现有公共推荐与公共缓存；登录用户失败降级必须携带当前用户 token，禁止使用系统账号代取 | ShougangPortalAdminConfig, KnowledgeFile | F056 |
 | INV-SG-12 | 热度参数变更必须使用双版本池重算并原子切换 active pool version；重算完成前继续使用上一有效版本 | PortalRecommendationPoolState, ShougangPortalAdminConfig | F056 |
+| INV-SG-13 | 公共知识空间只作为重复文档见证，任何预览、执行、失败恢复和重试路径都不得删除或修改公共文件及其版本链 | Knowledge, KnowledgeFile | F057 |
+| INV-SG-14 | 重复判定只比较公共与部门当前成功文件的非空 MD5 精确值；公共历史版本不得作为见证，部门命中后以完整逻辑文档为删除单元 | KnowledgeFile | F057 |
+| INV-SG-15 | 部门重复文档清理必须默认 dry-run，显式 apply 前逐单元重校验；多租户启用时拒绝运行，跨存储失败必须停止并保留可重试报告 | KnowledgeFile, PermissionTuple, PortalRecommendationFileProjection | F057 |
 
 INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-12 中部门管理员的权限继承语义。
 
@@ -78,19 +82,26 @@ INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-
 | F056-home-personalized-recommendation | F002-department-tree | 依赖 Department/UserDepartment 和主部门标识 |
 | F056-home-personalized-recommendation | F004-rebac-core, F008-resource-rebac-adaptation | 依赖统一权限服务和知识文件 `view_file` 校验 |
 | F056-home-personalized-recommendation | 既有 shougang_portal_config / telemetry / knowledge 模块 | 复用聚合配置、ES 遥测、文件浏览和门户权限上下文 |
+| F057-department-space-document-dedup | 既有 knowledge 模块 | 依赖空间 scope、文件状态、文档版本和跨存储删除能力 |
+| F057-department-space-document-dedup | F004-rebac-core | 依赖既有文件权限 tuple 清理边界 |
+| F057-department-space-document-dedup | F056-home-personalized-recommendation | 删除目标文件时清理 F056 拥有的推荐投影和派生缓存，不改变其所有权 |
 
 ```text
 F001 ──┐
 F002 ──┼──> F056-home-personalized-recommendation
 F004 ──┤
 F008 ──┘
+
+knowledge ──┬──> F057-department-space-document-dedup
+F004 ───────┤
+F056 ───────┘
 ```
 
 ---
 
 ## 已分配模块编码（MMMEE）
 
-本 Feature 不分配新模块编码。参数校验使用 schema 校验错误；知识推荐相关业务错误复用既有模块边界，不新增与现有编码冲突的错误码。
+本版本新增 Feature 不分配新模块编码。参数校验使用 schema/CLI 校验错误；知识推荐和清理脚本复用既有模块边界，不新增与现有编码冲突的错误码。
 
 | 模块编码 | 模块 | 本 Feature 用途 |
 |---------|------|----------------|
@@ -106,3 +117,4 @@ F008 ──┘
 |------|---------|---------|
 | 2026-07-15 | 建立 v2.5.0-sg 契约，登记 F056 对象、依赖及推荐权限不变量 | F056 |
 | 2026-07-16 | 对齐远端业务域部门绑定实现，删除独立绑定领域对象和表，改用 `domains[].department_ids` 唯一配置源 | F056 |
+| 2026-07-19 | 登记 F057 对既有知识、权限和推荐投影的复用边界，并增加公共数据保护、判重与安全执行不变量 | F057 |

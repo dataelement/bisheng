@@ -151,34 +151,115 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     return True
 
 
-def delete_minio_files(file: KnowledgeFile):
+def _artifact_owned_object_name(snapshot) -> str | None:
+    if isinstance(snapshot, dict):
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            PdfArtifactDeletionSnapshot,
+        )
+
+        snapshot = PdfArtifactDeletionSnapshot.from_dict(snapshot)
+    return getattr(snapshot, "artifact_owned_object_name", None)
+
+
+def _snapshot_value(snapshot, field_name: str, default=None):
+    if isinstance(snapshot, dict):
+        return snapshot.get(field_name, default)
+    return getattr(snapshot, field_name, default)
+
+
+def _knowledge_file_owned_object_names(file_snapshot) -> set[str]:
+    file_id = _snapshot_value(file_snapshot, "id")
+    file_name = _snapshot_value(file_snapshot, "file_name", "")
+    preview_object_name = KnowledgeUtils.resolve_preview_object_name(
+        file_id,
+        file_name,
+        _snapshot_value(file_snapshot, "preview_file_object_name"),
+    )
+    metadata = _snapshot_value(file_snapshot, "user_metadata", {}) or {}
+    return {
+        str(object_name)
+        for object_name in (
+            _snapshot_value(file_snapshot, "object_name"),
+            _snapshot_value(file_snapshot, "bbox_object_name"),
+            str(file_id) if file_id is not None else None,
+            preview_object_name,
+            metadata.get("pdf_preview_object_name"),
+            _snapshot_value(file_snapshot, "thumbnails"),
+        )
+        if object_name
+    }
+
+
+def delete_minio_file_snapshot_objects(
+    knowledge_file_snapshots: list | None,
+    pdf_artifact_snapshots: list | None = None,
+) -> None:
+    """按对象路径去重删除文件所有者和 Artifact 所有者的对象。"""
+
+    object_context: dict[str, tuple[int | None, int | None]] = {}
+    for file_snapshot in knowledge_file_snapshots or []:
+        file_id = _snapshot_value(file_snapshot, "id")
+        for object_name in _knowledge_file_owned_object_names(file_snapshot):
+            object_context.setdefault(object_name, (file_id, None))
+
+    for artifact_snapshot in pdf_artifact_snapshots or []:
+        object_name = _artifact_owned_object_name(artifact_snapshot)
+        if not object_name:
+            continue
+        object_context.setdefault(
+            object_name,
+            (
+                _snapshot_value(artifact_snapshot, "knowledge_file_id"),
+                _snapshot_value(artifact_snapshot, "generation"),
+            ),
+        )
+
+    if not object_context:
+        return
+    minio_client = get_minio_storage_sync()
+    for object_name, (file_id, generation) in object_context.items():
+        try:
+            minio_client.remove_object_sync(
+                bucket_name=minio_client.bucket,
+                object_name=object_name,
+            )
+        except Exception as exc:
+            logger.warning(
+                "delete_knowledge_file_object_failed file_id={} generation={} "
+                "object_name={} error_type={}",
+                file_id,
+                generation,
+                object_name,
+                type(exc).__name__,
+            )
+
+
+def delete_pdf_artifact_snapshot_objects(pdf_artifact_snapshots: list | None) -> None:
+    """删除快照中由 Artifact 生命周期拥有的 GENERATED 对象。"""
+
+    delete_minio_file_snapshot_objects([], pdf_artifact_snapshots)
+
+
+def delete_minio_files(
+    file: KnowledgeFile,
+    pdf_artifact_snapshots: list | None = None,
+):
     """Delete Knowledge Base Files inminioStorage on"""
 
-    minio_client = get_minio_storage_sync()
-
-    # Delete source file
-    if file.object_name:
-        minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=file.object_name)
-
-    # DeletebboxDoc.
-    if file.bbox_object_name:
-        minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=file.bbox_object_name)
-
-    # Delete ConvertedpdfDoc.
-    minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=f"{file.id}")
-
-    # Delete preview file. Prefer the persisted object name because generated
-    # previews such as media transcripts and web pages are not always derivable
-    # from the user-facing filename.
-    preview_object_name = KnowledgeUtils.resolve_preview_object_name(
-        file.id, file.file_name, file.preview_file_object_name
-    )
-    if preview_object_name:
-        minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=preview_object_name)
+    matching_artifacts = [
+        snapshot
+        for snapshot in pdf_artifact_snapshots or []
+        if int(_snapshot_value(snapshot, "knowledge_file_id")) == int(file.id)
+    ]
+    delete_minio_file_snapshot_objects([file], matching_artifacts)
     return True
 
 
-def delete_knowledge_file_vectors(file_ids: list[int], clear_minio: bool = True):
+def delete_knowledge_file_vectors(
+    file_ids: list[int],
+    clear_minio: bool = True,
+    pdf_artifact_snapshots: list | None = None,
+):
     """Delete Knowledge File Information"""
     knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
 
@@ -190,8 +271,7 @@ def delete_knowledge_file_vectors(file_ids: list[int], clear_minio: bool = True)
     delete_vector_files(file_ids, knowledge)
 
     if clear_minio:
-        for file in knowledge_files:
-            delete_minio_files(file)
+        delete_minio_file_snapshot_objects(knowledge_files, pdf_artifact_snapshots)
     return True
 
 
@@ -238,7 +318,7 @@ def addEmbedding(
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
             # Link A (approved tags): always attempt; gated inside _should_run (not by auto_tag_enabled).
-            KnowledgeSpaceAutoTagService.apply_after_upload_parse(
+            link_a_applied_tag_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(
                 knowledge=knowledge_info,
                 db_file=db_file,
                 documents=pipeline_result.documents,
@@ -248,11 +328,20 @@ def addEmbedding(
             cfg, inherited, source_tenant_id, has_override = WorkStationService.query_knowledge_space_config_with_meta()
             enable_pending_review_tags = bool(getattr(cfg, "review_tag_visible", True)) if cfg else True
 
-            if enable_pending_review_tags:
+            if enable_pending_review_tags and KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(
+                link_a_applied_tag_count
+            ):
                 KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
                     knowledge=knowledge_info,
                     db_file=db_file,
                     documents=pipeline_result.documents,
+                )
+            elif enable_pending_review_tags:
+                logger.info(
+                    "review_tag_skip_link_a_tag_limit space_id={} file_id={} link_a_applied_tag_count={}",
+                    knowledge_info.id,
+                    db_file.id,
+                    link_a_applied_tag_count,
                 )
             status = "success"
         except EtlException as e:

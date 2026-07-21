@@ -16,6 +16,8 @@ Usage:
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
+    PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-level public
+    PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --status failed --status waiting
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --include-inflight
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --only-inflight
 """
@@ -53,6 +55,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import (  # noqa: E402
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScope,
+)
 
 ELIGIBLE_STATUSES: tuple[int, ...] = (
     KnowledgeFileStatus.SUCCESS.value,
@@ -67,6 +73,9 @@ IN_FLIGHT_STATUSES: tuple[int, ...] = (
     KnowledgeFileStatus.REBUILDING.value,
 )
 
+SPACE_LEVEL_CHOICES: tuple[str, ...] = tuple(level.value for level in KnowledgeSpaceLevelEnum)
+STATUS_NAME_TO_VALUE: dict[str, int] = {status.name.lower(): status.value for status in KnowledgeFileStatus}
+
 
 @dataclass
 class SelectionReport:
@@ -77,6 +86,7 @@ class SelectionReport:
     skipped_non_space_records: int = 0
     skipped_folder_records: int = 0
     skipped_non_folder_records: int = 0
+    skipped_space_level_records: int = 0
     skipped_status_records: int = 0
     duplicate_records: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -94,6 +104,7 @@ class SelectionReport:
             + self.skipped_non_space_records
             + self.skipped_folder_records
             + self.skipped_non_folder_records
+            + self.skipped_space_level_records
             + self.skipped_status_records
             + self.duplicate_records
         )
@@ -162,11 +173,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="knowledge file ID to include; can be passed multiple times",
     )
     parser.add_argument(
+        "--space-level",
+        choices=SPACE_LEVEL_CHOICES,
+        default=None,
+        help="restrict all selected scopes to one space level: public, department, team, or personal",
+    )
+    parser.add_argument(
+        "--status",
+        dest="statuses",
+        action="append",
+        choices=tuple(STATUS_NAME_TO_VALUE),
+        default=[],
+        help="file status to include; can be passed multiple times and replaces the default status set",
+    )
+    parser.add_argument(
         "--include-inflight",
         dest="include_inflight",
         action="store_true",
         help=(
-            "also select and reparse files whose status is WAITING or PROCESSING; "
+            "also select and reparse files whose status is WAITING, PROCESSING, or REBUILDING; "
             "by default these are skipped to avoid interfering with an active parse run"
         ),
     )
@@ -175,11 +200,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         dest="only_inflight",
         action="store_true",
         help=(
-            "select ONLY files whose status is WAITING or PROCESSING, "
+            "select ONLY files whose status is WAITING, PROCESSING, or REBUILDING, "
             "skipping SUCCESS/FAILED/TIMEOUT/VIOLATION files"
         ),
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.statuses and (args.include_inflight or args.only_inflight):
+        parser.error("--status cannot be combined with --include-inflight or --only-inflight")
+    return args
+
+
+def resolve_eligible_statuses(args: argparse.Namespace) -> tuple[int, ...]:
+    statuses: Sequence[str] = getattr(args, "statuses", ())
+    if statuses:
+        return tuple(dict.fromkeys(STATUS_NAME_TO_VALUE[status] for status in statuses))
+    if getattr(args, "only_inflight", False):
+        return IN_FLIGHT_STATUSES
+    if getattr(args, "include_inflight", False):
+        return ELIGIBLE_STATUSES + IN_FLIGHT_STATUSES
+    return ELIGIBLE_STATUSES
 
 
 async def _get_all_space_ids(session: AsyncSession) -> set[int]:
@@ -187,22 +226,30 @@ async def _get_all_space_ids(session: AsyncSession) -> set[int]:
     return {int(row) for row in result.all()}
 
 
+async def _get_space_ids_by_level(
+    session: AsyncSession,
+    space_level: KnowledgeSpaceLevelEnum | str,
+) -> set[int]:
+    normalized_level = KnowledgeSpaceLevelEnum(getattr(space_level, "value", space_level))
+    result = await session.exec(
+        select(KnowledgeSpaceScope.space_id).where(KnowledgeSpaceScope.level == normalized_level.value)
+    )
+    return {int(row) for row in result.all()}
+
+
 async def _get_valid_requested_space_ids(
     session: AsyncSession,
     requested_space_ids: Sequence[int],
     report: SelectionReport,
+    all_space_ids: set[int] | None = None,
 ) -> set[int]:
     requested = set(requested_space_ids)
+    if all_space_ids is None:
+        all_space_ids = await _get_all_space_ids(session)
     if not requested:
-        return await _get_all_space_ids(session)
+        return set(all_space_ids)
 
-    result = await session.exec(
-        select(Knowledge.id).where(
-            col(Knowledge.id).in_(requested),
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-        )
-    )
-    valid_ids = {int(row) for row in result.all()}
+    valid_ids = requested & all_space_ids
     missing_or_non_space = requested - valid_ids
     if missing_or_non_space:
         report.skipped_missing_spaces += len(missing_or_non_space)
@@ -217,11 +264,15 @@ def _folder_descendant_prefix(folder: KnowledgeFile) -> str:
 def _is_eligible_file(
     record: KnowledgeFile,
     all_space_ids: set[int],
+    allowed_space_ids: set[int],
     report: SelectionReport,
     eligible_statuses: tuple[int, ...],
 ) -> bool:
     if record.knowledge_id not in all_space_ids:
         report.skipped_non_space_records += 1
+        return False
+    if record.knowledge_id not in allowed_space_ids:
+        report.skipped_space_level_records += 1
         return False
     if record.file_type != FileType.FILE.value:
         report.skipped_folder_records += 1
@@ -331,19 +382,37 @@ async def collect_candidate_files(
     space_ids: Sequence[int] = (),
     folder_ids: Sequence[int] = (),
     file_ids: Sequence[int] = (),
+    space_level: KnowledgeSpaceLevelEnum | str | None = None,
     eligible_statuses: tuple[int, ...] = ELIGIBLE_STATUSES,
 ) -> SelectionReport:
     """Collect the union of selected knowledge-space files.
 
     Scope arguments are unioned: passing both a space and a file includes files
-    from the space plus the explicit file when it is otherwise eligible.
+    from the space plus the explicit file when it is otherwise eligible. When
+    ``space_level`` is provided, it intersects that union.
     """
     report = SelectionReport()
     selected: dict[int, KnowledgeFile] = {}
     has_scope_filter = bool(space_ids or folder_ids or file_ids)
 
     all_space_ids = await _get_all_space_ids(session)
-    valid_space_ids = await _get_valid_requested_space_ids(session, space_ids, report)
+    allowed_space_ids = set(all_space_ids)
+    if space_level is not None:
+        allowed_space_ids &= await _get_space_ids_by_level(session, space_level)
+    requested_space_ids = await _get_valid_requested_space_ids(
+        session,
+        space_ids,
+        report,
+        all_space_ids,
+    )
+    valid_space_ids = requested_space_ids & allowed_space_ids
+    level_filtered_space_ids = requested_space_ids - allowed_space_ids if space_ids else set()
+    if level_filtered_space_ids:
+        report.skipped_space_level_records += len(level_filtered_space_ids)
+        report.warnings.append(
+            f"ignored knowledge-space IDs outside space level {getattr(space_level, 'value', space_level)}: "
+            f"{sorted(level_filtered_space_ids)}"
+        )
 
     if not has_scope_filter or space_ids:
         for record in await _select_space_files(session, valid_space_ids, eligible_statuses):
@@ -357,7 +426,7 @@ async def collect_candidate_files(
         if missing_file_ids:
             report.warnings.append(f"ignored missing file IDs: {sorted(missing_file_ids)}")
         for record in files_by_id.values():
-            if _is_eligible_file(record, all_space_ids, report, eligible_statuses):
+            if _is_eligible_file(record, all_space_ids, allowed_space_ids, report, eligible_statuses):
                 _add_candidate(selected, record, report)
 
     if folder_ids:
@@ -369,6 +438,9 @@ async def collect_candidate_files(
         for folder in folders_by_id.values():
             if folder.knowledge_id not in all_space_ids:
                 report.skipped_non_space_records += 1
+                continue
+            if folder.knowledge_id not in allowed_space_ids:
+                report.skipped_space_level_records += 1
                 continue
             if folder.file_type != FileType.DIR.value:
                 report.skipped_non_folder_records += 1
@@ -419,7 +491,12 @@ def _run_parse_pipeline(knowledge: Knowledge, db_file: KnowledgeFile) -> None:
     )
 
 
-def reparse_one_file(file_id: int, *, force_inflight: bool = False) -> FileReparseResult:
+def reparse_one_file(
+    file_id: int,
+    *,
+    force_inflight: bool = False,
+    eligible_statuses: tuple[int, ...] | None = None,
+) -> FileReparseResult:
     """Reparse one file and convert every failure into a result object."""
     with bypass_tenant_filter():
         db_file = _get_file_sync(file_id)
@@ -430,10 +507,11 @@ def reparse_one_file(file_id: int, *, force_inflight: bool = False) -> FileRepar
         knowledge_id = db_file.knowledge_id
         if db_file.file_type != FileType.FILE.value:
             return FileReparseResult(file_id, knowledge_id, file_name, False, db_file.status, "record is not a file")
-        if not force_inflight and db_file.status in IN_FLIGHT_STATUSES:
+        if eligible_statuses is None:
+            eligible_statuses = ELIGIBLE_STATUSES + IN_FLIGHT_STATUSES if force_inflight else ELIGIBLE_STATUSES
+        if db_file.status in IN_FLIGHT_STATUSES and db_file.status not in eligible_statuses:
             return FileReparseResult(file_id, knowledge_id, file_name, False, db_file.status, "file is in-flight")
-        eligible = ELIGIBLE_STATUSES + IN_FLIGHT_STATUSES if force_inflight else ELIGIBLE_STATUSES
-        if db_file.status not in eligible:
+        if db_file.status not in eligible_statuses:
             return FileReparseResult(file_id, knowledge_id, file_name, False, db_file.status, "status is not eligible")
 
         knowledge = _get_knowledge_sync(knowledge_id)
@@ -527,6 +605,7 @@ def print_selection_report(report: SelectionReport) -> None:
         f"non_space={report.skipped_non_space_records} "
         f"folders={report.skipped_folder_records} "
         f"non_folders={report.skipped_non_folder_records} "
+        f"space_level={report.skipped_space_level_records} "
         f"ineligible_status={report.skipped_status_records} "
         f"duplicates={report.duplicate_records}"
     )
@@ -543,12 +622,7 @@ async def run(args: argparse.Namespace) -> int:
 
     include_inflight: bool = getattr(args, "include_inflight", False)
     only_inflight: bool = getattr(args, "only_inflight", False)
-    if only_inflight:
-        effective_statuses = IN_FLIGHT_STATUSES
-    elif include_inflight:
-        effective_statuses = ELIGIBLE_STATUSES + IN_FLIGHT_STATUSES
-    else:
-        effective_statuses = ELIGIBLE_STATUSES
+    effective_statuses = resolve_eligible_statuses(args)
 
     try:
         with bypass_tenant_filter():
@@ -558,14 +632,19 @@ async def run(args: argparse.Namespace) -> int:
                     space_ids=args.space_ids,
                     folder_ids=args.folder_ids,
                     file_ids=args.file_ids,
+                    space_level=args.space_level,
                     eligible_statuses=effective_statuses,
                 )
 
         print_selection_report(selection)
         if only_inflight:
-            print("[INFO] --only-inflight is active: selecting ONLY WAITING/PROCESSING files.")
+            print("[INFO] --only-inflight is active: selecting ONLY WAITING/PROCESSING/REBUILDING files.")
         elif include_inflight:
-            print("[INFO] --include-inflight is active: WAITING/PROCESSING files are included.")
+            print("[INFO] --include-inflight is active: WAITING/PROCESSING/REBUILDING files are included.")
+        if args.space_level:
+            print(f"[INFO] --space-level is active: {args.space_level}.")
+        if args.statuses:
+            print(f"[INFO] --status is active: {','.join(args.statuses)}.")
 
         if not args.apply:
             print("Dry-run only. Pass --apply to reparse selected files.")
@@ -575,11 +654,7 @@ async def run(args: argparse.Namespace) -> int:
             print("No eligible files selected.")
             return 0
 
-        reparse_func = (
-            functools.partial(reparse_one_file, force_inflight=True)
-            if (include_inflight or only_inflight)
-            else reparse_one_file
-        )
+        reparse_func = functools.partial(reparse_one_file, eligible_statuses=effective_statuses)
         run_report = await run_reparse_files(
             selection.selected_files,
             concurrency=args.concurrency,

@@ -458,6 +458,9 @@ class KnowledgeUtils(BaseService):
         from bisheng.api.v1.schemas import FileProcessBase
         from bisheng.worker.knowledge import file_worker
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation,
+        )
 
         split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
         if req_data.excel_rule is not None:
@@ -466,6 +469,8 @@ class KnowledgeUtils(BaseService):
         db_file.status = KnowledgeFileStatus.WAITING.value
         db_file.updater_id = login_user_id
         db_file.updater_name = login_user_name
+        if getattr(db_file, "tenant_id", None) is not None:
+            await request_pdf_artifact_generation(db_file)
         db_file = await KnowledgeFileDao.async_update(db_file)
 
         preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
@@ -478,6 +483,9 @@ class KnowledgeUtils(BaseService):
         """Shared logic for retrying multiple files with updated configuration"""
         from bisheng.core.storage.minio.minio_manager import get_minio_storage
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation,
+        )
         from bisheng.worker.knowledge import file_worker
 
         minio_client = await get_minio_storage()
@@ -496,18 +504,32 @@ class KnowledgeUtils(BaseService):
                 pass
 
             # file exist
-            file.object_name = input_file.get("object_name", file.object_name)
+            incoming_object_name = input_file.get("object_name", file.object_name)
+            incoming_md5 = input_file.get("md5")
             file_preview_cache_key = cls.get_preview_cache_key(
                 file.knowledge_id, input_file.get("file_path", "")
             )
 
-            if file.object_name.startswith('tmp'):
+            target_object_name = incoming_object_name
+            if incoming_object_name.startswith('tmp'):
+                if not incoming_md5:
+                    raise ValueError("Overwrite source MD5 is required")
                 # Moving Temporary Files to the Official Directory
-                new_object_name = cls.get_knowledge_file_object_name(file.id, file.object_name)
-                await minio_client.copy_object(source_object=file.object_name, dest_object=new_object_name,
+                target_object_name = cls.get_knowledge_file_object_name(file.id, incoming_object_name)
+            effective_md5 = incoming_md5 or getattr(file, "md5", None)
+            if getattr(file, "tenant_id", None) is not None:
+                await request_pdf_artifact_generation(
+                    file,
+                    source_object_name=target_object_name,
+                    source_md5=effective_md5,
+                )
+
+            if incoming_object_name.startswith('tmp'):
+                await minio_client.copy_object(source_object=incoming_object_name, dest_object=target_object_name,
                                                source_bucket=minio_client.tmp_bucket,
                                                dest_bucket=minio_client.bucket)
-                file.object_name = new_object_name
+            file.object_name = target_object_name
+            file.md5 = effective_md5
             file.file_name = new_file_name
             file.remark = ""
             file.split_rule = input_file["split_rule"]

@@ -13,6 +13,9 @@ from bisheng.worker.knowledge.file_worker import (
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
 )
+from bisheng.worker.knowledge.pdf_artifact_worker import (
+    generate_knowledge_file_pdf_celery,
+)
 from bisheng.worker.knowledge.portal_hot_search import (
     fanout_portal_hot_search_rebuild,
     rebuild_portal_hot_search_snapshot_celery,
@@ -44,6 +47,10 @@ from bisheng.worker.org_sync.reconcile_tasks import (
 )
 from bisheng.worker.org_sync.tasks import check_org_sync_schedules, execute_org_sync
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
+from bisheng.worker.portal_course.tasks import (
+    process_portal_course_media_cleanup,
+    scan_portal_course_media_cleanup,
+)
 from bisheng.worker.telemetry.derived_mid_table import (
     sync_mid_active_user,
     sync_mid_doc_parse_dtl,

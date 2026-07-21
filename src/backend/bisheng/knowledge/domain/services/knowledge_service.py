@@ -988,7 +988,10 @@ class KnowledgeService(KnowledgeUtils):
         cls.delete_knowledge_file_in_vector(knowledge)
 
         # CleanedminioData
-        cls.delete_knowledge_file_in_minio(knowledge_id)
+        cls.delete_knowledge_file_in_minio(
+            knowledge_id,
+            tenant_id=int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID),
+        )
 
         # DeletemysqlDATA
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
@@ -1030,7 +1033,12 @@ class KnowledgeService(KnowledgeUtils):
         OwnerService.delete_resource_tuples_sync("knowledge_library", str(knowledge.id))
 
     @classmethod
-    def delete_knowledge_file_in_minio(cls, knowledge_id: int):
+    def delete_knowledge_file_in_minio(cls, knowledge_id: int, tenant_id: int):
+        from bisheng.api.services.knowledge_imp import delete_minio_file_snapshot_objects
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            get_pdf_artifact_deletion_snapshots_sync,
+        )
+
         # <g id="Bold">Qn,</g>1000records to deleteminioDoc.
         count = KnowledgeFileDao.count_file_by_knowledge_id(knowledge_id)
         if count == 0:
@@ -1038,16 +1046,26 @@ class KnowledgeService(KnowledgeUtils):
         page_size = 1000
         page_num = math.ceil(count / page_size)
 
-        minio_client = get_minio_storage_sync()
-
         for i in range(page_num):
             file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1, page_size)
-            for file in file_list:
-                minio_client.remove_object_sync(object_name=str(file[0]))
-                for object_name in file[1:]:
-                    if not object_name:
-                        continue
-                    minio_client.remove_object_sync(object_name=object_name)
+            file_ids = [int(file[0]) for file in file_list]
+            pdf_artifact_snapshots = get_pdf_artifact_deletion_snapshots_sync(
+                tenant_id,
+                file_ids,
+            )
+            file_snapshots = [
+                {
+                    "id": file[0],
+                    "file_name": file[6],
+                    "object_name": file[1],
+                    "preview_file_object_name": file[2],
+                    "bbox_object_name": file[3],
+                    "thumbnails": file[4],
+                    "user_metadata": file[5] or {},
+                }
+                for file in file_list
+            ]
+            delete_minio_file_snapshot_objects(file_snapshots, pdf_artifact_snapshots)
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
@@ -1408,6 +1426,10 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         """Sync uploaded files"""
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            enqueue_current_pdf_artifact_sync,
+        )
+
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
@@ -1421,14 +1443,22 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         if process_files:
-            process_file_task(
-                knowledge=knowledge,
-                db_files=process_files,
-                preview_cache_keys=preview_cache_keys,
-                callback_url=req_data.callback_url,
-            )
+            try:
+                process_file_task(
+                    knowledge=knowledge,
+                    db_files=process_files,
+                    preview_cache_keys=preview_cache_keys,
+                    callback_url=req_data.callback_url,
+                )
+            finally:
+                latest_files = KnowledgeFileDao.select_list([f.id for f in process_files])
+                for latest_file in latest_files:
+                    enqueue_current_pdf_artifact_sync(
+                        tenant_id=int(latest_file.tenant_id),
+                        knowledge_file_id=int(latest_file.id),
+                    )
 
-            process_files = KnowledgeFileDao.select_list([f.id for f in process_files])
+            process_files = latest_files
 
         cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
         return failed_files + process_files
@@ -1532,6 +1562,10 @@ class KnowledgeService(KnowledgeUtils):
         file_kwargs: dict = None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            request_pdf_artifact_generation_sync,
+        )
+
         # download original file
         filepath, file_name = file_download(file_info.file_path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
@@ -1565,6 +1599,7 @@ class KnowledgeService(KnowledgeUtils):
             db_file.split_rule = str_split_rule
             # Update file size information
             db_file.file_size = file_size
+            db_file.md5 = md5_
             return db_file
 
         # Insert new data, upload the original file tominio
@@ -1590,6 +1625,7 @@ class KnowledgeService(KnowledgeUtils):
 
         logger.info("upload_original_file path={}", db_file.object_name)
         KnowledgeFileDao.update(db_file)
+        request_pdf_artifact_generation_sync(db_file)
         return db_file
 
     @classmethod
@@ -1807,6 +1843,9 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: list[int]):
         from bisheng.worker.knowledge import file_worker
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            get_pdf_artifact_deletion_snapshots_sync,
+        )
 
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
         if not knowledge_file:
@@ -1821,8 +1860,30 @@ class KnowledgeService(KnowledgeUtils):
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
+        file_tenant_id = getattr(knowledge_file[0], "tenant_id", None)
+        pdf_artifact_snapshots = (
+            get_pdf_artifact_deletion_snapshots_sync(int(file_tenant_id), file_ids)
+            if file_tenant_id is not None
+            else []
+        )
+        knowledge_file_snapshots = [
+            {
+                "id": file.id,
+                "file_name": getattr(file, "file_name", ""),
+                "object_name": getattr(file, "object_name", None),
+                "preview_file_object_name": getattr(file, "preview_file_object_name", None),
+                "bbox_object_name": getattr(file, "bbox_object_name", None),
+                "thumbnails": getattr(file, "thumbnails", None),
+                "user_metadata": getattr(file, "user_metadata", None) or {},
+            }
+            for file in knowledge_file
+        ]
+
         # <g id="Bold">Medical Treatment:</g>vectordb
-        delete_knowledge_file_vectors(file_ids)
+        delete_knowledge_file_vectors(
+            file_ids,
+            pdf_artifact_snapshots=pdf_artifact_snapshots,
+        )
         KnowledgeFileDao.delete_batch(file_ids)
         cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
 
@@ -1831,7 +1892,21 @@ class KnowledgeService(KnowledgeUtils):
 
         # 5Minutes to check if the file was actually deleted
         file_worker.delete_knowledge_file_celery.apply_async(
-            args=(file_ids, knowledge_file[0].knowledge_id, True), countdown=300
+            args=(
+                file_ids,
+                knowledge_file[0].knowledge_id,
+                True,
+                [snapshot.to_dict() for snapshot in pdf_artifact_snapshots],
+                knowledge_file_snapshots,
+            ),
+            headers={
+                "tenant_id": int(
+                    file_tenant_id
+                    or getattr(db_knowledge, "tenant_id", None)
+                    or DEFAULT_TENANT_ID
+                )
+            },
+            countdown=300,
         )
 
         return True
@@ -2154,13 +2229,25 @@ class KnowledgeService(KnowledgeUtils):
         html_snapshot_object_name = metadata.get("html_snapshot_object_name")
         if html_snapshot_object_name:
             html_preview_url = cls.get_file_share_url_with_empty(html_snapshot_object_name)
-        # PDF rendition of a Word preview. Empty when the conversion failed or the file
-        # was parsed before this existed, which is the frontend's cue to fall back to
-        # preview_url (the .docx).
+        # PDF rendition for previewing office documents. Prefer the inline/backfilled
+        # copy (pdf_preview_object_name); when absent, fall back to the unified
+        # PDF-artifact pipeline, which reliably converts every file — the inline path
+        # only fires for .doc, not .docx. Scoped to office types so images/text/html
+        # keep their native viewers instead of being forced through a PDF.
         pdf_preview_url = ""
         pdf_preview_object_name = metadata.get("pdf_preview_object_name")
         if pdf_preview_object_name:
             pdf_preview_url = cls.get_file_share_url_with_empty(pdf_preview_object_name)
+        elif (file.file_name or "").rsplit(".", 1)[-1].lower() in {
+            "doc", "docx", "wps", "ppt", "pptx", "dps",
+        }:
+            # Imported locally to avoid a domain-service import cycle.
+            from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+                get_available_pdf_artifact_reference_sync,
+            )
+            artifact_reference = get_available_pdf_artifact_reference_sync(file)
+            if artifact_reference is not None:
+                pdf_preview_url = cls.get_file_share_url_with_empty(artifact_reference.object_name)
         return {
             "original_url": original_url,
             "preview_url": preview_url,

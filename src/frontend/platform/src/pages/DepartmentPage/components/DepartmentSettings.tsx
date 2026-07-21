@@ -64,19 +64,16 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const [loading, setLoading] = useState(true)
   const [parentIdValue, setParentIdValue] = useState<number | null>(dept.parent_id ?? null)
   const [parentTreeNodes, setParentTreeNodes] = useState<DepartmentTreeNode[]>([])
+  const [isDefaultRootDept, setIsDefaultRootDept] = useState(Boolean(dept.is_default_root))
 
   const adminSelectValueRef = useRef<DepartmentUserOption[]>([])
 
   const isSynced = isSyncedSource(dept.source)
   const isArchived = dept.status === "archived"
-  const isAbsoluteRootDept = dept.parent_id === null || Number(dept.parent_id) === 0
-  // 对部门管理员场景：当前可见树的顶层节点也视为“根节点”（即便全局树里它还有父节点）
-  const isVisibleRootDept = tree.some((n) => n.id === dept.id)
-  const isRootDept = isAbsoluteRootDept || isVisibleRootDept
-  /** 仅部门名称对第三方同步部门只读；管理员与默认角色仍可保存 */
+  /** 仅部门名称对第三方同步部门只读；管理员、默认角色与上级部门仍可保存 */
   const canEditName = !isArchived && !isSynced
   const canEditPermissions = !isArchived
-  const canEditParent = !isArchived && !isSynced && !isRootDept
+  const canEditParent = !isArchived && !isDefaultRootDept
 
   /** 最近一次从服务端加载成功的快照（父部门变更判断、保存后更新） */
   const baselineRef = useRef<{
@@ -157,6 +154,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         setParentTreeNodes(pTreeNodes)
         const pid = detailRes?.parent_id ?? dept.parent_id ?? null
         setParentIdValue(pid)
+        setIsDefaultRootDept(Boolean(detailRes?.is_default_root ?? dept.is_default_root))
         setAssignableRoles(
           (rolesRes || []).map((r) => ({ value: String(r.id), label: r.role_name }))
         )
@@ -429,7 +427,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
             />
           )}
         </div>
-        {!isRootDept && (
+        {!isDefaultRootDept && (
           <div className="space-y-1.5">
             <Label>{t("bs:department.parentDept")}</Label>
             {canEditParent ? (
@@ -564,7 +562,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
               )}
             </div>
             <div className="min-w-[1rem] flex-1" />
-            {onMarkAsTenant && !isRootDept && !dept.is_tenant_root && (
+            {onMarkAsTenant && !isDefaultRootDept && !dept.is_tenant_root && (
               <Button
                 variant="outline"
                 onClick={() => onMarkAsTenant(dept.id, dept.name)}
@@ -574,7 +572,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
                 {t("bs:tenant.markAsTenant", { defaultValue: "标记为子租户" })}
               </Button>
             )}
-            {onMarkAsTenant && !isRootDept && dept.is_tenant_root && (
+            {onMarkAsTenant && !isDefaultRootDept && dept.is_tenant_root && (
               <Button
                 variant="outline"
                 onClick={() => {

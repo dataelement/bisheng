@@ -215,14 +215,23 @@ async def test_get_space_tags_returns_only_bound_library_tags(service):
         id=100,
         name="安全生产",
         business_type="tag_library",
+        business_id="2",
         resource_type="system_tag",
     )
     library_tag_b = SimpleNamespace(
         id=101,
         name="制度",
         business_type="tag_library",
+        business_id="3",
         resource_type="manual_tag",
     )
+
+    async def mock_aget(library_id: int):
+        libraries = {
+            2: SimpleNamespace(name="公共标签库"),
+            3: SimpleNamespace(name="制度标签库"),
+        }
+        return libraries.get(library_id)
 
     with (
         patch.object(service, "_require_read_permission", new_callable=AsyncMock),
@@ -242,14 +251,35 @@ async def test_get_space_tags_returns_only_bound_library_tags(service):
             side_effect=lambda tags: tags,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
             new_callable=AsyncMock,
-            return_value=[],
+            side_effect=mock_aget,
         ),
     ):
         result = await service.get_space_tags(137)
 
-    assert result == [library_tag_a, library_tag_b]
+    assert result == [
+        {
+            "id": 100,
+            "name": "安全生产",
+            "resource_type": "system_tag",
+            "business_type": "tag_library",
+            "review_status": 1,
+            "tag_library_id": 2,
+            "tag_library_name": "公共标签库",
+            "is_bound_to_space": True,
+        },
+        {
+            "id": 101,
+            "name": "制度",
+            "resource_type": "manual_tag",
+            "business_type": "tag_library",
+            "review_status": 1,
+            "tag_library_id": 3,
+            "tag_library_name": "制度标签库",
+            "is_bound_to_space": True,
+        },
+    ]
 
 
 @pytest.mark.asyncio
@@ -258,6 +288,7 @@ async def test_get_space_tags_dedupes_tags_across_libraries(service):
         id=100,
         name="安全生产",
         business_type="tag_library",
+        business_id="2",
         resource_type="system_tag",
     )
 
@@ -279,14 +310,17 @@ async def test_get_space_tags_dedupes_tags_across_libraries(service):
             side_effect=lambda tags: tags,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
             new_callable=AsyncMock,
-            return_value=[],
+            return_value=SimpleNamespace(name="公共标签库"),
         ),
     ):
         result = await service.get_space_tags(137)
 
-    assert result == [library_tag]
+    assert len(result) == 1
+    assert result[0]["id"] == 100
+    assert result[0]["tag_library_id"] == 2
+    assert result[0]["tag_library_name"] == "公共标签库"
 
 
 @pytest.mark.asyncio
@@ -295,12 +329,14 @@ async def test_get_space_tags_dedupes_same_name_across_resource_types(service):
         id=100,
         name="安全生产",
         business_type="tag_library",
+        business_id="2",
         resource_type="system_tag",
     )
     manual_tag = SimpleNamespace(
         id=101,
         name="安全生产",
         business_type="tag_library",
+        business_id="2",
         resource_type="manual_tag",
     )
 
@@ -322,18 +358,20 @@ async def test_get_space_tags_dedupes_same_name_across_resource_types(service):
             side_effect=lambda tags: tags,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
             new_callable=AsyncMock,
-            return_value=[],
+            return_value=SimpleNamespace(name="公共标签库"),
         ),
     ):
         result = await service.get_space_tags(137)
 
-    assert result == [system_tag]
+    assert len(result) == 1
+    assert result[0]["id"] == 100
+    assert result[0]["resource_type"] == "system_tag"
 
 
 @pytest.mark.asyncio
-async def test_get_space_tags_includes_pending_review_tags(service):
+async def test_get_space_tags_excludes_pending_review_tags(service):
     pending_tag = SimpleNamespace(
         id=200,
         name="待审核人工",
@@ -357,16 +395,15 @@ async def test_get_space_tags_includes_pending_review_tags(service):
             return_value={},
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
             new_callable=AsyncMock,
-            side_effect=lambda business_type, business_id, name=None: (
-                [pending_tag] if business_type == TagBusinessTypeEnum.TAG_LIBRARY and business_id == "2" else []
-            ),
+            return_value=SimpleNamespace(name="公共标签库"),
         ),
     ):
         result = await service.get_space_tags(137)
 
-    assert result == [pending_tag]
+    assert result == []
+    assert pending_tag not in result
 
 
 @pytest.mark.asyncio
@@ -382,11 +419,6 @@ async def test_get_space_tags_returns_empty_when_no_bound_libraries(service):
             "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids",
             new_callable=AsyncMock,
         ) as mock_get_tags,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_business",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
     ):
         result = await service.get_space_tags(137)
 

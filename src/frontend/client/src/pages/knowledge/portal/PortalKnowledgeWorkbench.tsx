@@ -13,10 +13,9 @@ import {
     SpaceRole,
     VisibilityType,
     batchDeleteApi,
-    batchDownloadApi,
     batchRetryApi,
     deleteSpaceApi,
-    getFileDownloadApi,
+    downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
@@ -50,7 +49,7 @@ import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
 import { extractKnowledgeActionErrorMessage } from "../errorUtils";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
-import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, triggerUrlDownload, type UploadSizeEnvConfig } from "../knowledgeUtils";
+import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, type UploadSizeEnvConfig } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
 import { TREE_PAGE_SIZE } from "./constants";
 import type {
@@ -296,6 +295,8 @@ export default function PortalKnowledgeWorkbench() {
     // Download permission for the currently previewed file, returned authoritatively
     // by the preview endpoint (same gate the download endpoint enforces).
     const [selectedFileDownloadable, setSelectedFileDownloadable] = useState(false);
+    const [downloadPending, setDownloadPending] = useState(false);
+    const downloadPendingRef = useRef(false);
     const activeSpaceIdRef = useRef<string | undefined>();
     const currentFolderIdRef = useRef<string | undefined>();
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
@@ -1210,7 +1211,6 @@ export default function PortalKnowledgeWorkbench() {
         [displayedFiles, selectedFileIds, selectedFolderIds],
     );
     const selectedCount = selectedFiles.length;
-    const selectedDownloadable = selectedFiles.length > 0 && selectedFiles.every((file) => effectiveDownloadEntryIds.has(file.id));
     const selectedDeletable = selectedFiles.length > 0 && selectedFiles.every((file) => effectiveDeleteEntryIds.has(file.id));
     const retryableSelectedFiles = selectedFiles.filter(isRetryable);
     const canBatchRetry = Boolean(isActiveSpaceAdmin && retryableSelectedFiles.length > 0);
@@ -2194,49 +2194,35 @@ export default function PortalKnowledgeWorkbench() {
     }, [fileUpload, folderDraft]);
 
     const handleDownloadSelected = useCallback(async () => {
-        if (!activeSpace || !selectedFile || isFolder(selectedFile)) return;
+        if (!activeSpace || !selectedFile || isFolder(selectedFile) || downloadPendingRef.current) return;
         // 收藏原地预览时 activeSpace 仍是收藏库，需按源文件所属空间下载
         const downloadSpaceId = selectedFile.spaceId || activeSpace.id;
+        downloadPendingRef.current = true;
+        setDownloadPending(true);
         try {
-            const res = await getFileDownloadApi(downloadSpaceId, selectedFile.id);
-            const downloadUrl = res.original_url || res.preview_url;
-            if (!downloadUrl) {
-                showToast({ message: "未获取到下载地址", severity: NotificationSeverity.ERROR });
-                return;
-            }
-            triggerUrlDownload(downloadUrl, selectedFile.name);
-        } catch {
-            showToast({ message: "下载地址获取失败", severity: NotificationSeverity.ERROR });
+            await downloadWatermarkedKnowledgeFileApi({
+                spaceId: downloadSpaceId,
+                fileId: selectedFile.id,
+                entryPoint: isActiveSpaceFavorite ? "bisheng_favorite" : "bisheng_preview",
+                fallbackFileName: selectedFile.name,
+            });
+        } catch (error) {
+            showToast({
+                message: error instanceof Error && error.message
+                    ? error.message
+                    : "文档下载失败，请稍后重试",
+                severity: NotificationSeverity.ERROR,
+            });
+        } finally {
+            downloadPendingRef.current = false;
+            setDownloadPending(false);
         }
-    }, [activeSpace, selectedFile, showToast]);
+    }, [activeSpace, isActiveSpaceFavorite, selectedFile, showToast]);
 
     const clearBatchSelection = useCallback(() => {
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
     }, []);
-
-    const handleBatchDownload = useCallback(async () => {
-        if (!activeSpace || selectedFiles.length === 0) return;
-        if (!selectedDownloadable) {
-            showToast({ message: "所选内容无下载权限", severity: NotificationSeverity.ERROR });
-            return;
-        }
-        const files = selectedFiles.filter((file) => !isFolder(file));
-        const folders = selectedFiles.filter(isFolder);
-        try {
-            const url = await batchDownloadApi(activeSpace.id, {
-                file_ids: files.length ? toNumericIds(files) : undefined,
-                folder_ids: folders.length ? toNumericIds(folders) : undefined,
-            });
-            if (!url) {
-                showToast({ message: "未获取到下载地址", severity: NotificationSeverity.ERROR });
-                return;
-            }
-            triggerUrlDownload(url, `${activeSpace.name || "knowledge"}_files.zip`);
-        } catch {
-            showToast({ message: "批量下载失败", severity: NotificationSeverity.ERROR });
-        }
-    }, [activeSpace, selectedDownloadable, selectedFiles, showToast]);
 
     const handleBatchDelete = useCallback(async () => {
         if (!activeSpace || selectedFiles.length === 0) return;
@@ -2467,6 +2453,7 @@ export default function PortalKnowledgeWorkbench() {
                         groupRefs={groupRefs}
                         createOptionsLoading={createOptionsLoading}
                         createPermissionByLevel={createPermissionByLevel}
+                        isAdminUser={isSystemAdmin}
                         spaceLoading={spaceLoading}
                         spaceMenuOpenId={spaceMenuOpenId}
                         getSpacePermissions={getSpacePermissions}
@@ -2577,6 +2564,8 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideNativeStatusFilter
                                                     hideSpaceInfoTooltip
                                                     hideShareButton
+                                                    hideBatchDownload
+                                                    hideFolderDownload
                                                     hideFilePermissionActions={isActiveSpacePersonal}
                                                     externalFileActionPermissions={publicFileActionPermissions}
                                                     enableEncodingClassification
@@ -2642,6 +2631,7 @@ export default function PortalKnowledgeWorkbench() {
                     canEditTags={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
                     canManagePermission={canManageSelectedFilePermission && !isActiveSpaceFavorite}
                     canDownload={canDownloadSelectedFile}
+                    downloadPending={downloadPending}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}
                     preview={preview}

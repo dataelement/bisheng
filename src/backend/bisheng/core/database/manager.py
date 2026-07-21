@@ -4,8 +4,8 @@ Provides global management and easy access to database context
 Supports health checks, connection pool monitoring, and transaction management
 """
 import logging
-from typing import Dict, Any, Optional, AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
+from typing import Any, AsyncGenerator
 
 from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -26,22 +26,25 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
     name: str = "database"
 
     def __init__(
-            self,
-            database_url: Optional[str] = None,
-            engine_config: Optional[Dict[str, Any]] = None,
-            **kwargs
+        self,
+        database_url: str | None = None,
+        sync_engine_config: dict[str, Any] | None = None,
+        async_engine_config: dict[str, Any] | None = None,
+        **kwargs,
     ):
         super().__init__(self.name, **kwargs)
         self.database_url = database_url
         if not self.database_url:
             raise ValueError("Database URL is required. Please provide via parameter or settings.database_url")
-        self.engine_config = engine_config or {}
+        self.sync_engine_config = sync_engine_config or {}
+        self.async_engine_config = async_engine_config or {}
 
     async def _async_initialize(self) -> DatabaseConnectionManager:
         """Initialize Database Connection Manager"""
         conn_manager = DatabaseConnectionManager(
             self.database_url,
-            **self.engine_config
+            sync_engine_config=self.sync_engine_config,
+            async_engine_config=self.async_engine_config,
         )
         self._register_tenant_filter()
         return conn_manager
@@ -50,7 +53,8 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
         """Synchronization Initialization"""
         conn_manager = DatabaseConnectionManager(
             self.database_url,
-            **self.engine_config
+            sync_engine_config=self.sync_engine_config,
+            async_engine_config=self.async_engine_config,
         )
         self._register_tenant_filter()
         return conn_manager
@@ -121,12 +125,13 @@ async def get_database_connection() -> DatabaseConnectionManager:
     try:
         return await app_context.async_get_instance(DatabaseManager.name)
     except KeyError:
-        logger.warning(f"Database context not found, registering default instance")
+        logger.warning("Database context not found, registering default instance")
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(DatabaseManager(
                 settings.database_url,
-                engine_config=settings.database_pool.as_engine_kwargs(),
+                sync_engine_config=settings.database_pool.as_sync_engine_kwargs(),
+                async_engine_config=settings.database_pool.as_async_engine_kwargs(),
             ))
             return await app_context.async_get_instance(DatabaseManager.name)
         except Exception as e:
@@ -147,12 +152,13 @@ def sync_get_database_connection() -> DatabaseConnectionManager:
     try:
         return app_context.sync_get_instance(DatabaseManager.name)
     except KeyError:
-        logger.warning(f"Database context not found, registering default instance")
+        logger.warning("Database context not found, registering default instance")
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(DatabaseManager(
                 settings.database_url,
-                engine_config=settings.database_pool.as_engine_kwargs(),
+                sync_engine_config=settings.database_pool.as_sync_engine_kwargs(),
+                async_engine_config=settings.database_pool.as_async_engine_kwargs(),
             ))
             return app_context.sync_get_instance(DatabaseManager.name)
         except Exception as e:

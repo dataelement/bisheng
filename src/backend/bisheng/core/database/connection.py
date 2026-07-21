@@ -40,10 +40,16 @@ class DatabaseConnectionManager:
     Responsible for managing database engine creation, connection pool configuration and lifecycle management
     """
 
-    def __init__(self, database_url: str, **engine_kwargs):
+    def __init__(
+        self,
+        database_url: str,
+        sync_engine_config: dict[str, Any] | None = None,
+        async_engine_config: dict[str, Any] | None = None,
+    ):
         self.database_url = database_url
         self.async_database_url = self._convert_to_async_url(database_url)
-        self.engine_kwargs = engine_kwargs
+        self.sync_engine_config = sync_engine_config or {}
+        self.async_engine_config = async_engine_config or {}
 
         self._engine: Optional[Engine] = None
         self._async_engine: Optional[AsyncEngine] = None
@@ -60,29 +66,31 @@ class DatabaseConnectionManager:
             return url.replace("dmPython", "dmAsync")
         return url
 
-    def _get_default_engine_config(self) -> Dict[str, Any]:
+    def _get_default_engine_config(self, *, is_async: bool = False) -> dict[str, Any]:
         """Get default engine configuration"""
         config = {
-            'pool_size': 100,
-            'max_overflow': 20,
-            'pool_timeout': 30,
-            'pool_pre_ping': True,
-            'pool_recycle': 3600,  # 1 hour
+            "pool_size": 40 if is_async else 20,
+            "max_overflow": 20 if is_async else 10,
+            "pool_timeout": 30,
+            "pool_pre_ping": True,
+            "pool_recycle": 3600,  # 1 hour
         }
 
         # SQLiteSPECIAL CONFIGURATION
         if self.database_url.startswith("sqlite"):
-            config.update({
-                'connect_args': {'check_same_thread': False},
-                'poolclass': StaticPool,
-                'pool_size': 1,
-                'max_overflow': 0,
-            })
+            config.update(
+                {
+                    "connect_args": {"check_same_thread": False},
+                    "poolclass": StaticPool,
+                    "pool_size": 1,
+                    "max_overflow": 0,
+                }
+            )
         # MySQLSPECIAL CONFIGURATION
         elif "mysql" in self.database_url:
-            if 'connect_args' not in config:
-                config['connect_args'] = {}
-            config['connect_args']['charset'] = 'utf8mb4'
+            if "connect_args" not in config:
+                config["connect_args"] = {}
+            config["connect_args"]["charset"] = "utf8mb4"
 
         return config
 
@@ -107,33 +115,30 @@ class DatabaseConnectionManager:
         at_idx = url.find("@")
         if at_idx == -1:
             return url
-        after_at = url[at_idx + 1:]  # host:port/schema?query
+        after_at = url[at_idx + 1 :]  # host:port/schema?query
         slash_idx = after_at.find("/")
         if slash_idx == -1:
             return url  # no path — nothing to strip
-        return url[:at_idx + 1 + slash_idx]  # trim /schema and beyond
+        return url[: at_idx + 1 + slash_idx]  # trim /schema and beyond
 
     @property
     def engine(self) -> Engine:
         """Get Synchronization Database Engine"""
         if self._engine is None:
             config = self._get_default_engine_config()
-            config.update(self.engine_kwargs)
+            config.update(self.sync_engine_config)
 
             # StaticPool rejects QueuePool sizing options. Keep SQLite usable
             # when the application-level pool configuration is always passed.
-            if config.get('poolclass') is StaticPool:
-                for key in ('pool_size', 'max_overflow', 'pool_timeout'):
+            if config.get("poolclass") is StaticPool:
+                for key in ("pool_size", "max_overflow", "pool_timeout"):
                     config.pop(key, None)
 
             sync_url = self.database_url
             if "dm+dmPython" in sync_url:
                 sync_url = self._dm_sync_url(sync_url)
 
-            self._engine = create_engine(
-                sync_url,
-                **config
-            )
+            self._engine = create_engine(sync_url, **config)
             logger.debug(f"Created sync database engine for {sync_url}")
 
         return self._engine
@@ -155,23 +160,20 @@ class DatabaseConnectionManager:
             return None
 
     def _create_async_engine(self) -> AsyncEngine:
-        config = self._get_default_engine_config()
-        config.update(self.engine_kwargs)
+        config = self._get_default_engine_config(is_async=True)
+        config.update(self.async_engine_config)
 
         # Remove Synchronization Engine Specific Configuration
-        config.pop('poolclass', None)
+        config.pop("poolclass", None)
 
-        if self.database_url.startswith('sqlite'):
-            for key in ('pool_size', 'max_overflow', 'pool_timeout'):
+        if self.database_url.startswith("sqlite"):
+            for key in ("pool_size", "max_overflow", "pool_timeout"):
                 config.pop(key, None)
 
-        if 'mysql+aiomysql' in self.async_database_url:
+        if "mysql+aiomysql" in self.async_database_url:
             _patch_aiomysql_pre_ping()
 
-        async_engine = create_async_engine(
-            self.async_database_url,
-            **config
-        )
+        async_engine = create_async_engine(self.async_database_url, **config)
         logger.debug(f"Created async database engine for {self.async_database_url}")
         return async_engine
 

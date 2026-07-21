@@ -61,7 +61,7 @@ export default function useFileChat(spaceId: string, fileId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText, retrying: false };
                     return msgs;
                 });
             },
@@ -71,9 +71,16 @@ export default function useFileChat(spaceId: string, fileId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText, retrying: false };
                     return msgs;
                 });
+            },
+            onRetry: (progress) => {
+                setMessages((prev) => prev.map((message) =>
+                    message.messageId === responseMessageId
+                        ? { ...message, text: progress.message, error: false, retrying: true }
+                        : message
+                ));
             },
             onError: (error) => {
                 setMessages((prev) => {
@@ -84,8 +91,9 @@ export default function useFileChat(spaceId: string, fileId: string) {
                     if (idx >= 0) {
                         msgs[idx] = {
                             ...msgs[idx],
-                            text: error || "An error occurred, please try again",
+                            text: error.message,
                             error: true,
+                            retrying: false,
                         };
                     }
                     return msgs;
@@ -116,6 +124,10 @@ export default function useFileChat(spaceId: string, fileId: string) {
             };
 
             const responseMessageId = `${userMessageId}_`;
+            const requestPayload = {
+                query: text.trim(),
+                model_id: String(chatModel.id || ""),
+            };
             const initialResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -124,6 +136,7 @@ export default function useFileChat(spaceId: string, fileId: string) {
                 conversationId: "",
                 messageId: responseMessageId,
                 error: false,
+                requestPayload,
             };
 
             setMessages((prev) => [...prev, userMessage, initialResponse]);
@@ -131,7 +144,7 @@ export default function useFileChat(spaceId: string, fileId: string) {
             setIsStreaming(true);
             setSseSubmission(
                 buildSubmission(
-                    { query: text.trim(), model_id: String(chatModel.id || "") },
+                    requestPayload,
                     responseMessageId
                 )
             );
@@ -167,7 +180,14 @@ export default function useFileChat(spaceId: string, fileId: string) {
             );
             if (!parentMsg) return;
 
-            const newResponseId = v4();
+            const failedResponse = [...messagesRef.current].reverse().find(
+                (message) => message.parentMessageId === parentMessageId && message.error
+            );
+            const newResponseId = failedResponse?.messageId || v4();
+            const requestPayload = failedResponse?.requestPayload ?? {
+                query: parentMsg.text?.trim() || "",
+                model_id: String(chatModel.id || ""),
+            };
             const newResponse: ChatMessage = {
                 text: "",
                 sender: chatModel.name || "AI",
@@ -176,16 +196,17 @@ export default function useFileChat(spaceId: string, fileId: string) {
                 conversationId: "",
                 messageId: newResponseId,
                 error: false,
+                requestPayload,
             };
 
-            setMessages((prev) => [...prev, newResponse]);
+            setMessages((prev) => failedResponse
+                ? prev.map((message) => message.messageId === newResponseId ? newResponse : message)
+                : [...prev, newResponse]
+            );
             setIsStreaming(true);
             setSseSubmission(
                 buildSubmission(
-                    {
-                        query: parentMsg.text?.trim() || "",
-                        model_id: String(chatModel.id || ""),
-                    },
+                    requestPayload,
                     newResponseId
                 )
             );

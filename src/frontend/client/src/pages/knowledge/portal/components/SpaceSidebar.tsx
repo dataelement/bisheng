@@ -66,6 +66,8 @@ interface SpaceSidebarProps {
     groupRefs: MutableRefObject<Record<SpaceGroupKey, HTMLDivElement | null>>;
     createOptionsLoading: boolean;
     createPermissionByLevel: Record<SpaceLevel, boolean>;
+    /** 当前用户是否为系统管理员；公共/部门知识库仅管理员显示新建入口。 */
+    isAdminUser?: boolean;
     spaceLoading: boolean;
     spaceMenuOpenId: string | null;
     getSpacePermissions: (space: KnowledgeSpace) => SpacePermissions;
@@ -264,6 +266,7 @@ export function SpaceSidebar({
     groupRefs,
     createOptionsLoading,
     createPermissionByLevel,
+    isAdminUser = false,
     spaceLoading,
     spaceMenuOpenId,
     getSpacePermissions,
@@ -471,7 +474,10 @@ export function SpaceSidebar({
                                             {(() => { const Icon = SPACE_GROUP_ICONS[group.key]; return <Icon className={`${s.groupIcon} ${expanded ? s.groupIconExpanded : ""}`} aria-hidden="true" data-testid={`space-group-icon-${group.key}`} />; })()}
                                             <strong>{group.title}</strong>
                                         </button>
-                                        {group.level !== SpaceLevel.PERSONAL ? (
+                                        {group.level !== SpaceLevel.PERSONAL && !(
+                                            (group.level === SpaceLevel.PUBLIC || group.level === SpaceLevel.DEPARTMENT)
+                                            && !isAdminUser
+                                        ) ? (
                                             <button
                                                 type="button"
                                                 className={s.groupCreateButton}

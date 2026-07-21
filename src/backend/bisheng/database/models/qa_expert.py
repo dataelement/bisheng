@@ -31,6 +31,18 @@ class Expert(SQLModel, table=True):
         default=None,
         description="所属专业"
     )
+    position: Optional[str] = Field(
+        default=None,
+        description="所属岗位"
+    )
+    job_family: Optional[str] = Field(
+        default=None,
+        description="所属岗位族"
+    )
+    job_category: Optional[str] = Field(
+        default=None,
+        description="所属岗位分类"
+    )
     
     # 统计字段
     answer_count: int = Field(default=0)

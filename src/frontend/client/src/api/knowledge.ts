@@ -288,6 +288,58 @@ export function isLibrarySpaceTag(tag: SpaceTag): boolean {
     return tag.business_type === "tag_library";
 }
 
+export interface SpaceTagLibraryGroup {
+    libraryId: number | null;
+    libraryName: string;
+    tags: SpaceTag[];
+}
+
+const UNGROUPED_SPACE_TAG_LIBRARY_KEY = "__ungrouped__";
+
+export function getSpaceTagLibraryGroupKey(tag: SpaceTag): string {
+    if (tag.tag_library_id != null) {
+        return `lib:${tag.tag_library_id}`;
+    }
+    const libraryName = (tag.tag_library_name || "").trim();
+    if (libraryName) {
+        return `name:${libraryName}`;
+    }
+    return UNGROUPED_SPACE_TAG_LIBRARY_KEY;
+}
+
+/** Group space tags by tag library for display (e.g. search dropdown). */
+export function groupSpaceTagsByLibrary(tags: SpaceTag[]): SpaceTagLibraryGroup[] {
+    const groupMap = new Map<string, SpaceTagLibraryGroup>();
+
+    for (const tag of tags) {
+        const key = getSpaceTagLibraryGroupKey(tag);
+        let group = groupMap.get(key);
+        if (!group) {
+            group = {
+                libraryId: tag.tag_library_id ?? null,
+                libraryName: (tag.tag_library_name || "").trim(),
+                tags: [],
+            };
+            groupMap.set(key, group);
+        }
+        group.tags.push(tag);
+    }
+
+    const groups = Array.from(groupMap.values());
+    for (const group of groups) {
+        group.tags.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    groups.sort((a, b) => {
+        const aUngrouped = getSpaceTagLibraryGroupKey(a.tags[0]) === UNGROUPED_SPACE_TAG_LIBRARY_KEY;
+        const bUngrouped = getSpaceTagLibraryGroupKey(b.tags[0]) === UNGROUPED_SPACE_TAG_LIBRARY_KEY;
+        if (aUngrouped !== bUngrouped) {
+            return aUngrouped ? 1 : -1;
+        }
+        return a.libraryName.localeCompare(b.libraryName);
+    });
+    return groups;
+}
+
 export function isBoundLibraryTagName(
     tagName: string,
     recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
@@ -2681,21 +2733,138 @@ export async function getFilePreviewApi(
     };
 }
 
-/**
- * Get file download URL. This is intentionally separate from preview because
- * viewing a file does not imply download permission.
- */
-export async function getFileDownloadApi(
-    space_id: string,
-    file_id: string
-): Promise<{ original_url: string; preview_url: string }> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/download`);
-    const data = res?.data ?? res;
-    return {
-        original_url: data?.original_url ?? "",
-        preview_url: data?.preview_url ?? "",
+export type BiShengKnowledgeDownloadEntryPoint =
+    | "bisheng_knowledge_list"
+    | "bisheng_preview"
+    | "bisheng_favorite"
+    | "bisheng_version_history";
+
+interface WatermarkedKnowledgeDownloadParams {
+    spaceId: string;
+    fileId: string;
+    entryPoint: BiShengKnowledgeDownloadEntryPoint;
+    fallbackFileName?: string;
+}
+
+interface WatermarkedKnowledgeDownloadResponse {
+    data: Blob;
+    headers?: Record<string, unknown> & { get?: (name: string) => unknown };
+    status?: number;
+}
+
+function getDownloadResponseHeader(
+    headers: WatermarkedKnowledgeDownloadResponse["headers"],
+    name: string,
+): string {
+    if (!headers) return "";
+    const fromGetter = headers.get?.(name);
+    if (typeof fromGetter === "string") return fromGetter;
+    const value = headers[name] ?? headers[name.toLowerCase()];
+    return typeof value === "string" ? value : "";
+}
+
+function sanitizePdfDownloadFileName(fileName?: string): string {
+    const leafName = (fileName ?? "").split(/[\\/]/).pop() ?? "";
+    const cleanName = leafName.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+    const stem = cleanName.replace(/\.[^.]+$/, "").trim() || "document";
+    return `${stem}.pdf`;
+}
+
+function resolveWatermarkedDownloadFileName(
+    contentDisposition: string,
+    fallbackFileName?: string,
+): string {
+    const encodedMatch = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+    if (encodedMatch?.[1]) {
+        try {
+            return sanitizePdfDownloadFileName(decodeURIComponent(encodedMatch[1].trim().replace(/^"|"$/g, "")));
+        } catch {
+            // Fall through to the ASCII or caller-provided filename.
+        }
+    }
+    const asciiMatch = contentDisposition.match(/filename\s*=\s*"([^"]+)"/i);
+    return sanitizePdfDownloadFileName(asciiMatch?.[1] || fallbackFileName);
+}
+
+async function readDownloadErrorPayload(data: unknown): Promise<Record<string, unknown> | null> {
+    if (data instanceof Blob) {
+        const text = typeof data.text === "function"
+            ? await data.text()
+            : await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result ?? ""));
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(data);
+            });
+        try {
+            return JSON.parse(text) as Record<string, unknown>;
+        } catch {
+            return null;
+        }
+    }
+    return data && typeof data === "object" ? data as Record<string, unknown> : null;
+}
+
+async function toWatermarkedDownloadError(error: unknown): Promise<Error> {
+    const response = (error as { response?: { status?: number; data?: unknown } } | null)?.response;
+    const payload = await readDownloadErrorPayload(response?.data);
+    const statusMessage = typeof payload?.status_message === "string" ? payload.status_message.trim() : "";
+    const detail = typeof payload?.detail === "string" ? payload.detail.trim() : "";
+    const formatted = !statusMessage && !detail && payload ? formatApiErrorMessage(payload) : "";
+    const fallbackByStatus: Record<number, string> = {
+        401: "登录状态已失效，请重新登录",
+        403: "无权下载该文档",
+        404: "文档不存在或已删除",
+        409: "PDF 生成失败，请稍后重试",
+        429: "下载任务繁忙，请稍后重试",
+        500: "PDF 生成失败，请稍后重试",
+        503: "下载服务暂不可用，请稍后重试",
+        504: "PDF 生成超时，请稍后重试",
     };
+    const message = statusMessage
+        || detail
+        || formatted
+        || fallbackByStatus[response?.status ?? 0]
+        || "文档下载失败，请稍后重试";
+    const normalizedError = new Error(message);
+    (normalizedError as Error & { status?: number }).status = response?.status;
+    return normalizedError;
+}
+
+export async function downloadWatermarkedKnowledgeFileApi(
+    params: WatermarkedKnowledgeDownloadParams,
+): Promise<void> {
+    try {
+        const response = await request.getResponse<WatermarkedKnowledgeDownloadResponse>(
+            `/api/v1/knowledge/space/${params.spaceId}/files/${params.fileId}/download`,
+            {
+                params: { entry_point: params.entryPoint },
+                responseType: "blob",
+            },
+        );
+        if (!(response.data instanceof Blob)) {
+            throw new Error("下载服务未返回有效的 PDF 文件");
+        }
+
+        const contentDisposition = getDownloadResponseHeader(response.headers, "content-disposition");
+        const fileName = resolveWatermarkedDownloadFileName(contentDisposition, params.fallbackFileName);
+        const objectUrl = URL.createObjectURL(response.data);
+        const anchor = document.createElement("a");
+        try {
+            anchor.href = objectUrl;
+            anchor.download = fileName;
+            document.body.appendChild(anchor);
+            anchor.click();
+        } finally {
+            anchor.remove();
+            URL.revokeObjectURL(objectUrl);
+        }
+    } catch (error) {
+        if (error instanceof Error && !(error as Error & { response?: unknown }).response) {
+            throw error;
+        }
+        throw await toWatermarkedDownloadError(error);
+    }
 }
 
 /**

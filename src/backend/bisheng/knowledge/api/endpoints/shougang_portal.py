@@ -1,14 +1,15 @@
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, Query
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
-from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_portal_pdf_download_service
+from bisheng.knowledge.api.portal_pdf_download_response import prepare_portal_pdf_download_response
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalDomainBindableSpacesResp,
@@ -50,11 +51,34 @@ from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
     PortalHotSearchTriggerRebuildReq,
     PortalHotSearchTriggerRebuildResp,
 )
+from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
 from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
     PortalHotSearchAdminService,
 )
 
 router = APIRouter(prefix="/knowledge/shougang-portal", tags=["shougang_portal"])
+
+
+@router.get("/files/{space_id}/{file_id}/download")
+async def download_shougang_portal_pdf(
+    space_id: int,
+    file_id: int,
+    entry_point: str = Query(default="other"),
+    share_access_grant: str = Header(default="", alias="X-Portal-Share-Access-Grant"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    svc: Any = Depends(get_portal_pdf_download_service),
+) -> Any:
+    request = PortalPdfDownloadRequest(
+        space_id=space_id,
+        file_id=file_id,
+        entry_point=entry_point,
+        share_access_grant=share_access_grant,
+    )
+    return await prepare_portal_pdf_download_response(
+        service=svc,
+        request=request,
+        login_user=login_user,
+    )
 
 
 @router.get("/space-levels")
@@ -155,7 +179,12 @@ async def verify_shougang_portal_share_link(
     try:
         result = await svc.verify_shougang_portal_share_link(share_token, req)
         raw = result.model_dump() if hasattr(result, "model_dump") else result
-        return resp_200(ShougangPortalShareLinkAccessResp(**raw).model_dump(mode="json"))
+        access = ShougangPortalShareLinkAccessResp(**raw)
+        payload = access.model_dump(mode="json")
+        if not access.download_grant:
+            payload.pop("download_grant", None)
+            payload.pop("download_grant_expires_at", None)
+        return resp_200(payload)
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
 

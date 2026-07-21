@@ -56,6 +56,11 @@ async def test_aggregate_builds_manual_filter_and_sorts_candidates():
     should = entry_clause["bool"]["should"]
     assert {"term": {"event_data.entry_point": "search_page"}} in should
     assert any("must_not" in s.get("bool", {}) for s in should)
+    ts_range = next(f for f in filters if "range" in f)["range"]["timestamp"]
+    assert ts_range == {
+        "gte": int(_SINCE.timestamp() * 1000),
+        "lt": int(_BEFORE.timestamp() * 1000),
+    }
 
 
 async def test_aggregate_truncates_when_candidate_cap_exceeded():

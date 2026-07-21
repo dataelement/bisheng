@@ -20,6 +20,12 @@ import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
+import {
+    formatStreamChatError,
+    parseStreamRetryEvent,
+    type StreamChatError,
+    type StreamRetryProgress,
+} from "~/utils/streamChatErrors";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -52,7 +58,8 @@ export interface SSESubmission {
      */
     onAgentUpdate?: (patch: AgentPatch) => void;
     onFinal: (data: any) => void;
-    onError: (error: string) => void;
+    onRetry?: (progress: StreamRetryProgress) => void;
+    onError: (error: StreamChatError) => void;
     onStart: () => void;
     onEnd: () => void;
 }
@@ -70,6 +77,7 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
             onMessage,
             onAgentUpdate,
             onFinal,
+            onRetry,
             onError,
             onStart,
             onEnd,
@@ -365,11 +373,19 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
         sse.addEventListener("error", (e: MessageEvent) => {
             try {
                 const data = JSON.parse(e.data);
-                onError(data?.text || data?.message || "Stream error");
+                onError(formatStreamChatError(data));
             } catch {
-                onError("Connection error");
+                onError(formatStreamChatError({ kind: "network" }));
             }
             safeEnd();
+        });
+
+        sse.addEventListener("retry", (e: MessageEvent) => {
+            try {
+                onRetry?.(parseStreamRetryEvent(JSON.parse(e.data)));
+            } catch {
+                onRetry?.(parseStreamRetryEvent(null));
+            }
         });
 
         sse.addEventListener("cancel", () => safeEnd());
@@ -379,7 +395,7 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
         return () => {
             const isCancelled = sse.readyState <= 1;
             sse.close();
-            if (isCancelled) sse.dispatchEvent(new Event("cancel"));
+            if (isCancelled) (sse as any).dispatchEvent(new Event("cancel"));
             sseRef.current = null;
         };
     }, [submission]);

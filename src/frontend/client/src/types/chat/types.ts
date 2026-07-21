@@ -113,6 +113,7 @@ export type TUser = {
   name: string;
   avatar: string;
   role: string;
+  departmentName?: string;
   provider: string;
   plugins?: string[];
   is_department_admin?: boolean;

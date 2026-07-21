@@ -29,6 +29,11 @@ start_default(){
     celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q celery -n celery@%h
 }
 
+start_pdf(){
+    # 统一 PDF 派生产物使用独立低并发 worker
+    celery -A bisheng.worker.main worker -l info -c "${KNOWLEDGE_PDF_CONCURRENCY:-2}" -P threads -Q knowledge_pdf_celery -n knowledge_pdf@%h
+}
+
 if [ "$start_mode" = "api" ]; then
     echo "Running database migrations..."
     alembic upgrade head || echo "WARNING: alembic migration failed, continuing startup..."
@@ -46,6 +51,9 @@ elif [ "$start_mode" = "beat" ]; then
 elif [ "$start_mode" = "default" ]; then
     echo "Starting default celery worker..."
     start_default
+elif [ "$start_mode" = "pdf" ]; then
+    echo "Starting Knowledge PDF Celery worker..."
+    start_pdf
 elif [ "$start_mode" = "linsight" ]; then
     echo "Starting LinSight worker..."
     start_linsight
@@ -63,6 +71,6 @@ elif [ "$start_mode" = "worker" ]; then
 
     echo "All workers started successfully."
 else
-    echo "Invalid start mode. Use api、worker、knowledge、workflow、beat、default、linsight."
+    echo "Invalid start mode. Use api、worker、knowledge、workflow、beat、default、pdf、linsight."
     exit 1
 fi

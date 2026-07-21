@@ -103,37 +103,52 @@ class ExpertService:
             introduction=request.introduction,
             depart_ment=request.depart_ment,
             user_id=request.user_id,
-            major = request.major
+            major = request.major,
+            position = request.position,
+            job_family = request.job_family,
+            job_category = request.job_category,
         )
         temp_expert = await self.repository.create(expert)
-        depart = DepartmentDao.get_by_id(temp_expert.depart_ment)
+        depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
         if depart:
             temp_expert.depart_ment = depart.name
         else:
             temp_expert.depart_ment = None
         return temp_expert
 
-    async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> Expert:
+    async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> dict:
         """更新专家信息"""
         expert = await self.repository.get_by_id(expert_id)
         if not expert:
             raise ExpertNotFoundError()
 
         update_data = request.dict(exclude_unset=True)
-        return await self.repository.update(expert_id, **update_data)
+        temp_expert = await self.repository.update(expert_id, **update_data)
+        expert_dict = temp_expert.model_dump()
+        expert_dict["department_id"] = temp_expert.depart_ment
+        depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
+        if depart:
+            expert_dict["depart_ment"] = depart.name
+        else:
+            expert_dict["depart_ment"] = None
+        return expert_dict
 
     async def list_experts(
         self, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
-    ) -> tuple[List[Expert], int]:
+    ) -> tuple[List[dict], int]:
         """列表查询专家"""
         experts, total = await self.repository.list_all(keyword=keyword, skip=skip, limit=limit)
+        experts_all = []
         for expert in experts:
-            department = DepartmentDao.get_by_id(expert.depart_ment)
+            expert_dict = expert.model_dump()
+            expert_dict["department_id"] = expert.depart_ment
+            department = await DepartmentDao.aget_by_id(expert.depart_ment)
             if department:
-                expert.depart_ment = department.name
+                expert_dict["depart_ment"] = department.name
             else:
-                expert.depart_ment = None
-        return experts, total
+                expert_dict["depart_ment"] = None
+            experts_all.append(expert_dict)
+        return experts_all, total
 
     async def delete_expert(self, expert_id: int) -> bool:
         """删除专家"""

@@ -252,7 +252,6 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
-
         await self._require_version_management_enabled()
 
         from bisheng.common.errcode.knowledge_space import (
@@ -379,7 +378,6 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
-
         await self._require_version_management_enabled()
 
         target_version = await self.version_repo.find_by_id(version_id)
@@ -436,6 +434,9 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
+        from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+            get_pdf_artifact_deletion_snapshots,
+        )
 
         await self._require_version_management_enabled()
 
@@ -460,6 +461,13 @@ class KnowledgeVersionService:
         if kf is not None and kf.knowledge_id is not None:
             knowledge = await KnowledgeDao.aquery_by_id(kf.knowledge_id)
 
+        pdf_artifact_snapshots = []
+        if kf is not None and kf.tenant_id is not None:
+            pdf_artifact_snapshots = await get_pdf_artifact_deletion_snapshots(
+                int(kf.tenant_id),
+                [int(kf.id)],
+            )
+
         await self.version_repo.delete(version_id)
         if kf is not None:
             await self.knowledge_file_repo.delete(kf.id)
@@ -478,7 +486,14 @@ class KnowledgeVersionService:
                         exc,
                     )
             try:
-                await asyncio.to_thread(delete_minio_files, kf)
+                if pdf_artifact_snapshots:
+                    await asyncio.to_thread(
+                        delete_minio_files,
+                        kf,
+                        pdf_artifact_snapshots,
+                    )
+                else:
+                    await asyncio.to_thread(delete_minio_files, kf)
             except Exception as exc:
                 logger.warning(
                     "delete_version: MinIO cleanup failed for file_id={}: {}",

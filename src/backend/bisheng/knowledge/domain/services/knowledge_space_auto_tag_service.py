@@ -32,6 +32,7 @@ from bisheng.llm.domain import LLMService
 AUTO_TAG_MAX_CONTENT = 3000
 AUTO_TAG_MAX_LIBRARY_MATCH = 5
 AUTO_TAG_MAX_AI_TAGS_PER_FILE = 5
+AUTO_TAG_LINK_B_MAX_LINK_A_TAGS = 3
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
     "你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。\n"
     '输出格要求严格遵循 JSON 格式： {"tags": ["标签名"]}。'
@@ -40,15 +41,19 @@ DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
 
 class KnowledgeSpaceAutoTagService:
     @classmethod
+    def should_run_link_b_after_link_a(cls, link_a_applied_tag_count: int) -> bool:
+        return link_a_applied_tag_count <= AUTO_TAG_LINK_B_MAX_LINK_A_TAGS
+
+    @classmethod
     def apply_after_upload_parse(
         cls,
         knowledge: Knowledge,
         db_file: KnowledgeFile,
         documents: Sequence[Document] | None = None,
-    ) -> None:
+    ) -> int:
         try:
             if not cls._should_run(knowledge, db_file):
-                return
+                return 0
 
             library_ids = cls._resolve_library_ids(knowledge)
             manual_tags, ai_tags = cls._collect_library_tags(library_ids)
@@ -59,11 +64,11 @@ class KnowledgeSpaceAutoTagService:
                     db_file.id,
                     library_ids,
                 )
-                return
+                return 0
 
             llm_config = LLMService.get_knowledge_llm(tenant_id=db_file.tenant_id)
             if not llm_config.auto_tag_enabled or not llm_config.extract_title_model_id:
-                return
+                return 0
 
             text = cls._collect_content(documents, db_file)
             if not text:
@@ -72,7 +77,7 @@ class KnowledgeSpaceAutoTagService:
                     knowledge.id,
                     db_file.id,
                 )
-                return
+                return 0
 
             llm = LLMService.get_bisheng_llm_sync(
                 model_id=llm_config.extract_title_model_id,
@@ -89,7 +94,8 @@ class KnowledgeSpaceAutoTagService:
             matched, ai_matched = cls._match_library_tags(selected, manual_tags, ai_tags)
             if not matched and not ai_matched:
                 logger.info("auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
-                return
+                return 0
+            applied_count = 0
             # Write each resource type independently: an empty manual match must not
             # prevent AI-tag matches (or vice versa) from being applied.
             if matched:
@@ -101,6 +107,7 @@ class KnowledgeSpaceAutoTagService:
                     tenant_id=db_file.tenant_id,
                     resource_type=TagResourceTypeEnum.SYSTEM_TAG,
                 )
+                applied_count += len(matched)
             if ai_matched:
                 ai_matched = cls._cap_ai_tags_for_file(db_file.id, ai_matched)
             if ai_matched:
@@ -112,19 +119,23 @@ class KnowledgeSpaceAutoTagService:
                     tenant_id=db_file.tenant_id,
                     resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
                 )
+                applied_count += len(ai_matched)
             logger.info(
-                "auto_tag_success space_id={} file_id={} matched={} ai_matched={}",
+                "auto_tag_success space_id={} file_id={} matched={} ai_matched={} applied_count={}",
                 knowledge.id,
                 db_file.id,
                 matched,
                 ai_matched,
+                applied_count,
             )
+            return applied_count
         except Exception:
             logger.exception(
                 "auto_tag_failed space_id={} file_id={}",
                 getattr(knowledge, "id", None),
                 getattr(db_file, "id", None),
             )
+            return 0
 
     @classmethod
     def _resolve_library_ids(cls, knowledge: Knowledge) -> list[int]:

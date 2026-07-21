@@ -34,7 +34,7 @@ from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRB
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
-from ..domain.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
+from ..domain.models.user import User, UserCreate, UserDao, UserLogin, UserUpdate
 from ..domain.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from ..domain.services.auth import AuthJwt, LoginUser
 from ..domain.services.user import UserService
@@ -181,6 +181,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_department_admin=is_department_admin,
     )
     menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
+    department_name = await UserService.get_primary_department_name(user_id)
 
     # Tenant-tree admin flags for the frontend. Any failure here degrades
     # to defaults so a transient FGA outage never blocks login.
@@ -229,6 +230,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         admin_groups=admin_group,
         can_manage_user_groups=can_manage_user_groups,
         is_department_admin=is_department_admin,
+        department_name=department_name,
         is_global_super=is_global_super,
         is_child_admin=is_child_admin,
         leaf_tenant_id=leaf_tenant_id,

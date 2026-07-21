@@ -279,7 +279,12 @@ function TreeNode({
   const isExpanded = expanded.has(node.id);
   const explicitSelection = selectedDepartmentsById.get(node.id);
   const isExplicitlySelected = selectedIds.has(node.id);
-  const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected;
+  const isCoveredByAncestor = selectionMode === "single"
+    && ancestorIncluded
+    && !isExplicitlySelected;
+  const isImplicitlySelected = selectionMode === "multiple"
+    && ancestorIncluded
+    && !isExplicitlySelected;
   const isDisabled = disabledIds.has(node.id);
   const isChecked = isExplicitlySelected || isImplicitlySelected;
   const isIndeterminate = !isChecked && indeterminateIds.has(node.id);
@@ -328,6 +333,11 @@ function TreeNode({
         <span className="min-w-0 truncate text-sm">{node.name}</span>
         {node.member_count != null && (
           <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>
+        )}
+        {isCoveredByAncestor && (
+          <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+            {localize("com_permission.covered_by_parent_department")}
+          </span>
         )}
         {isDisabled && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">

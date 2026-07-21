@@ -68,17 +68,22 @@ class ApplicationContextManager:
     def _register_default_contexts(self, config: Settings) -> None:
         """Register default context manager"""
         try:
-
             from bisheng.core.database.manager import DatabaseManager
-            self.register_context(DatabaseManager(
-                database_url=config.database_url,
-                engine_config=config.database_pool.as_engine_kwargs(),
-            ))
+
+            self.register_context(
+                DatabaseManager(
+                    database_url=config.database_url,
+                    sync_engine_config=config.database_pool.as_sync_engine_kwargs(),
+                    async_engine_config=config.database_pool.as_async_engine_kwargs(),
+                )
+            )
 
             from bisheng.core.cache.redis_manager import RedisManager
+
             self.register_context(RedisManager(redis_url=config.redis_url))
 
             from bisheng.core.storage.minio.minio_manager import MinioManager
+
             self.register_context(MinioManager(minio_config=config.object_storage.minio))
 
             from bisheng.core.search.elasticsearch.manager import EsConnManager, statistics_es_name

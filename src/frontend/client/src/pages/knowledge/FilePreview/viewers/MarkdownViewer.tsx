@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { useLocalize } from "~/hooks";
+import KnowledgePreviewWatermark from "../KnowledgePreviewWatermark";
 
 interface MarkdownViewerProps {
     fileUrl: string;
@@ -57,7 +58,8 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
         <div className="flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="flex justify-center py-6 px-4">
                 <div
-                    className="bg-white shadow-md max-w-[800px] w-full rounded-sm"
+                    data-preview-watermark-surface
+                    className="relative max-w-[800px] w-full overflow-hidden rounded-sm bg-white shadow-md"
                     style={{
                         transform: `scale(${scale})`,
                         transformOrigin: "top center",
@@ -71,6 +73,7 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
                             {content}
                         </ReactMarkdown>
                     </div>
+                    <KnowledgePreviewWatermark />
                 </div>
             </div>
         </div>

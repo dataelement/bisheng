@@ -686,6 +686,7 @@ interface FileTableProps {
     renameEntryIds?: Set<string>;
     deleteEntryIds?: Set<string>;
     downloadEntryIds?: Set<string>;
+    downloadingEntryIds?: ReadonlySet<string>;
     publishEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
     onMove?: (file: KnowledgeFile) => void;
@@ -712,7 +713,7 @@ interface FileTableProps {
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -942,6 +943,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
                                 canDelete={Boolean(deleteEntryIds?.has(file.id))}
                                 canDownload={Boolean(downloadEntryIds?.has(file.id))}
+                                downloadPending={Boolean(downloadingEntryIds?.has(file.id))}
                                 canPublish={Boolean(publishEntryIds?.has(file.id))}
                                 onPublishFile={onPublishFile}
                                 columnWidths={columnWidths}
@@ -1025,6 +1027,7 @@ function FileRow({
     canRename = false,
     canDelete = false,
     canDownload = false,
+    downloadPending = false,
     canPublish = false,
     onPublishFile,
     columnWidths,
@@ -1070,6 +1073,7 @@ function FileRow({
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
+    downloadPending?: boolean;
     canPublish?: boolean;
     canMove?: boolean;
     onMove?: () => void;
@@ -1179,8 +1183,12 @@ function FileRow({
                         onDownload();
                     }}
                     title={localize("com_knowledge.download")}
+                    disabled={downloadPending}
+                    aria-busy={downloadPending}
                 >
-                    <Download className="size-4" />
+                    {downloadPending
+                        ? <Loader2 className="size-4 animate-spin" />
+                        : <Download className="size-4" />}
                 </button>
             )}
             {showMoreMenu && (

@@ -28,6 +28,20 @@ knowledges: # 知识库相关配置
     simhash_similarity_threshold: 0.85
     enable_tfidf_refine: true
     tfidf_similarity_threshold: 0.3
+  pdf_artifact:
+    enabled: true
+    queue_name: "knowledge_pdf_celery"
+    max_retries: 3
+    retry_base_seconds: 30
+    retry_max_seconds: 300
+    conversion_timeout_seconds: 300
+    on_demand_timeout_seconds: 300
+    generation_lock_ttl_seconds: 330
+  pdf_watermark:
+    timeout_seconds: 60
+    max_concurrency: 2
+    user_lock_ttl_seconds: 390
+    process_terminate_grace_seconds: 2
 
 llm_request:
   # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值
@@ -217,6 +231,7 @@ linsight:
   max_steps: 200
   # 灵思任务执行过程中模型调用重试次数
   retry_num: 3
+
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
   # 生成SOP时，prompt里放的用户上传文件信息的数量
@@ -229,6 +244,29 @@ linsight:
   default_temperature: 0
   # 模型json格式失败重试时的温度
   retry_temperature: 1
+
+# 应用内消息转发配置
+in_app_message_forwarding:
+  # 首钢企业微信消息推送总开关
+  shougang_wechat:
+    enabled: true
+    api_url: "https://mobms.sggf.com.cn:30201/madp-app/madp/qywxPush-api/pushMessage"
+    id: "ww09d8b84921e7fd3f"
+    agentid: "1000008"
+    key: "BH27OF9Xn5n2mxDJ6z2Tkpk01USKmoUdyjbbFXTEONg"
+    sys_id: "1"
+    msg_type: "text"
+    timeout_seconds: 10
+    max_retries: 3
+    batch_size: 100
+    scan_interval_seconds: 30
+    retry_base_seconds: 60
+    retry_max_seconds: 3600
+    templates:
+      qa_expert_invited: "{applicant} 邀请你回答问题「{resource}」\n{preview}"
+      qa_expert_answered: "{applicant} 回答了问题「{resource}」\n{preview}"
+      qa_answer_commented: "{applicant} 评论了回答「{resource}」\n{preview}"
+      qa_answer_accepted: "你的回答「{resource}」被 {applicant} 采纳\n{preview}"
 
 information_conf:
   # 情报订阅服务的接口地址
@@ -245,25 +283,3 @@ knowledge_space:
   # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）
   # 默认 true；中粮场内部署改为 false 走原 Tab 布局
   tree_structured_directory_display: true
-
-in_app_message_forwarding:
-  # 首钢企业微信消息推送总开关
-  shougang_wechat:
-    enabled: true
-    api_url: "https://mobms.sggf.com.cn:30201/madp-app/madp/qywxPush-api/pushMessage"
-    id: ""
-    agentid: "1000053"
-    key: "FveVv2PHybeI3PSFjPcrJgFGUfuF5-ZGg6ca3NJkwFk"
-    sys_id: "1"
-    msg_type: "text"
-    timeout_seconds: 10
-    max_retries: 3
-    batch_size: 100
-    scan_interval_seconds: 30
-    retry_base_seconds: 60
-    retry_max_seconds: 3600
-    templates:
-      qa_expert_invited: "{applicant} 邀请你回答问题「{resource}」\n{preview}"
-      qa_expert_answered: "{applicant} 回答了问题「{resource}」\n{preview}"
-      qa_answer_commented: "{applicant} 评论了回答「{resource}」\n{preview}"
-      qa_answer_accepted: "你的回答「{resource}」被 {applicant} 采纳\n{preview}"

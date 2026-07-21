@@ -9,8 +9,10 @@ import {
     SpaceSortType,
     type KnowledgeSpace,
 } from "~/api/knowledge";
+import { useAuthContext } from "~/hooks";
 import {
     hasKnowledgeSpacePermission,
+    isSystemAdmin,
     useKnowledgeSpaceActionPermissions,
     type KnowledgeSpaceActionPermission,
 } from "../../hooks/useKnowledgeSpacePermissions";
@@ -78,6 +80,7 @@ export function usePortalSpaces({
     expandedGroups,
     preferredSpaceId,
 }: UsePortalSpacesParams) {
+    const { user } = useAuthContext();
     const preferredSpaceQuery = useQuery({
         queryKey: ["knowledgeSpaces", "preferred", preferredSpaceId],
         queryFn: () => getSpaceInfoApi(String(preferredSpaceId)),
@@ -171,13 +174,17 @@ export function usePortalSpaces({
         teamSpacesQuery.isLoading,
     ]);
 
-    const createPermissionByLevel = useMemo<Record<SpaceLevel, boolean>>(() => ({
-        [SpaceLevel.PUBLIC]: Boolean(createOptions?.canCreatePublic),
-        [SpaceLevel.DEPARTMENT]: Boolean(createOptions?.canCreateDepartment),
-        [SpaceLevel.TEAM]: Boolean(createOptions?.canCreateTeam),
-        // 个人知识库不允许手动新建（我的收藏 / {用户名}的知识库 由系统按需自动创建）
-        [SpaceLevel.PERSONAL]: false,
-    }), [createOptions]);
+    const createPermissionByLevel = useMemo<Record<SpaceLevel, boolean>>(() => {
+        const admin = isSystemAdmin(user?.role);
+        return {
+            // 公共/部门知识库仅系统管理员可新建，非管理员用户隐藏操作入口
+            [SpaceLevel.PUBLIC]: admin && Boolean(createOptions?.canCreatePublic),
+            [SpaceLevel.DEPARTMENT]: admin && Boolean(createOptions?.canCreateDepartment),
+            [SpaceLevel.TEAM]: Boolean(createOptions?.canCreateTeam),
+            // 个人知识库不允许手动新建（我的收藏 / {用户名}的知识库 由系统按需自动创建）
+            [SpaceLevel.PERSONAL]: false,
+        };
+    }, [createOptions, user?.role]);
 
     const selectableSpaces = useMemo(
         () => groups.flatMap((group) => group.spaces),

@@ -172,6 +172,7 @@ class CeleryConf(BaseModel):
                 # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
                 "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
                 "bisheng.worker.message.*": {"queue": "knowledge_celery"},  # WeChat message push tasks
+                "bisheng.worker.portal_course.*": {"queue": "knowledge_celery"},
             }
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
@@ -296,6 +297,12 @@ class CeleryConf(BaseModel):
             self.beat_schedule["scan_wechat_message_push_outbox"] = {
                 "task": "bisheng.worker.message.tasks.scan_wechat_message_push_outbox",
                 "schedule": 30.0,  # Every 30 seconds
+            }
+
+        if "scan_portal_course_media_cleanup" not in self.beat_schedule:
+            self.beat_schedule["scan_portal_course_media_cleanup"] = {
+                "task": "bisheng.worker.portal_course.tasks.scan_portal_course_media_cleanup",
+                "schedule": 60.0,
             }
 
         # F056: root Beat entries only fan out; every tenant child task carries
@@ -552,6 +559,47 @@ class VersionManagementConf(BaseModel):
     )
 
 
+class KnowledgePdfArtifactConf(BaseModel):
+    """统一 PDF 派生产物配置。"""
+
+    enabled: bool = Field(default=True, description="Enable unified PDF artifact scheduling")
+    queue_name: str = Field(default="knowledge_pdf_celery", min_length=1, description="Dedicated Celery queue")
+    max_retries: int = Field(default=3, ge=0, le=10, description="Retries after the initial attempt")
+    retry_base_seconds: int = Field(default=30, ge=1, description="Initial retry countdown")
+    retry_max_seconds: int = Field(default=300, ge=1, description="Maximum retry countdown")
+    conversion_timeout_seconds: int = Field(default=300, ge=10, description="Per conversion timeout")
+    on_demand_timeout_seconds: int = Field(default=300, ge=10, le=600, description="On-demand readiness deadline")
+    generation_lock_ttl_seconds: int = Field(default=330, ge=11, le=900, description="Per-file generation lock TTL")
+
+    @model_validator(mode="after")
+    def validate_retry_window(self):
+        if self.retry_max_seconds < self.retry_base_seconds:
+            raise ValueError("retry_max_seconds must be greater than or equal to retry_base_seconds")
+        if self.generation_lock_ttl_seconds <= self.on_demand_timeout_seconds:
+            raise ValueError("generation_lock_ttl_seconds must be greater than on_demand_timeout_seconds")
+        return self
+
+
+class KnowledgePdfWatermarkConf(BaseModel):
+    """门户 PDF 实时水印运行配置。"""
+
+    timeout_seconds: int = Field(default=60, ge=1, le=300, description="Watermark generation deadline")
+    max_concurrency: int = Field(default=2, ge=1, le=16, description="Per-process generation concurrency")
+    user_lock_ttl_seconds: int = Field(default=390, ge=2, le=900, description="Per-user Redis lock TTL")
+    process_terminate_grace_seconds: float = Field(
+        default=2,
+        gt=0,
+        le=10,
+        description="Worker terminate grace period before kill",
+    )
+
+    @model_validator(mode="after")
+    def validate_user_lock_ttl(self):
+        if self.user_lock_ttl_seconds <= self.timeout_seconds:
+            raise ValueError("user_lock_ttl_seconds must be greater than timeout_seconds")
+        return self
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -562,6 +610,14 @@ class KnowledgeConf(BaseModel):
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
         description="Version Management Configure",
+    )
+    pdf_artifact: KnowledgePdfArtifactConf = Field(
+        default_factory=KnowledgePdfArtifactConf,
+        description="Unified PDF Artifact Configure",
+    )
+    pdf_watermark: KnowledgePdfWatermarkConf = Field(
+        default_factory=KnowledgePdfWatermarkConf,
+        description="Portal PDF Watermark Configure",
     )
 
     @property
@@ -668,18 +724,101 @@ class InAppMessageForwardingConf(BaseModel):
     shougang_wechat: ShougangWeChatMessagePushConf = ShougangWeChatMessagePushConf()
 
 
-class DatabasePoolConf(BaseModel):
-    """SQLAlchemy connection-pool settings for each database engine."""
+DATABASE_POOL_FIELDS = (
+    "pool_size",
+    "max_overflow",
+    "pool_timeout",
+    "pool_recycle",
+    "pool_pre_ping",
+)
+SYNC_DATABASE_POOL_DEFAULTS: dict[str, Any] = {
+    "pool_size": 20,
+    "max_overflow": 10,
+    "pool_timeout": 30,
+    "pool_recycle": 3600,
+    "pool_pre_ping": True,
+}
+ASYNC_DATABASE_POOL_DEFAULTS: dict[str, Any] = {
+    "pool_size": 40,
+    "max_overflow": 20,
+    "pool_timeout": 30,
+    "pool_recycle": 3600,
+    "pool_pre_ping": True,
+}
 
-    pool_size: int = Field(default=100, description="Persistent connections per engine and process")
-    max_overflow: int = Field(default=20, description="Temporary connections allowed above pool_size")
-    pool_timeout: int = Field(default=30, description="Seconds to wait for an available connection")
-    pool_recycle: int = Field(default=3600, description="Seconds before recycling a connection")
-    pool_pre_ping: bool = Field(default=True, description="Check connection health before use")
+
+class DatabaseEnginePoolConf(BaseModel):
+    """Resolved SQLAlchemy connection-pool settings for one engine type."""
+
+    pool_size: int
+    max_overflow: int
+    pool_timeout: int
+    pool_recycle: int
+    pool_pre_ping: bool
 
     def as_engine_kwargs(self) -> dict[str, Any]:
-        """Return keyword arguments accepted by SQLAlchemy engine factories."""
+        """Return keyword arguments accepted by a SQLAlchemy engine factory."""
         return self.model_dump()
+
+
+class DatabasePoolConf(BaseModel):
+    """Resolve legacy common overrides and engine-specific pool settings."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    pool_size: int | None = Field(default=None, description="Legacy common persistent connections")
+    max_overflow: int | None = Field(default=None, description="Legacy common overflow connections")
+    pool_timeout: int | None = Field(default=None, description="Legacy common pool wait timeout")
+    pool_recycle: int | None = Field(default=None, description="Legacy common connection recycle time")
+    pool_pre_ping: bool | None = Field(default=None, description="Legacy common connection health check")
+    sync: DatabaseEnginePoolConf
+    async_: DatabaseEnginePoolConf = Field(alias="async")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_engine_pool_settings(cls, values: Any) -> Any:
+        """Apply defaults, legacy common fields, then engine-specific fields."""
+        if values is None:
+            values = {}
+        if not isinstance(values, dict):
+            return values
+
+        resolved_values = dict(values)
+        legacy_overrides = {field: resolved_values[field] for field in DATABASE_POOL_FIELDS if field in resolved_values}
+
+        def resolve(
+            defaults: dict[str, Any],
+            engine_values: Any,
+        ) -> Any:
+            if engine_values is None:
+                engine_values = {}
+            if isinstance(engine_values, BaseModel):
+                engine_values = engine_values.model_dump()
+            if not isinstance(engine_values, dict):
+                return engine_values
+            return {**defaults, **legacy_overrides, **engine_values}
+
+        resolved_values["sync"] = resolve(
+            SYNC_DATABASE_POOL_DEFAULTS,
+            resolved_values.get("sync"),
+        )
+        resolved_values["async"] = resolve(
+            ASYNC_DATABASE_POOL_DEFAULTS,
+            resolved_values.get("async", resolved_values.get("async_")),
+        )
+        return resolved_values
+
+    def as_sync_engine_kwargs(self) -> dict[str, Any]:
+        """Return resolved keyword arguments for the synchronous engine."""
+        return self.sync.as_engine_kwargs()
+
+    def as_async_engine_kwargs(self) -> dict[str, Any]:
+        """Return resolved keyword arguments for the asynchronous engine."""
+        return self.async_.as_engine_kwargs()
+
+    def as_engine_kwargs(self) -> dict[str, Any]:
+        """Return sync kwargs for callers using the legacy helper method."""
+        return self.as_sync_engine_kwargs()
 
 
 class PortalHotSearchConf(BaseModel):
@@ -841,7 +980,7 @@ class Settings(BaseModel):
     @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
-            if key != "dev" and not value:
+            if key not in {"dev", "database_pool"} and not value:
                 values[key] = []
         return values
 

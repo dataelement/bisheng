@@ -75,6 +75,16 @@ async def test_read_returns_empty_when_no_data():
     assert await svc.list_for_home(1) == []
 
 
+async def test_read_ignores_empty_redis_cache_and_falls_back_to_db():
+    redis = _FakeRedisRepo(cached=[])
+    snapshot = _FakeSnapshotRepo([PortalHotSearchItem(rank=1, query="设备检修时的安全要求是什么？")])
+    svc = PortalHotSearchReadService(redis_repository=redis, snapshot_repository=snapshot, top_k=5)
+
+    result = await svc.list_for_home(1)
+    assert [i.query for i in result] == ["设备检修时的安全要求是什么？"]
+    assert snapshot.calls == 1
+
+
 async def test_read_survives_redis_failure():
     redis = _FakeRedisRepo(fail=True)
     snapshot = _FakeSnapshotRepo([PortalHotSearchItem(rank=1, query="环保设施运行要求？")])

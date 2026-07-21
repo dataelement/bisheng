@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import type * as pdfjsLib from "pdfjs-dist";
 import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
 import { useLocalize } from "~/hooks";
+import KnowledgePreviewWatermark from "../KnowledgePreviewWatermark";
 
 const PDF_RENDER_CONCURRENCY = 2;
 const PDF_RENDER_OVERSCAN_PX = 1200;
@@ -159,7 +160,8 @@ function PdfPage({
         <div
             ref={handlePageRef}
             data-page={pageNumber}
-            className="relative shadow-md bg-white flex items-start justify-center"
+            data-preview-watermark-surface
+            className="relative overflow-hidden shadow-md bg-white flex items-start justify-center"
             style={{ minHeight: wrapperHeight, width: wrapperWidth }}
         >
             <canvas ref={canvasRef} />
@@ -192,6 +194,7 @@ function PdfPage({
                     })}
                 </svg>
             )}
+            {rendered ? <KnowledgePreviewWatermark /> : null}
         </div>
     );
 }
