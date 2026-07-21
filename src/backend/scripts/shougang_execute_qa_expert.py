@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
+
+
 _backend_root = Path(__file__).resolve().parents[1]
 if str(_backend_root) not in sys.path:
     sys.path.insert(0, str(_backend_root))
@@ -140,45 +142,8 @@ EXPERT_ROWS: tuple[ExpertSeedRow, ...] = (
     ExpertSeedRow(18250, "郑银辉", "首钢冷轧", "机械性能检验", "首席技师", "技能操作族", "设备技能类"),
     ExpertSeedRow(17882, "郭成", "首钢冷轧", "维护钳工", "首席技师", "技能操作族", "设备技能类"),
     ExpertSeedRow(18176, "黄士岩", "首钢冷轧", "镀锌操控", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "夏兆所", "首钢智新", "轧制技术", "首席工程师", "制造技术族", "轧制技术类"),
-    ExpertSeedRow(None, "安冬洋", "首钢智新", "无取向产品研发", "首席技术专家", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "黎先浩", "首钢智新", "取向产品研发", "首钢科学家", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "王现辉", "首钢智新", "取向产品研发", "首席技术专家", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "司良英", "首钢智新", "取向产品研发", "首席技术专家", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "刘玉金", "首钢智新", "无取向应用研究", "首席工程师", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "赵鹏飞", "首钢智新", "取向产品研发", "首席工程师", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "郝晓鹏", "首钢智新", "工程技术", "首席技术专家", "设备运行族", "工程管理类"),
-    ExpertSeedRow(None, "程林", "首钢智新", "产品研发工程师", "首席工程师", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "李广林", "首钢智新", "产品研发工程师", "首席技术专家", "制造技术族", "研发设计类"),
-    ExpertSeedRow(None, "刘磊", "首钢智新", "系统工程师", "首席工程师", "制造技术族", "轧制技术类"),
-    ExpertSeedRow(None, "徐厚军", "首钢智新", "轧钢主操", "首钢工匠", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "刘根林", "首钢智新", "钳工", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "吴红福", "首钢智新", "变配电运行", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "武庆国", "首钢智新", "钳工", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "王宇栋", "首钢智新", "设备点检", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "赵凯", "首钢智新", "轧钢主操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "赵国顺", "首钢智新", "轧钢主操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "柳振方", "首钢智新", "中试操作", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "赵进元", "首钢智新", "轧钢主操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "姜东友", "首钢智新", "轧钢主操", "股份工匠", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "刘靖", "首钢智新", "设备点检", "股份工匠", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "孙同江", "首钢智新", "热处理副操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "贾会刚", "首钢智新", "设备点检", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "董振虎", "首钢智新", "轧钢主操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "盖力建", "首钢智新", "轧钢精整副操", "首席技能专家", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "李宁", "首钢智新", "轧钢副操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "司泽", "首钢智新", "设备点检", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "马小云", "首钢智新", "轧钢主操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "刘新", "首钢智新", "设备点检", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "张垚龙", "首钢智新", "设备点检", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "徐延明", "首钢智新", "热处理副操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "李二伟", "首钢智新", "热处理主操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "解攀龙", "首钢智新", "热处理副操", "首席技师", "技能操作族", "工艺技能类"),
-    ExpertSeedRow(None, "王瑞", "首钢资环", "挖掘机司机", "首席技师", "技能操作族", "设备技能类"),
-    ExpertSeedRow(None, "赵建宣", "首钢资环", "天车工", "首席技师", "技能操作族", "设备技能类"),
     ExpertSeedRow(12690, "许国峰", "投资管理部", "工程审核评价管理", "首席工程师", "设备运行族", "工程管理类"),
     ExpertSeedRow(11737, "赵忠义", "投资管理部", "工程投资预算管理", "首席工程师", "设备运行族", "工程管理类"),
-    ExpertSeedRow(None, "杨可", "投资管理部", "工程组织管理", "首席工程师", "设备运行族", "工程管理类"),
     ExpertSeedRow(11727, "黄学启", "营销中心", "产品工程师", "首席工程师", "市场管理族", "市场营销类"),
     ExpertSeedRow(12138, "陈连峰", "营销中心", "汽车板技术服务", "首席技术专家", "市场管理族", "市场营销类"),
     ExpertSeedRow(18658, "刘印良", "营销中心", "产品工程师", "首席工程师", "市场管理族", "市场营销类"),
@@ -239,6 +204,7 @@ async def _prepare_experts(
     list_departments: DepartmentLookup,
     get_existing_expert: ExistingExpertLookup,
     expert_factory: ExpertFactory,
+    get_user_primary_department: Callable[[int], Awaitable[Any | None]],
 ) -> tuple[list[Any], ImportStats]:
     """Resolve hardcoded rows and return experts that are safe to insert."""
     stats = ImportStats()
@@ -251,40 +217,12 @@ async def _prepare_experts(
             stats.skipped_empty_name += 1
             continue
 
-        user_id, reason = await _resolve_user_id(row, lookup_users)
-        if reason == "not_found":
-            print(
-                f"[expert_import] Skip row {index}: user not found for name '{row.name}'.",
-                file=sys.stderr,
-            )
-            stats.skipped_no_user += 1
-            continue
-        if reason == "ambiguous":
-            print(
-                f"[expert_import] Skip row {index}: ambiguous name '{row.name}'.",
-                file=sys.stderr,
-            )
-            stats.skipped_ambiguous_name += 1
-            continue
+        user_id = row.user_id
         if user_id is None:
-            raise RuntimeError(f"Resolved user id is missing for row {index}.")
-
-        if await get_existing_expert(user_id) is not None:
-            stats.skipped_duplicate += 1
             continue
 
-        department = departments_by_name.get(row.unit)
-        if row.unit and department is None:
-            print(
-                f"[expert_import] Row {index}: "
-                f"department not found for unit '{row.unit}', "
-                "setting depart_ment to None.",
-                file=sys.stderr,
-            )
-            stats.unit_not_found += 1
-            department_id = None
-        else:
-            department_id = str(department.id) if department is not None else None
+        department = await get_user_primary_department(user_id)
+        department_id = str(department.id) if department is not None else None
 
         experts.append(
             expert_factory(
@@ -335,6 +273,7 @@ async def _run(args: argparse.Namespace) -> int:
     from bisheng.database.models.qa_expert import Expert
     from bisheng.qa_expert.domain.repositories import ExpertRepository
     from bisheng.user.domain.models.user import UserDao
+    from bisheng.database.models.department import UserDepartmentDao
 
     tenant_token = None
     await initialize_app_context(config=settings)
@@ -348,6 +287,7 @@ async def _run(args: argparse.Namespace) -> int:
                 list_departments=DepartmentDao.aget_all_active,
                 get_existing_expert=repository.get_by_user_id,
                 expert_factory=Expert,
+                get_user_primary_department=UserDepartmentDao.aget_user_primary_department,
             )
             inserted = await _persist_experts(
                 experts,
