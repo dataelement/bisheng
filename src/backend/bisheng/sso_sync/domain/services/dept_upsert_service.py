@@ -22,7 +22,7 @@ enforcing three invariants:
    (freshly looked-up) parent's current path, not from any cached value.
 """
 
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
 
 from bisheng.common.errcode.sso_sync import SsoDeptParentMissingError
 from bisheng.database.models.department import Department, DepartmentDao
@@ -43,7 +43,7 @@ class DeptUpsertService:
         external_ids: Iterable[str],
         *,
         source: str = DEFAULT_SSO_SYNC_SOURCE,
-    ) -> Dict[str, Department]:
+    ) -> dict[str, Department]:
         """Resolve every ``external_id`` to a Department row, raise 19312 on
         the first miss.
 
@@ -51,22 +51,21 @@ class DeptUpsertService:
         not yet pushed the user's department tree. Returns the resolved
         mapping so callers don't have to requery.
         """
-        resolved: Dict[str, Department] = {}
-        missing: List[str] = []
+        resolved: dict[str, Department] = {}
+        missing: list[str] = []
         for ext in external_ids:
             if not ext:
                 continue
             dept = await DepartmentDao.aget_by_source_external_id(
-                source, ext,
+                source,
+                ext,
             )
             if dept is None or dept.is_deleted == 1:
                 missing.append(ext)
                 continue
             resolved[ext] = dept
         if missing:
-            raise SsoDeptParentMissingError.http_exception(
-                f'departments not synced yet: {missing}'
-            )
+            raise SsoDeptParentMissingError.http_exception(f"departments not synced yet: {missing}")
         return resolved
 
     # -----------------------------------------------------------------------
@@ -76,11 +75,11 @@ class DeptUpsertService:
     @classmethod
     async def upsert_from_sync_payload(
         cls,
-        existing: Optional[Department],
+        existing: Department | None,
         item: DepartmentUpsertItem,
         source: str,
         last_sync_ts: int,
-        parent_cache: Optional[Dict[str, Department]] = None,
+        parent_cache: dict[str, Department] | None = None,
     ) -> Department:
         """Apply a single upsert. The caller is responsible for running
         :class:`OrgSyncTsGuard` and passing only APPLY-verdicted items.
@@ -96,42 +95,44 @@ class DeptUpsertService:
         back to the DAO so insertion order within a batch can still expose
         a freshly created parent that wasn't present at pre-load time.
         """
-        parent_id: Optional[int] = None
-        parent_path: str = ''
+        parent_id: int | None = None
+        parent_path: str = ""
         if item.parent_external_id:
-            parent: Optional[Department] = None
+            parent: Department | None = None
             if parent_cache is not None:
                 parent = parent_cache.get(item.parent_external_id)
             if parent is None:
                 parent = await DepartmentDao.aget_by_source_external_id(
-                    source, item.parent_external_id,
+                    source,
+                    item.parent_external_id,
                 )
             if parent is None or parent.is_deleted == 1:
                 raise SsoDeptParentMissingError.http_exception(
-                    f'parent {item.parent_external_id} not synced for '
-                    f'child {item.external_id}'
+                    f"parent {item.parent_external_id} not synced for child {item.external_id}"
                 )
             parent_id = parent.id
-            parent_path = parent.path or ''
+            parent_path = parent.path or ""
 
         # ``path`` convention (F002): /id1/id2/.../self_id/ — always
         # terminated with '/'. The DAO appends the row's own id after insert
         # or when updating an existing row.
         if parent_id is None:
-            computed_path = ''
+            computed_path = ""
         else:
-            base = parent_path if parent_path.endswith('/') else parent_path + '/'
+            base = parent_path if parent_path.endswith("/") else parent_path + "/"
             computed_path = base
 
         # INV-T1 (2-layer lock) — symmetrical with F002 amove_department.
         # Mount state itself is bisheng-internal (PRD §5.2.5) and SSO never
         # toggles it, but we still reject upstream reparents that would
         # land a mounted subtree under another mount.
-        if (
-            existing is not None
-            and (existing.parent_id or 0) != (parent_id or 0)
-        ):
+        if existing is not None and (existing.parent_id or 0) != (parent_id or 0):
             await DepartmentDao.aassert_reparent_legal(existing.id, parent_id)
+            from bisheng.department.domain.services.department_root_guard import (
+                aassert_default_root_parent_immutable,
+            )
+
+            await aassert_default_root_parent_immutable(existing.id, parent_id)
 
         return await DepartmentDao.aupsert_by_external_id(
             source=source,

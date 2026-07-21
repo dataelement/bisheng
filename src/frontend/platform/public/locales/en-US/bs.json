@@ -2003,6 +2003,7 @@
     "21018": "Cannot restore department while parent department is archived",
     "21019": "Person ID already exists",
     "21020": "Person ID already belongs to a deleted account. Please restore the original account.",
+    "21021": "The default root organization cannot be moved or reparented",
     "personIdAlreadyExists": "Person ID already exists",
     "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
     "10810": "Please configure the workbench embedding model.",
