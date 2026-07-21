@@ -137,6 +137,29 @@ bash scripts/backfill_knowledge_space_auto_tags.sh --apply --min-tags 3 --max-ta
 - `--scan-batch-size` 控制标签统计分批大小；`--batch-size` 控制实际打标签分批大小。
 - Link B 是否执行仍受 `review_tag_visible`、空间 `auto_tag_enabled`、Link A 应用标签数上限，以及 `--max-tags` 剩余额度约束。
 
+### `backfill_word_pdf_preview.py`
+
+给**存量 Word 文件**补生成 PDF 预览。新上传的 Word 在解析时会把 .docx 预览转成 PDF 存到 `preview/{file_id}.pdf` 并记到 `user_metadata.pdf_preview_object_name`，前端优先用它（LibreOffice 排版更接近 Word，避免电子印章/图形错位）。此功能上线前解析的旧文件没有这个字段，预览会回退到 .docx —— 本脚本离线复刻同样的步骤给这些文件补齐。串行执行，幂等（`pdf_preview_source_md5` 已匹配当前 md5 的跳过）；默认 dry-run，传 `--apply` 才转换并写库。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_word_pdf_preview.py            # dry-run，仅列出待处理文件
+PYTHONPATH=./ .venv/bin/python scripts/backfill_word_pdf_preview.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backfill_word_pdf_preview.py --apply --space-id 202 --limit 50
+bash scripts/backfill_word_pdf_preview.sh --apply --limit 50
+
+# Docker 容器内（WORKDIR /app，使用系统 python，无 .venv；容器里已装 LibreOffice）：
+PYTHONPATH=./ python scripts/backfill_word_pdf_preview.py --apply
+```
+
+说明：
+
+- 只处理 `status=SUCCESS`、扩展名为 `doc/docx/wps` 的真实文件。
+- 转换源优先取解析产出的 `preview/{id}.docx`，缺失时回退到原始 `.doc/.docx`。
+- 每个文件转换失败只记日志并继续，不中断整批（预览是尽力而为）；`--timeout` 控制单文件 LibreOffice 超时（默认 120s）。
+- `--force` 可对已有 PDF 的文件强制重转。
+
 ### `reparse_knowledge_space_files.py`
 
 重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。
