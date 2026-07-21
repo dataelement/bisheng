@@ -20,6 +20,14 @@ export default defineConfig({
   title: 'BiSheng 组件库',
   description: 'BiSheng client 设计规范 + 组件库',
   lang: 'zh', // single language — i18n intentionally not enabled (req 5)
+  // No SSG: demos import real app components, whose dependency tree reaches
+  // browser/node-conditional packages (@dicebear/converter resolves its `node`
+  // build under SSR and then needs the native `sharp` / `@resvg/resvg-js`,
+  // which we don't install). `rspress dev` never hit this because it only
+  // client-renders; `rspress build` prerenders and failed. Client-side
+  // rendering is fine for an internal docs site, and it keeps every future
+  // demo immune to the same class of SSR-only resolution breakage.
+  ssg: false,
   // Point straight at the app's stylesheet (tailwind directives + all design
   // tokens). A wrapper css with `@import` breaks rspack's cssExtractLoader.
   globalStyles: path.join(clientSrc, 'style.css'),
@@ -27,26 +35,40 @@ export default defineConfig({
   // req 1: live component preview
   plugins: [pluginPreview({ previewMode: 'internal' })],
 
+  route: {
+    // 00-总纲 is the Claude-window working charter, not reader material —
+    // keep it out of the site entirely (routes AND search index).
+    exclude: ['**/00-总纲.md'],
+  },
+
   themeConfig: {
     // req 6: two top-level sections — 文档 (specs) / 组件 (demos)
     // NOTE: the demos dir is ASCII (`components/`) on purpose — rspress v1's
     // client router fails to match nested routes with non-ASCII dir names.
     nav: [
-      { text: '文档', link: '/00-总纲' },
-      { text: '组件', link: '/components/button' },
+      // activeMatch drives the selected state: 组件 owns /components/*,
+      // 文档 owns every other doc route (home included).
+      { text: '文档', link: '/基础-字体规范', activeMatch: '^/(?!components/)' },
+      { text: '组件', link: '/components/button', activeMatch: '^/components/' },
     ],
     sidebar: {
       // 组件 section — component demos
       '/components/': [
         { text: '组件总览', link: '/components/index' },
+        { text: 'Typography 字体', link: '/components/typography' },
+        { text: 'Color 色彩', link: '/components/color' },
         { text: 'Button 按钮', link: '/components/button' },
+        { text: 'Modal 弹窗', link: '/components/modal' },
+        { text: 'Confirm 二次确认', link: '/components/confirm' },
+        { text: 'Feedback 点赞点踩', link: '/components/feedback' },
+        { text: 'Icon 图标', link: '/components/icon' },
+        { text: 'Illustration 插画', link: '/components/illustration' },
       ],
       // 文档 section — the existing design-spec markdown (kept flat, not moved)
       '/': [
         {
           text: '设计规范',
           items: [
-            { text: '总纲', link: '/00-总纲' },
             { text: '字体 Typography', link: '/基础-字体规范' },
             { text: '色彩 Color', link: '/基础-色彩规范' },
             { text: '多端适配', link: '/基础-多端适配原则' },
@@ -68,6 +90,14 @@ export default defineConfig({
 
   builderConfig: {
     source: {
+      // The app entry (src/main.jsx) imports this too — react-speech-recognition
+      // (reached via the ~/hooks barrel) needs a global regeneratorRuntime.
+      // rspress-overrides.css: docs-site-only fixes on top of the app css
+      // (restores document flow so the sticky nav works — see file header).
+      preEntry: [
+        'regenerator-runtime/runtime',
+        path.join(__dirname, 'stubs/rspress-overrides.css'),
+      ],
       define: {
         // vite injects these globals (vite.config define); app code reached via
         // the `~/utils` barrel reads them at module scope — must exist here too.
@@ -102,19 +132,39 @@ export default defineConfig({
           filter: (url: string) => !url.startsWith('/') && !url.startsWith('$fonts'),
         },
       },
-      rspack: {
-        resolve: {
-          // Some ui components reach the `~/utils` barrel, which transitively
-          // imports api modules using Node builtins. Demos never execute those
-          // paths at runtime; stub them out so the browser bundle compiles.
-          fallback: {
-            crypto: false,
-            url: false,
-            fs: false,
-            path: false,
-            stream: false,
-          },
-        },
+      rspack: (config) => {
+        config.resolve = config.resolve || {};
+        // filenamify (ESM, imports node:path — an unbundlable scheme) comes
+        // in via the ~/hooks barrel (usePresets); no demo executes it. The
+        // alias must live at the raw-rspack layer — rsbuild's resolve.alias
+        // did not take effect for this package.
+        config.resolve.alias = {
+          ...(config.resolve.alias as Record<string, unknown>),
+          filenamify: path.join(__dirname, 'stubs/filenamify-stub.ts'),
+        };
+        // Some ui components reach the `~/utils` barrel, which transitively
+        // imports api modules using Node builtins. Demos never execute those
+        // paths at runtime; stub them out so the browser bundle compiles.
+        config.resolve.fallback = {
+          ...(config.resolve.fallback as Record<string, unknown>),
+          crypto: false,
+          url: false,
+          fs: false,
+          path: false,
+          stream: false,
+        };
+        // Strip internal working sections (ledgers, change logs, scan
+        // archives) from the spec md BEFORE the MDX compiler runs — a
+        // remark-level strip misses the TOC/search, which rspress extracts
+        // ahead of user remark plugins. Single source of truth stays the md.
+        config.module = config.module || { rules: [] };
+        config.module.rules = config.module.rules || [];
+        config.module.rules.push({
+          test: /\.md$/,
+          include: [path.join(__dirname, '../../../docs-ui-refactor')],
+          enforce: 'pre',
+          use: [path.join(__dirname, 'plugins/strip-internal-loader.cjs')],
+        });
       },
     },
   },

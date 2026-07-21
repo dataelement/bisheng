@@ -1,0 +1,15 @@
+/**
+ * Docs-site-only overrides on top of the app's style.css (rspress.config
+ * loads this via source.preEntry; !important wins regardless of order).
+ *
+ * The app is an app-shell layout: `html, body, #root { height: 100% }` and
+ * inner containers scroll. rspress needs normal document flow — with the app
+ * rule active, #root is pinned to viewport height, the whole page scrolls the
+ * window past it, and the sticky `.rspress-nav` (top: 0, scoped to #root)
+ * scrolls away with it. Restore document flow for the docs site.
+ */
+html,
+body,
+#root {
+  height: auto !important;
+}
