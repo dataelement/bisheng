@@ -518,6 +518,10 @@ async def list_user(
     group_dict = {}
     for one, avatar_url in zip(users, avatar_urls):
         one_data = one.model_dump()
+        # Never expose sensitive/internal User columns in the list response — the
+        # ORM dump carries the full row; the frontend uses none of these fields.
+        for sensitive_field in ("password", "password_update_time", "token_version"):
+            one_data.pop(sensitive_field, None)
         primary_dept_id = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
         one_data["department_id"] = primary_dept_id
         if with_department_path:
