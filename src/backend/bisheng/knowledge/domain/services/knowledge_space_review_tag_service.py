@@ -44,7 +44,7 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     "4. 空内容文件不生成候选标签；\n"
     "5. 文件夹不生成候选标签。\n\n"
     "# task\n"
-    "在满足上述所有约束条件的前提下，针对收到的文档内容，请你：\n"
+    "在满足上述所有约束条件的前提下，结合文件的业务域、文件分类与文档内容，请你：\n"
     "1. 分析文档类型与核心主题；\n"
     "2. 提取最多 5 个精准、多维度的标签，覆盖文档类型、业务领域、关键实体、核心主题等维度；\n"
     "3. 标签应简洁、规范、具代表性，避免过于宽泛或冗余；\n"
@@ -62,6 +62,9 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     '2. 若因任何限制条件（constraints）不满足、或经标签规则（tag rules）过滤后无有效标签、或最终候选标签为空，则必须输出：`{"tags": []}`\n\n'
     "# result example\n"
     '{"tags": ["会议纪要", "季度业务", "销售目标", "市场推广", "新产品上市", "团队组建", "决策事项"]}\n\n'
+)
+REVIEW_TAG_CONTEXT_INSTRUCTION = (
+    '请结合上述业务域、文件分类与文件内容，生成不在标签库中的新标签；若无合适新标签则输出 {"tags": []}。'
 )
 
 
@@ -124,7 +127,11 @@ class KnowledgeSpaceReviewTagService:
                 user_id=db_file.user_id,
                 temperature=0,
             )
-            system_prompt = (llm_config.review_tag_prompt or "").strip() or DEFAULT_REVIEW_TAG_SYSTEM_PROMPT
+            system_prompt = KnowledgeSpaceAutoTagService._build_file_context_system_prompt(
+                (llm_config.review_tag_prompt or "").strip() or DEFAULT_REVIEW_TAG_SYSTEM_PROMPT,
+                db_file,
+                REVIEW_TAG_CONTEXT_INSTRUCTION,
+            )
 
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
 
