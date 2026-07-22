@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Eraser, TerminalSquare, Variable } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { alertContext } from "../../contexts/alertContext";
@@ -96,10 +97,10 @@ export default function FormModal({
     id.current = flow.id;
   }, [flow.id, tabsStateFlowId, tabsStateFlowIdFormKeysData]);
 
-  var isStream = false;
+  let isStream = false;
 
   const addChatHistory = (
-    message: string | Object,
+    message: string | object,
     isSend: boolean,
     chatKey: string,
     template?: string,
@@ -107,7 +108,7 @@ export default function FormModal({
     files?: Array<any>
   ) => {
     setChatHistory((old) => {
-      let newChat = cloneDeep(old);
+      const newChat = cloneDeep(old);
       if (files) {
         newChat.push({ message, isSend, files, thought, chatKey });
       } else if (thought) {
@@ -138,8 +139,8 @@ export default function FormModal({
   }) {
     setChatHistory((old) => {
       if (!old.length) return old // 拒绝 chatHistory无数据时接收数据
-      let newChat = [...old];
-      let prevChat = newChat[newChat.length - 2]
+      const newChat = [...old];
+      const prevChat = newChat[newChat.length - 2]
       // let lastChat = newChat[newChat.length - 1]
       // 上一条log时，当前条与上一条合并(确保log在一条中)
       if (end && !prevChat?.message && prevChat?.thought) {
@@ -340,7 +341,7 @@ export default function FormModal({
   }, [open]);
 
   function sendMessage() {
-    let nodeValidationErrors = validateNodes(reactFlowInstance);
+    const nodeValidationErrors = validateNodes(reactFlowInstance);
     if (nodeValidationErrors.length === 0) {
       let inputs: any = tabsState[id.current].formKeysData.input_keys;
       inputs = inputs.find((el: any) => !el.type) || {}
@@ -366,7 +367,7 @@ export default function FormModal({
       });
       setTabsState((old) => {
         if (!chatKey) return old;
-        let newTabsState = cloneDeep(old);
+        const newTabsState = cloneDeep(old);
         // newTabsState[id.current].formKeysData.input_keys[chatKey] = "";
         return newTabsState;
       });
@@ -484,7 +485,7 @@ export default function FormModal({
                               }
                               onChange={(e) => {
                                 setTabsState((old) => {
-                                  let newTabsState = cloneDeep(old);
+                                  const newTabsState = cloneDeep(old);
                                   const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                                   input[i] = e.target.value;
                                   return newTabsState;
@@ -570,7 +571,7 @@ export default function FormModal({
                       setChatValue={(value) => {
                         setChatValue(value);
                         setTabsState((old) => {
-                          let newTabsState = cloneDeep(old);
+                          const newTabsState = cloneDeep(old);
                           const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                           input[chatKey] = value;
                           return newTabsState;

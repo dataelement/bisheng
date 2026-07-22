@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import NodeToolbarComponent from "@/pages/BuildPage/skills/editSkill/nodeToolbarComponent";
 import { Zap } from "lucide-react";

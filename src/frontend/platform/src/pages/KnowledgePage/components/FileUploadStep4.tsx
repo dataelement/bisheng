@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
 import { Button } from "@/components/bs-ui/button";

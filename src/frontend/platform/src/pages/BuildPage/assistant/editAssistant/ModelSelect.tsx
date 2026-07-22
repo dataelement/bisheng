@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useModel } from "@/pages/ModelPage/manage";
 import { useMemo } from "react";

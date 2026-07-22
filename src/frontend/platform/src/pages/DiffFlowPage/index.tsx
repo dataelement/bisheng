@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { PlusIcon } from "@/components/bs-icons/plus"
 import { Button } from "@/components/bs-ui/button"
 import { useToast } from "@/components/bs-ui/toast/use-toast"

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { TipIcon } from "@/components/bs-icons/tip"
 import i18next from "i18next"

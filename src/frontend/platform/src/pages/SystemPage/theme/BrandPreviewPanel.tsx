@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import DefaultLoadingIcon from "@/components/bs-icons/loading/Loading.svg?react";
 import type { BrandAsset, BrandConfig } from "@/controllers/API";
 import { withBrandBaseUrl } from "@/utils/brand";

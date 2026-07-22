@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import i18next from "i18next";

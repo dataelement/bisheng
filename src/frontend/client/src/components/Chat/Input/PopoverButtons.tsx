@@ -133,7 +133,7 @@ export default function PopoverButtons({
           </Button>
         ))}
       </div>
-      {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition */}
+      { }
       {disabled ? null : (
         <div className="flex w-[150px] items-center justify-end">
           {additionalButtons[settingsView].map((button, index) => (

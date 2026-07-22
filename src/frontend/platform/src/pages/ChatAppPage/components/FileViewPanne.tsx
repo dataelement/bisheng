@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import FileView from "@/components/bs-comp/FileView";
 import { generateUUID } from "@/components/bs-ui/utils";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";

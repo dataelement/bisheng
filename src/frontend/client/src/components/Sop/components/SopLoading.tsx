@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useMemo } from "react";
 import { cn } from "~/utils";

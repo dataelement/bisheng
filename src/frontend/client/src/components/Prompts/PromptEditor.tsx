@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useMemo, memo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { EditIcon } from 'lucide-react';

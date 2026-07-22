@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AlertDropdown from "@/alerts/alertDropDown";
 import TipPng from "@/assets/tip.jpg";
 import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
@@ -357,7 +358,7 @@ const useBeforeUnload = (flow, preFlow) => {
     // 离开提示保存
     useEffect(() => {
         const fun = (e) => {
-            var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            const confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
             return confirmationMessage;
         }

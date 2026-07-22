@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";

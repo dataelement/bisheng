@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";

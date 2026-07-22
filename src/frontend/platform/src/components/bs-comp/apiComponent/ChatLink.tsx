@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import Skeleton from '@/components/bs-ui/skeleton';
@@ -59,7 +60,7 @@ const enum API_TYPE {
 }
 
 const NoLoginLink = ({ type, noLogin = false }) => {
-  const [isCopied, setIsCopied] = useState<Boolean>(false);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
   const { t } = useTranslation()
   const { id } = useParams()
 

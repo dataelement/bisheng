@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { createContext, useEffect, useState } from "react";
 
 type darkContextType = {

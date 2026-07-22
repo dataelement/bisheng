@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FlagIcon } from "@/components/bs-icons";
 import { ThunmbIcon } from "@/components/bs-icons/thumbs";
 import { Button } from "@/components/bs-ui/button";

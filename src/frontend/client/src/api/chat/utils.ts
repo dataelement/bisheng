@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 export const envVarRegex = /^\${(.+)}$/;
 
 /** Extracts the value of an environment variable from a string. */

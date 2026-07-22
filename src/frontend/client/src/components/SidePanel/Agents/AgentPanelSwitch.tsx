@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useEffect, useMemo } from 'react';
 import { EModelEndpoint } from '~/types/chat';
 import type { ActionsEndpoint } from '~/common';

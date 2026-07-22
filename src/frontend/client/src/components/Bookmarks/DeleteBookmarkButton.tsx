@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback, useState } from 'react';
 import type { FC } from 'react';
 import { Label, OGDialog, OGDialogTrigger, TooltipAnchor } from '~/components/ui';

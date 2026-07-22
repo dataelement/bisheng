@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { forwardRef } from 'react';
 import type { ForwardedRef } from 'react';
 import { CheckIcon } from 'lucide-react';

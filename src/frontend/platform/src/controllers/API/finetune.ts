@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FileDB, FileItem, TaskDB } from "../../types/api/finetune";
 import axios from "../request";
 

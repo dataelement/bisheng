@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { memo, useMemo } from 'react';
 import type { IconMapProps } from '~/common';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // src/features/chat-config/components/ModelManagement.tsx
 import { TrashIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";

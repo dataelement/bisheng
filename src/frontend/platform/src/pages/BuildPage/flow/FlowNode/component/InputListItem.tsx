@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { InputList } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";

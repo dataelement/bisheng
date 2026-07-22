@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useMemo } from 'react';
 import { Variable } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';

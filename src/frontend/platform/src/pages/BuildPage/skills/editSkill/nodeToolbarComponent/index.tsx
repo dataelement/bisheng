@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select-custom";

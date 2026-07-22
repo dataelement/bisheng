@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import cloneDeep from "lodash-es/cloneDeep";
 import uniqueId from "lodash-es/uniqueId";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
@@ -19,7 +20,7 @@ import { LoadingIcon } from "./components/bs-icons/loading";
 import { useToast } from "./components/bs-ui/toast/use-toast";
 
 export default function App() {
-  let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
+  const { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
   // let location = useLocation();
   useEffect(() => {
     setCurrent(location.pathname.replace(/\/$/g, "").split("/"));
@@ -61,7 +62,7 @@ export default function App() {
       }
       setErrorOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "error", data: cloneDeep(errorData), id: uniqueId() },
         ];
@@ -79,7 +80,7 @@ export default function App() {
       }
       setNoticeOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "notice", data: cloneDeep(noticeData), id: uniqueId() },
         ];
@@ -97,7 +98,7 @@ export default function App() {
       }
       setSuccessOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "success", data: cloneDeep(successData), id: uniqueId() },
         ];
@@ -123,7 +124,7 @@ export default function App() {
   useEffect(() => {
     window.errorAlerts = (errorList: string[]) => {
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "error", data: { title: '', list: errorList }, id: uniqueId() },
         ];

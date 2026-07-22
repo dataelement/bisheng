@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { updateToolApi } from "@/controllers/API/tools";

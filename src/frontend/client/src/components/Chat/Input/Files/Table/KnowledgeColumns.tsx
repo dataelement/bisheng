@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ArrowUpDown, Database, Download, TrashIcon } from 'lucide-react';
 import { FileSources, FileContext, dataService } from '~/types/chat';
 import type { ColumnDef } from '@tanstack/react-table';

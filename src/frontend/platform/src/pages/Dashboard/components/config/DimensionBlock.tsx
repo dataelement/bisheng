@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { useEffect, useState } from "react"
@@ -517,7 +518,7 @@ export function DimensionBlock({
                             localFormat.type === 'duration' ? 'ms' :
                               'none')}
                         onValueChange={(value) => {
-                          let unitVal = value === "none" ? "" : value;
+                          const unitVal = value === "none" ? "" : value;
                           setLocalFormat({ ...localFormat, unit: unitVal })
                         }}
                       >

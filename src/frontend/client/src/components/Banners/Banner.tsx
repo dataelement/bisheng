@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useRef } from 'react';
 import { XIcon } from 'lucide-react';
 import { useRecoilState } from 'recoil';

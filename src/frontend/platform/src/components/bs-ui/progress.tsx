@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client";
 
 import * as ProgressPrimitive from "@radix-ui/react-progress";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Braces } from "lucide-react";
 import { useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

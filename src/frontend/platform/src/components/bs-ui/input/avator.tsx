@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Camera, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../toast/use-toast";

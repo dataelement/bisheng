@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";

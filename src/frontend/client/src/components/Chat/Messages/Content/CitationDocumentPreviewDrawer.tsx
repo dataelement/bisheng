@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useState } from 'react';
 import { useSetRecoilState } from 'recoil';

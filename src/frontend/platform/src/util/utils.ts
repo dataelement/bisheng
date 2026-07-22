@@ -120,7 +120,7 @@ export function formatStrTime(time: string, notSameDayFormat: string): string {
 
 export function toTitleCase(str: string | undefined): string {
     if (!str) return "";
-    let result = str
+    const result = str
         .split("_")
         .map((word, index) => {
             if (index === 0) {

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { paramsSerializer } from ".";
 import axios from "../request";
 

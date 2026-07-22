@@ -43,8 +43,8 @@ export default function CodeAreaModal({
     captureAndAlertRequestErrorHoc(postValidateCode(code)
       .then((apiReturn) => {
         if (apiReturn) {
-          let importsErrors = apiReturn.imports.errors;
-          let funcErrors = apiReturn.function.errors;
+          const importsErrors = apiReturn.imports.errors;
+          const funcErrors = apiReturn.function.errors;
           if (funcErrors.length === 0 && importsErrors.length === 0) {
             setSuccessData({ title: t('code.codeReadyToRun') });
             setValue(code);

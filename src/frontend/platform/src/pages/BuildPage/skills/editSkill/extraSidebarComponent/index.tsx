@@ -28,7 +28,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
     data: { type: string; node?: APIClassType }
   ) {
     // start drag event
-    var crt = event.currentTarget.cloneNode(true);
+    const crt = event.currentTarget.cloneNode(true);
     crt.style.position = "absolute";
     crt.style.top = "-500px";
     crt.style.right = "-500px";
@@ -40,10 +40,10 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
 
   function handleSearchInput(e: string) {
     setFilterData((_) => {
-      let ret = {};
+      const ret = {};
       Object.keys(data).forEach((d: keyof APIObjectType, i) => {
         ret[d] = {};
-        let keys = Object.keys(data[d]).filter((nd) =>
+        const keys = Object.keys(data[d]).filter((nd) =>
           nd.toLowerCase().includes(e.toLowerCase())
         );
         keys.forEach((element) => {

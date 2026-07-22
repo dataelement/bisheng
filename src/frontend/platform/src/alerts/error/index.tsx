@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Transition } from "@headlessui/react";
 import { XCircle } from "lucide-react";
 import { useEffect, useState } from "react";

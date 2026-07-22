@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';

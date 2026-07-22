@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { SearchInput } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";

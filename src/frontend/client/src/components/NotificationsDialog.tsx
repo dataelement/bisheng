@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/Dialog";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useContext, useEffect, useRef, useState } from "react";
 import { InputListComponentType } from "../../types/components";
 
@@ -61,7 +62,7 @@ export default function InputListComponent({
               placeholder="input..."
               onChange={(e) => {
                 setInputList((old) => {
-                  let newInputList = cloneDeep(old);
+                  const newInputList = cloneDeep(old);
                   newInputList[idx] = e.target.value;
                   onChange(newInputList);
                   return newInputList;
@@ -72,7 +73,7 @@ export default function InputListComponent({
               <button
                 onClick={() => {
                   setInputList((old) => {
-                    let newInputList = cloneDeep(old);
+                    const newInputList = cloneDeep(old);
                     newInputList.push("");
                     onChange(newInputList);
                     return newInputList;
@@ -86,7 +87,7 @@ export default function InputListComponent({
               inputList.length !== 1 && <button
                 onClick={() => {
                   setInputList((old) => {
-                    let newInputList = cloneDeep(old);
+                    const newInputList = cloneDeep(old);
                     newInputList.splice(idx, 1);
                     onChange(newInputList);
                     return newInputList;

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import cloneDeep from "lodash-es/cloneDeep";
 import { ExternalLink, Plus, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -80,7 +81,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
 
     // 
     const handleDelClick = async (index) => {
-        let newItems = cloneDeep(items);
+        const newItems = cloneDeep(items);
         const item = newItems.splice(index, 1);
         item[0].update && await captureAndAlertRequestErrorHoc(delVariableApi(item[0].id))
         setItems(newItems)
@@ -120,7 +121,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
             <button
                 onClick={() => {
                     setItems((old) => {
-                        let newItems = cloneDeep(old);
+                        const newItems = cloneDeep(old);
                         newItems.push({
                             id: generateUUID(8),
                             name: "",

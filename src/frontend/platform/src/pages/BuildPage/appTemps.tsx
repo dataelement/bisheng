@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
 import { useEffect, useState } from "react";

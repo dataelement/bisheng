@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import axios from "axios";
 import i18next from "i18next";

@@ -64,6 +64,7 @@
     "tailwind-merge": "^2.3.0",
     "tailwindcss": "^3.4.4",
     "tailwindcss-animate": "^1.0.7",
+    "unist-util-visit": "^5",
     "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "web-vitals": "^4.1.1",
     "xlsx": "^0.18.5",
@@ -79,7 +80,11 @@
     "format": "npx prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --suppressions-location eslint-suppressions.json",
+    "lint:fix": "eslint . --suppressions-location eslint-suppressions.json --fix",
+    "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
+    "typecheck": "tsc-strict"
   },
   "eslintConfig": {
     "extends": [
@@ -102,13 +107,18 @@
   "proxy": "http://127.0.0.1:7860",
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.13",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.0.0",
     "@types/axios": "^0.14.0",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^20.14.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.7.0",
+    "@vitest/coverage-v8": "^3.0.0",
     "autoprefixer": "^10.4.19",
+    "jsdom": "^25.0.0",
     "postcss": "^8.4.38",
     "prettier": "^3.3.2",
     "prettier-plugin-organize-imports": "^3.2.4",
@@ -120,12 +130,7 @@
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^1.0.6",
     "vite-plugin-svgr": "^4.2.0",
-    "vitest": "^3.0.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/user-event": "^14.0.0",
-    "@vitest/coverage-v8": "^3.0.0",
-    "jsdom": "^25.0.0"
+    "vitest": "^3.0.0"
   },
   "engines": {
     "node": ">= 18"

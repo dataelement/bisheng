@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilState } from 'recoil';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';

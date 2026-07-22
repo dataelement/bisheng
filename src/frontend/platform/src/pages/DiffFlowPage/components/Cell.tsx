@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import Skeleton from "@/components/bs-ui/skeleton";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { useDiffFlowStore } from "@/store/diffFlowStore";

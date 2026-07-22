@@ -299,7 +299,7 @@ export function getCitationDocumentUrl(detail?: ChatCitation | null) {
   return getCitationDocumentPreviewUrl(detail);
 }
 
-let inflightFileShareCache: Record<string, Promise<string>> = {};
+const inflightFileShareCache: Record<string, Promise<string>> = {};
 
 export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
   const fileId = getCitationKnowledgeFileId(detail);

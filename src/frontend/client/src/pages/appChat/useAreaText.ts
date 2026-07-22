@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { FLOW_TYPES } from ".";

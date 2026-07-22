@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type * as t from '~/types/chat/types';
 import { EndpointURLs } from '~/types/chat/config';
 import * as s from '~/types/chat/schemas';

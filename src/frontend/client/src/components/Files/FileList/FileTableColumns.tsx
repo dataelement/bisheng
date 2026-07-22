@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /* eslint-disable react-hooks/rules-of-hooks */
 import { FileSources, FileContext } from '~/types/chat';
 import type { ColumnDef } from '@tanstack/react-table';

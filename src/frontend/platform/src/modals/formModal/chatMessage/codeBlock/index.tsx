@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function CodeBlock({ language, value }) {
-  const [isCopied, setIsCopied] = useState<Boolean>(false);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
 
   const copyToClipboard = () => {
     setIsCopied(true);

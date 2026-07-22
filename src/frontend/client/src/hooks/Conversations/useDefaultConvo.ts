@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useGetModelsQuery } from '~/hooks/queries';
 import type {
   TEndpointsConfig,

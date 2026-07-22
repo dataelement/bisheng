@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useMemo } from "react";
 import { useRecoilValue } from "recoil";
 import type { CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";

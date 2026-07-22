@@ -92,7 +92,7 @@ export type UploadFileTypeAPI = {
 export type Component = {
   name: string;
   description: string;
-  data: Object;
+  data: object;
   tags: [string];
 };
 

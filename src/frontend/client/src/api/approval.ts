@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import request from "./request";
 import { FileStatus, FileType, type KnowledgeFile } from "./knowledge";
 

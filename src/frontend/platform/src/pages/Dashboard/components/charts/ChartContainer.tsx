@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { queryChartData } from '@/controllers/API/dashboard'

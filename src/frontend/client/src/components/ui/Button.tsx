@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * Button has moved to the shared component library (@bisheng/ui) — the first
  * component managed there and consumed by both apps. This re-export keeps every

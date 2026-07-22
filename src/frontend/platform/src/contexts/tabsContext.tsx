@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import cloneDeep from "lodash-es/cloneDeep";
 import { ReactNode, createContext, useContext, useState } from "react";
 import { addEdge } from "@xyflow/react";
@@ -74,7 +75,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     if (file) {
       file.text().then((text) => {
         // parse the text into a JSON object
-        let flow: FlowType = JSON.parse(text);
+        const flow: FlowType = JSON.parse(text);
         // 粘贴
         paste(
           { nodes: flow.data.nodes, edges: flow.data.edges },
@@ -100,7 +101,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
           // read the file as text
           currentfile.text().then((text) => {
             // parse the text into a JSON object
-            let flow: FlowType = JSON.parse(text);
+            const flow: FlowType = JSON.parse(text);
             // 粘贴
             paste(
               { nodes: flow.data.nodes, edges: flow.data.edges },
@@ -156,7 +157,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   ) {
     let minimumX = Infinity;
     let minimumY = Infinity;
-    let idsMap = {};
+    const idsMap = {};
     let nodes = reactFlowInstance.getNodes();
     let edges = reactFlowInstance.getEdges();
     selectionInstance.nodes.forEach((n) => {
@@ -204,19 +205,19 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     reactFlowInstance.setNodes(nodes);
 
     selectionInstance.edges.forEach((e) => {
-      let source = idsMap[e.source];
-      let target = idsMap[e.target];
-      let sourceHandleSplitted = e.sourceHandle.split("|");
-      let sourceHandle =
+      const source = idsMap[e.source];
+      const target = idsMap[e.target];
+      const sourceHandleSplitted = e.sourceHandle.split("|");
+      const sourceHandle =
         sourceHandleSplitted[0] +
         "|" +
         source +
         "|" +
         sourceHandleSplitted.slice(2).join("|");
-      let targetHandleSplitted = e.targetHandle.split("|");
-      let targetHandle =
+      const targetHandleSplitted = e.targetHandle.split("|");
+      const targetHandle =
         targetHandleSplitted.slice(0, -1).join("|") + "|" + target;
-      let id =
+      const id =
         "reactflow__edge-" +
         source +
         sourceHandle +

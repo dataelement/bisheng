@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"

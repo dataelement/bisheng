@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { TrashIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import ChatInput from "./ChatInput";
 import MessagePanne from "./MessagePanne";
 

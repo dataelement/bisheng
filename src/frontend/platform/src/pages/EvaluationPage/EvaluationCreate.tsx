@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";

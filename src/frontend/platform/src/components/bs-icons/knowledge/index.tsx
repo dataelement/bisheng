@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import Knowledge from "./Knowledge.svg?react";
 import Book from "./file-logo.svg?react";

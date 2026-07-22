@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useId, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';

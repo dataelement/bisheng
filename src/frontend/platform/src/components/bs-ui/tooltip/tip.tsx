@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Tooltip, TooltipContent, TooltipTrigger, Portal } from "./index";
 
 export default function Tip({

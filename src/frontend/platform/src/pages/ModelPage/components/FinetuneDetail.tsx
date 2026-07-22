@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";

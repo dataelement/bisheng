@@ -2,7 +2,7 @@
  * 接收ws event 滚动
  */
 import { useEffect, useRef } from "react";
-import { useParams } from "react-router";
+import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { getChatHistoryApi } from "~/api/apps";
 import { useAutoScroll } from "~/hooks/useAutoScroll";

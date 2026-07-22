@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Copy } from "lucide-react";
 import { useMemo } from "react";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";

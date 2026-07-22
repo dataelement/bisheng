@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FlagIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { ChatMessageType } from "@/types/chat";

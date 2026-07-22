@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { locationContext } from "@/contexts/locationContext";
 import { FileSearch2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";

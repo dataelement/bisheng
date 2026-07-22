@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ArrowUpDown } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TFile } from '~/types/chat';

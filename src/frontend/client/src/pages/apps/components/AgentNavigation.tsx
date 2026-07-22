@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { BoltIcon } from "lucide-react"

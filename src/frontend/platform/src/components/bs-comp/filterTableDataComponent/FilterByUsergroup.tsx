@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useCallback, useEffect, useRef, useState } from "react";

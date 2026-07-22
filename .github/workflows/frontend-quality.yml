@@ -1,0 +1,55 @@
+name: Frontend Quality
+
+# Quality gate for the two frontend apps.
+# Policy: legacy violations are frozen in each app's eslint-suppressions.json and
+# via @ts-strict-ignore file annotations; suppressed counts may only shrink.
+# Any NEW lint violation or strict-mode type error fails this workflow.
+
+on:
+  pull_request:
+    paths:
+      - "src/frontend/**"
+      - ".github/workflows/frontend-quality.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: src/frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint platform
+        run: pnpm --filter bisheng lint
+
+      - name: Lint client
+        run: pnpm --filter bishengchat lint
+
+      - name: Typecheck platform (strict, non-exempted files)
+        run: pnpm --filter bisheng typecheck
+
+      - name: Typecheck client (strict, non-exempted files)
+        run: pnpm --filter bishengchat typecheck

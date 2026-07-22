@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { MultiSelect } from "@/components/bs-ui/multiSelect.tsx";
 import { getGroupsApi } from "@/controllers/API/log";
 import { useCallback, useEffect, useRef, useState } from "react";

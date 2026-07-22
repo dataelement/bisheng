@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { CircleMinus, CirclePlus, Eye, EyeOff } from "lucide-react"
 import * as React from "react"
 import { useState } from "react"

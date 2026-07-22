@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import CollectionNameComponent from "@/pages/BuildPage/skills/editSkill/CollectionNameComponent";
 import { useContext, useState } from "react";
 import CodeAreaComponent from "../../../../components/codeAreaComponent";
@@ -24,7 +25,7 @@ export default function L2ParameterComponent({
 }) {
     const { reactFlowInstance } = useContext(typesContext);
     // let disabled = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
-    let disabled = false
+    const disabled = false
 
     const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 

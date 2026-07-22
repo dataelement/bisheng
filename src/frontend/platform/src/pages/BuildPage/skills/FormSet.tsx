@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Switch } from "@/components/bs-ui/switch";
 import { getVariablesApi, saveReportFormApi } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";

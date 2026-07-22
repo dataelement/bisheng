@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Accordion } from "@/components/bs-ui/accordion";

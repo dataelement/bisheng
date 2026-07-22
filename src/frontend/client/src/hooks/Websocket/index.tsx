@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus } from "~/store/linsight";

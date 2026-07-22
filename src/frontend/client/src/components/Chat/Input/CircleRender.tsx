@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React from 'react';
 import { CircleIcon, CircleDotsIcon } from '~/components/svg';
 import { ECallState } from '~/types/chat';

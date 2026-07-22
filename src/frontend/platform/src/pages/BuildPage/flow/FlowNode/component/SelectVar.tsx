@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
 import Tip from "@/components/bs-ui/tooltip/tip";

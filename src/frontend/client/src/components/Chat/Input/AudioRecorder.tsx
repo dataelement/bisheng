@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback } from 'react';
 import { useChatFormContext, useToastContext } from '~/Providers';
 import { ListeningIcon, Spinner } from '~/components/svg';

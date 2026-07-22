@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Transition } from "@headlessui/react";
 import { Zap } from "lucide-react";
 import { useContext, useState } from "react";
@@ -68,7 +69,7 @@ export default function BuildTrigger({
     // Step 1: Make a POST request to send the flow data and receive a unique session ID
     const { flowId } = await postBuildInit({ flow });
     // Step 2: Use the session ID to establish an SSE connection using EventSource
-    let validationResults = [];
+    const validationResults = [];
     let finished = false;
     let buildEnd = false
     const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}`;

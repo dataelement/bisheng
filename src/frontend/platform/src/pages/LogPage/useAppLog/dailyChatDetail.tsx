@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Alert, AlertDescription } from "@/components/bs-ui/alert"
 import { Badge } from "@/components/bs-ui/badge"

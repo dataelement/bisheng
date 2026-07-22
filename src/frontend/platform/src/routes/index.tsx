@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { lazy, useEffect } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import MainLayout from "../layout/MainLayout";

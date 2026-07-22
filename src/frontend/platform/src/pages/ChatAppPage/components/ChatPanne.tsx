@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import ChatComponent from "@/components/bs-comp/chatComponent";
@@ -137,7 +138,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
     const getWsParamData = (action, msg) => {
         if (type === AppNumType.SKILL) {
             const _flow = flowRef.current
-            let inputs = tabsState[_flow.id].formKeysData.input_keys;
+            const inputs = tabsState[_flow.id].formKeysData.input_keys;
             const input = inputs.find((el: any) => !el.type)
             const inputKey = input ? Object.keys(input)[0] : '';
             const msgData = {
@@ -310,7 +311,7 @@ const useBuild = () => {
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
         const { flowId } = await postBuildInit({ flow, chatId });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
-        let validationResults = [];
+        const validationResults = [];
         let finished = false;
         let buildEnd = false
         const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}?chat_id=${chatId}`;

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Badge } from "@/components/bs-ui/badge"
 import { Label } from "@/components/bs-ui/label"
 import { Switch } from "@/components/bs-ui/switch"

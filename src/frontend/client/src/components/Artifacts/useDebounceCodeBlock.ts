@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // client/src/hooks/useDebounceCodeBlock.ts
 import { useCallback, useEffect } from 'react';
 import debounce from 'lodash/debounce';

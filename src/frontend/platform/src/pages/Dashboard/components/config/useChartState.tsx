@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // useChartState.tsx
 "use client"
 

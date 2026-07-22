@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
 import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
 import { useEffect, useRef } from "react";

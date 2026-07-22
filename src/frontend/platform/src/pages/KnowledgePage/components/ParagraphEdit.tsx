@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import FileView from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";

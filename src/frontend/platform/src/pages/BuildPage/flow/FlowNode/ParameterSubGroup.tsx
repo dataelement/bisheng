@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { WorkflowNode } from "@/types/flow";
 import GroupInputFile from "./component/GroupInputFile";
 import Parameter from "./Parameter";

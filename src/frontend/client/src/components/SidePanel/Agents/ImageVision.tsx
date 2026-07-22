@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useFormContext, Controller } from 'react-hook-form';
 import { Capabilities } from '~/types/chat';
 import type { AgentForm } from '~/common';

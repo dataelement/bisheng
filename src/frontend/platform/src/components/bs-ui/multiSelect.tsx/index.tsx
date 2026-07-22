@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import * as PopoverPrimitive from "@radix-ui/react-popover"

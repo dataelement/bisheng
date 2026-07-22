@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import download from 'downloadjs';
 import { useCallback } from 'react';
 import exportFromJSON from 'export-from-json';

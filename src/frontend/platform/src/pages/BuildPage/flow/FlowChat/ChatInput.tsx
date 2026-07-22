@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FormIcon } from "@/components/bs-icons/form";
 import { SendIcon } from "@/components/bs-icons/send";
 import { Button } from "@/components/bs-ui/button";
