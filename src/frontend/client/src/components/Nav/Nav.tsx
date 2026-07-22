@@ -1,6 +1,6 @@
 import type { ConversationListResponse } from '~/types/chat';
 import { PermissionTypes, Permissions } from '~/types/chat';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
@@ -15,7 +15,6 @@ import {
 } from '~/hooks';
 import { cn } from '~/utils';
 import AccountSettings from './AccountSettings';
-import NavToggle from './NavToggle';
 import NewChat from './NewChat';
 import { ChatNavUserFooter } from './ChatNavUserFooter';
 
@@ -30,9 +29,6 @@ const Nav = ({
   const { isAuthenticated } = useAuthContext();
 
   const [navWidth, setNavWidth] = useState('240px');
-  const [isHovering, setIsHovering] = useState(false);
-  const navPanelRef = useRef<HTMLDivElement>(null);
-  const [navPanelRightPx, setNavPanelRightPx] = useState(0);
   const isSmallScreen = usePrefersMobileLayout();
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
 
@@ -53,28 +49,6 @@ const Nav = ({
       setNavWidth('240px');
     }
   }, [isSmallScreen]);
-
-  // 折叠把手贴在会话列表右缘（分隔线右侧），需计入 MainLayout 窄轨 + main 内边距，故用测量值而非假定 left:0 + translateX
-  useLayoutEffect(() => {
-    if (isSmallScreen) {
-      return;
-    }
-    const el = navPanelRef.current;
-    if (!el) {
-      return;
-    }
-    const sync = () => {
-      setNavPanelRightPx(el.getBoundingClientRect().right);
-    };
-    sync();
-    const ro = new ResizeObserver(sync);
-    ro.observe(el);
-    window.addEventListener('resize', sync);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', sync);
-    };
-  }, [isSmallScreen, navVisible, navWidth]);
 
   const [showLoading, setShowLoading] = useState(false);
 
@@ -145,7 +119,6 @@ const Nav = ({
   return (
     <>
       <div
-        ref={navPanelRef}
         data-testid="nav"
         className={cn(
           // 须与 usePrefersMobileLayout（max-width:767px）一致：touch-mobile 为 max-1023，误伤 768–1023 会去掉边距/边框，像「盖在内容上」
@@ -153,8 +126,10 @@ const Nav = ({
           isSmallScreen && 'fixed inset-y-0 left-0 z-[70] h-[100dvh] shadow-[4px_0_24px_rgba(0,0,0,0.06)]',
         )}
         style={{
-          width: navVisible ? navWidth : '0px',
-          visibility: navVisible ? 'visible' : 'hidden',
+          // Desktop: sidebar is always docked/visible (collapse removed).
+          // Mobile: still a toggleable overlay drawer.
+          width: isSmallScreen ? (navVisible ? navWidth : '0px') : navWidth,
+          visibility: isSmallScreen ? (navVisible ? 'visible' : 'hidden') : 'visible',
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
@@ -228,16 +203,6 @@ const Nav = ({
           </div>
         </div>
       </div>
-      {!isSmallScreen && navPanelRightPx > 0 ? (
-        <NavToggle
-          navVisible={navVisible}
-          onToggle={toggleNavVisible}
-          isHovering={isHovering}
-          setIsHovering={setIsHovering}
-          className=""
-          anchorRightEdgePx={navPanelRightPx}
-        />
-      ) : null}
       {isSmallScreen && (
         <div
           id="mobile-nav-mask-toggle"

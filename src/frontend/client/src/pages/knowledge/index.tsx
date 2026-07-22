@@ -166,12 +166,6 @@ export default function Knowledge() {
         if (!isH5) setSpaceListDrawerOpen(false);
     }, [isH5]);
 
-    // Tablet (768–1023): collapse the sidebar by default so the file area gets the room,
-    // while the NavToggle stays available to expand it. Desktop keeps the user's choice.
-    useEffect(() => {
-        if (!isH5 && !isDesktop) setSidebarCollapsed(true);
-    }, [isH5, isDesktop]);
-
     useEffect(() => {
         if (showKnowledgeSquare) setSpaceListDrawerOpen(false);
     }, [showKnowledgeSquare]);

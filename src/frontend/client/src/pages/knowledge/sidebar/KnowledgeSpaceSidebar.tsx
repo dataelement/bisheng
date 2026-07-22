@@ -7,7 +7,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KnowledgeSpace, SpaceRole, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
-import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
 import { SectionHeader } from "./SectionHeader";
@@ -148,7 +147,6 @@ export function KnowledgeSpaceSidebar({
     // Scrolling container ref — drives the dynamic, scroll-following name ellipsis.
     const listScrollRef = useRef<HTMLDivElement>(null);
     useDynamicEllipsis(listScrollRef);
-    const [isToggleHovering, setIsToggleHovering] = useState(false);
 
     const queryClient = useQueryClient();
 
@@ -610,8 +608,6 @@ export function KnowledgeSpaceSidebar({
                     onMouseDown={handleResizeStart}
                     onDoubleClick={handleResizeReset}
                     className={cn(
-                        // z below NavToggle (z-40) so the collapse button keeps capturing clicks
-                        // in its small area; everywhere else along the edge the resize handle wins.
                         "absolute top-0 z-[35] h-full w-[6px] -translate-x-1/2 cursor-col-resize",
                         // Subtle visual feedback: thin accent line on hover/active.
                         "after:absolute after:right-1/2 after:top-0 after:h-full after:w-px after:translate-x-1/2",
@@ -621,15 +617,6 @@ export function KnowledgeSpaceSidebar({
                     style={{ left: sidebarWidth }}
                 />
             )}
-            <NavToggle
-                navVisible={!collapsed}
-                onToggle={() => setCollapsed(!collapsed)}
-                isHovering={isToggleHovering}
-                setIsHovering={setIsToggleHovering}
-                className={`absolute top-1/2 left-0 z-[40] ${fullWidthMode ? "hidden" : ""}`}
-                translateX={collapsed ? 0 : sidebarWidth}
-                disableTransition={isResizing}
-            />
         </div>
     );
 }
