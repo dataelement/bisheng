@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useQuery } from "@tanstack/react-query";
-import { XIcon } from "lucide-react";
+import { ChevronDown, XIcon } from "lucide-react";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Label } from "~/components/ui/Label";
 import MultiSelect from "~/components/ui/MultiSelect";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
 import {
     Sheet,
     SheetContent,
@@ -212,6 +213,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
+    const [departmentDropdownOpen, setDepartmentDropdownOpen] = useState(false);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagLibraryIds, setAutoTagLibraryIds] = useState<number[]>([]);
     const [autoTagLibraryTags, setAutoTagLibraryTags] = useState<string[]>([]);
@@ -275,12 +277,12 @@ export function CreateKnowledgeSpaceDrawer({
         },
         {
             value: SpaceLevel.DEPARTMENT,
-            label: localize("com_knowledge.department_spaces"),
+            label: localize("com_knowledge.clinic_space", "科室知识库"),
             enabled: createOptions?.canCreateDepartment ?? false,
         },
         {
             value: SpaceLevel.TEAM,
-            label: localize("com_knowledge.team_spaces"),
+            label: localize("com_knowledge.team_space", "团队知识库"),
             enabled: createOptions?.canCreateTeam ?? false,
         },
         {
@@ -295,11 +297,8 @@ export function CreateKnowledgeSpaceDrawer({
         [levelOptions],
     );
     const visibleLevelOptions = useMemo(
-        () => {
-            if (mode !== "create") return enabledLevelOptions;
-            return enabledLevelOptions.filter((option) => option.value === spaceLevel);
-        },
-        [enabledLevelOptions, mode, spaceLevel],
+        () => enabledLevelOptions,
+        [enabledLevelOptions],
     );
     const selectedLevelCreateEnabled = useMemo(() => {
         if (mode !== "create") return true;
@@ -732,30 +731,10 @@ export function CreateKnowledgeSpaceDrawer({
                                                 >
                                                     <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                                 </RadioGroup.Item>
-                                                <span>
-                                                    {option.value === SpaceLevel.DEPARTMENT && selectedDepartmentName
-                                                        ? `${option.label} - ${selectedDepartmentName}`
-                                                        : option.label}
-                                                </span>
+                                                <span>{option.label}</span>
                                             </label>
                                         ))}
                                     </RadioGroup.Root>
-                                )}
-                                {shouldShowDepartmentSelector && (
-                                    <div className="space-y-2">
-                                        <Label className="text-sm text-[#1D2129] font-medium">
-                                            <span className="text-[#F53F3F] mr-1">*</span>
-                                            选择部门
-                                        </Label>
-                                        <SubjectSearchDepartment
-                                            value={departmentSelection}
-                                            onChange={setDepartmentSelection}
-                                            includeChildren
-                                            onIncludeChildrenChange={() => undefined}
-                                            selectionMode="single"
-                                            loadDepartments={loadCreateDepartments}
-                                        />
-                                    </div>
                                 )}
                             </div>
 
@@ -806,6 +785,45 @@ export function CreateKnowledgeSpaceDrawer({
                                     </span>
                                 </div>
                             </div>
+
+                            {shouldShowDepartmentSelector && (
+                                <div className="space-y-2">
+                                    <Label className="text-sm text-[#1D2129] font-medium">
+                                        <span className="text-[#F53F3F] mr-1">*</span>
+                                        绑定科室
+                                    </Label>
+                                    <Popover open={departmentDropdownOpen} onOpenChange={setDepartmentDropdownOpen}>
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="flex h-8 w-full items-center justify-between rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none transition-colors hover:border-[#C9CDD4] focus:border-[#165DFF]"
+                                            >
+                                                <span className={cn(!selectedDepartmentName && "text-[#86909C]")}>
+                                                    {selectedDepartmentName || "请选择绑定科室"}
+                                                </span>
+                                                <ChevronDown className="size-4 text-[#86909C]" />
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[360px] p-0" align="start">
+                                            <div className="h-[320px] p-3">
+                                                <SubjectSearchDepartment
+                                                    value={departmentSelection}
+                                                    onChange={(selection) => {
+                                                        setDepartmentSelection(selection);
+                                                        if (selection.length > 0) {
+                                                            setDepartmentDropdownOpen(false);
+                                                        }
+                                                    }}
+                                                    includeChildren
+                                                    onIncludeChildrenChange={() => undefined}
+                                                    selectionMode="single"
+                                                    loadDepartments={loadCreateDepartments}
+                                                />
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
