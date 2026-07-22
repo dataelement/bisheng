@@ -170,7 +170,7 @@ export default function App() {
   const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.replace(__APP_ENV__.BASE_URL, '').split('/')?.[1] || ''
 
-  // 动态路由根据权限：部门管理员补 create_app、子租户管理员补 sys（详见 resolveRoutePermissions）
+  // Dynamic routes use web_menu; Child Admin compatibility grants are added in resolveRoutePermissions.
   const router = useMemo(() => {
     if (user && user.role === 'admin') return getAdminRouter()
     if (!user?.user_id) return null

@@ -106,13 +106,13 @@ const privateRouter = [
       { path: "log", element: <LogPage />, permission: "log" },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail />, permission: "log" },
       { path: "log/chatlog/:cid", element: <DailyChatDetail />, permission: "log" },
-      { path: "evaluation", element: <EvaluatingPage /> },
-      { path: "evaluation/create", element: <EvaluatingCreate /> },
-      { path: "dataset", element: <DataSetPage /> },
+      { path: "evaluation", element: <EvaluatingPage />, permission: 'evaluation' },
+      { path: "evaluation/create", element: <EvaluatingCreate />, permission: 'evaluation' },
+      { path: "dataset", element: <DataSetPage />, permission: 'dataset' },
       { path: "label", element: <LabelPage />, permission: 'mark_task' },
       { path: "label/:id", element: <TaskApps />, permission: 'mark_task' },
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats />, permission: 'mark_task' },
-      { path: "dashboard", element: <Dashboard /> },
+      { path: "dashboard", element: <Dashboard />, permission: 'board' },
       { path: "tenant", element: <TenantPage />, permission: 'sys' },
       { path: "department", element: <Navigate to="/sys" replace /> },
       { path: "menu-pending", element: <MenuPermissionPlaceholder /> },
@@ -175,7 +175,6 @@ function hasRoutePermission(permissions: string[], key: string) {
 /**
  * 把后端下发的 web_menu 转成路由层用的 permissions 数组。
  *
- * - 部门管理员补 `create_app`（后端来不及下发时的兜底，原有行为）。
  * - 子租户管理员（Child Admin）补 `sys` / `model`：后端 web_menu 不下发 sys/system_config 给非
  *   超管/非部门管理员，且默认不下发 `model` / `workstation` 资源。子租户管理员需要在自己
  *   租户内管理模型和工作台配置，路由层放行后由后端各自的 tenant admin 校验实际权限。
@@ -186,9 +185,6 @@ export function resolveRoutePermissions(user: {
   is_child_admin?: boolean | null
 }): string[] {
   let perms = user.web_menu ?? []
-  if (user.is_department_admin && !perms.includes("create_app")) {
-    perms = [...perms, "create_app"]
-  }
   if (user.is_child_admin && !perms.includes("sys")) {
     perms = [...perms, "sys"]
   }
@@ -199,6 +195,23 @@ export function resolveRoutePermissions(user: {
     perms = [...perms, "workstation"]
   }
   return perms
+}
+
+const ADMIN_LANDING_ROUTES = [
+  { key: "board", path: "/dashboard" },
+  { key: "build", path: "/build/apps" },
+  { key: "knowledge", path: "/filelib" },
+  { key: "dataset", path: "/dataset" },
+  { key: "model", path: "/model/management" },
+  { key: "evaluation", path: "/evaluation" },
+  { key: "mark_task", path: "/label" },
+  { key: "sys", path: "/sys" },
+] as const
+
+export function resolveAdminLandingPath(permissions: string[], menuApprovalMode: boolean): string {
+  const target = ADMIN_LANDING_ROUTES.find((item) => permissions.includes(item.key))
+  if (target) return target.path
+  return menuApprovalMode ? "/menu-pending?menu=board" : "/menu-pending"
 }
 
 export const getPrivateRouter = (

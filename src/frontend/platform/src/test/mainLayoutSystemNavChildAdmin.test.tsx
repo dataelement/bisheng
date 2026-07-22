@@ -145,7 +145,7 @@ function renderLayout(userOverrides: Record<string, unknown> = {}) {
   );
 }
 
-describe("MainLayout system / tenant nav for Child Admin (PRD §3.3)", () => {
+describe("MainLayout identity-specific navigation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(window, "localStorage", {
@@ -173,9 +173,31 @@ describe("MainLayout system / tenant nav for Child Admin (PRD §3.3)", () => {
     expect(screen.queryByText("tenant.management")).toBeNull();
   });
 
-  it("Child Admin does NOT see the dataset entry (super / dept admin only)", () => {
+  it("Child Admin does NOT see the role-controlled dataset entry", () => {
     renderLayout({ is_child_admin: true });
     expect(screen.queryByText("menu.dataset")).toBeNull();
+  });
+
+  it("department admin sees system but not unassigned business menus", () => {
+    renderLayout({
+      is_department_admin: true,
+      web_menu: ["admin", "system_config", "sys"],
+    });
+
+    expect(screen.getByText("menu.system")).toBeInTheDocument();
+    expect(screen.queryByText("menu.dataset")).toBeNull();
+    expect(screen.queryByText("menu.skills")).toBeNull();
+    expect(screen.queryByText("menu.knowledge")).toBeNull();
+  });
+
+  it("department admin sees dataset when the role grants it", () => {
+    renderLayout({
+      is_department_admin: true,
+      web_menu: ["admin", "system_config", "sys", "dataset"],
+    });
+
+    expect(screen.getByText("menu.system")).toBeInTheDocument();
+    expect(screen.getByText("menu.dataset")).toBeInTheDocument();
   });
 
   it("plain user without any admin flag sees neither system nor tenant management", () => {

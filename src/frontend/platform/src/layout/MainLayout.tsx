@@ -68,16 +68,15 @@ export default function MainLayout() {
         navigator('/reset')
     }
 
-    // 系统超管（租户超管仍走自定义角色 web_menu；部门管理员由服务端合并全量菜单）
+    // Global super admins bypass menu checks. Department admins receive only
+    // the system entry by identity; all business menus still use web_menu.
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
     const isDeptAdmin = Boolean(user.is_department_admin)
     const isChildAdmin = Boolean(user.is_child_admin)
     const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
-    // 侧栏：数据集 / 日志 — 超管与部门管理员
-    const isFullAdminShell = isSuperAdmin || isDeptAdmin
     // 侧栏：系统管理 — 超管 / 部门管理员 / Child Admin。SystemPage 内部按
     // PRD §3.3 已为 Child Admin 分了 Tab 视角（组织 + 角色）
-    const showSystemNav = isFullAdminShell || isChildAdmin
+    const showSystemNav = isSuperAdmin || isDeptAdmin || isChildAdmin
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
     // Admin-area approval scope (falls back to the legacy global flag for
@@ -200,7 +199,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            isFullAdminShell && <>
+                            isMenu('dataset') && <>
                                 <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
                                 </NavLink>
