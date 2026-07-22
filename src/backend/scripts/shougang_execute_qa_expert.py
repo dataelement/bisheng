@@ -160,14 +160,11 @@ EXPERT_ROWS: tuple[ExpertSeedRow, ...] = (
     ExpertSeedRow(15569, "庞振兴", "质量检验部", "ICP-MS分析", "首席技师", "技能操作族", "检验技能类"),
     ExpertSeedRow(15448, "李付", "质量检验部", "精密点检", "首席技师", "技能操作族", "设备技能类"),
     ExpertSeedRow(12597, "徐佳", "质量检验部", "质量检测", "首席工程师", "制造技术族", "质量技术类"),
-    ExpertSeedRow(31, "许博文", "质量检验部", "质量检测", "首席工程师", "制造技术族", "质量技术类"),
 )
 
 
 ResolutionReason = Literal["not_found", "ambiguous"]
 UserLookup = Callable[[str], Awaitable[Sequence[Any]]]
-DepartmentLookup = Callable[[], Awaitable[Sequence[Any]]]
-ExistingExpertLookup = Callable[[int], Awaitable[Any | None]]
 ExpertFactory = Callable[..., Any]
 
 
@@ -200,20 +197,16 @@ async def _resolve_user_id(
 
 async def _prepare_experts(
     rows: Sequence[ExpertSeedRow],
-    *,
     lookup_users: UserLookup,
-    list_departments: DepartmentLookup,
-    get_existing_expert: ExistingExpertLookup,
     expert_factory: ExpertFactory,
     get_user_primary_department: Callable[[int], Awaitable[Any | None]],
 ) -> tuple[list[Any], ImportStats]:
     """Resolve hardcoded rows and return experts that are safe to insert."""
     stats = ImportStats()
-    departments = await list_departments()
-    departments_by_name = {department.name: department for department in departments}
     experts: list[Any] = []
+    seen_user_ids: set[int] = set()
 
-    for index, row in enumerate(rows, start=1):
+    for row in rows:
         if not row.name:
             stats.skipped_empty_name += 1
             continue
@@ -221,6 +214,12 @@ async def _prepare_experts(
         user_id = row.user_id
         if user_id is None:
             continue
+
+        # Deduplicate within the same import batch to avoid processing the same user twice.
+        if user_id in seen_user_ids:
+            stats.skipped_duplicate += 1
+            continue
+        seen_user_ids.add(user_id)
 
         department = await get_user_primary_department(user_id)
         department_id = str(department.department_id) if department is not None else None
@@ -252,7 +251,12 @@ async def _persist_experts(
         return len(experts)
 
     for expert in experts:
-        await repository.create(expert)
+        existing_expert = await repository.get_expertinfo_userid(expert.user_id)
+        if existing_expert:
+            expert.id = existing_expert.id
+            await repository.update(expert.id, **{k: v for k, v in expert.model_dump().items() if v is not None})
+        else:
+            await repository.create(expert)
     return len(experts)
 
 
@@ -270,7 +274,6 @@ async def _run(args: argparse.Namespace) -> int:
         current_tenant_id,
         set_current_tenant_id,
     )
-    from bisheng.database.models.department import DepartmentDao
     from bisheng.database.models.qa_expert import Expert
     from bisheng.qa_expert.domain.repositories import ExpertRepository
     from bisheng.user.domain.models.user import UserDao
@@ -285,8 +288,6 @@ async def _run(args: argparse.Namespace) -> int:
             experts, stats = await _prepare_experts(
                 EXPERT_ROWS,
                 lookup_users=UserDao.aget_users_by_username,
-                list_departments=DepartmentDao.aget_all_active,
-                get_existing_expert=repository.get_by_user_id,
                 expert_factory=Expert,
                 get_user_primary_department=UserDepartmentDao.aget_user_primary_department,
             )

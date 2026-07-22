@@ -236,6 +236,11 @@ class SpacePinLimitError(BaseErrorCode):
     Msg: str = "每类最多置顶 5 个知识库"
 
 
+class SpaceNamePendingApprovalError(BaseErrorCode):
+    Code: int = 18091
+    Msg: str = "该知识库名称正在审核中"
+
+
 # —— Free space deletion / migration to department knowledge space
 class FreeSpaceMigrationTargetNotFoundError(BaseErrorCode):
     Code: int = 18081
