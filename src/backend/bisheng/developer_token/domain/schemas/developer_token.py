@@ -4,7 +4,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import PageData
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
 
 
@@ -46,6 +45,7 @@ class FileSyncTargetSpaceRule(BaseModel):
 
     mode: Literal["fixed", "dynamic"]
     knowledge_id: int | None = Field(default=None, strict=True, gt=0)
+    folder_id: int | None = Field(default=None, strict=True, gt=0)
 
 
 class DeveloperTokenFileSyncRule(BaseModel):
@@ -82,16 +82,60 @@ class FileSyncOptionBusinessDomain(BaseModel):
     name: str
 
 
-class FileSyncOptionKnowledgeSpace(BaseModel):
+class FileSyncTargetSpaceOption(BaseModel):
+    id: int
+    name: str
+    selectable: bool
+    has_children: bool
+
+
+class FileSyncTargetSpaceGroup(BaseModel):
+    space_type: Literal["public", "department"]
+    spaces: list[FileSyncTargetSpaceOption]
+
+
+class FileSyncTargetSpaceGroupsPage(BaseModel):
+    data: list[FileSyncTargetSpaceGroup]
+    has_more: bool
+    next_cursor: str | None
+    page_size: int
+
+
+class FileSyncTargetFolderOption(BaseModel):
+    id: int
+    name: str
+    selectable: bool
+    navigation_only: bool
+    has_children: bool
+
+
+class DeveloperTokenFileSyncTargetChildren(BaseModel):
+    data: list[FileSyncTargetFolderOption]
+    has_more: bool
+    next_cursor: str | None
+    page_size: int
+
+
+class FileSyncTargetPathItem(BaseModel):
     id: int
     name: str
 
 
+class FileSyncTargetDisplay(BaseModel):
+    knowledge_id: int
+    knowledge_name: str | None = None
+    target_type: Literal["root", "folder"]
+    folder_id: int | None = None
+    folder_path: list[FileSyncTargetPathItem] = Field(default_factory=list)
+    stale: bool = False
+
+
 class DeveloperTokenFileSyncOptions(BaseModel):
     tenant_id: int
+    user_id: int
     categories: list[FileSyncOptionCategory]
     business_domains: list[FileSyncOptionBusinessDomain]
-    knowledge_spaces: PageData[FileSyncOptionKnowledgeSpace]
+    target_space_groups: FileSyncTargetSpaceGroupsPage
 
 
 class DeveloperTokenGlobalConfig(BaseModel):
@@ -156,6 +200,7 @@ class DeveloperTokenRead(BaseModel):
     rate_limit_per_minute: int | None = None
     route_rule_count: int = 0
     file_sync_rule: DeveloperTokenFileSyncRule | None = None
+    file_sync_target_display: FileSyncTargetDisplay | None = None
     last_used_time: datetime | None = None
     last_used_ip: str | None = None
     created_by: int | None = None

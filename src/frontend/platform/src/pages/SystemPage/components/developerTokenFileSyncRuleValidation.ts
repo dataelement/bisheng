@@ -2,6 +2,7 @@ import type {
   DeveloperTokenFileSyncMode,
   DeveloperTokenFileSyncOptions,
   DeveloperTokenFileSyncRule,
+  DeveloperTokenFileSyncTargetDisplay,
 } from "@/controllers/API/developerToken"
 
 const CATEGORY_CODE_PATTERN = /^[A-Z0-9_]{1,16}$/
@@ -28,13 +29,15 @@ export interface FileSyncRuleSummaryLabels {
   targetSpace: string
   dynamicDepartment: string
   dynamicResponsiblePerson: string
+  root?: string
+  stale?: string
 }
 
 export function createEmptyFileSyncRule(): DeveloperTokenFileSyncRule {
   return {
     category: { code: "", subcategory_code: "" },
     business_domain: { mode: "fixed", code: null },
-    target_space: { mode: "fixed", knowledge_id: null },
+    target_space: { mode: "fixed", knowledge_id: null, folder_id: null },
     dynamic_source: null,
   }
 }
@@ -60,6 +63,9 @@ export function normalizeFileSyncRule(
       knowledge_id: rule.target_space.mode === "fixed"
         ? rule.target_space.knowledge_id
         : null,
+      folder_id: rule.target_space.mode === "fixed"
+        ? rule.target_space.folder_id ?? null
+        : null,
     },
     dynamic_source: dynamic ? rule.dynamic_source : null,
   }
@@ -72,13 +78,21 @@ export function changeFileSyncRuleMode(
 ): DeveloperTokenFileSyncRule {
   const next: DeveloperTokenFileSyncRule = field === "businessDomain"
     ? { ...rule, business_domain: { mode, code: mode === "fixed" ? rule.business_domain.code : null } }
-    : { ...rule, target_space: { mode, knowledge_id: mode === "fixed" ? rule.target_space.knowledge_id : null } }
+    : {
+      ...rule,
+      target_space: {
+        mode,
+        knowledge_id: mode === "fixed" ? rule.target_space.knowledge_id : null,
+        folder_id: mode === "fixed" ? rule.target_space.folder_id ?? null : null,
+      },
+    }
   return normalizeFileSyncRule(next) as DeveloperTokenFileSyncRule
 }
 
 export function findInvalidFileSyncRule(
   rule?: DeveloperTokenFileSyncRule | null,
-  options?: DeveloperTokenFileSyncOptions | null
+  options?: DeveloperTokenFileSyncOptions | null,
+  targetDisplay?: DeveloperTokenFileSyncTargetDisplay | null,
 ): FileSyncRuleError | null {
   if (!rule) return null
   const normalized = normalizeFileSyncRule(rule) as DeveloperTokenFileSyncRule
@@ -116,15 +130,21 @@ export function findInvalidFileSyncRule(
     if (!Number.isInteger(knowledgeId) || Number(knowledgeId) <= 0) {
       return { field: "targetSpace", reason: knowledgeId == null ? "required" : "invalid" }
     }
-    const spacesExhaustive = options
-      && options.knowledge_spaces.total <= options.knowledge_spaces.data.length
+    const folderId = normalized.target_space.folder_id
+    if (folderId != null && (!Number.isInteger(folderId) || folderId <= 0)) {
+      return { field: "targetSpace", reason: "invalid" }
+    }
     if (
-      spacesExhaustive
-      && !options.knowledge_spaces.data.some((item) => item.id === knowledgeId)
+      targetDisplay?.stale
+      && targetDisplay.knowledge_id === knowledgeId
+      && (targetDisplay.folder_id ?? null) === folderId
     ) {
       return { field: "targetSpace", reason: "stale" }
     }
-  } else if (normalized.target_space.knowledge_id != null) {
+  } else if (
+    normalized.target_space.knowledge_id != null
+    || normalized.target_space.folder_id != null
+  ) {
     return { field: "targetSpace", reason: "invalid" }
   }
 
@@ -136,7 +156,8 @@ export function findInvalidFileSyncRule(
 
 export function formatFileSyncRuleSummary(
   rule: DeveloperTokenFileSyncRule | null | undefined,
-  labels: FileSyncRuleSummaryLabels
+  labels: FileSyncRuleSummaryLabels,
+  targetDisplay?: DeveloperTokenFileSyncTargetDisplay | null,
 ): string {
   if (!rule) return labels.notConfigured
   const normalized = normalizeFileSyncRule(rule) as DeveloperTokenFileSyncRule
@@ -147,13 +168,33 @@ export function formatFileSyncRuleSummary(
     ? normalized.business_domain.code || "-"
     : dynamicLabel
   const target = normalized.target_space.mode === "fixed"
-    ? String(normalized.target_space.knowledge_id || "-")
+    ? formatFixedTarget(normalized, labels, targetDisplay)
     : dynamicLabel
   return [
     `${normalized.category.code}/${normalized.category.subcategory_code}`,
     `${labels.businessDomain}: ${domain}`,
     `${labels.targetSpace}: ${target}`,
   ].join(" · ")
+}
+
+function formatFixedTarget(
+  rule: DeveloperTokenFileSyncRule,
+  labels: FileSyncRuleSummaryLabels,
+  display?: DeveloperTokenFileSyncTargetDisplay | null,
+): string {
+  const knowledgeId = rule.target_space.knowledge_id
+  const folderId = rule.target_space.folder_id
+  const displayMatches = display
+    && display.knowledge_id === knowledgeId
+    && (display.folder_id ?? null) === (folderId ?? null)
+  if (!displayMatches) {
+    return folderId == null ? String(knowledgeId || "-") : `${knowledgeId}/${folderId}`
+  }
+  const segments = [display.knowledge_name || String(display.knowledge_id)]
+  if (display.target_type === "root") segments.push(labels.root || "Root")
+  else segments.push(...display.folder_path.map((item) => item.name))
+  const suffix = display.stale && labels.stale ? ` (${labels.stale})` : ""
+  return `${segments.join(" / ")}${suffix}`
 }
 
 function normalizeOptionalCode(value?: string | null): string | null {

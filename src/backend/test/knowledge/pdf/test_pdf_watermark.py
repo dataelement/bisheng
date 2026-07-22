@@ -10,7 +10,9 @@ from bisheng.knowledge.pdf.watermark import (
     _CJK_FONT_CANDIDATES,
     PdfWatermarkError,
     PdfWatermarkSpec,
+    _calculate_watermark_layout,
     _resolve_cjk_font,
+    _tile_positions,
     apply_pdf_watermark,
 )
 
@@ -111,16 +113,63 @@ def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
 
     assert len(spec.lines) == 2
     assert spec.rotation == -35.0
-    assert spec.opacity == 0.16
+    assert spec.opacity == 0.11
     assert spec.font_size == 12.0
-    assert spec.horizontal_gap == 180.0
-    assert spec.vertical_gap == 120.0
+    assert spec.horizontal_gap == 288.0
+    assert spec.vertical_gap == 200.0
     assert spec.color == (0.45, 0.45, 0.45)
     assert all("songti" not in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
     assert any("zenhei" in candidate.lower() or "heiti" in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
 
     with pytest.raises(PdfWatermarkError, match="two non-empty lines"):
         PdfWatermarkSpec(lines=("identity", "date", "legacy notice"))
+
+
+def test_watermark_layout_uses_rotated_bounds_clearance_and_staggered_rows() -> None:
+    page_rect = fitz.Rect(0, 0, 595, 842)
+    font = _resolve_cjk_font()
+    legacy_spacing_spec = PdfWatermarkSpec(
+        lines=_spec().lines,
+        horizontal_gap=180.0,
+        vertical_gap=120.0,
+    )
+    layout = _calculate_watermark_layout(page_rect, legacy_spacing_spec, font)
+
+    assert layout.horizontal_step == 288.0
+    assert layout.vertical_step >= 200.0
+    assert layout.horizontal_step >= layout.rotated_width + 48.0
+    assert layout.vertical_step >= layout.rotated_height + 36.0
+
+    positions = _tile_positions(page_rect, layout)
+    rows: dict[float, list[float]] = {}
+    for position in positions:
+        rows.setdefault(position.y, []).append(position.x)
+
+    assert len(positions) in range(8, 11)
+    assert len(rows) >= 2
+    first_row, second_row = list(rows.values())[:2]
+    assert second_row[0] - first_row[0] == pytest.approx(layout.horizontal_step / 2.0)
+    assert first_row[1] - first_row[0] == pytest.approx(layout.horizontal_step)
+
+
+def test_watermark_layout_expands_for_long_identity_without_shrinking_text() -> None:
+    page_rect = fitz.Rect(0, 0, 595, 842)
+    font = _resolve_cjk_font()
+    normal = _calculate_watermark_layout(page_rect, _spec(), font)
+    long_spec = PdfWatermarkSpec(
+        lines=(
+            f"{'超长部门名称' * 8}-张三--{'SG-VERY-LONG-ACCOUNT-' * 5}-2026-07-21",
+            "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+        )
+    )
+
+    expanded = _calculate_watermark_layout(page_rect, long_spec, font)
+
+    assert expanded.font_size == normal.font_size == 12.0
+    assert expanded.horizontal_step > normal.horizontal_step
+    assert expanded.vertical_step > normal.vertical_step
+    assert expanded.horizontal_step >= expanded.rotated_width + 48.0
+    assert expanded.vertical_step >= expanded.rotated_height + 36.0
 
 
 def test_watermark_uses_bundled_sans_font_and_rejects_unreliable_fallback() -> None:

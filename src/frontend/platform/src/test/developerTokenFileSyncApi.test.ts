@@ -2,6 +2,7 @@ import axios from "@/controllers/request"
 import {
   createDeveloperTokenApi,
   getDeveloperTokenFileSyncOptionsApi,
+  getDeveloperTokenFileSyncTargetChildrenApi,
   updateDeveloperTokenApi,
 } from "@/controllers/API/developerToken"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -15,7 +16,11 @@ vi.mock("@/controllers/request", () => ({
   },
 }))
 
-const mockedAxios = vi.mocked(axios)
+const mockedAxios = axios as unknown as {
+  get: ReturnType<typeof vi.fn>
+  post: ReturnType<typeof vi.fn>
+  put: ReturnType<typeof vi.fn>
+}
 
 describe("developer token file-sync API client", () => {
   beforeEach(() => {
@@ -27,13 +32,20 @@ describe("developer token file-sync API client", () => {
       tenant_id: 2,
       categories: [],
       business_domains: [],
-      knowledge_spaces: { data: [], total: 0 },
+      user_id: 7,
+      target_space_groups: {
+        data: [],
+        has_more: false,
+        next_cursor: null,
+        page_size: 50,
+      },
     })
 
     await getDeveloperTokenFileSyncOptionsApi({
       tenant_id: 2,
-      space_page: 3,
-      space_limit: 50,
+      user_id: 7,
+      space_cursor: "next-space",
+      space_page_size: 50,
       space_keyword: "safety",
     })
 
@@ -42,9 +54,42 @@ describe("developer token file-sync API client", () => {
       {
         params: {
           tenant_id: 2,
-          space_page: 3,
-          space_limit: 50,
+          user_id: 7,
+          space_cursor: "next-space",
+          space_page_size: 50,
           space_keyword: "safety",
+        },
+      }
+    )
+  })
+
+  it("loads folder children with a scoped cursor", async () => {
+    mockedAxios.get.mockResolvedValue({
+      data: [],
+      has_more: false,
+      next_cursor: null,
+      page_size: 50,
+    })
+
+    await getDeveloperTokenFileSyncTargetChildrenApi({
+      tenant_id: 2,
+      user_id: 7,
+      knowledge_id: 118,
+      parent_id: 4096,
+      cursor: "next-folder",
+      page_size: 25,
+    })
+
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "/api/v1/admin/developer-tokens/config/file-sync-target-children",
+      {
+        params: {
+          tenant_id: 2,
+          user_id: 7,
+          knowledge_id: 118,
+          parent_id: 4096,
+          cursor: "next-folder",
+          page_size: 25,
         },
       }
     )

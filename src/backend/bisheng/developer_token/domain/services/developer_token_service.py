@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
+from bisheng.common.cursor import CursorDecodeError
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.developer_token import (
     DeveloperTokenAdminForbiddenError,
@@ -19,6 +20,7 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenDisabledError,
     DeveloperTokenInvalidError,
     DeveloperTokenInvalidFileSyncRuleError,
+    DeveloperTokenInvalidFileSyncTargetCursorError,
     DeveloperTokenInvalidIpRuleError,
     DeveloperTokenInvalidRateLimitError,
     DeveloperTokenInvalidRouteRuleError,
@@ -27,6 +29,11 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenMissingError,
     DeveloperTokenRateLimitedError,
     DeveloperTokenRouteForbiddenError,
+)
+from bisheng.common.errcode.knowledge_space import (
+    SpaceFolderNotFoundError,
+    SpaceNotFoundError,
+    SpacePermissionDeniedError,
 )
 from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import PageData
@@ -54,6 +61,7 @@ from bisheng.developer_token.domain.schemas import (
     DeveloperTokenDetail,
     DeveloperTokenFileSyncOptions,
     DeveloperTokenFileSyncRule,
+    DeveloperTokenFileSyncTargetChildren,
     DeveloperTokenGlobalConfig,
     DeveloperTokenListQuery,
     DeveloperTokenPrincipal,
@@ -63,9 +71,15 @@ from bisheng.developer_token.domain.schemas import (
     FileSyncOptionBusinessDomain,
     FileSyncOptionCategory,
     FileSyncOptionChild,
-    FileSyncOptionKnowledgeSpace,
+    FileSyncTargetDisplay,
+    FileSyncTargetFolderOption,
+    FileSyncTargetPathItem,
+    FileSyncTargetSpaceGroup,
+    FileSyncTargetSpaceGroupsPage,
+    FileSyncTargetSpaceOption,
 )
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
+from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
 )
@@ -100,13 +114,27 @@ class DeveloperTokenService:
             user_id=query.user_id,
             enabled=query.enabled,
         )
-        return PageData(data=[await cls._to_read(row) for row in rows], total=total)
+        display_map = await cls._build_file_sync_target_displays(rows)
+        return PageData(
+            data=[
+                await cls._to_read(
+                    row,
+                    file_sync_target_display=display_map.get(int(row.id)),
+                )
+                for row in rows
+            ],
+            total=total,
+        )
 
     @classmethod
     async def get_token_detail(cls, token_id: int, operator: UserPayload) -> DeveloperTokenDetail:
         token = await cls._get_existing_token(token_id)
         await cls._assert_admin_scope(operator, token.tenant_id)
-        return await cls._to_detail(token)
+        display_map = await cls._build_file_sync_target_displays([token])
+        return await cls._to_detail(
+            token,
+            file_sync_target_display=display_map.get(int(token.id)),
+        )
 
     @classmethod
     async def create_token(
@@ -126,7 +154,11 @@ class DeveloperTokenService:
         cls._validate_ip_whitelist(payload.ip_whitelist)
         cls._validate_rate_limit(payload.rate_limit_per_minute)
         route_whitelist = cls._normalize_route_whitelist(payload.route_whitelist)
-        file_sync_rule = await cls._validate_file_sync_rule(tenant_id, payload.file_sync_rule)
+        file_sync_rule = await cls._validate_file_sync_rule(
+            tenant_id,
+            payload.user_id,
+            payload.file_sync_rule,
+        )
 
         plaintext = cls._generate_plaintext_token()
         token = DeveloperToken(
@@ -174,6 +206,7 @@ class DeveloperTokenService:
         await cls._assert_admin_scope(operator, token.tenant_id)
 
         update_data = payload.model_dump(exclude_unset=True)
+        target_user_id = token.user_id
         binding_keys = {"user_id", "department_id", "dept_id"}
         if binding_keys.intersection(update_data):
             target_user_id = int(update_data.get("user_id", token.user_id))
@@ -192,6 +225,7 @@ class DeveloperTokenService:
         final_file_sync_rule = update_data.get("file_sync_rule", token.file_sync_rule)
         normalized_file_sync_rule = await cls._validate_file_sync_rule(
             target_tenant_id,
+            target_user_id,
             final_file_sync_rule,
         )
         if "file_sync_rule" in update_data:
@@ -289,8 +323,9 @@ class DeveloperTokenService:
         operator: UserPayload,
         *,
         tenant_id: int,
-        space_page: int = 1,
-        space_limit: int = 50,
+        user_id: int,
+        space_cursor: str | None = None,
+        space_page_size: int = 50,
         space_keyword: str | None = None,
     ) -> DeveloperTokenFileSyncOptions:
         await cls._assert_admin_scope(operator, tenant_id)
@@ -301,11 +336,16 @@ class DeveloperTokenService:
                 raise DeveloperTokenInvalidFileSyncRuleError(
                     msg="portal categories and business domains must be configured first"
                 )
-            spaces, total = await cls.repository.list_file_sync_spaces(
-                page=space_page,
-                limit=space_limit,
-                keyword=keyword,
-            )
+            bound_user = await cls._get_bound_user_payload(tenant_id, user_id)
+            try:
+                spaces = await KnowledgeSpaceService.list_file_sync_target_spaces(
+                    login_user=bound_user,
+                    cursor=space_cursor,
+                    page_size=space_page_size,
+                    keyword=keyword,
+                )
+            except CursorDecodeError as exc:
+                raise DeveloperTokenInvalidFileSyncTargetCursorError() from exc
 
         categories: list[FileSyncOptionCategory] = []
         for item in config.portal.document_types:
@@ -346,20 +386,84 @@ class DeveloperTokenService:
                 )
             )
 
+        grouped_spaces: dict[str, list[FileSyncTargetSpaceOption]] = {
+            "public": [],
+            "department": [],
+        }
+        for space in spaces.items:
+            if space.space_type not in grouped_spaces:
+                continue
+            grouped_spaces[space.space_type].append(
+                FileSyncTargetSpaceOption(
+                    id=space.id,
+                    name=space.name,
+                    selectable=space.selectable,
+                    has_children=space.has_children,
+                )
+            )
+
         return DeveloperTokenFileSyncOptions(
             tenant_id=tenant_id,
+            user_id=user_id,
             categories=categories,
             business_domains=domains,
-            knowledge_spaces=PageData(
+            target_space_groups=FileSyncTargetSpaceGroupsPage(
                 data=[
-                    FileSyncOptionKnowledgeSpace(
-                        id=int(space.id),
-                        name=str(space.name or ""),
+                    FileSyncTargetSpaceGroup(
+                        space_type=space_type,
+                        spaces=grouped_spaces[space_type],
                     )
-                    for space in spaces
+                    for space_type in ("public", "department")
+                    if grouped_spaces[space_type]
                 ],
-                total=total,
+                has_more=spaces.has_more,
+                next_cursor=spaces.next_cursor,
+                page_size=space_page_size,
             ),
+        )
+
+    @classmethod
+    async def get_file_sync_target_children(
+        cls,
+        operator: UserPayload,
+        *,
+        tenant_id: int,
+        user_id: int,
+        knowledge_id: int,
+        parent_id: int | None,
+        cursor: str | None,
+        page_size: int,
+    ) -> DeveloperTokenFileSyncTargetChildren:
+        await cls._assert_admin_scope(operator, tenant_id)
+        with cls._target_tenant_context(tenant_id):
+            bound_user = await cls._get_bound_user_payload(tenant_id, user_id)
+            try:
+                page = await KnowledgeSpaceService.list_file_sync_target_folders(
+                    login_user=bound_user,
+                    knowledge_id=knowledge_id,
+                    parent_id=parent_id,
+                    cursor=cursor,
+                    page_size=page_size,
+                )
+            except CursorDecodeError as exc:
+                raise DeveloperTokenInvalidFileSyncTargetCursorError() from exc
+            except (SpaceNotFoundError, SpaceFolderNotFoundError) as exc:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="file sync target is unavailable") from exc
+
+        return DeveloperTokenFileSyncTargetChildren(
+            data=[
+                FileSyncTargetFolderOption(
+                    id=item.id,
+                    name=item.name,
+                    selectable=item.selectable,
+                    navigation_only=not item.selectable,
+                    has_children=item.has_children,
+                )
+                for item in page.items
+            ],
+            has_more=page.has_more,
+            next_cursor=page.next_cursor,
+            page_size=page_size,
         )
 
     @classmethod
@@ -422,6 +526,8 @@ class DeveloperTokenService:
             raise DeveloperTokenInvalidFileSyncRuleError(msg="business domain mode and code do not match")
         if space_fixed != (normalized.target_space.knowledge_id is not None):
             raise DeveloperTokenInvalidFileSyncRuleError(msg="target space mode and knowledge id do not match")
+        if not space_fixed and normalized.target_space.folder_id is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target cannot specify a folder id")
 
         has_dynamic_dimension = not domain_fixed or not space_fixed
         if has_dynamic_dimension != (normalized.dynamic_source is not None):
@@ -432,6 +538,7 @@ class DeveloperTokenService:
     async def _validate_file_sync_rule(
         cls,
         tenant_id: int,
+        user_id: int,
         rule: DeveloperTokenFileSyncRule | dict | None,
     ) -> dict | None:
         normalized = cls._normalize_file_sync_rule(rule)
@@ -474,7 +581,12 @@ class DeveloperTokenService:
 
             fixed_space = None
             if normalized.target_space.mode == "fixed":
-                fixed_space = await cls._get_file_sync_space(int(normalized.target_space.knowledge_id))
+                fixed_space = await cls._validate_file_sync_target(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    knowledge_id=int(normalized.target_space.knowledge_id),
+                    folder_id=normalized.target_space.folder_id,
+                )
                 if fixed_space is None:
                     raise DeveloperTokenInvalidFileSyncRuleError(msg="target knowledge space is unavailable")
 
@@ -504,6 +616,45 @@ class DeveloperTokenService:
     @classmethod
     async def _get_file_sync_space(cls, knowledge_id: int):
         return await cls.repository.get_file_sync_space(knowledge_id)
+
+    @classmethod
+    async def _get_bound_user_payload(cls, tenant_id: int, user_id: int) -> UserPayload:
+        await cls._validate_token_binding(tenant_id, user_id)
+        with bypass_tenant_filter():
+            user = await UserDao.aget_user(user_id)
+            roles = [role.role_id for role in UserRoleDao.get_user_roles(user_id)]
+        return UserPayload(
+            user_id=user_id,
+            user_name=str(getattr(user, "user_name", "") or ""),
+            user_role=roles or [0],
+            tenant_id=tenant_id,
+            token_version=int(getattr(user, "token_version", 0) or 0),
+            is_global_super=False,
+        )
+
+    @classmethod
+    async def _validate_file_sync_target(
+        cls,
+        *,
+        tenant_id: int,
+        user_id: int,
+        knowledge_id: int,
+        folder_id: int | None,
+    ):
+        with cls._target_tenant_context(tenant_id):
+            bound_user = await cls._get_bound_user_payload(tenant_id, user_id)
+            try:
+                return await KnowledgeSpaceService.validate_file_sync_target(
+                    login_user=bound_user,
+                    knowledge_id=knowledge_id,
+                    folder_id=folder_id,
+                )
+            except (SpaceNotFoundError, SpaceFolderNotFoundError) as exc:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="file sync target is unavailable") from exc
+            except SpacePermissionDeniedError as exc:
+                raise DeveloperTokenInvalidFileSyncRuleError(
+                    msg="bound user cannot upload to the file sync target"
+                ) from exc
 
     @staticmethod
     @contextmanager
@@ -914,7 +1065,49 @@ class DeveloperTokenService:
             raise DeveloperTokenRouteForbiddenError()
 
     @classmethod
-    async def _to_read(cls, token: DeveloperToken) -> DeveloperTokenRead:
+    async def _build_file_sync_target_displays(
+        cls,
+        tokens: list[DeveloperToken],
+    ) -> dict[int, FileSyncTargetDisplay]:
+        targets_by_tenant: dict[int, dict[int, tuple[int, int | None]]] = {}
+        for token in tokens:
+            if token.id is None or token.file_sync_rule is None:
+                continue
+            try:
+                rule = cls._normalize_file_sync_rule(token.file_sync_rule)
+            except DeveloperTokenInvalidFileSyncRuleError:
+                continue
+            if rule is None or rule.target_space.mode != "fixed":
+                continue
+            targets_by_tenant.setdefault(int(token.tenant_id), {})[int(token.id)] = (
+                int(rule.target_space.knowledge_id),
+                rule.target_space.folder_id,
+            )
+
+        result: dict[int, FileSyncTargetDisplay] = {}
+        for tenant_id, targets in targets_by_tenant.items():
+            with cls._target_tenant_context(tenant_id):
+                displays = await KnowledgeSpaceService.resolve_file_sync_target_displays(targets)
+            for token_id, display in displays.items():
+                result[token_id] = FileSyncTargetDisplay(
+                    knowledge_id=display.knowledge_id,
+                    knowledge_name=display.knowledge_name,
+                    target_type="folder" if display.folder_id is not None else "root",
+                    folder_id=display.folder_id,
+                    folder_path=[
+                        FileSyncTargetPathItem(id=folder_id, name=name) for folder_id, name in display.folder_path
+                    ],
+                    stale=display.stale,
+                )
+        return result
+
+    @classmethod
+    async def _to_read(
+        cls,
+        token: DeveloperToken,
+        *,
+        file_sync_target_display: FileSyncTargetDisplay | None = None,
+    ) -> DeveloperTokenRead:
         tenant_name = None
         user_name = None
         try:
@@ -947,6 +1140,7 @@ class DeveloperTokenService:
             rate_limit_per_minute=token.rate_limit_per_minute,
             route_rule_count=len(token.route_whitelist or []),
             file_sync_rule=file_sync_rule,
+            file_sync_target_display=file_sync_target_display,
             last_used_time=token.last_used_time,
             last_used_ip=token.last_used_ip,
             created_by=token.created_by,
@@ -956,8 +1150,18 @@ class DeveloperTokenService:
         )
 
     @classmethod
-    async def _to_detail(cls, token: DeveloperToken) -> DeveloperTokenDetail:
-        data = (await cls._to_read(token)).model_dump()
+    async def _to_detail(
+        cls,
+        token: DeveloperToken,
+        *,
+        file_sync_target_display: FileSyncTargetDisplay | None = None,
+    ) -> DeveloperTokenDetail:
+        data = (
+            await cls._to_read(
+                token,
+                file_sync_target_display=file_sync_target_display,
+            )
+        ).model_dump()
         data["ip_whitelist"] = token.ip_whitelist
         data["route_whitelist"] = token.route_whitelist or []
         return DeveloperTokenDetail(**data)

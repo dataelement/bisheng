@@ -54,6 +54,44 @@ def test_rule_schema_accepts_all_mode_combinations_and_normalizes_codes(payload)
         assert rule.business_domain.code == "SA"
 
 
+def test_folder_id_is_backward_compatible_and_fixed_target_accepts_a_directory() -> None:
+    old_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {"mode": "fixed", "knowledge_id": 118},
+            "dynamic_source": None,
+        }
+    )
+    folder_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {"mode": "fixed", "knowledge_id": 118, "folder_id": 4096},
+            "dynamic_source": None,
+        }
+    )
+
+    assert old_rule.target_space.folder_id is None
+    assert folder_rule.target_space.folder_id == 4096
+
+
+def test_dynamic_target_rejects_a_folder_id_with_19813() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {"mode": "dynamic", "knowledge_id": None, "folder_id": 4096},
+            "dynamic_source": "department_id",
+        }
+    )
+
+    with pytest.raises(DeveloperTokenInvalidFileSyncRuleError) as exc_info:
+        DeveloperTokenService._normalize_file_sync_rule(rule)
+
+    assert exc_info.value.code == 19813
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -159,7 +197,13 @@ async def test_fixed_references_and_bidirectional_binding_are_validated(monkeypa
         }
     )
 
-    normalized = await DeveloperTokenService._validate_file_sync_rule(5, rule)
+    monkeypatch.setattr(
+        DeveloperTokenService,
+        "_validate_file_sync_target",
+        AsyncMock(return_value=spaces[0]),
+        raising=False,
+    )
+    normalized = await DeveloperTokenService._validate_file_sync_rule(5, 7, rule)
 
     assert normalized == rule.model_dump(mode="json")
 
@@ -210,8 +254,9 @@ async def test_invalid_or_unbound_fixed_references_fail_closed(
     )
     monkeypatch.setattr(
         DeveloperTokenService,
-        "_get_file_sync_space",
+        "_validate_file_sync_target",
         AsyncMock(return_value=spaces[0] if spaces else None),
+        raising=False,
     )
     rule = DeveloperTokenFileSyncRule.model_validate(
         {
@@ -223,7 +268,48 @@ async def test_invalid_or_unbound_fixed_references_fail_closed(
     )
 
     with pytest.raises(DeveloperTokenInvalidFileSyncRuleError):
-        await DeveloperTokenService._validate_file_sync_rule(5, rule)
+        await DeveloperTokenService._validate_file_sync_rule(5, 7, rule)
+
+
+@pytest.mark.asyncio
+async def test_fixed_folder_is_validated_for_bound_user_before_persistence(monkeypatch) -> None:
+    config = SimpleNamespace(
+        portal=SimpleNamespace(
+            document_types=[SimpleNamespace(code="POLICY", children=[SimpleNamespace(code="MGMT_POLICY")])],
+            domains=[SimpleNamespace(code="SA", enabled=True, space_ids=[118])],
+        )
+    )
+    space = SimpleNamespace(id=118, business_domain_codes=["SA"])
+    target_validation = AsyncMock(return_value=space)
+    monkeypatch.setattr(
+        DeveloperTokenService,
+        "_get_file_sync_portal_config",
+        AsyncMock(return_value=config),
+    )
+    monkeypatch.setattr(
+        DeveloperTokenService,
+        "_validate_file_sync_target",
+        target_validation,
+        raising=False,
+    )
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {"mode": "fixed", "knowledge_id": 118, "folder_id": 4096},
+            "dynamic_source": None,
+        }
+    )
+
+    normalized = await DeveloperTokenService._validate_file_sync_rule(5, 7, rule)
+
+    target_validation.assert_awaited_once_with(
+        tenant_id=5,
+        user_id=7,
+        knowledge_id=118,
+        folder_id=4096,
+    )
+    assert normalized["target_space"]["folder_id"] == 4096
 
 
 @pytest.mark.asyncio
@@ -250,7 +336,7 @@ async def test_create_persists_normalized_rule(monkeypatch) -> None:
     monkeypatch.setattr(
         DeveloperTokenService,
         "_validate_file_sync_rule",
-        AsyncMock(side_effect=lambda _tenant_id, value: value.model_dump(mode="json")),
+        AsyncMock(side_effect=lambda _tenant_id, _user_id, value: value.model_dump(mode="json")),
     )
     monkeypatch.setattr(DeveloperTokenService, "_audit", AsyncMock())
     monkeypatch.setattr(
@@ -326,7 +412,9 @@ async def test_update_distinguishes_omitted_rule_from_explicit_null(
             return existing
 
     validate = AsyncMock(
-        side_effect=lambda _tenant_id, value: value.model_dump(mode="json") if hasattr(value, "model_dump") else value
+        side_effect=lambda _tenant_id, _user_id, value: (
+            value.model_dump(mode="json") if hasattr(value, "model_dump") else value
+        )
     )
     monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
     monkeypatch.setattr(DeveloperTokenService, "_assert_admin_scope", AsyncMock())
@@ -338,10 +426,58 @@ async def test_update_distinguishes_omitted_rule_from_explicit_null(
 
     if expected_rule == "existing":
         assert "file_sync_rule" not in updated_fields
-        assert validate.await_args.args[1] == existing_rule
+        assert validate.await_args.args[1:] == (7, existing_rule)
     else:
         assert updated_fields["file_sync_rule"] is None
-        assert validate.await_args.args[1] is None
+        assert validate.await_args.args[1:] == (7, None)
+
+
+@pytest.mark.asyncio
+async def test_rebinding_same_tenant_revalidates_existing_target_for_new_user(monkeypatch) -> None:
+    existing_rule = {
+        "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+        "business_domain": {"mode": "fixed", "code": "SA"},
+        "target_space": {"mode": "fixed", "knowledge_id": 118, "folder_id": 4096},
+        "dynamic_source": None,
+    }
+    existing = DeveloperToken(
+        id=1,
+        tenant_id=5,
+        user_id=7,
+        name="sync",
+        token_hash="hash",
+        token_ciphertext="cipher",
+        token_prefix="bst_test",
+        file_sync_rule=existing_rule,
+    )
+
+    class Repo:
+        @staticmethod
+        async def get_token_by_id(_token_id):
+            return existing
+
+        @staticmethod
+        async def update_token(_token_id, **fields):
+            for key, value in fields.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, value)
+            return existing
+
+    validate = AsyncMock(return_value=existing_rule)
+    monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
+    monkeypatch.setattr(DeveloperTokenService, "_assert_admin_scope", AsyncMock())
+    monkeypatch.setattr(DeveloperTokenService, "_resolve_binding_tenant", AsyncMock(return_value=5))
+    monkeypatch.setattr(DeveloperTokenService, "_validate_file_sync_rule", validate)
+    monkeypatch.setattr(DeveloperTokenService, "_audit", AsyncMock())
+    monkeypatch.setattr(DeveloperTokenService, "_to_read", AsyncMock(return_value=SimpleNamespace(id=1)))
+
+    await DeveloperTokenService.update_token(
+        1,
+        SimpleNamespace(user_id=10),
+        DeveloperTokenUpdate(user_id=8, department_id=20),
+    )
+
+    validate.assert_awaited_once_with(5, 8, existing_rule)
 
 
 def test_audit_snapshot_contains_only_rule_summary() -> None:

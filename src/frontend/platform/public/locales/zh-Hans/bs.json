@@ -198,6 +198,22 @@
         "stale": "当前保存值已失效；该原值会保留，重新选择后才会替换。",
         "spaceSearchPlaceholder": "搜索知识空间名称",
         "searchSpace": "搜索知识空间",
+        "targetTree": {
+          "groups": {
+            "public": "公共空间",
+            "department": "部门空间"
+          },
+          "root": "空间根目录",
+          "navigationOnly": "仅用于导航，不可选择",
+          "loading": "正在加载目标空间…",
+          "error": "目标空间加载失败，请重试。",
+          "empty": "未找到可用的公共或部门空间。",
+          "noPermission": "绑定用户没有可上传的空间根目录或目录。",
+          "stale": "当前目标已失效，请重新选择。",
+          "loadingChildren": "正在加载目录…",
+          "childrenError": "目录加载失败，请重新展开。",
+          "loadMore": "加载更多目录"
+        },
         "modes": {
           "fixed": "固定配置",
           "dynamic": "运行时动态获取"

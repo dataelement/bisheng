@@ -31,6 +31,7 @@ export interface DeveloperTokenFileSyncRule {
   target_space: {
     mode: DeveloperTokenFileSyncMode
     knowledge_id: number | null
+    folder_id: number | null
   }
   dynamic_source: DeveloperTokenFileSyncDynamicSource | null
 }
@@ -46,21 +47,48 @@ export interface DeveloperTokenFileSyncBusinessDomainOption {
   name: string
 }
 
-export interface DeveloperTokenFileSyncKnowledgeSpaceOption {
+export interface DeveloperTokenFileSyncTargetSpaceOption {
   id: number
   name: string
+  selectable: boolean
+  has_children: boolean
 }
 
-export interface DeveloperTokenPageData<T> {
+export interface DeveloperTokenFileSyncTargetSpaceGroup {
+  space_type: "public" | "department"
+  spaces: DeveloperTokenFileSyncTargetSpaceOption[]
+}
+
+export interface DeveloperTokenFileSyncCursorPage<T> {
   data: T[]
-  total: number
+  has_more: boolean
+  next_cursor: string | null
+  page_size: number
+}
+
+export interface DeveloperTokenFileSyncTargetFolderOption {
+  id: number
+  name: string
+  selectable: boolean
+  navigation_only: boolean
+  has_children: boolean
+}
+
+export interface DeveloperTokenFileSyncTargetDisplay {
+  knowledge_id: number
+  knowledge_name?: string | null
+  target_type: "root" | "folder"
+  folder_id?: number | null
+  folder_path: Array<{ id: number; name: string }>
+  stale: boolean
 }
 
 export interface DeveloperTokenFileSyncOptions {
   tenant_id: number
+  user_id: number
   categories: DeveloperTokenFileSyncCategoryOption[]
   business_domains: DeveloperTokenFileSyncBusinessDomainOption[]
-  knowledge_spaces: DeveloperTokenPageData<DeveloperTokenFileSyncKnowledgeSpaceOption>
+  target_space_groups: DeveloperTokenFileSyncCursorPage<DeveloperTokenFileSyncTargetSpaceGroup>
 }
 
 export interface DeveloperTokenRecord {
@@ -77,6 +105,7 @@ export interface DeveloperTokenRecord {
   rate_limit_per_minute?: number | null
   route_rule_count: number
   file_sync_rule?: DeveloperTokenFileSyncRule | null
+  file_sync_target_display?: DeveloperTokenFileSyncTargetDisplay | null
   last_used_time?: string | null
   last_used_ip?: string | null
   created_by?: number | null
@@ -174,11 +203,34 @@ export async function updateDeveloperTokenGlobalConfigApi(
 
 export async function getDeveloperTokenFileSyncOptionsApi(params: {
   tenant_id: number
-  space_page?: number
-  space_limit?: number
+  user_id: number
+  space_cursor?: string
+  space_page_size?: number
   space_keyword?: string
+  signal?: AbortSignal
 }): Promise<DeveloperTokenFileSyncOptions> {
+  const { signal, ...query } = params
   return await axios.get("/api/v1/admin/developer-tokens/config/file-sync-options", {
-    params: { space_page: 1, space_limit: 50, ...params },
+    params: { space_page_size: 50, ...query },
+    ...(signal ? { signal } : {}),
   })
+}
+
+export async function getDeveloperTokenFileSyncTargetChildrenApi(params: {
+  tenant_id: number
+  user_id: number
+  knowledge_id: number
+  parent_id?: number
+  cursor?: string
+  page_size?: number
+  signal?: AbortSignal
+}): Promise<DeveloperTokenFileSyncCursorPage<DeveloperTokenFileSyncTargetFolderOption>> {
+  const { signal, ...query } = params
+  return await axios.get(
+    "/api/v1/admin/developer-tokens/config/file-sync-target-children",
+    {
+      params: { page_size: 50, ...query },
+      ...(signal ? { signal } : {}),
+    }
+  )
 }

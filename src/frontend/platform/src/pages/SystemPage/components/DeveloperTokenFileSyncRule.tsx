@@ -1,5 +1,3 @@
-import { Button } from "@/components/bs-ui/button"
-import { Input } from "@/components/bs-ui/input"
 import {
   Select,
   SelectContent,
@@ -13,13 +11,15 @@ import type {
   DeveloperTokenFileSyncMode,
   DeveloperTokenFileSyncOptions,
   DeveloperTokenFileSyncRule as FileSyncRule,
+  DeveloperTokenFileSyncTargetDisplay,
 } from "@/controllers/API/developerToken"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import {
   changeFileSyncRuleMode,
   createEmptyFileSyncRule,
 } from "./developerTokenFileSyncRuleValidation"
+import DeveloperTokenFileSyncTargetTree from "./DeveloperTokenFileSyncTargetTree"
 
 const UNSET_VALUE = "__unset__"
 
@@ -30,6 +30,7 @@ interface DeveloperTokenFileSyncRuleProps {
   loading: boolean
   error: string | null
   onSearchSpaces: (keyword: string) => void
+  targetDisplay?: DeveloperTokenFileSyncTargetDisplay | null
 }
 
 export default function DeveloperTokenFileSyncRule({
@@ -39,9 +40,9 @@ export default function DeveloperTokenFileSyncRule({
   loading,
   error,
   onSearchSpaces,
+  targetDisplay = null,
 }: DeveloperTokenFileSyncRuleProps) {
   const { t } = useTranslation()
-  const [spaceKeyword, setSpaceKeyword] = useState("")
   const selectedCategory = useMemo(
     () => options?.categories.find((item) => item.code === value?.category.code),
     [options, value?.category.code]
@@ -63,17 +64,6 @@ export default function DeveloperTokenFileSyncRule({
       && !options?.business_domains.some((item) => item.code === value.business_domain.code)
   )
   const businessStale = Boolean(businessOptionMissing && options)
-  const targetOptionMissing = Boolean(
-    value?.target_space.mode === "fixed"
-      && value.target_space.knowledge_id
-      && !options?.knowledge_spaces.data.some((item) => item.id === value.target_space.knowledge_id)
-  )
-  const targetStale = Boolean(
-    targetOptionMissing
-      && options
-      && options.knowledge_spaces.total <= options.knowledge_spaces.data.length
-      && !spaceKeyword.trim()
-  )
   const hasDynamicDimension = Boolean(
     value
       && (value.business_domain.mode === "dynamic" || value.target_space.mode === "dynamic")
@@ -243,51 +233,28 @@ export default function DeveloperTokenFileSyncRule({
           onModeChange={(mode) => handleModeChange("targetSpace", mode)}
         >
           {value.target_space.mode === "fixed" && (
-            <div className="space-y-2">
-              <Field stale={targetStale}>
-                <Select
-                  name="file-sync-target-space"
-                  value={value.target_space.knowledge_id?.toString() || UNSET_VALUE}
-                  onValueChange={(id) => onChange({
+            <Field>
+              {options ? (
+                <DeveloperTokenFileSyncTargetTree
+                  tenantId={options.tenant_id}
+                  userId={options.user_id}
+                  groups={options.target_space_groups.data}
+                  value={value.target_space}
+                  display={targetDisplay}
+                  loading={false}
+                  error={null}
+                  onChange={(target) => onChange({
                     ...value,
-                    target_space: {
-                      ...value.target_space,
-                      knowledge_id: id === UNSET_VALUE ? null : Number(id),
-                    },
+                    target_space: { mode: "fixed", ...target },
                   })}
-                >
-                  <SelectTrigger aria-label={t("system.developerToken.fileSync.targetSpace")}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={UNSET_VALUE}>{t("system.developerToken.fileSync.select")}</SelectItem>
-                    {targetOptionMissing && value.target_space.knowledge_id && (
-                      <SelectItem value={String(value.target_space.knowledge_id)}>
-                        {value.target_space.knowledge_id}
-                      </SelectItem>
-                    )}
-                    {(options?.knowledge_spaces.data || []).map((item) => (
-                      <SelectItem key={item.id} value={String(item.id)}>
-                        {item.name} ({item.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <div className="flex gap-2">
-                <Input
-                  value={spaceKeyword}
-                  placeholder={t("system.developerToken.fileSync.spaceSearchPlaceholder")}
-                  onChange={(event) => setSpaceKeyword(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") onSearchSpaces(spaceKeyword.trim())
-                  }}
+                  onSearchSpaces={onSearchSpaces}
                 />
-                <Button type="button" variant="outline" onClick={() => onSearchSpaces(spaceKeyword.trim())}>
-                  {t("system.developerToken.fileSync.searchSpace")}
-                </Button>
-              </div>
-            </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  {t("system.developerToken.fileSync.selectBindingFirst")}
+                </div>
+              )}
+            </Field>
           )}
         </ModeField>
 

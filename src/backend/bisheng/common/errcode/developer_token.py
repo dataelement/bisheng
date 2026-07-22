@@ -69,3 +69,13 @@ class DeveloperTokenInvalidFileSyncRuleError(BaseErrorCode):
     @property
     def http_status(self) -> int:
         return self.HttpStatus
+
+
+class DeveloperTokenInvalidFileSyncTargetCursorError(BaseErrorCode):
+    Code: int = 19814
+    Msg: str = "developer_token_invalid_file_sync_target_cursor"
+    HttpStatus: int = 400
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus

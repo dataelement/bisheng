@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest"
 
 const options: DeveloperTokenFileSyncOptions = {
   tenant_id: 2,
+  user_id: 7,
   categories: [
     {
       code: "POLICY",
@@ -20,7 +21,17 @@ const options: DeveloperTokenFileSyncOptions = {
     },
   ],
   business_domains: [{ code: "SAFETY", name: "Safety" }],
-  knowledge_spaces: { data: [{ id: 118, name: "Safety space" }], total: 1 },
+  target_space_groups: {
+    data: [
+      {
+        space_type: "department",
+        spaces: [{ id: 118, name: "Safety space", selectable: true, has_children: true }],
+      },
+    ],
+    has_more: false,
+    next_cursor: null,
+    page_size: 50,
+  },
 }
 
 function rule(
@@ -37,6 +48,7 @@ function rule(
     target_space: {
       mode: targetMode,
       knowledge_id: targetMode === "fixed" ? 118 : null,
+      folder_id: null,
     },
     dynamic_source: dynamic ? "responsible_person_id" : null,
   }
@@ -56,12 +68,12 @@ describe("developer token file-sync rule validation", () => {
     expect(normalizeFileSyncRule({
       category: { code: " policy ", subcategory_code: " mgmt_policy " },
       business_domain: { mode: "dynamic", code: " safety " },
-      target_space: { mode: "fixed", knowledge_id: 118 },
+      target_space: { mode: "fixed", knowledge_id: 118, folder_id: 4096 },
       dynamic_source: "department_id",
     })).toEqual({
       category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
       business_domain: { mode: "dynamic", code: null },
-      target_space: { mode: "fixed", knowledge_id: 118 },
+      target_space: { mode: "fixed", knowledge_id: 118, folder_id: 4096 },
       dynamic_source: "department_id",
     })
   })
@@ -77,20 +89,26 @@ describe("developer token file-sync rule validation", () => {
     }, options)).toEqual({ field: "businessDomain", reason: "stale" })
     expect(findInvalidFileSyncRule({
       ...rule("fixed", "fixed"),
-      target_space: { mode: "fixed", knowledge_id: 999 },
-    }, options)).toEqual({ field: "targetSpace", reason: "stale" })
+      target_space: { mode: "fixed", knowledge_id: 999, folder_id: 4096 },
+    }, options, {
+      knowledge_id: 999,
+      knowledge_name: null,
+      target_type: "folder",
+      folder_id: 4096,
+      folder_path: [],
+      stale: true,
+    })).toEqual({ field: "targetSpace", reason: "stale" })
   })
 
-  it("does not call a fixed space stale when the options page is not exhaustive", () => {
-    const pagedOptions = {
-      ...options,
-      knowledge_spaces: { ...options.knowledge_spaces, total: 500 },
-    }
-
+  it("validates folder ids without assuming the current space page is exhaustive", () => {
     expect(findInvalidFileSyncRule({
       ...rule("fixed", "fixed"),
-      target_space: { mode: "fixed", knowledge_id: 999 },
-    }, pagedOptions)).toBeNull()
+      target_space: { mode: "fixed", knowledge_id: 999, folder_id: 4096 },
+    }, options)).toBeNull()
+    expect(findInvalidFileSyncRule({
+      ...rule("fixed", "fixed"),
+      target_space: { mode: "fixed", knowledge_id: 118, folder_id: -1 },
+    }, options)).toEqual({ field: "targetSpace", reason: "invalid" })
   })
 
   it("uses the same 16-character business-domain code contract as the backend", () => {
@@ -112,7 +130,11 @@ describe("developer token file-sync rule validation", () => {
     expect(fixedAgain.dynamic_source).toBeNull()
 
     const dynamicTarget = changeFileSyncRuleMode(rule("fixed", "fixed"), "targetSpace", "dynamic")
-    expect(dynamicTarget.target_space).toEqual({ mode: "dynamic", knowledge_id: null })
+    expect(dynamicTarget.target_space).toEqual({
+      mode: "dynamic",
+      knowledge_id: null,
+      folder_id: null,
+    })
   })
 
   it("formats localized configured and unconfigured summaries without option lookups", () => {
@@ -128,5 +150,23 @@ describe("developer token file-sync rule validation", () => {
     expect(formatFileSyncRuleSummary(rule("fixed", "dynamic"), labels)).toBe(
       "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(responsible person)"
     )
+    expect(formatFileSyncRuleSummary({
+      ...rule("fixed", "fixed"),
+      target_space: { mode: "fixed", knowledge_id: 118, folder_id: 4096 },
+    }, {
+      ...labels,
+      root: "Root",
+      stale: "Unavailable",
+    }, {
+      knowledge_id: 118,
+      knowledge_name: "Safety",
+      target_type: "folder",
+      folder_id: 4096,
+      folder_path: [
+        { id: 4000, name: "Policies" },
+        { id: 4096, name: "Management" },
+      ],
+      stale: false,
+    })).toContain("Safety / Policies / Management")
   })
 })

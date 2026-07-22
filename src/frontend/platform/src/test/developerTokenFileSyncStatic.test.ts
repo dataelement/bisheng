@@ -7,9 +7,12 @@ const relevantFiles = [
   "src/controllers/API/developerToken.ts",
   "src/pages/SystemPage/components/DeveloperToken.tsx",
   "src/pages/SystemPage/components/DeveloperTokenFileSyncRule.tsx",
+  "src/pages/SystemPage/components/DeveloperTokenFileSyncTargetTree.tsx",
   "src/pages/SystemPage/components/DeveloperTokenGlobalSettings.tsx",
   "src/pages/SystemPage/components/DeveloperTokenTable.tsx",
   "src/pages/SystemPage/components/developerTokenFileSyncRuleValidation.ts",
+  "src/pages/SystemPage/components/useDeveloperTokenFileSyncOptions.ts",
+  "src/pages/SystemPage/components/useDeveloperTokenFileSyncTargetTree.ts",
   "src/components/bs-comp/selectComponent/DepartmentUsersSelect.tsx",
 ]
 
@@ -33,6 +36,7 @@ describe("developer token file-sync static contracts", () => {
     expect(keySets[1]).toEqual(keySets[0])
     expect(keySets[2]).toEqual(keySets[0])
     expect(keySets[0]).toContain("fileSync.summary.notConfigured")
+    expect(keySets[0]).toContain("fileSync.targetTree.navigationOnly")
     expect(keySets[0]).toContain("columns.fileSync")
   })
 

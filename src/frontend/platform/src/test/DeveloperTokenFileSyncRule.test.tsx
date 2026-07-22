@@ -1,8 +1,8 @@
 import type {
   DeveloperTokenFileSyncOptions,
-  DeveloperTokenFileSyncRule,
+  DeveloperTokenFileSyncRule as FileSyncRule,
 } from "@/controllers/API/developerToken"
-import DeveloperTokenFileSyncRule from "@/pages/SystemPage/components/DeveloperTokenFileSyncRule"
+import DeveloperTokenFileSyncRuleEditor from "@/pages/SystemPage/components/DeveloperTokenFileSyncRule"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
@@ -57,6 +57,7 @@ vi.mock("@/components/bs-ui/switch", () => ({
 
 const options: DeveloperTokenFileSyncOptions = {
   tenant_id: 2,
+  user_id: 7,
   categories: [
     {
       code: "POLICY",
@@ -70,21 +71,29 @@ const options: DeveloperTokenFileSyncOptions = {
     },
   ],
   business_domains: [{ code: "SAFETY", name: "Safety" }],
-  knowledge_spaces: { data: [{ id: 118, name: "Safety space" }], total: 1 },
+  target_space_groups: {
+    data: [{
+      space_type: "department",
+      spaces: [{ id: 118, name: "Safety space", selectable: true, has_children: false }],
+    }],
+    has_more: false,
+    next_cursor: null,
+    page_size: 50,
+  },
 }
 
-const configuredRule: DeveloperTokenFileSyncRule = {
+const configuredRule: FileSyncRule = {
   category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
   business_domain: { mode: "fixed", code: "SAFETY" },
-  target_space: { mode: "fixed", knowledge_id: 118 },
+  target_space: { mode: "fixed", knowledge_id: 118, folder_id: null },
   dynamic_source: null,
 }
 
-function Harness({ initial = null }: { initial?: DeveloperTokenFileSyncRule | null }) {
-  const [value, setValue] = useState<DeveloperTokenFileSyncRule | null>(initial)
+function Harness({ initial = null }: { initial?: FileSyncRule | null }) {
+  const [value, setValue] = useState<FileSyncRule | null>(initial)
   return (
     <>
-      <DeveloperTokenFileSyncRule
+      <DeveloperTokenFileSyncRuleEditor
         value={value}
         onChange={setValue}
         options={options}
@@ -143,7 +152,7 @@ describe("DeveloperTokenFileSyncRule", () => {
   it("renders loading and error states and delegates knowledge-space search", () => {
     const onSearchSpaces = vi.fn()
     const { rerender } = render(
-      <DeveloperTokenFileSyncRule
+      <DeveloperTokenFileSyncRuleEditor
         value={configuredRule}
         onChange={vi.fn()}
         options={null}
@@ -155,7 +164,7 @@ describe("DeveloperTokenFileSyncRule", () => {
     expect(screen.getByText("system.developerToken.fileSync.optionsLoading")).toBeInTheDocument()
 
     rerender(
-      <DeveloperTokenFileSyncRule
+      <DeveloperTokenFileSyncRuleEditor
         value={configuredRule}
         onChange={vi.fn()}
         options={null}
@@ -167,7 +176,16 @@ describe("DeveloperTokenFileSyncRule", () => {
     expect(screen.getByText("system.developerToken.fileSync.optionsError")).toBeInTheDocument()
     expect(screen.getByRole("combobox", { name: "file-sync-category" })).toHaveValue("POLICY")
     expect(screen.getByRole("combobox", { name: "file-sync-business-domain" })).toHaveValue("SAFETY")
-    expect(screen.getByRole("combobox", { name: "file-sync-target-space" })).toHaveValue("118")
+    rerender(
+      <DeveloperTokenFileSyncRuleEditor
+        value={configuredRule}
+        onChange={vi.fn()}
+        options={options}
+        loading={false}
+        error={null}
+        onSearchSpaces={onSearchSpaces}
+      />
+    )
     fireEvent.change(screen.getByPlaceholderText("system.developerToken.fileSync.spaceSearchPlaceholder"), {
       target: { value: "safety" },
     })
@@ -176,16 +194,34 @@ describe("DeveloperTokenFileSyncRule", () => {
   })
 
   it("retains and marks stale stored references instead of remapping them", () => {
-    const staleRule: DeveloperTokenFileSyncRule = {
+    const staleRule: FileSyncRule = {
       category: { code: "REMOVED", subcategory_code: "OLD" },
       business_domain: { mode: "fixed", code: "OLD_DOMAIN" },
-      target_space: { mode: "fixed", knowledge_id: 999 },
+      target_space: { mode: "fixed", knowledge_id: 999, folder_id: 4096 },
       dynamic_source: null,
     }
-    render(<Harness initial={staleRule} />)
+    render(
+      <DeveloperTokenFileSyncRuleEditor
+        value={staleRule}
+        onChange={vi.fn()}
+        options={options}
+        loading={false}
+        error={null}
+        onSearchSpaces={vi.fn()}
+        targetDisplay={{
+          knowledge_id: 999,
+          knowledge_name: null,
+          target_type: "folder",
+          folder_id: 4096,
+          folder_path: [],
+          stale: true,
+        }}
+      />
+    )
 
-    expect(screen.getAllByText("system.developerToken.fileSync.stale")).toHaveLength(3)
-    expect(screen.getByTestId("rule-state")).toHaveTextContent('"code":"REMOVED"')
-    expect(screen.getByTestId("rule-state")).toHaveTextContent('"knowledge_id":999')
+    expect(screen.getAllByText("system.developerToken.fileSync.stale")).toHaveLength(2)
+    expect(screen.getByText("system.developerToken.fileSync.targetTree.stale")).toBeInTheDocument()
+    expect(screen.getByRole("combobox", { name: "file-sync-category" })).toHaveValue("REMOVED")
+    expect(screen.getByRole("combobox", { name: "file-sync-business-domain" })).toHaveValue("OLD_DOMAIN")
   })
 })

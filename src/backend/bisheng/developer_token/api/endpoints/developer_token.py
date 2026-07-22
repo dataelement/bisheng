@@ -84,17 +84,41 @@ async def update_developer_token_global_config(
 @router.get("/config/file-sync-options")
 async def get_developer_token_file_sync_options(
     tenant_id: int = Query(..., gt=0),
-    space_page: int = Query(1, ge=1),
-    space_limit: int = Query(50, ge=1, le=200),
+    user_id: int = Query(..., gt=0),
+    space_cursor: str | None = Query(None, max_length=2000),
+    space_page_size: int = Query(50, ge=1, le=200),
     space_keyword: str | None = Query(None, max_length=200),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await DeveloperTokenService.get_file_sync_options(
         login_user,
         tenant_id=tenant_id,
-        space_page=space_page,
-        space_limit=space_limit,
+        user_id=user_id,
+        space_cursor=space_cursor,
+        space_page_size=space_page_size,
         space_keyword=space_keyword,
+    )
+    return resp_200(data=data)
+
+
+@router.get("/config/file-sync-target-children")
+async def get_developer_token_file_sync_target_children(
+    tenant_id: int = Query(..., gt=0),
+    user_id: int = Query(..., gt=0),
+    knowledge_id: int = Query(..., gt=0),
+    parent_id: int | None = Query(None, gt=0),
+    cursor: str | None = Query(None, max_length=2000),
+    page_size: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    data = await DeveloperTokenService.get_file_sync_target_children(
+        login_user,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        knowledge_id=knowledge_id,
+        parent_id=parent_id,
+        cursor=cursor,
+        page_size=page_size,
     )
     return resp_200(data=data)
 

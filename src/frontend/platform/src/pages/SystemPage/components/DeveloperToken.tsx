@@ -10,20 +10,18 @@ import {
   createDeveloperTokenApi,
   deleteDeveloperTokenApi,
   DeveloperTokenDetail,
-  DeveloperTokenFileSyncOptions,
   DeveloperTokenFileSyncRule,
   DeveloperTokenPayload,
   DeveloperTokenRecord,
   DeveloperTokenRouteRule,
   getDeveloperTokenDetailApi,
-  getDeveloperTokenFileSyncOptionsApi,
   listDeveloperTokensApi,
   updateDeveloperTokenApi,
   viewDeveloperTokenSecretApi,
 } from "@/controllers/API/developerToken"
 import { userContext } from "@/contexts/userContext"
 import type { ClipboardEvent, CompositionEvent, FormEvent, KeyboardEvent } from "react"
-import { useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   findInvalidIpWhitelistRule,
@@ -42,6 +40,7 @@ import {
 } from "./developerTokenFileSyncRuleValidation"
 import DeveloperTokenGlobalSettings from "./DeveloperTokenGlobalSettings"
 import DeveloperTokenTable from "./DeveloperTokenTable"
+import useDeveloperTokenFileSyncOptions from "./useDeveloperTokenFileSyncOptions"
 
 const PAGE_SIZE = 20
 
@@ -58,6 +57,7 @@ interface TokenFormState {
   route_whitelist: DeveloperTokenRouteRule[]
   tenant_id: number | null
   file_sync_rule: DeveloperTokenFileSyncRule | null
+  file_sync_target_display: DeveloperTokenDetail["file_sync_target_display"]
 }
 
 function toForm(row?: DeveloperTokenDetail): TokenFormState {
@@ -78,6 +78,7 @@ function toForm(row?: DeveloperTokenDetail): TokenFormState {
     route_whitelist: row?.route_whitelist || [],
     tenant_id: row?.tenant_id ?? null,
     file_sync_rule: row?.file_sync_rule ?? null,
+    file_sync_target_display: row?.file_sync_target_display ?? null,
   }
 }
 
@@ -121,10 +122,17 @@ export default function DeveloperToken() {
   const [saving, setSaving] = useState(false)
   const [secretOpen, setSecretOpen] = useState(false)
   const [secret, setSecret] = useState("")
-  const [fileSyncOptions, setFileSyncOptions] = useState<DeveloperTokenFileSyncOptions | null>(null)
-  const [fileSyncOptionsLoading, setFileSyncOptionsLoading] = useState(false)
-  const [fileSyncOptionsError, setFileSyncOptionsError] = useState<string | null>(null)
-  const fileSyncTenantIdRef = useRef<number | null>(null)
+  const boundUserId = form.user[0]?.value ?? null
+  const {
+    options: fileSyncOptions,
+    loading: fileSyncOptionsLoading,
+    error: fileSyncOptionsError,
+    searchSpaces: handleSearchFileSyncSpaces,
+  } = useDeveloperTokenFileSyncOptions({
+    active: formOpen,
+    tenantId: form.tenant_id,
+    userId: boundUserId,
+  })
 
   const maxPage = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
 
@@ -148,35 +156,6 @@ export default function DeveloperToken() {
     loadList(1)
   }, [])
 
-  useEffect(() => {
-    const tenantId = form.tenant_id
-    fileSyncTenantIdRef.current = tenantId
-    if (!formOpen || !tenantId) {
-      setFileSyncOptions(null)
-      setFileSyncOptionsError(null)
-      setFileSyncOptionsLoading(false)
-      return
-    }
-    let active = true
-    setFileSyncOptions(null)
-    setFileSyncOptionsError(null)
-    setFileSyncOptionsLoading(true)
-    void getDeveloperTokenFileSyncOptionsApi({
-      tenant_id: tenantId,
-      space_page: 1,
-      space_limit: 200,
-    }).then((result) => {
-      if (active && result.tenant_id === tenantId) setFileSyncOptions(result)
-    }).catch(() => {
-      if (active) setFileSyncOptionsError("load_failed")
-    }).finally(() => {
-      if (active) setFileSyncOptionsLoading(false)
-    })
-    return () => {
-      active = false
-    }
-  }, [form.tenant_id, formOpen])
-
   const handleOpenCreate = () => {
     setForm(toForm())
     setFormOpen(true)
@@ -190,51 +169,16 @@ export default function DeveloperToken() {
 
   const handleBindingChange = (value: DepartmentUserOption[]) => {
     const selectedTenantId = Number(value[0]?.tenant_id ?? user?.tenant_id) || null
-    const tenantChanged = selectedTenantId !== form.tenant_id
-    fileSyncTenantIdRef.current = selectedTenantId
+    const bindingChanged = selectedTenantId !== form.tenant_id
+      || value[0]?.value !== form.user[0]?.value
     setForm({
       ...form,
       user: value,
       binding_changed: true,
       tenant_id: selectedTenantId,
-      file_sync_rule: tenantChanged ? null : form.file_sync_rule,
+      file_sync_rule: bindingChanged ? null : form.file_sync_rule,
+      file_sync_target_display: bindingChanged ? null : form.file_sync_target_display,
     })
-    if (tenantChanged) {
-      setFileSyncOptions(null)
-      setFileSyncOptionsError(null)
-    }
-  }
-
-  const handleSearchFileSyncSpaces = async (spaceKeyword: string) => {
-    if (!form.tenant_id) return
-    setFileSyncOptionsLoading(true)
-    setFileSyncOptionsError(null)
-    try {
-      const result = await getDeveloperTokenFileSyncOptionsApi({
-        tenant_id: form.tenant_id,
-        space_page: 1,
-        space_limit: 200,
-        space_keyword: spaceKeyword || undefined,
-      })
-      if (result.tenant_id === fileSyncTenantIdRef.current) {
-        setFileSyncOptions((current) => {
-          if (!current || !spaceKeyword) return result
-          const spaces = new Map(current.knowledge_spaces.data.map((item) => [item.id, item]))
-          result.knowledge_spaces.data.forEach((item) => spaces.set(item.id, item))
-          return {
-            ...result,
-            knowledge_spaces: {
-              data: Array.from(spaces.values()),
-              total: Math.max(current.knowledge_spaces.total, result.knowledge_spaces.total),
-            },
-          }
-        })
-      }
-    } catch {
-      setFileSyncOptionsError("load_failed")
-    } finally {
-      setFileSyncOptionsLoading(false)
-    }
   }
 
   const fileSyncSummaryLabels = {
@@ -243,6 +187,8 @@ export default function DeveloperToken() {
     targetSpace: t("system.developerToken.fileSync.summary.targetSpace"),
     dynamicDepartment: t("system.developerToken.fileSync.summary.dynamicDepartment"),
     dynamicResponsiblePerson: t("system.developerToken.fileSync.summary.dynamicResponsiblePerson"),
+    root: t("system.developerToken.fileSync.targetTree.root"),
+    stale: t("system.developerToken.fileSync.targetTree.stale"),
   }
 
   const showRateLimitError = () => {
@@ -343,7 +289,11 @@ export default function DeveloperToken() {
         })
         return
       }
-      const invalidFileSyncRule = findInvalidFileSyncRule(form.file_sync_rule, fileSyncOptions)
+      const invalidFileSyncRule = findInvalidFileSyncRule(
+        form.file_sync_rule,
+        fileSyncOptions,
+        form.file_sync_target_display,
+      )
       if (invalidFileSyncRule) {
         toast({
           title: t("prompt"),
@@ -541,6 +491,7 @@ export default function DeveloperToken() {
               loading={fileSyncOptionsLoading}
               error={fileSyncOptionsError}
               onSearchSpaces={handleSearchFileSyncSpaces}
+              targetDisplay={form.file_sync_target_display}
             />
           </div>
           <DialogFooter>

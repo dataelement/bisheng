@@ -27,7 +27,10 @@ from bisheng.open_endpoints.domain.schemas.filelib_sync import (
     FilelibSyncParams,
     FilelibSyncResponseData,
 )
-from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+from bisheng.open_endpoints.domain.services.filelib_sync_service import (
+    FilelibSyncService,
+    ResolvedFileSyncTarget,
+)
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import PortalDomainConfig
 
 
@@ -383,7 +386,9 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
     service._resolve_document_type = Mock(return_value=(category, subcategory))
     service._resolve_business_domain = Mock(return_value=domain)
-    service._resolve_target_space = AsyncMock(return_value=target_space)
+    service._resolve_target_space = AsyncMock(
+        return_value=ResolvedFileSyncTarget(space=target_space, folder_id=None)
+    )
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")

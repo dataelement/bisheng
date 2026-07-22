@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useRecoilValue } from "recoil";
 
 import store from "~/store";
@@ -6,28 +6,98 @@ import type { TUser } from "~/types/chat";
 import styles from "./KnowledgePreviewWatermark.module.css";
 
 const BEIJING_TIME_ZONE = "Asia/Shanghai";
-const WATERMARK_HORIZONTAL_STEP = 240;
-const WATERMARK_VERTICAL_STEP = 160;
+const WATERMARK_FONT_SIZE = 16;
+const WATERMARK_LINE_HEIGHT = 20;
+const WATERMARK_ROTATION = -35;
+const WATERMARK_OPACITY = 0.11;
+const WATERMARK_MIN_CELL_WIDTH = 384;
+const WATERMARK_MIN_CELL_HEIGHT = 267;
+const WATERMARK_HORIZONTAL_CLEARANCE = 64;
+const WATERMARK_VERTICAL_CLEARANCE = 48;
+const WATERMARK_FONT_FAMILY = [
+    '"WenQuanYi Zen Hei"',
+    '"Microsoft YaHei"',
+    '"PingFang SC"',
+    '"Noto Sans CJK SC"',
+    "sans-serif",
+].join(", ");
 
 type KnowledgePreviewWatermarkUser = Pick<
     TUser,
     "name" | "username" | "departmentName" | "externalId"
 >;
 
-interface WatermarkGrid {
-    columns: number;
-    rows: number;
-    tileCount: number;
+interface WatermarkPatternLayout {
+    fontSize: number;
+    lineHeight: number;
+    rotation: number;
+    opacity: number;
+    textWidth: number;
+    blockHeight: number;
+    rotatedWidth: number;
+    rotatedHeight: number;
+    cellWidth: number;
+    cellHeight: number;
+    patternHeight: number;
+    secondRowOffsetX: number;
+    anchorX: number;
+    anchorY: number;
 }
 
 const KnowledgePreviewWatermarkContext = createContext<string[] | null>(null);
 
-export function calculateKnowledgePreviewWatermarkGrid(width: number, height: number): WatermarkGrid {
-    const safeWidth = Number.isFinite(width) ? Math.max(width, 0) : 0;
-    const safeHeight = Number.isFinite(height) ? Math.max(height, 0) : 0;
-    const columns = Math.max(2, Math.ceil(safeWidth / WATERMARK_HORIZONTAL_STEP) + 1);
-    const rows = Math.max(2, Math.ceil(safeHeight / WATERMARK_VERTICAL_STEP) + 1);
-    return { columns, rows, tileCount: columns * rows };
+function estimateKnowledgePreviewWatermarkLineWidth(line: string): number {
+    return [...line].reduce((width, character) => (
+        width + ((character.codePointAt(0) ?? 0) <= 0xff ? WATERMARK_FONT_SIZE * 0.62 : WATERMARK_FONT_SIZE)
+    ), 0);
+}
+
+function measureKnowledgePreviewWatermarkLineWidths(lines: readonly string[]): number[] {
+    const fallback = lines.map(estimateKnowledgePreviewWatermarkLineWidth);
+    if (typeof document === "undefined") return fallback;
+    if (typeof navigator !== "undefined" && /jsdom/i.test(navigator.userAgent)) return fallback;
+    try {
+        const context = document.createElement("canvas").getContext("2d");
+        if (!context) return fallback;
+        context.font = `${WATERMARK_FONT_SIZE}px ${WATERMARK_FONT_FAMILY}`;
+        return lines.map((line) => context.measureText(line).width);
+    } catch {
+        return fallback;
+    }
+}
+
+export function calculateKnowledgePreviewWatermarkPatternLayout(
+    lineWidths: readonly number[],
+): WatermarkPatternLayout {
+    const textWidth = Math.max(0, ...lineWidths.filter(Number.isFinite));
+    const blockHeight = WATERMARK_LINE_HEIGHT * 2;
+    const angle = Math.abs(WATERMARK_ROTATION) * Math.PI / 180;
+    const rotatedWidth = textWidth * Math.cos(angle) + blockHeight * Math.sin(angle);
+    const rotatedHeight = textWidth * Math.sin(angle) + blockHeight * Math.cos(angle);
+    const cellWidth = Math.max(
+        WATERMARK_MIN_CELL_WIDTH,
+        Math.ceil(rotatedWidth + WATERMARK_HORIZONTAL_CLEARANCE),
+    );
+    const cellHeight = Math.max(
+        WATERMARK_MIN_CELL_HEIGHT,
+        Math.ceil(rotatedHeight + WATERMARK_VERTICAL_CLEARANCE),
+    );
+    return {
+        fontSize: WATERMARK_FONT_SIZE,
+        lineHeight: WATERMARK_LINE_HEIGHT,
+        rotation: WATERMARK_ROTATION,
+        opacity: WATERMARK_OPACITY,
+        textWidth,
+        blockHeight,
+        rotatedWidth,
+        rotatedHeight,
+        cellWidth,
+        cellHeight,
+        patternHeight: cellHeight * 2,
+        secondRowOffsetX: cellWidth / 2,
+        anchorX: WATERMARK_HORIZONTAL_CLEARANCE / 2,
+        anchorY: WATERMARK_VERTICAL_CLEARANCE / 2 + textWidth * Math.sin(angle),
+    };
 }
 
 export function formatKnowledgePreviewWatermarkTime(value: Date): string {
@@ -69,46 +139,54 @@ export function KnowledgePreviewWatermarkProvider({ children }: { children: Reac
 
 export default function KnowledgePreviewWatermark() {
     const lines = useContext(KnowledgePreviewWatermarkContext);
-    const hasLines = lines !== null;
-    const overlayRef = useRef<HTMLDivElement>(null);
-    const [grid, setGrid] = useState(() => calculateKnowledgePreviewWatermarkGrid(0, 0));
+    const patternId = `knowledge-preview-watermark-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    const fallbackLayout = useMemo(
+        () => calculateKnowledgePreviewWatermarkPatternLayout(
+            measureKnowledgePreviewWatermarkLineWidths(lines ?? []),
+        ),
+        [lines],
+    );
+    const [layout, setLayout] = useState(fallbackLayout);
 
     useEffect(() => {
-        const overlay = overlayRef.current;
-        if (!overlay) return undefined;
-
-        const updateGrid = (width: number, height: number) => {
-            const next = calculateKnowledgePreviewWatermarkGrid(width, height);
-            setGrid((current) => (
-                current.columns === next.columns && current.rows === next.rows ? current : next
-            ));
+        if (!lines) return undefined;
+        let active = true;
+        const updateLayout = () => {
+            const next = calculateKnowledgePreviewWatermarkPatternLayout(
+                measureKnowledgePreviewWatermarkLineWidths(lines),
+            );
+            if (active) setLayout(next);
         };
-        const initialRect = overlay.getBoundingClientRect();
-        updateGrid(initialRect.width, initialRect.height);
-
-        if (typeof ResizeObserver === "undefined") return undefined;
-        const observer = new ResizeObserver((entries) => {
-            const rect = entries[0]?.contentRect ?? overlay.getBoundingClientRect();
-            updateGrid(rect.width, rect.height);
-        });
-        observer.observe(overlay);
-        return () => observer.disconnect();
-    }, [hasLines]);
+        updateLayout();
+        void document.fonts?.ready.then(updateLayout);
+        return () => { active = false; };
+    }, [lines]);
 
     if (!lines) return null;
 
     return (
-        <div
-            ref={overlayRef}
-            className={styles.overlay}
-            aria-hidden="true"
-            style={{ gridTemplateColumns: `repeat(${grid.columns}, ${WATERMARK_HORIZONTAL_STEP}px)` }}
-        >
-            {Array.from({ length: grid.tileCount }, (_, index) => (
-                <div className={styles.tile} key={index}>
-                    {lines.map((line) => <span className={styles.line} key={line}>{line}</span>)}
-                </div>
-            ))}
+        <div className={styles.overlay} aria-hidden="true">
+            <svg className={styles.patternCanvas} width="100%" height="100%">
+                <defs>
+                    <pattern
+                        id={patternId}
+                        patternUnits="userSpaceOnUse"
+                        width={layout.cellWidth}
+                        height={layout.patternHeight}
+                        overflow="visible"
+                    >
+                        <g transform={`translate(${layout.anchorX} ${layout.anchorY}) rotate(${layout.rotation})`}>
+                            <text className={styles.text} x="0" y={layout.fontSize}>{lines[0]}</text>
+                            <text className={styles.text} x="0" y={layout.fontSize + layout.lineHeight}>{lines[1]}</text>
+                        </g>
+                        <g transform={`translate(${layout.anchorX + layout.secondRowOffsetX} ${layout.cellHeight + layout.anchorY}) rotate(${layout.rotation})`}>
+                            <text className={styles.text} x="0" y={layout.fontSize}>{lines[0]}</text>
+                            <text className={styles.text} x="0" y={layout.fontSize + layout.lineHeight}>{lines[1]}</text>
+                        </g>
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill={`url(#${patternId})`} />
+            </svg>
         </div>
     );
 }

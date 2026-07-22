@@ -17,6 +17,8 @@ from bisheng.common.errcode.filelib_sync import (
 )
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceAmbiguousError,
+    SpaceFolderNotFoundError,
+    SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
 from bisheng.core.cache.utils import save_uploaded_file
@@ -63,6 +65,12 @@ class ResolvedClassification:
     business_domain_name: str
 
 
+@dataclass(frozen=True)
+class ResolvedFileSyncTarget:
+    space: Knowledge
+    folder_id: int | None
+
+
 class FilelibSyncService:
     def __init__(
         self,
@@ -95,9 +103,9 @@ class FilelibSyncService:
             portal_config,
             identity.selected_department,
         )
-        target_space = await self._resolve_target_space(identity)
-        self._ensure_domain_bound(target_space, domain)
-        await self._require_upload_permission(target_space)
+        target = await self._resolve_target_space(identity)
+        self._ensure_domain_bound(target.space, domain)
+        await self._require_upload_permission(target)
 
         created_file: KnowledgeFile | None = None
         temporary_file_path: str | None = None
@@ -105,13 +113,13 @@ class FilelibSyncService:
         try:
             temporary_file_path = await self._save_temporary_file(params, upload_file)
             preview_cache_key = self.knowledge_space_service.get_preview_cache_key(
-                int(target_space.id),
+                int(target.space.id),
                 temporary_file_path,
             )
             upload_results = await self.knowledge_space_service.add_file(
-                knowledge_id=int(target_space.id),
+                knowledge_id=int(target.space.id),
                 file_path=[temporary_file_path],
-                parent_id=None,
+                parent_id=target.folder_id,
                 file_category_code=self.file_sync_rule.category.code,
                 file_subcategory_code=self.file_sync_rule.category.subcategory_code,
                 business_domain_code=domain.code,
@@ -148,19 +156,20 @@ class FilelibSyncService:
                 [preview_cache_key],
             )
             logger.info(
-                "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} user_id={}",
+                "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} folder_id={} user_id={}",
                 self.token_id,
                 params.external_file_id,
                 created_file.id,
-                target_space.id,
+                target.space.id,
+                target.folder_id,
                 self.login_user.user_id,
             )
             return FilelibSyncResponseData(
                 external_file_id=params.external_file_id,
                 file_id=int(created_file.id),
                 file_encoding=str(created_file.file_encoding),
-                knowledge_id=int(target_space.id),
-                knowledge_name=target_space.name,
+                knowledge_id=int(target.space.id),
+                knowledge_name=target.space.name,
                 status=int(created_file.status),
             )
         except Exception:
@@ -324,15 +333,19 @@ class FilelibSyncService:
     async def _resolve_target_space(
         self,
         identity: ResolvedIdentity,
-    ) -> Knowledge:
+    ) -> ResolvedFileSyncTarget:
         if self.file_sync_rule.target_space.mode == "fixed":
             space = await self.repository.find_knowledge_by_id(int(self.file_sync_rule.target_space.knowledge_id))
             if space is None:
                 raise FilelibSyncNotFoundError(msg="configured target knowledge space does not exist")
-            return space
+            return ResolvedFileSyncTarget(
+                space=space,
+                folder_id=self.file_sync_rule.target_space.folder_id,
+            )
         if identity.selected_department is None:
             raise FilelibSyncNotFoundError(msg="dynamic target department does not exist")
-        return await self._find_nearest_department_space(identity.selected_department)
+        space = await self._find_nearest_department_space(identity.selected_department)
+        return ResolvedFileSyncTarget(space=space, folder_id=None)
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:
         chain = self._department_chain(department)
@@ -367,11 +380,17 @@ class FilelibSyncService:
         if int(space.id) not in configured_space_ids or domain_code not in allowed_codes:
             raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台的{space.name}不存在{domain.name}")
 
-    async def _require_upload_permission(self, space: Knowledge) -> None:
+    async def _require_upload_permission(self, target: ResolvedFileSyncTarget) -> None:
         try:
-            await self.knowledge_space_service.require_root_upload_permission(int(space.id))
+            await KnowledgeSpaceService.validate_file_sync_target(
+                login_user=self.login_user,
+                knowledge_id=int(target.space.id),
+                folder_id=target.folder_id,
+            )
+        except (SpaceNotFoundError, SpaceFolderNotFoundError) as exc:
+            raise FilelibSyncNotFoundError(msg="configured file sync target does not exist") from exc
         except SpacePermissionDeniedError as exc:
-            raise FilelibSyncPermissionDeniedError(msg="no upload permission for target knowledge space") from exc
+            raise FilelibSyncPermissionDeniedError(msg="no upload permission for file sync target") from exc
 
     @staticmethod
     async def _save_temporary_file(

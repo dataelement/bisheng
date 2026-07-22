@@ -12,7 +12,6 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenAdminForbiddenError,
     DeveloperTokenInvalidFileSyncRuleError,
 )
-from bisheng.common.schemas.api import PageData
 from bisheng.core.context.tenant import (
     current_tenant_id,
     get_current_tenant_id,
@@ -26,9 +25,12 @@ from bisheng.developer_token.domain.schemas import (
     FileSyncOptionBusinessDomain,
     FileSyncOptionCategory,
     FileSyncOptionChild,
-    FileSyncOptionKnowledgeSpace,
+    FileSyncTargetSpaceGroup,
+    FileSyncTargetSpaceGroupsPage,
+    FileSyncTargetSpaceOption,
 )
 from bisheng.developer_token.domain.services.developer_token_service import DeveloperTokenService
+from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 ENDPOINT_MOD = "bisheng.developer_token.api.endpoints.developer_token"
 
@@ -52,6 +54,7 @@ def _app(login_user):
 def test_options_route_precedes_dynamic_token_route_and_forwards_query() -> None:
     response = DeveloperTokenFileSyncOptions(
         tenant_id=5,
+        user_id=7,
         categories=[
             FileSyncOptionCategory(
                 code="POLICY",
@@ -60,9 +63,23 @@ def test_options_route_precedes_dynamic_token_route_and_forwards_query() -> None
             )
         ],
         business_domains=[FileSyncOptionBusinessDomain(code="SA", name="安全")],
-        knowledge_spaces=PageData(
-            data=[FileSyncOptionKnowledgeSpace(id=118, name="安全库")],
-            total=1,
+        target_space_groups=FileSyncTargetSpaceGroupsPage(
+            data=[
+                FileSyncTargetSpaceGroup(
+                    space_type="department",
+                    spaces=[
+                        FileSyncTargetSpaceOption(
+                            id=118,
+                            name="安全库",
+                            selectable=True,
+                            has_children=False,
+                        )
+                    ],
+                )
+            ],
+            has_more=False,
+            next_cursor=None,
+            page_size=25,
         ),
     )
     service = AsyncMock(return_value=response)
@@ -73,21 +90,20 @@ def test_options_route_precedes_dynamic_token_route_and_forwards_query() -> None
             "/api/v1/admin/developer-tokens/config/file-sync-options",
             params={
                 "tenant_id": 5,
-                "space_page": 2,
-                "space_limit": 25,
+                "user_id": 7,
+                "space_cursor": "next",
+                "space_page_size": 25,
                 "space_keyword": "安全",
             },
         )
 
     assert result.status_code == 200
-    assert result.json()["data"]["knowledge_spaces"] == {
-        "data": [{"id": 118, "name": "安全库"}],
-        "total": 1,
-    }
+    assert result.json()["data"]["target_space_groups"]["data"][0]["spaces"][0]["id"] == 118
     assert service.await_args.kwargs == {
         "tenant_id": 5,
-        "space_page": 2,
-        "space_limit": 25,
+        "user_id": 7,
+        "space_cursor": "next",
+        "space_page_size": 25,
         "space_keyword": "安全",
     }
 
@@ -115,18 +131,39 @@ async def test_options_filter_invalid_categories_disabled_domains_and_page_space
         )
     )
 
-    class Repo:
-        @staticmethod
-        async def list_file_sync_spaces(*, page, limit, keyword):
-            assert (page, limit, keyword) == (2, 25, "安全")
-            return [SimpleNamespace(id=118, name="安全库")], 26
-
-    monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
+    bound_user = UserPayload(user_id=7, user_name="bound", user_role=[2], tenant_id=5)
+    list_spaces = AsyncMock(
+        return_value=SimpleNamespace(
+            items=[
+                SimpleNamespace(
+                    id=118,
+                    name="安全库",
+                    space_type="department",
+                    selectable=True,
+                    has_children=False,
+                )
+            ],
+            has_more=False,
+            next_cursor=None,
+        )
+    )
     monkeypatch.setattr(DeveloperTokenService, "_assert_admin_scope", AsyncMock())
     monkeypatch.setattr(
         DeveloperTokenService,
         "_get_file_sync_portal_config",
         AsyncMock(return_value=config),
+    )
+    monkeypatch.setattr(
+        DeveloperTokenService,
+        "_get_bound_user_payload",
+        AsyncMock(return_value=bound_user),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        KnowledgeSpaceService,
+        "list_file_sync_target_spaces",
+        list_spaces,
+        raising=False,
     )
     current_token = set_current_tenant_id(99)
     visible_token = set_visible_tenant_ids(frozenset({99}))
@@ -134,8 +171,9 @@ async def test_options_filter_invalid_categories_disabled_domains_and_page_space
         result = await DeveloperTokenService.get_file_sync_options(
             _operator(),
             tenant_id=5,
-            space_page=2,
-            space_limit=25,
+            user_id=7,
+            space_cursor="next",
+            space_page_size=25,
             space_keyword=" 安全 ",
         )
 
@@ -145,7 +183,13 @@ async def test_options_filter_invalid_categories_disabled_domains_and_page_space
             "children": [{"code": "MGMT_POLICY", "label": "管理政策"}],
         }
         assert [item.model_dump() for item in result.business_domains] == [{"code": "SA", "name": "安全"}]
-        assert result.knowledge_spaces.total == 26
+        assert result.target_space_groups.next_cursor is None
+        list_spaces.assert_awaited_once_with(
+            login_user=bound_user,
+            cursor="next",
+            page_size=25,
+            keyword="安全",
+        )
         assert get_current_tenant_id() == 99
         assert get_visible_tenant_ids() == frozenset({99})
     finally:
@@ -163,7 +207,7 @@ async def test_options_requires_portal_config(monkeypatch) -> None:
     )
 
     with pytest.raises(DeveloperTokenInvalidFileSyncRuleError) as exc_info:
-        await DeveloperTokenService.get_file_sync_options(_operator(), tenant_id=5)
+        await DeveloperTokenService.get_file_sync_options(_operator(), tenant_id=5, user_id=7)
 
     assert exc_info.value.code == 19813
 
@@ -177,7 +221,7 @@ async def test_options_rejects_cross_tenant_scope_before_loading_resources(monke
     monkeypatch.setattr(DeveloperTokenService, "_get_file_sync_portal_config", load_config)
 
     with pytest.raises(DeveloperTokenAdminForbiddenError):
-        await DeveloperTokenService.get_file_sync_options(operator, tenant_id=8)
+        await DeveloperTokenService.get_file_sync_options(operator, tenant_id=8, user_id=7)
 
     check_scope.assert_awaited_once_with(operator, 8)
     load_config.assert_not_awaited()

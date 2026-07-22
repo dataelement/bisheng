@@ -16,19 +16,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const configuredRule: FileSyncRule = {
   category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
   business_domain: { mode: "fixed", code: "SAFETY" },
-  target_space: { mode: "dynamic", knowledge_id: null },
+  target_space: { mode: "dynamic", knowledge_id: null, folder_id: null },
   dynamic_source: "department_id",
 }
 
-const emptyOptions = (tenantId: number): DeveloperTokenFileSyncOptions => ({
+const emptyOptions = (tenantId: number, userId: number): DeveloperTokenFileSyncOptions => ({
   tenant_id: tenantId,
+  user_id: userId,
   categories: [{
     code: "POLICY",
     label: "Policy",
     children: [{ code: "MGMT_POLICY", label: "Management policy" }],
   }],
   business_domains: [{ code: "SAFETY", name: "Safety" }],
-  knowledge_spaces: { data: [], total: 0 },
+  target_space_groups: {
+    data: [],
+    has_more: false,
+    next_cursor: null,
+    page_size: 50,
+  },
 })
 
 vi.mock("@/controllers/API/developerToken", () => ({
@@ -127,7 +133,9 @@ describe("DeveloperToken file-sync integration", () => {
       total: 1,
     })
     mockedGetDetail.mockResolvedValue({} as never)
-    mockedGetOptions.mockImplementation(async ({ tenant_id }) => emptyOptions(tenant_id))
+    mockedGetOptions.mockImplementation(async ({ tenant_id, user_id }) => (
+      emptyOptions(tenant_id, user_id)
+    ))
     mockedCreate.mockResolvedValue({ plaintext_token: "secret", token: {} as never })
   })
 
@@ -145,13 +153,19 @@ describe("DeveloperToken file-sync integration", () => {
     })
 
     fireEvent.click(screen.getByRole("button", { name: "select-tenant-2" }))
-    await waitFor(() => expect(mockedGetOptions).toHaveBeenCalledWith(expect.objectContaining({ tenant_id: 2 })))
+    await waitFor(() => expect(mockedGetOptions).toHaveBeenCalledWith(expect.objectContaining({
+      tenant_id: 2,
+      user_id: 22,
+    })))
     fireEvent.click(screen.getByRole("button", { name: "configure-file-sync" }))
     expect(screen.getByTestId("integrated-rule-state")).toHaveTextContent("configured")
 
     fireEvent.click(screen.getByRole("button", { name: "select-tenant-3" }))
     expect(screen.getByTestId("integrated-rule-state")).toHaveTextContent("empty")
-    await waitFor(() => expect(mockedGetOptions).toHaveBeenCalledWith(expect.objectContaining({ tenant_id: 3 })))
+    await waitFor(() => expect(mockedGetOptions).toHaveBeenCalledWith(expect.objectContaining({
+      tenant_id: 3,
+      user_id: 33,
+    })))
 
     fireEvent.click(screen.getByRole("button", { name: "configure-file-sync" }))
     fireEvent.click(screen.getByRole("button", { name: "confirmButton" }))

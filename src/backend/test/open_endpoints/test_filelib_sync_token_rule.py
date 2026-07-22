@@ -248,10 +248,11 @@ async def test_fixed_dynamic_matrix_resolves_independent_dimensions(
         new=AsyncMock(return_value=22),
     ):
         domain = service._resolve_business_domain(config, selected_department)
-        space = await service._resolve_target_space(identity)
+        target = await service._resolve_target_space(identity)
 
     assert domain.code == expected_domain
-    assert space.id == expected_space
+    assert target.space.id == expected_space
+    assert target.folder_id is None
 
 
 @pytest.mark.asyncio

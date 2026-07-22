@@ -88,7 +88,11 @@ export default function DeveloperTokenTable({
                     : t("system.developerToken.routeRules.allRoutes")}
                 </TableCell>
                 <TableCell className="max-w-80 text-xs">
-                  {formatFileSyncRuleSummary(row.file_sync_rule, fileSyncSummaryLabels)}
+                  {formatFileSyncRuleSummary(
+                    row.file_sync_rule,
+                    fileSyncSummaryLabels,
+                    row.file_sync_target_display,
+                  )}
                 </TableCell>
                 <TableCell className="text-xs">
                   <div>{row.last_used_time ? formatIsoDateTime(row.last_used_time) : "-"}</div>

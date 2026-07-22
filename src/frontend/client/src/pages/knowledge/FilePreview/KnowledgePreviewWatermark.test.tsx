@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { readFileSync } from "fs";
 import path from "path";
 import { RecoilRoot } from "recoil";
@@ -7,7 +7,7 @@ import store from "~/store";
 import KnowledgePreviewWatermark, {
     KnowledgePreviewWatermarkProvider,
     buildKnowledgePreviewWatermarkLines,
-    calculateKnowledgePreviewWatermarkGrid,
+    calculateKnowledgePreviewWatermarkPatternLayout,
     formatKnowledgePreviewWatermarkTime,
 } from "./KnowledgePreviewWatermark";
 
@@ -25,21 +25,6 @@ const currentUser = {
     updatedAt: "",
 };
 
-let resizeCallback: ResizeObserverCallback | null = null;
-const originalResizeObserver = globalThis.ResizeObserver;
-
-class ResizeObserverMock {
-    constructor(callback: ResizeObserverCallback) {
-        resizeCallback = callback;
-    }
-
-    observe() {}
-
-    unobserve() {}
-
-    disconnect() {}
-}
-
 function renderWatermark(user = currentUser) {
     return render(
         <RecoilRoot initializeState={({ set }) => set(store.user, user)}>
@@ -56,13 +41,10 @@ describe("KnowledgePreviewWatermark", () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.setSystemTime(new Date("2026-07-21T04:05:06.000Z"));
-        resizeCallback = null;
-        globalThis.ResizeObserver = ResizeObserverMock;
     });
 
     afterEach(() => {
         jest.useRealTimers();
-        globalThis.ResizeObserver = originalResizeObserver;
     });
 
     test("uses the current Bisheng user and keeps the mount-time Beijing clock", () => {
@@ -99,28 +81,27 @@ describe("KnowledgePreviewWatermark", () => {
             new Date(),
         )[0]).toBe("lisi--lisi-2026-07-21");
 
-        const compactGrid = calculateKnowledgePreviewWatermarkGrid(800, 640);
-        const tallGrid = calculateKnowledgePreviewWatermarkGrid(800, 2400);
-        expect(compactGrid).toEqual({ columns: 5, rows: 5, tileCount: 25 });
-        expect(tallGrid.tileCount).toBeGreaterThan(compactGrid.tileCount);
+        const normalLayout = calculateKnowledgePreviewWatermarkPatternLayout([240, 220]);
+        const longLayout = calculateKnowledgePreviewWatermarkPatternLayout([760, 320]);
+        expect(normalLayout.cellWidth).toBe(384);
+        expect(normalLayout.cellHeight).toBe(267);
+        expect(normalLayout.patternHeight).toBe(534);
+        expect(normalLayout.secondRowOffsetX).toBe(192);
+        expect(normalLayout.rotation).toBe(-35);
+        expect(normalLayout.fontSize).toBe(16);
+        expect(normalLayout.opacity).toBe(0.11);
+        expect(longLayout.cellWidth).toBeGreaterThan(normalLayout.cellWidth);
+        expect(longLayout.cellHeight).toBeGreaterThan(normalLayout.cellHeight);
+        expect(longLayout.cellWidth).toBeGreaterThanOrEqual(Math.ceil(longLayout.rotatedWidth + 64));
+        expect(longLayout.cellHeight).toBeGreaterThanOrEqual(Math.ceil(longLayout.rotatedHeight + 48));
 
         const { container } = renderWatermark();
         const overlay = container.querySelector('[aria-hidden="true"]');
-        expect(overlay?.children).toHaveLength(4);
-        act(() => {
-            resizeCallback?.(
-                [{ contentRect: { width: 800, height: 640 } } as ResizeObserverEntry],
-                {} as ResizeObserver,
-            );
-        });
-        expect(overlay?.children).toHaveLength(25);
-        act(() => {
-            resizeCallback?.(
-                [{ contentRect: { width: 800, height: 2400 } } as ResizeObserverEntry],
-                {} as ResizeObserver,
-            );
-        });
-        expect(overlay?.children).toHaveLength(tallGrid.tileCount);
+        expect(overlay?.querySelectorAll("svg")).toHaveLength(1);
+        expect(overlay?.querySelectorAll("pattern")).toHaveLength(1);
+        expect(overlay?.querySelectorAll("rect")).toHaveLength(1);
+        expect(overlay?.querySelectorAll("g")).toHaveLength(2);
+        expect(overlay?.querySelectorAll("text")).toHaveLength(4);
 
         const styleSource = readFileSync(
             path.resolve(process.cwd(), "src/pages/knowledge/FilePreview/KnowledgePreviewWatermark.module.css"),
@@ -155,11 +136,10 @@ describe("KnowledgePreviewWatermark", () => {
         expect(styleSource).toMatch(/user-select:\s*none/);
         expect(styleSource).toMatch(/font-family:[^;]*(WenQuanYi Zen Hei|Microsoft YaHei)/);
         expect(styleSource).toMatch(/font-size:\s*16px/);
-        expect(styleSource).toMatch(/rgba\(115,\s*115,\s*115,\s*0\.16\)/);
-        expect(styleSource).toMatch(/transform:\s*rotate\(-35deg\)/);
-        expect(styleSource).toMatch(/grid-auto-rows:\s*160px/);
-        expect(styleSource).toMatch(/padding:\s*48px\s+0\s+0\s+27px/);
-        expect(styleSource).toMatch(/240px/);
+        expect(styleSource).toMatch(/fill:\s*#737373/);
+        expect(styleSource).toMatch(/fill-opacity:\s*0\.11/);
+        expect(styleSource).not.toMatch(/grid-auto-rows/);
+        expect(styleSource).not.toMatch(/240px/);
         expect(styleSource).not.toMatch(/align-content:\s*space-around/);
         expect(filePreviewSource).toContain("<KnowledgePreviewWatermarkProvider>");
         expect(filePreviewSource).not.toContain("<KnowledgePreviewWatermark />");
@@ -168,10 +148,13 @@ describe("KnowledgePreviewWatermark", () => {
         expect(userDataSource).toContain("external_id");
         expect(userDataSource).toContain('"departmentName"');
         expect(userDataSource).toContain('"externalId"');
-        expect(readFileSync(
+        const watermarkSource = readFileSync(
             path.resolve(process.cwd(), "src/pages/knowledge/FilePreview/KnowledgePreviewWatermark.tsx"),
             "utf8",
-        )).toContain("ResizeObserver");
+        );
+        expect(watermarkSource).toContain("<pattern");
+        expect(watermarkSource).not.toContain("ResizeObserver");
+        expect(watermarkSource).not.toContain("Array.from");
         expect(viewerSources).toContain("data-preview-watermark-surface");
         expect(viewerSources).toContain("<KnowledgePreviewWatermark />");
         expect(viewerSources).toMatch(/relative[^"\n]*overflow-hidden|overflow-hidden[^"\n]*relative/);

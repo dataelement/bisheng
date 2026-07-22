@@ -198,6 +198,22 @@
         "stale": "The saved value is stale. Its original value is retained until you select a replacement.",
         "spaceSearchPlaceholder": "Search knowledge-space names",
         "searchSpace": "Search spaces",
+        "targetTree": {
+          "groups": {
+            "public": "Public spaces",
+            "department": "Department spaces"
+          },
+          "root": "Space root",
+          "navigationOnly": "Navigation only; cannot be selected",
+          "loading": "Loading target spaces…",
+          "error": "Failed to load target spaces. Please retry.",
+          "empty": "No public or department spaces found.",
+          "noPermission": "The bound user cannot upload to any listed root or folder.",
+          "stale": "The current target is unavailable. Select another target.",
+          "loadingChildren": "Loading folders…",
+          "childrenError": "Failed to load folders. Expand again to retry.",
+          "loadMore": "Load more folders"
+        },
         "modes": {
           "fixed": "Fixed configuration",
           "dynamic": "Resolve at runtime"
