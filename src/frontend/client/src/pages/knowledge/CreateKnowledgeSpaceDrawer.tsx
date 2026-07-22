@@ -296,10 +296,33 @@ export function CreateKnowledgeSpaceDrawer({
         () => levelOptions.filter((option) => option.enabled),
         [levelOptions],
     );
-    const visibleLevelOptions = useMemo(
-        () => enabledLevelOptions,
-        [enabledLevelOptions],
-    );
+    const visibleLevelOptions = useMemo(() => {
+        if (mode !== "create") return enabledLevelOptions;
+
+        let filtered: typeof enabledLevelOptions = [];
+        switch (initialSpaceLevel) {
+            case SpaceLevel.TEAM:
+                filtered = enabledLevelOptions.filter(
+                    (option) => option.value === SpaceLevel.TEAM
+                        || (createOptions?.canCreateDepartment && option.value === SpaceLevel.DEPARTMENT),
+                );
+                break;
+            case SpaceLevel.PUBLIC:
+                filtered = enabledLevelOptions.filter((option) => option.value === SpaceLevel.PUBLIC);
+                break;
+            case SpaceLevel.DEPARTMENT:
+                filtered = enabledLevelOptions.filter((option) => option.value === SpaceLevel.DEPARTMENT);
+                break;
+            case SpaceLevel.PERSONAL:
+                filtered = enabledLevelOptions.filter((option) => option.value === SpaceLevel.PERSONAL);
+                break;
+            default:
+                filtered = enabledLevelOptions;
+        }
+
+        // Fallback to all enabled options if the requested level is unavailable.
+        return filtered.length > 0 ? filtered : enabledLevelOptions;
+    }, [enabledLevelOptions, initialSpaceLevel, createOptions?.canCreateDepartment, mode]);
     const selectedLevelCreateEnabled = useMemo(() => {
         if (mode !== "create") return true;
         return Boolean(levelOptions.find((option) => option.value === spaceLevel)?.enabled);

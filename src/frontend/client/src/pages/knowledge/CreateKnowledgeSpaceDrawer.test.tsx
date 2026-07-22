@@ -267,7 +267,27 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
-        expect(screen.getByRole("radio", { name: "个人知识库" })).toHaveAttribute("aria-checked", "false");
+        expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("radio", { name: "科室知识库" })).not.toBeInTheDocument();
+    });
+
+    test("部门管理员创建团队知识库时同时展示科室和团队选项", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: true,
+            canCreateTeam: true,
+            canCreatePersonal: false,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.TEAM,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("radio", { name: "科室知识库" })).toHaveAttribute("aria-checked", "false");
+        expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
     });
 
     test("科室知识库创建需要选择部门并提交部门", async () => {
