@@ -20,6 +20,7 @@ import { useLocalize } from "~/hooks";
 import {
     getCreateSpaceOptionsApi,
     getCreateSpaceDepartmentsApi,
+    getCreateSpaceMyDepartmentTreeApi,
     getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibrariesByKnowledgeApi,
     getKnowledgeSpaceTagLibraryDetailApi,
@@ -214,6 +215,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
     const [departmentDropdownOpen, setDepartmentDropdownOpen] = useState(false);
+    const [boundDepartmentIds, setBoundDepartmentIds] = useState<number[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagLibraryIds, setAutoTagLibraryIds] = useState<number[]>([]);
     const [autoTagLibraryTags, setAutoTagLibraryTags] = useState<string[]>([]);
@@ -410,15 +412,26 @@ export function CreateKnowledgeSpaceDrawer({
         }
     };
 
-    const loadCreateDepartments = useCallback(async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
-        const res = await getCreateSpaceDepartmentsApi({
-            page: 1,
-            pageSize: 100,
-            approvalRequest: mode === "create" && showApprovalReason,
-            signal: config?.signal,
-        });
-        return res.data;
-    }, [mode, showApprovalReason]);
+    const loadCreateDepartments = useCallback(
+        async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
+            if (isClinicContext) {
+                const res = await getCreateSpaceMyDepartmentTreeApi({
+                    excludeSpaceId: mode === "edit" ? editingSpace?.id : undefined,
+                    signal: config?.signal,
+                });
+                setBoundDepartmentIds(res.bound_department_ids);
+                return res.data;
+            }
+            const res = await getCreateSpaceDepartmentsApi({
+                page: 1,
+                pageSize: 100,
+                approvalRequest: mode === "create" && showApprovalReason,
+                signal: config?.signal,
+            });
+            return res.data;
+        },
+        [isClinicContext, mode, showApprovalReason, editingSpace?.id],
+    );
 
     // Pre-fill form in edit mode
     useEffect(() => {
@@ -854,6 +867,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                     onIncludeChildrenChange={() => undefined}
                                                     selectionMode="single"
                                                     loadDepartments={loadCreateDepartments}
+                                                    disabledIds={boundDepartmentIds}
                                                 />
                                             </div>
                                         </PopoverContent>

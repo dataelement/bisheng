@@ -221,6 +221,11 @@ export interface KnowledgeSpaceCreateDepartmentNode {
     children?: KnowledgeSpaceCreateDepartmentNode[];
 }
 
+export interface KnowledgeSpaceCreateMyDepartmentTreeResponse {
+    data: KnowledgeSpaceCreateDepartmentNode[];
+    bound_department_ids: number[];
+}
+
 export interface KnowledgeSpaceCreateOptionUserGroup {
     id: number;
     groupName: string;
@@ -1342,6 +1347,28 @@ export async function getCreateSpaceDepartmentsApi(params?: {
     return {
         data: rows.map((dept) => mapCreateDepartmentNode(dept)),
         total: Number(raw.total ?? rows.length),
+    };
+}
+
+export async function getCreateSpaceMyDepartmentTreeApi(params?: {
+    excludeSpaceId?: string | number;
+    signal?: AbortSignal;
+}): Promise<KnowledgeSpaceCreateMyDepartmentTreeResponse> {
+    const res = await request.get<ApiResponse<any>>(
+        `/api/v1/knowledge/space/create-options/my-department-tree`,
+        {
+            params: {
+                exclude_space_id: params?.excludeSpaceId ?? undefined,
+            },
+            signal: params?.signal,
+        },
+    );
+    const raw: any = res?.data ?? {};
+    return {
+        data: asArray<any>(raw.data).map((dept) => mapCreateDepartmentNode(dept)),
+        bound_department_ids: asArray<any>(raw.bound_department_ids)
+            .map((id) => Number(id))
+            .filter(Number.isFinite),
     };
 }
 

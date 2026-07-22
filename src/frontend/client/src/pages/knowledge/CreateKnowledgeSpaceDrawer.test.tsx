@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { CreateKnowledgeSpaceDrawer } from "./CreateKnowledgeSpaceDrawer";
-import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, getKnowledgeSpaceTagLibrariesApi, getKnowledgeSpaceTagLibrariesByKnowledgeApi, getKnowledgeSpaceTagLibraryDetailApi, getSpaceInfoApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
+import { getCreateSpaceMyDepartmentTreeApi, getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, getKnowledgeSpaceTagLibrariesApi, getKnowledgeSpaceTagLibrariesByKnowledgeApi, getKnowledgeSpaceTagLibraryDetailApi, getSpaceInfoApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
 
 const mockShowToast = jest.fn();
 
@@ -70,6 +70,12 @@ jest.mock("~/components/ui/Sheet", () => ({
     SheetTitle: ({ children, ...props }: any) => <h2 {...props}>{children}</h2>,
 }));
 
+jest.mock("~/components/ui/Popover", () => ({
+    Popover: ({ children }: any) => <div>{children}</div>,
+    PopoverTrigger: ({ children, asChild }: any) => (asChild ? <>{children}</> : <div>{children}</div>),
+    PopoverContent: ({ children }: any) => <div>{children}</div>,
+}));
+
 jest.mock("~/components/ui/Select", () => ({
     Select: ({ children }: any) => <div>{children}</div>,
     SelectContent: ({ children }: any) => <div>{children}</div>,
@@ -124,11 +130,12 @@ jest.mock("~/components/icons/channels", () => ({
 }));
 
 jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
-    SubjectSearchDepartment: ({ value, onChange, loadDepartments }: any) => {
+    SubjectSearchDepartment: ({ value, onChange, loadDepartments, disabledIds = [] }: any) => {
         const React = require("react");
         const [departments, setDepartments] = React.useState<any[]>([]);
         const [loading, setLoading] = React.useState(Boolean(loadDepartments));
         const [failed, setFailed] = React.useState(false);
+        const disabledSet = React.useMemo(() => new Set(disabledIds), [disabledIds]);
 
         React.useEffect(() => {
             if (!loadDepartments) return;
@@ -150,19 +157,24 @@ jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
         }, [loadDepartments]);
 
         return (
-            <div data-testid="department-selector">
+            <div data-testid="department-selector" data-disabled-ids={JSON.stringify(Array.from(disabledSet))}>
                 <span>{value?.[0]?.name ?? "未选择部门"}</span>
                 {loading ? <span>加载部门中</span> : null}
                 {!loading && failed ? <span>暂无部门数据</span> : null}
-                {!loading && departments.map((department) => (
-                    <button
-                        key={department.id}
-                        type="button"
-                        onClick={() => onChange([{ type: "department", id: department.id, name: department.name }])}
-                    >
-                        选择{department.name}
-                    </button>
-                ))}
+                {!loading && departments.map((department) => {
+                    const disabled = disabledSet.has(department.id);
+                    return (
+                        <button
+                            key={department.id}
+                            type="button"
+                            disabled={disabled}
+                            data-disabled={disabled ? "true" : "false"}
+                            onClick={() => onChange([{ type: "department", id: department.id, name: department.name }])}
+                        >
+                            选择{department.name}{disabled ? "(已绑定)" : ""}
+                        </button>
+                    );
+                })}
                 {!loading && departments.length === 0 ? (
                     <button
                         type="button"
@@ -194,6 +206,7 @@ jest.mock("~/api/knowledge", () => ({
     },
     getCreateSpaceOptionsApi: jest.fn(),
     getCreateSpaceDepartmentsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+    getCreateSpaceMyDepartmentTreeApi: jest.fn().mockResolvedValue({ data: [], bound_department_ids: [] }),
     getCreateSpaceUserGroupsApi: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     getKnowledgeSpaceAutoTagVisibilityApi: jest.fn().mockResolvedValue({ visible: false }),
     getKnowledgeSpaceTagLibrariesApi: jest.fn().mockResolvedValue({
@@ -295,6 +308,38 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "false");
         expect(screen.getByText("绑定科室")).toBeInTheDocument();
         expect(screen.getByText("申请理由")).toBeInTheDocument();
+    });
+
+    test("科室知识库场景调用新接口获取当前用户部门树并标记已绑定部门", async () => {
+        jest.mocked(getCreateSpaceMyDepartmentTreeApi).mockResolvedValue({
+            data: [
+                { id: 1, dept_id: "SG-1", name: "研发部", parent_id: null, children: [] },
+                { id: 2, dept_id: "SG-2", name: "前端组", parent_id: 1, children: [] },
+            ],
+            bound_department_ids: [2],
+        });
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: true,
+            canCreateTeam: true,
+            canCreatePersonal: false,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.TEAM,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        fireEvent.click(screen.getByRole("radio", { name: "科室知识库" }));
+
+        await waitFor(() => expect(getCreateSpaceMyDepartmentTreeApi).toHaveBeenCalledTimes(1));
+        expect(getCreateSpaceMyDepartmentTreeApi).toHaveBeenCalledWith(expect.objectContaining({ excludeSpaceId: undefined }));
+
+        const selector = await screen.findByTestId("department-selector");
+        expect(selector).toHaveAttribute("data-disabled-ids", JSON.stringify([2]));
+        expect(screen.getByRole("button", { name: "选择前端组(已绑定)" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "选择研发部" })).not.toBeDisabled();
     });
 
     test("部门知识库创建需要选择部门并提交部门", async () => {
