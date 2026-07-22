@@ -11,6 +11,11 @@ from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagLink, TagResourceTypeEnum
+from bisheng.knowledge.domain.constants import (
+    BUSINESS_DOMAIN_OPTIONS,
+    get_business_domain_code_from_file,
+    parse_shougang_file_encoding_codes,
+)
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileSource,
@@ -35,7 +40,12 @@ AUTO_TAG_MAX_AI_TAGS_PER_FILE = 5
 AUTO_TAG_LINK_B_MAX_LINK_A_TAGS = 3
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
     "你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。\n"
-    '输出格要求严格遵循 JSON 格式： {"tags": ["标签名"]}。'
+    "请结合文件的业务域、文件分类与文件内容选择标签。\n"
+    '输出格式要求严格遵循 JSON：有合适标签时输出 {"tags": ["标签名"]}；'
+    '没有合适标签时输出 {"tags": []}。'
+)
+AUTO_TAG_CONTEXT_INSTRUCTION = (
+    '请结合上述业务域、文件分类与文件内容，从候选标签中选择最相关的标签；若无合适标签则输出 {"tags": []}。'
 )
 
 
@@ -87,7 +97,10 @@ class KnowledgeSpaceAutoTagService:
                 user_id=db_file.user_id,
                 temperature=0,
             )
-            system_prompt = (llm_config.auto_tag_prompt or "").strip() or DEFAULT_AUTO_TAG_SYSTEM_PROMPT
+            system_prompt = cls._build_auto_tag_system_prompt(
+                (llm_config.auto_tag_prompt or "").strip() or DEFAULT_AUTO_TAG_SYSTEM_PROMPT,
+                db_file,
+            )
 
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
             selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
@@ -202,6 +215,80 @@ class KnowledgeSpaceAutoTagService:
         if not content and db_file.abstract:
             content = db_file.abstract.strip()
         return content[:AUTO_TAG_MAX_CONTENT]
+
+    @staticmethod
+    def _format_business_domain_display(business_domain_code: str | None) -> str | None:
+        normalized = (business_domain_code or "").strip().upper()
+        if not normalized:
+            return None
+        label = BUSINESS_DOMAIN_OPTIONS.get(normalized)
+        return f"{normalized}（{label}）" if label else normalized
+
+    @staticmethod
+    def _normalize_category_code(value: str | None) -> str | None:
+        if not isinstance(value, str):
+            return None
+        code = value.strip().upper()
+        if not code or len(code) > 16:
+            return None
+        return code
+
+    @classmethod
+    def _get_file_category_code_from_split_rule(cls, split_rule) -> str | None:
+        if isinstance(split_rule, str) and split_rule.strip():
+            try:
+                split_rule = json.loads(split_rule)
+            except json.JSONDecodeError:
+                return None
+        if not isinstance(split_rule, dict):
+            return None
+        return cls._normalize_category_code(split_rule.get("file_category_code"))
+
+    @classmethod
+    def _resolve_file_category_code(cls, db_file: KnowledgeFile) -> str | None:
+        file_category_code = cls._get_file_category_code_from_split_rule(getattr(db_file, "split_rule", None))
+        if file_category_code:
+            return file_category_code
+        document_code, _ = parse_shougang_file_encoding_codes(db_file)
+        return document_code or None
+
+    @classmethod
+    def _resolve_file_tagging_context(cls, db_file: KnowledgeFile) -> tuple[str | None, str | None]:
+        business_domain_code = get_business_domain_code_from_file(db_file)
+        business_domain = cls._format_business_domain_display(business_domain_code)
+
+        category_parts: list[str] = []
+        file_category_code = cls._resolve_file_category_code(db_file)
+        if file_category_code:
+            category_parts.append(file_category_code)
+        file_subcategory_code = cls._normalize_category_code(getattr(db_file, "file_subcategory_code", None))
+        if file_subcategory_code and file_subcategory_code not in category_parts:
+            category_parts.append(file_subcategory_code)
+        file_category = " / ".join(category_parts) if category_parts else None
+        return business_domain, file_category
+
+    @classmethod
+    def _build_file_context_system_prompt(
+        cls,
+        base_prompt: str,
+        db_file: KnowledgeFile,
+        context_instruction: str,
+    ) -> str:
+        business_domain, file_category = cls._resolve_file_tagging_context(db_file)
+        context_lines: list[str] = []
+        if business_domain:
+            context_lines.append(f"业务域：{business_domain}")
+        if file_category:
+            context_lines.append(f"文件分类：{file_category}")
+        if not context_lines:
+            return base_prompt.strip()
+
+        parts = [base_prompt.strip(), "\n".join(context_lines), context_instruction]
+        return "\n\n".join(part for part in parts if part)
+
+    @classmethod
+    def _build_auto_tag_system_prompt(cls, base_prompt: str, db_file: KnowledgeFile) -> str:
+        return cls._build_file_context_system_prompt(base_prompt, db_file, AUTO_TAG_CONTEXT_INSTRUCTION)
 
     @staticmethod
     def _invoke_llm(

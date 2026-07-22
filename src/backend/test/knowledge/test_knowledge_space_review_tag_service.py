@@ -13,6 +13,7 @@ from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
     KnowledgeSpaceAutoTagService,
 )
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import (
+    REVIEW_TAG_CONTEXT_INSTRUCTION,
     KnowledgeSpaceReviewTagService,
 )
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -21,6 +22,33 @@ _LINK_DAO_PATCH = (
     "bisheng.knowledge.domain.services.knowledge_space_review_tag_service."
     "KnowledgeSpaceAutoTagService._resolve_library_ids"
 )
+
+
+def test_build_review_tag_system_prompt_appends_business_domain_and_file_category():
+    db_file = KnowledgeFile(
+        id=1,
+        split_rule='{"file_category_code": "STD", "business_domain_code": "PP"}',
+        file_subcategory_code="STD_A",
+    )
+    prompt = KnowledgeSpaceAutoTagService._build_file_context_system_prompt(
+        "base prompt",
+        db_file,
+        REVIEW_TAG_CONTEXT_INSTRUCTION,
+    )
+    assert "base prompt" in prompt
+    assert "业务域：PP（生产）" in prompt
+    assert "文件分类：STD / STD_A" in prompt
+    assert "生成不在标签库中的新标签" in prompt
+
+
+def test_build_review_tag_system_prompt_without_metadata_keeps_base_prompt():
+    db_file = KnowledgeFile(id=3)
+    prompt = KnowledgeSpaceAutoTagService._build_file_context_system_prompt(
+        "base prompt",
+        db_file,
+        REVIEW_TAG_CONTEXT_INSTRUCTION,
+    )
+    assert prompt == "base prompt"
 
 
 def test_append_file_tags_delegates_to_tag_library_review_sync():
