@@ -1,8 +1,9 @@
 from collections.abc import AsyncGenerator
 
-from fastapi import Request
+from fastapi import Depends, Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.developer_token.domain.services import DeveloperTokenService
 from bisheng.utils import get_request_ip
 
@@ -18,8 +19,10 @@ def _get_developer_token_route(request: Request) -> tuple[str, str | None]:
     return request.method.upper(), getattr(route, "path", None)
 
 
-async def get_developer_token_user(request: Request) -> AsyncGenerator[UserPayload, None]:
-    user = await DeveloperTokenService.authenticate(
+async def get_developer_token_principal(
+    request: Request,
+) -> AsyncGenerator[DeveloperTokenPrincipal, None]:
+    principal = await DeveloperTokenService.authenticate_principal(
         request.headers.get("X-Developer-Token"),
         request_ip=get_request_ip(request),
         user_agent=request.headers.get("user-agent"),
@@ -28,6 +31,12 @@ async def get_developer_token_user(request: Request) -> AsyncGenerator[UserPaylo
         route_path=_get_developer_token_route(request)[1],
     )
     try:
-        yield user
+        yield principal
     finally:
-        DeveloperTokenService.reset_auth_context(user)
+        DeveloperTokenService.reset_auth_context(principal.user)
+
+
+async def get_developer_token_user(
+    principal: DeveloperTokenPrincipal = Depends(get_developer_token_principal),
+) -> UserPayload:
+    return principal.user

@@ -59,3 +59,13 @@ class DeveloperTokenInvalidRouteRuleError(BaseErrorCode):
 class DeveloperTokenRouteForbiddenError(BaseErrorCode):
     Code: int = 19812
     Msg: str = "developer_token_route_forbidden"
+
+
+class DeveloperTokenInvalidFileSyncRuleError(BaseErrorCode):
+    Code: int = 19813
+    Msg: str = "developer_token_invalid_file_sync_rule"
+    HttpStatus: int = 400
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus

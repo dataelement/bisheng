@@ -214,13 +214,11 @@ class PortalPdfDownloadService:
         display_name = str(getattr(user_record, "user_name", "") or "").strip()
         if not display_name:
             display_name = str(getattr(login_user, "user_name", "") or user_id).strip()
+        department_name = str(await self.user_repository.get_primary_department_name(user_id) or "").strip()
         account = str(getattr(user_record, "external_id", "") or "").strip()
-        department_name = str(
-            await self.user_repository.get_primary_department_name(user_id) or ""
-        ).strip()
-        date_line = self.now_provider().strftime("%Y-%m-%d")
-        identity_base = f"{department_name}-{display_name}" if department_name else display_name
-        identity_line = f"{identity_base}--{account}-{date_line}" if account else f"{identity_base}-{date_line}"
+        if not account:
+            account = str(getattr(login_user, "user_name", "") or user_id).strip()
+        identity_prefix = f"{department_name}-{display_name}" if department_name else display_name
 
         lock_token = await self.user_lock.acquire(
             tenant_id=tenant_id,
@@ -276,10 +274,11 @@ class PortalPdfDownloadService:
                 await self._copy_and_validate_artifact(artifact, input_path, readiness_deadline)
 
             deadline = self.monotonic() + float(self.config.timeout_seconds)
+            watermark_date = self.now_provider().strftime("%Y-%m-%d")
             spec = PdfWatermarkSpec(
                 lines=(
-                    identity_line,
-                    "首钢股份内部资料，严禁外传，违者必究",
+                    f"{identity_prefix}--{account}-{watermark_date}",
+                    "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
                 )
             )
             remaining = self._remaining(deadline)

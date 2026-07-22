@@ -19,8 +19,8 @@ class PdfWatermarkSpec:
     rotation: float = -35.0
     opacity: float = 0.16
     font_size: float = 12.0
-    horizontal_gap: float = 120.0
-    vertical_gap: float = 80.0
+    horizontal_gap: float = 180.0
+    vertical_gap: float = 120.0
     color: tuple[float, float, float] = (0.45, 0.45, 0.45)
 
     def __post_init__(self) -> None:
@@ -51,9 +51,11 @@ _CJK_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+    "/usr/share/fonts/opentype/noto-office/NotoSansCJKsc-Regular.otf",
     "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/Supplemental/Songti.ttc",
+    "/System/Library/Fonts/STHeiti Medium.ttc",
     "/Library/Fonts/NotoSansCJKsc-Regular.otf",
+    str(Path(__file__).resolve().parents[3] / "docker/fonts/NotoSansCJKsc-Regular.otf"),
 )
 
 
@@ -61,11 +63,7 @@ def _resolve_cjk_font(candidates: Sequence[str] = _CJK_FONT_CANDIDATES) -> _Font
     for candidate in candidates:
         if Path(candidate).is_file():
             return _FontSelection(font_name="portal-cjk", font_file=candidate)
-    try:
-        fitz.Font(fontname="china-s")
-    except Exception as exc:
-        raise PdfWatermarkError("CJK watermark font is unavailable") from exc
-    return _FontSelection(font_name="china-s")
+    raise PdfWatermarkError("CJK watermark font is unavailable")
 
 
 def _tile_positions(page_rect: fitz.Rect, spec: PdfWatermarkSpec) -> list[fitz.Point]:

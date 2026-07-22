@@ -479,7 +479,14 @@ async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, err
     [
         (_user(), "设备管理部-张三--SG001-2026-07-21"),
         (_user(primary_department_name=""), "张三--SG001-2026-07-21"),
-        (_user(user_name="", external_id="", primary_department_name=None), "client-name-must-not-be-used-2026-07-21"),
+        (
+            _user(user_name="", primary_department_name=None),
+            "client-name-must-not-be-used--SG001-2026-07-21",
+        ),
+        (
+            _user(external_id="", primary_department_name="设备管理部"),
+            "设备管理部-张三--client-name-must-not-be-used-2026-07-21",
+        ),
     ],
 )
 async def test_watermark_identity_comes_from_server_user_record(
@@ -495,7 +502,7 @@ async def test_watermark_identity_comes_from_server_user_record(
     lines = runner.calls[0]["spec"].lines
     assert lines == (
         expected_identity,
-        "首钢股份内部资料，严禁外传，违者必究",
+        "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
     )
     await prepared.close()
 

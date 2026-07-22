@@ -13,6 +13,56 @@ export interface DeveloperTokenRouteRule {
   path: string
 }
 
+export type DeveloperTokenFileSyncMode = "fixed" | "dynamic"
+
+export type DeveloperTokenFileSyncDynamicSource =
+  | "department_id"
+  | "responsible_person_id"
+
+export interface DeveloperTokenFileSyncRule {
+  category: {
+    code: string
+    subcategory_code: string
+  }
+  business_domain: {
+    mode: DeveloperTokenFileSyncMode
+    code: string | null
+  }
+  target_space: {
+    mode: DeveloperTokenFileSyncMode
+    knowledge_id: number | null
+  }
+  dynamic_source: DeveloperTokenFileSyncDynamicSource | null
+}
+
+export interface DeveloperTokenFileSyncCategoryOption {
+  code: string
+  label: string
+  children: Array<{ code: string; label: string }>
+}
+
+export interface DeveloperTokenFileSyncBusinessDomainOption {
+  code: string
+  name: string
+}
+
+export interface DeveloperTokenFileSyncKnowledgeSpaceOption {
+  id: number
+  name: string
+}
+
+export interface DeveloperTokenPageData<T> {
+  data: T[]
+  total: number
+}
+
+export interface DeveloperTokenFileSyncOptions {
+  tenant_id: number
+  categories: DeveloperTokenFileSyncCategoryOption[]
+  business_domains: DeveloperTokenFileSyncBusinessDomainOption[]
+  knowledge_spaces: DeveloperTokenPageData<DeveloperTokenFileSyncKnowledgeSpaceOption>
+}
+
 export interface DeveloperTokenRecord {
   id: number
   tenant_id: number
@@ -26,6 +76,7 @@ export interface DeveloperTokenRecord {
   override_rate_limit: boolean
   rate_limit_per_minute?: number | null
   route_rule_count: number
+  file_sync_rule?: DeveloperTokenFileSyncRule | null
   last_used_time?: string | null
   last_used_ip?: string | null
   created_by?: number | null
@@ -55,6 +106,7 @@ export interface DeveloperTokenPayload {
   override_rate_limit: boolean
   rate_limit_per_minute?: number | null
   route_whitelist?: DeveloperTokenRouteRule[] | null
+  file_sync_rule?: DeveloperTokenFileSyncRule | null
 }
 
 export interface DeveloperTokenCreateResponse {
@@ -118,4 +170,15 @@ export async function updateDeveloperTokenGlobalConfigApi(
   data: DeveloperTokenGlobalConfig
 ): Promise<DeveloperTokenGlobalConfig> {
   return await axios.put("/api/v1/admin/developer-tokens/config/global", data)
+}
+
+export async function getDeveloperTokenFileSyncOptionsApi(params: {
+  tenant_id: number
+  space_page?: number
+  space_limit?: number
+  space_keyword?: string
+}): Promise<DeveloperTokenFileSyncOptions> {
+  return await axios.get("/api/v1/admin/developer-tokens/config/file-sync-options", {
+    params: { space_page: 1, space_limit: 50, ...params },
+  })
 }

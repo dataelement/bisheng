@@ -182,7 +182,7 @@ export function getUser(): Promise<t.TUser> {
       "provider": "local",
       "role": role,
       "departmentName": String(department_name ?? '').trim(),
-      "employeeId": String(external_id ?? '').trim() || undefined,
+      "externalId": String(external_id ?? '').trim(),
       "plugins": wm,
       "is_department_admin": Boolean(is_department_admin),
       "menu_approval_mode": Boolean(menu_approval_mode),

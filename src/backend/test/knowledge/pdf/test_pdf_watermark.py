@@ -7,8 +7,10 @@ import fitz
 import pytest
 
 from bisheng.knowledge.pdf.watermark import (
+    _CJK_FONT_CANDIDATES,
     PdfWatermarkError,
     PdfWatermarkSpec,
+    _resolve_cjk_font,
     apply_pdf_watermark,
 )
 
@@ -46,11 +48,7 @@ def _create_zero_page_pdf(path: Path) -> None:
     body.extend(b"xref\n0 3\n0000000000 65535 f \n")
     for offset in offsets:
         body.extend(f"{offset:010d} 00000 n \n".encode())
-    body.extend(
-        b"trailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n"
-        + str(xref_offset).encode()
-        + b"\n%%EOF\n"
-    )
+    body.extend(b"trailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n" + str(xref_offset).encode() + b"\n%%EOF\n")
     path.write_bytes(body)
 
 
@@ -58,7 +56,7 @@ def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
             "设备管理部-张三--SG001-2026-07-21",
-            "首钢股份内部资料，严禁外传，违者必究",
+            "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
         )
     )
 
@@ -84,8 +82,8 @@ def test_watermark_preserves_source_and_pages_while_tiling_each_page(tmp_path: P
             assert watermarked_page.rect == original_page.rect
             text = watermarked_page.get_text()
             assert original_page.get_text().strip() in text
-            assert text.count("设备管理部-张三--SG001-2026-07-21") >= 4
-            assert text.count("首钢股份内部资料，严禁外传，违者必究") >= 4
+            assert text.count("设备管理部-张三--SG001-2026-07-21") >= 2
+            assert text.count("首钢股份内部资料，严禁外传，违者必究") >= 2  # noqa: RUF001
 
 
 def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path) -> None:
@@ -106,6 +104,34 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
         assert watermark_traces
         assert any(trace["dir"] != (1.0, 0.0) for trace in watermark_traces)
         assert any(0 < trace["opacity"] < 1 for trace in watermark_traces)
+
+
+def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
+    spec = _spec()
+
+    assert len(spec.lines) == 2
+    assert spec.rotation == -35.0
+    assert spec.opacity == 0.16
+    assert spec.font_size == 12.0
+    assert spec.horizontal_gap == 180.0
+    assert spec.vertical_gap == 120.0
+    assert spec.color == (0.45, 0.45, 0.45)
+    assert all("songti" not in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
+    assert any("zenhei" in candidate.lower() or "heiti" in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
+
+    with pytest.raises(PdfWatermarkError, match="two non-empty lines"):
+        PdfWatermarkSpec(lines=("identity", "date", "legacy notice"))
+
+
+def test_watermark_uses_bundled_sans_font_and_rejects_unreliable_fallback() -> None:
+    bundled_font = next(
+        candidate for candidate in _CJK_FONT_CANDIDATES if candidate.endswith("docker/fonts/NotoSansCJKsc-Regular.otf")
+    )
+
+    assert Path(bundled_font).is_file()
+    assert _resolve_cjk_font(("/missing/watermark-font.ttf", bundled_font)).font_file == bundled_font
+    with pytest.raises(PdfWatermarkError, match="font is unavailable"):
+        _resolve_cjk_font(("/missing/watermark-font.ttf",))
 
 
 def test_watermark_rejects_corrupt_encrypted_and_zero_page_sources(tmp_path: Path) -> None:
