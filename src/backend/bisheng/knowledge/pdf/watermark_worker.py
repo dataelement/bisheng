@@ -137,8 +137,8 @@ def _parse_spec(payload: object) -> PdfWatermarkSpec:
         rotation=float(payload.get("rotation", -35.0)),
         opacity=float(payload.get("opacity", 0.11)),
         font_size=float(payload.get("font_size", 12.0)),
-        horizontal_gap=float(payload.get("horizontal_gap", 288.0)),
-        vertical_gap=float(payload.get("vertical_gap", 200.0)),
+        horizontal_gap=float(payload.get("horizontal_gap", 240.0)),
+        vertical_gap=float(payload.get("vertical_gap", 180.0)),
         color=tuple(float(item) for item in color),
     )
 

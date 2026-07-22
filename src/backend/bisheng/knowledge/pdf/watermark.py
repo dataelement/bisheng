@@ -20,8 +20,8 @@ class PdfWatermarkSpec:
     rotation: float = -35.0
     opacity: float = 0.11
     font_size: float = 12.0
-    horizontal_gap: float = 288.0
-    vertical_gap: float = 200.0
+    horizontal_gap: float = 240.0
+    vertical_gap: float = 180.0
     color: tuple[float, float, float] = (0.45, 0.45, 0.45)
 
     def __post_init__(self) -> None:
@@ -81,8 +81,8 @@ def _resolve_cjk_font(candidates: Sequence[str] = _CJK_FONT_CANDIDATES) -> _Font
 
 _HORIZONTAL_CLEARANCE = 48.0
 _VERTICAL_CLEARANCE = 36.0
-_MIN_HORIZONTAL_STEP = 288.0
-_MIN_VERTICAL_STEP = 200.0
+_MIN_HORIZONTAL_STEP = 240.0
+_MIN_VERTICAL_STEP = 180.0
 
 
 def _calculate_watermark_layout(
