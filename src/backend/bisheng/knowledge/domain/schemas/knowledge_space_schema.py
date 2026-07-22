@@ -648,6 +648,14 @@ class DepartmentBindingReq(BaseModel):
     department_id: int = Field(..., description="Department id to bind the space to")
 
 
+class DepartmentBindingUpdateReq(BaseModel):
+    department_id: int = Field(
+        ...,
+        gt=0,
+        description="New department id to rebind the space to",
+    )
+
+
 class FolderCreateReq(BaseModel):
     name: str = Field(..., description="Folder Name")
     parent_id: int | None = Field(None, description="Parent Folder ID")

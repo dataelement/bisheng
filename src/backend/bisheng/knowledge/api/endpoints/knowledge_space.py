@@ -27,6 +27,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatFolderReq,
     ChatReq,
     DepartmentBindingReq,
+    DepartmentBindingUpdateReq,
     DepartmentKnowledgeSpaceBatchCreateReq,
     FileCreateReq,
     FileEncodingUpdateReq,
@@ -371,7 +372,8 @@ async def bind_department_space(
 ) -> Any:
     try:
         data = await DepartmentKnowledgeSpaceService.bind_space_to_department(
-            login_user, space_id=body.space_id, department_id=body.department_id)
+            login_user, space_id=body.space_id, department_id=body.department_id
+        )
         return resp_200(data)
     except BaseErrorCode as e:
         return e.return_resp_instance()
@@ -385,6 +387,26 @@ async def unbind_department_space(
     try:
         await DepartmentKnowledgeSpaceService.unbind_space(login_user, space_id=space_id)
         return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.put("/department-binding/{space_id}")
+async def rebind_department_space(
+    space_id: int,
+    body: DepartmentBindingUpdateReq,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    """Rebind a department/clinic knowledge space to another department."""
+    try:
+        space = await DepartmentKnowledgeSpaceService.rebind_space_to_department(
+            request=request,
+            login_user=login_user,
+            space_id=space_id,
+            department_id=body.department_id,
+        )
+        return resp_200(space)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
@@ -405,8 +427,7 @@ async def list_bindable_spaces(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     try:
-        return resp_200(await DepartmentKnowledgeSpaceService.list_bindable_team_spaces(
-            login_user, keyword=keyword))
+        return resp_200(await DepartmentKnowledgeSpaceService.list_bindable_team_spaces(login_user, keyword=keyword))
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
