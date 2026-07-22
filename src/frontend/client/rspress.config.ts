@@ -88,6 +88,7 @@ export default defineConfig({
         {
           text: '设计模式',
           items: [
+            { text: '文案 Copywriting', link: '/基础-文案规范' },
             { text: '多端适配 Responsive', link: '/基础-多端适配原则' },
             { text: '滚动条 Scrollbar', link: '/基础-滚动条规范' },
           ],
