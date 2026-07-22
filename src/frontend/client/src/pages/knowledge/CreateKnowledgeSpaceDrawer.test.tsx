@@ -289,6 +289,12 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByRole("radio", { name: "科室知识库" })).toHaveAttribute("aria-checked", "false");
         expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("radio", { name: "科室知识库" }));
+        expect(screen.getByRole("radio", { name: "科室知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "false");
+        expect(screen.getByText("绑定科室")).toBeInTheDocument();
+        expect(screen.getByText("申请理由")).toBeInTheDocument();
     });
 
     test("部门知识库创建需要选择部门并提交部门", async () => {

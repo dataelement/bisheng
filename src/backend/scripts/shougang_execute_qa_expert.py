@@ -160,6 +160,7 @@ EXPERT_ROWS: tuple[ExpertSeedRow, ...] = (
     ExpertSeedRow(15569, "庞振兴", "质量检验部", "ICP-MS分析", "首席技师", "技能操作族", "检验技能类"),
     ExpertSeedRow(15448, "李付", "质量检验部", "精密点检", "首席技师", "技能操作族", "设备技能类"),
     ExpertSeedRow(12597, "徐佳", "质量检验部", "质量检测", "首席工程师", "制造技术族", "质量技术类"),
+    ExpertSeedRow(31, "许博文", "质量检验部", "质量检测", "首席工程师", "制造技术族", "质量技术类"),
 )
 
 
@@ -222,7 +223,7 @@ async def _prepare_experts(
             continue
 
         department = await get_user_primary_department(user_id)
-        department_id = str(department.id) if department is not None else None
+        department_id = str(department.department_id) if department is not None else None
 
         experts.append(
             expert_factory(

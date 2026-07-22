@@ -349,7 +349,7 @@ export function CreateKnowledgeSpaceDrawer({
         );
     const shouldShowApprovalReason = mode === "create"
         && showApprovalReason
-        && spaceLevel === SpaceLevel.TEAM;
+        && initialSpaceLevel === SpaceLevel.TEAM;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
     const selectedDepartmentName = departmentSelection[0]?.name;
