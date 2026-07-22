@@ -9778,6 +9778,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
         await self._delete_similarity_candidate_cache_by_file_ids(expanded_file_ids)
+        await self._cleanup_review_tags_for_deleted_files(expanded_file_ids)
         await KnowledgeFileDao.adelete_batch(expanded_file_ids + floder_ids)
         if expanded_file_ids:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_file_ids)
@@ -10674,6 +10675,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 [("knowledge_file", created_file_id) for created_file_id in expanded_ids]
             )
         finally:
+            await self._cleanup_review_tags_for_deleted_files(expanded_ids)
             await KnowledgeFileDao.adelete_batch(expanded_ids)
 
     async def add_file(
@@ -10788,6 +10790,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     [("knowledge_file", created_file_id) for created_file_id in expanded_ids]
                 )
             finally:
+                await self._cleanup_review_tags_for_deleted_files(expanded_ids)
                 await KnowledgeFileDao.adelete_batch(expanded_ids)
 
         try:
@@ -11080,6 +11083,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return list(expanded)
 
+    async def _cleanup_review_tags_for_deleted_files(self, file_ids: list[int]) -> None:
+        deduped_ids = self._dedupe_ids(file_ids)
+        if not deduped_ids:
+            return
+        await ReviewTagDao.acleanup_for_deleted_space_files(deduped_ids)
+
     async def _delete_similarity_candidate_cache_by_file_ids(self, file_ids: list[int]) -> None:
         deduped_ids = sorted({int(file_id) for file_id in file_ids if file_id is not None})
         if not deduped_ids:
@@ -11127,6 +11136,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else []
         )
         await self._delete_similarity_candidate_cache_by_file_ids(expanded_ids)
+        await self._cleanup_review_tags_for_deleted_files(expanded_ids)
         await KnowledgeFileDao.adelete_batch(expanded_ids)
         if expanded_ids:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_ids)
@@ -11850,6 +11860,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 else []
             )
             await self._delete_similarity_candidate_cache_by_file_ids(expanded_file_ids)
+            await self._cleanup_review_tags_for_deleted_files(expanded_file_ids)
             await KnowledgeFileDao.adelete_batch(expanded_file_ids)
             if expanded_file_ids:
                 await KnowledgeSpaceContentStat.enqueue_file_stat_async(expanded_file_ids)
