@@ -7,6 +7,9 @@ from loguru import logger
 from sqlmodel import func, select
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.models.config import Config
+from bisheng.common.services.config_service import settings
+from bisheng.core.config.settings import DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
@@ -33,6 +36,10 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import (
     TagLibraryTagService,
 )
 from bisheng.llm.domain import LLMService
+from bisheng.shougang_portal_config.domain.repositories.interfaces.portal_admin_config_repository import (
+    portal_admin_config_physical_key,
+)
+from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import ShougangPortalAdminConfig
 
 AUTO_TAG_MAX_CONTENT = 3000
 AUTO_TAG_MAX_LIBRARY_MATCH = 5
@@ -252,19 +259,93 @@ class KnowledgeSpaceAutoTagService:
         document_code, _ = parse_shougang_file_encoding_codes(db_file)
         return document_code or None
 
+    @staticmethod
+    def _resolve_item_label(item, fallback: str) -> str:
+        if isinstance(item, dict):
+            label = item.get("label")
+        else:
+            label = getattr(item, "label", None)
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        return fallback
+
+    @classmethod
+    def _load_document_types_for_tenant(cls, tenant_id: int | None) -> list[dict]:
+        resolved_tenant_id = int(tenant_id or 1)
+        try:
+            with get_sync_db_session() as session:
+                config_row = session.exec(
+                    select(Config).where(Config.key == portal_admin_config_physical_key(resolved_tenant_id))
+                ).first()
+            if config_row and config_row.value:
+                portal_config = ShougangPortalAdminConfig.model_validate_json(config_row.value)
+                document_types = getattr(getattr(portal_config, "portal", None), "document_types", None) or []
+                if document_types:
+                    return [item.model_dump(mode="json") for item in document_types if item]
+        except Exception:
+            logger.warning(
+                "auto_tag_load_portal_document_types_failed tenant_id={}",
+                resolved_tenant_id,
+            )
+
+        try:
+            shougang_conf = settings.get_all_config().get("shougang", {}) or {}
+            file_encoding_conf = shougang_conf.get("file_encoding", {}) or {}
+            document_types = file_encoding_conf.get("document_types")
+            if isinstance(document_types, list) and document_types:
+                return [dict(item) if isinstance(item, dict) else item for item in document_types]
+        except Exception:
+            logger.warning("auto_tag_load_shougang_document_types_failed tenant_id={}", resolved_tenant_id)
+
+        return [dict(item) for item in DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES]
+
+    @classmethod
+    def _build_document_type_label_lookup(
+        cls,
+        raw_document_types: list[dict],
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        parent_labels: dict[str, str] = {}
+        subcategory_labels: dict[str, str] = {}
+        for item in raw_document_types or DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES:
+            parent_code = cls._normalize_category_code(
+                item.get("code") if isinstance(item, dict) else getattr(item, "code", None)
+            )
+            if not parent_code:
+                continue
+            parent_labels[parent_code] = cls._resolve_item_label(item, parent_code)
+
+            raw_children = item.get("children") if isinstance(item, dict) else getattr(item, "children", None)
+            children = raw_children if isinstance(raw_children, list) and raw_children else [item]
+            for child in children:
+                child_code = cls._normalize_category_code(
+                    child.get("code") if isinstance(child, dict) else getattr(child, "code", None)
+                )
+                if not child_code:
+                    continue
+                subcategory_labels[child_code] = cls._resolve_item_label(child, child_code)
+        return parent_labels, subcategory_labels
+
+    @classmethod
+    def _format_file_category_display(cls, db_file: KnowledgeFile) -> str | None:
+        parent_labels, subcategory_labels = cls._build_document_type_label_lookup(
+            cls._load_document_types_for_tenant(getattr(db_file, "tenant_id", None))
+        )
+        parts: list[str] = []
+        file_category_code = cls._resolve_file_category_code(db_file)
+        if file_category_code:
+            parts.append(parent_labels.get(file_category_code, file_category_code))
+        file_subcategory_code = cls._normalize_category_code(getattr(db_file, "file_subcategory_code", None))
+        if file_subcategory_code:
+            subcategory_name = subcategory_labels.get(file_subcategory_code, file_subcategory_code)
+            if not parts or subcategory_name != parts[0]:
+                parts.append(subcategory_name)
+        return " / ".join(parts) if parts else None
+
     @classmethod
     def _resolve_file_tagging_context(cls, db_file: KnowledgeFile) -> tuple[str | None, str | None]:
         business_domain_code = get_business_domain_code_from_file(db_file)
         business_domain = cls._format_business_domain_display(business_domain_code)
-
-        category_parts: list[str] = []
-        file_category_code = cls._resolve_file_category_code(db_file)
-        if file_category_code:
-            category_parts.append(file_category_code)
-        file_subcategory_code = cls._normalize_category_code(getattr(db_file, "file_subcategory_code", None))
-        if file_subcategory_code and file_subcategory_code not in category_parts:
-            category_parts.append(file_subcategory_code)
-        file_category = " / ".join(category_parts) if category_parts else None
+        file_category = cls._format_file_category_display(db_file)
         return business_domain, file_category
 
     @classmethod
