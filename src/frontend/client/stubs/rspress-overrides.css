@@ -122,35 +122,78 @@ body {
     monospace;
 }
 
-/* Spec tables span the full content column. rspress ships the doc table as
-   display:block with a max-content cap, which shrinks these narrow token
-   tables to their content width; force them back to the column width. */
+/* ============================================================================
+ * ONE table style for the whole site — matches the design-token page's
+ * TokenTable. Applies to BOTH native markdown tables (the .md spec pages) AND
+ * the hand-styled JSX tables in the spec mdx (字体/色彩), since every one
+ * renders inside `.rspress-doc`. `!important` overrides the JSX inline th/td
+ * styles too, so there is a single source of truth for table appearance:
+ *   · full content width, horizontal rules only (no vertical/outer grid)
+ *   · light header row (--fill-1) with medium (500) header text
+ *   · 10×16 padding, 13px text, uniform --border-base rules, no zebra
+ * ==========================================================================*/
 .rspress-doc table {
   display: table !important;
   width: 100% !important;
+  /* `separate` (not `collapse`) so the outer border can carry a border-radius —
+     collapsed borders ignore radius. border-spacing:0 keeps cells flush. The
+     outer frame + 8px corners live on the table element; radius is the
+     --radius design token itself (= Tailwind `rounded-lg`, 8px). */
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 1px solid rgb(var(--border-base)) !important;
+  border-radius: var(--radius) !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+  margin: 16px 0 8px !important;
 }
-
-/* No zebra striping: rspress paints even rows with --rp-c-bg-soft. Invisible
-   on white (#F7F8FA) but obvious on the dark ramp (#17171A vs #121212 page).
-   Spec tables use uniform row backgrounds in BOTH themes. */
+/* Header cells: light fill, medium weight, primary text, bottom rule only. */
+.rspress-doc table th {
+  padding: 10px 16px !important;
+  text-align: left !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  color: rgb(var(--text-1)) !important;
+  background: rgb(var(--fill-1)) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgb(var(--border-base)) !important;
+}
+/* Body cells: secondary text, transparent bg, bottom rule only. Inner
+   <code>/<span> with their own inline color still win (emphasised values). */
+.rspress-doc table td {
+  padding: 10px 16px !important;
+  font-size: 13px !important;
+  color: rgb(var(--text-2)) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgb(var(--border-base)) !important;
+}
+/* No zebra (rspress paints even rows with --rp-c-bg-soft — obvious on the dark
+   ramp). transition:none so the header rule flips in lockstep on theme switch
+   instead of lagging ~0.2s behind. rspress also frames every <tr> with a
+   heavier #D1D1D1 border (its default `border` class) — recolor it to
+   --border-base so the outer frame is the SAME single color as the inner
+   rules (no heavy outer border). */
 .rspress-doc table tr,
 .rspress-doc table tr:nth-child(2n) {
   background-color: transparent !important;
-}
-
-/* ONE border color for every table rule line. rspress's MDX component map
-   re-renders th/td with a Tailwind `border` class whose default color comes
-   from a different palette (#d1d1d1 in light) — mixing with our token'd
-   inline borders inside the same table. Force everything to --border-base. */
-.rspress-doc table,
-.rspress-doc tr,
-.rspress-doc th,
-.rspress-doc td {
-  border-color: rgb(var(--border-base)) !important;
-  /* rspress puts a color transition on `tr` (th/td have none), so the row
-     border lags ~0.2s behind on theme switch and reads as a flicker on the
-     header rule line. Flip in lockstep instead. */
   transition: none !important;
+  /* The outer frame now lives on the table element; drop rspress's per-<tr>
+     border so it doesn't double up inside the rounded frame. */
+  border: 0 !important;
+}
+/* Last row: no bottom rule — the table's own rounded border closes the table,
+   and a cell rule here would cut a straight line across the rounded corners. */
+.rspress-doc table tr:last-child td {
+  border-bottom: 0 !important;
+}
+/* Round the header's outer top corners to follow the table radius (its --fill-1
+   fill would otherwise show square corners inside the rounded frame). */
+.rspress-doc table thead tr:first-child th:first-child {
+  border-top-left-radius: var(--radius) !important;
+}
+.rspress-doc table thead tr:first-child th:last-child {
+  border-top-right-radius: var(--radius) !important;
 }
 
 /* Palette strips on the color spec page — same look & interaction as the

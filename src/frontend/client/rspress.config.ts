@@ -88,6 +88,7 @@ export default defineConfig({
         {
           text: '设计模式',
           items: [
+            { text: '多端适配 Responsive', link: '/基础-多端适配原则' },
             { text: '滚动条 Scrollbar', link: '/基础-滚动条规范' },
           ],
         },
@@ -97,7 +98,6 @@ export default defineConfig({
             { text: '设计变量 Design Token', link: '/design-token' },
             { text: '字体 Typography', link: '/基础-字体规范' },
             { text: '色彩 Color', link: '/基础-色彩规范' },
-            { text: '多端适配', link: '/基础-多端适配原则' },
             { text: '图标 Icon', link: '/基础-图标规范' },
             { text: '插画 Illustration', link: '/基础-插画规范' },
           ],
