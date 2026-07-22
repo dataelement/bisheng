@@ -169,6 +169,7 @@ class ShougangApprovalService:
         space_level: Any,
         name: str,
         applicant_user_id: int,
+        active_statuses: list[str]
     ) -> None:
         business_resource_id = f"{space_level}:{name}"
         pending = await ApprovalInstanceRepository.find_pending_instance_by_business_resource_id(
@@ -176,9 +177,10 @@ class ShougangApprovalService:
             scenario_code=KNOWLEDGE_SPACE_CREATE_SCENARIO,
             business_resource_id=business_resource_id,
             exclude_applicant_user_id=applicant_user_id,
+            active_statuses=active_statuses,
         )
         if pending:
-            raise SpaceNamePendingApprovalError(msg=f"【{name}】的知识库正在审核中")
+            raise SpaceNamePendingApprovalError(msg=f"已经有同名知识库在审批中了")
 
     async def _task_approver_user_ids(self, task_ids: list[int]) -> list[int]:
         approver_user_ids: list[int] = []
@@ -358,6 +360,7 @@ class ShougangApprovalService:
             space_level=params.get('space_level'),
             name=params.get('name'),
             applicant_user_id=None,
+            active_statuses=None,
         )
         approval_req = ApprovalGateRequest(
             tenant_id=login_user.tenant_id,
