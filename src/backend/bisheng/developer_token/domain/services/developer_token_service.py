@@ -7,7 +7,10 @@ import json
 import logging
 import re
 import secrets
+from contextlib import contextmanager
 from datetime import datetime, timezone
+
+from pydantic import ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.developer_token import (
@@ -15,6 +18,7 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenBindingForbiddenError,
     DeveloperTokenDisabledError,
     DeveloperTokenInvalidError,
+    DeveloperTokenInvalidFileSyncRuleError,
     DeveloperTokenInvalidIpRuleError,
     DeveloperTokenInvalidRateLimitError,
     DeveloperTokenInvalidRouteRuleError,
@@ -34,6 +38,7 @@ from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
     get_current_tenant_id,
+    set_admin_scope_tenant_id,
     set_current_tenant_id,
     set_visible_tenant_ids,
     visible_tenant_ids,
@@ -47,11 +52,22 @@ from bisheng.developer_token.domain.schemas import (
     DeveloperTokenCreate,
     DeveloperTokenCreateResponse,
     DeveloperTokenDetail,
+    DeveloperTokenFileSyncOptions,
+    DeveloperTokenFileSyncRule,
     DeveloperTokenGlobalConfig,
     DeveloperTokenListQuery,
+    DeveloperTokenPrincipal,
     DeveloperTokenRead,
     DeveloperTokenSecretResponse,
     DeveloperTokenUpdate,
+    FileSyncOptionBusinessDomain,
+    FileSyncOptionCategory,
+    FileSyncOptionChild,
+    FileSyncOptionKnowledgeSpace,
+)
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
 )
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -110,6 +126,7 @@ class DeveloperTokenService:
         cls._validate_ip_whitelist(payload.ip_whitelist)
         cls._validate_rate_limit(payload.rate_limit_per_minute)
         route_whitelist = cls._normalize_route_whitelist(payload.route_whitelist)
+        file_sync_rule = await cls._validate_file_sync_rule(tenant_id, payload.file_sync_rule)
 
         plaintext = cls._generate_plaintext_token()
         token = DeveloperToken(
@@ -125,6 +142,7 @@ class DeveloperTokenService:
             override_rate_limit=payload.override_rate_limit,
             rate_limit_per_minute=cls._normalize_rate_limit(payload.rate_limit_per_minute),
             route_whitelist=route_whitelist,
+            file_sync_rule=file_sync_rule,
             created_by=operator.user_id,
             updated_by=operator.user_id,
         )
@@ -169,6 +187,15 @@ class DeveloperTokenService:
             update_data["user_id"] = target_user_id
         update_data.pop("department_id", None)
         update_data.pop("dept_id", None)
+
+        target_tenant_id = int(update_data.get("tenant_id", token.tenant_id))
+        final_file_sync_rule = update_data.get("file_sync_rule", token.file_sync_rule)
+        normalized_file_sync_rule = await cls._validate_file_sync_rule(
+            target_tenant_id,
+            final_file_sync_rule,
+        )
+        if "file_sync_rule" in update_data:
+            update_data["file_sync_rule"] = normalized_file_sync_rule
 
         if "ip_whitelist" in update_data:
             cls._validate_ip_whitelist(update_data.get("ip_whitelist"))
@@ -257,6 +284,85 @@ class DeveloperTokenService:
         return await cls._read_global_config()
 
     @classmethod
+    async def get_file_sync_options(
+        cls,
+        operator: UserPayload,
+        *,
+        tenant_id: int,
+        space_page: int = 1,
+        space_limit: int = 50,
+        space_keyword: str | None = None,
+    ) -> DeveloperTokenFileSyncOptions:
+        await cls._assert_admin_scope(operator, tenant_id)
+        keyword = (space_keyword or "").strip() or None
+        with cls._target_tenant_context(tenant_id):
+            config = await cls._get_file_sync_portal_config(tenant_id)
+            if config is None:
+                raise DeveloperTokenInvalidFileSyncRuleError(
+                    msg="portal categories and business domains must be configured first"
+                )
+            spaces, total = await cls.repository.list_file_sync_spaces(
+                page=space_page,
+                limit=space_limit,
+                keyword=keyword,
+            )
+
+        categories: list[FileSyncOptionCategory] = []
+        for item in config.portal.document_types:
+            code = str(getattr(item, "code", "") or "").strip().upper()
+            if re.fullmatch(r"[A-Z0-9_]{1,16}", code) is None:
+                continue
+            children: list[FileSyncOptionChild] = []
+            for child in getattr(item, "children", None) or []:
+                child_code = str(getattr(child, "code", "") or "").strip().upper()
+                if re.fullmatch(r"[A-Z0-9_-]{1,16}", child_code) is None:
+                    continue
+                children.append(
+                    FileSyncOptionChild(
+                        code=child_code,
+                        label=str(getattr(child, "label", "") or "").strip(),
+                    )
+                )
+            if children:
+                categories.append(
+                    FileSyncOptionCategory(
+                        code=code,
+                        label=str(getattr(item, "label", "") or "").strip(),
+                        children=children,
+                    )
+                )
+
+        domains: list[FileSyncOptionBusinessDomain] = []
+        seen_domain_codes: set[str] = set()
+        for item in config.portal.domains:
+            code = normalize_business_domain_code(getattr(item, "code", None))
+            if not bool(getattr(item, "enabled", False)) or code is None or code in seen_domain_codes:
+                continue
+            seen_domain_codes.add(code)
+            domains.append(
+                FileSyncOptionBusinessDomain(
+                    code=code,
+                    name=str(getattr(item, "name", "") or "").strip(),
+                )
+            )
+
+        return DeveloperTokenFileSyncOptions(
+            tenant_id=tenant_id,
+            categories=categories,
+            business_domains=domains,
+            knowledge_spaces=PageData(
+                data=[
+                    FileSyncOptionKnowledgeSpace(
+                        id=int(space.id),
+                        name=str(space.name or ""),
+                    )
+                    for space in spaces
+                ],
+                total=total,
+            ),
+        )
+
+    @classmethod
     async def update_global_config(
         cls,
         operator: UserPayload,
@@ -295,6 +401,124 @@ class DeveloperTokenService:
         return normalized
 
     @classmethod
+    def _normalize_file_sync_rule(
+        cls,
+        rule: DeveloperTokenFileSyncRule | dict | None,
+    ) -> DeveloperTokenFileSyncRule | None:
+        if rule is None:
+            return None
+        try:
+            normalized = (
+                rule
+                if isinstance(rule, DeveloperTokenFileSyncRule)
+                else DeveloperTokenFileSyncRule.model_validate(rule)
+            )
+        except (TypeError, ValidationError) as exc:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="file sync rule structure is invalid") from exc
+
+        domain_fixed = normalized.business_domain.mode == "fixed"
+        space_fixed = normalized.target_space.mode == "fixed"
+        if domain_fixed != bool(normalized.business_domain.code):
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="business domain mode and code do not match")
+        if space_fixed != (normalized.target_space.knowledge_id is not None):
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="target space mode and knowledge id do not match")
+
+        has_dynamic_dimension = not domain_fixed or not space_fixed
+        if has_dynamic_dimension != (normalized.dynamic_source is not None):
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic source does not match rule modes")
+        return normalized
+
+    @classmethod
+    async def _validate_file_sync_rule(
+        cls,
+        tenant_id: int,
+        rule: DeveloperTokenFileSyncRule | dict | None,
+    ) -> dict | None:
+        normalized = cls._normalize_file_sync_rule(rule)
+        if normalized is None:
+            return None
+
+        with cls._target_tenant_context(tenant_id):
+            config = await cls._get_file_sync_portal_config(tenant_id)
+            if config is None:
+                raise DeveloperTokenInvalidFileSyncRuleError(
+                    msg="portal categories and business domains must be configured first"
+                )
+
+            parent_matches = [
+                item
+                for item in config.portal.document_types
+                if str(getattr(item, "code", "") or "").strip().upper() == normalized.category.code
+            ]
+            if len(parent_matches) != 1:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="file category is unavailable")
+            child_matches = [
+                item
+                for item in (getattr(parent_matches[0], "children", None) or [])
+                if str(getattr(item, "code", "") or "").strip().upper() == normalized.category.subcategory_code
+            ]
+            if len(child_matches) != 1:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="file subcategory is unavailable")
+
+            fixed_domain = None
+            if normalized.business_domain.mode == "fixed":
+                fixed_domain_matches = [
+                    item
+                    for item in config.portal.domains
+                    if bool(getattr(item, "enabled", False))
+                    and normalize_business_domain_code(getattr(item, "code", None)) == normalized.business_domain.code
+                ]
+                if len(fixed_domain_matches) != 1:
+                    raise DeveloperTokenInvalidFileSyncRuleError(msg="business domain is unavailable")
+                fixed_domain = fixed_domain_matches[0]
+
+            fixed_space = None
+            if normalized.target_space.mode == "fixed":
+                fixed_space = await cls._get_file_sync_space(int(normalized.target_space.knowledge_id))
+                if fixed_space is None:
+                    raise DeveloperTokenInvalidFileSyncRuleError(msg="target knowledge space is unavailable")
+
+            if fixed_domain is not None and fixed_space is not None:
+                domain_space_ids = {
+                    int(space_id) for space_id in (getattr(fixed_domain, "space_ids", None) or []) if int(space_id) > 0
+                }
+                space_domain_codes = {
+                    code
+                    for value in (getattr(fixed_space, "business_domain_codes", None) or [])
+                    if (code := normalize_business_domain_code(value)) is not None
+                }
+                if (
+                    int(fixed_space.id) not in domain_space_ids
+                    or normalized.business_domain.code not in space_domain_codes
+                ):
+                    raise DeveloperTokenInvalidFileSyncRuleError(
+                        msg="business domain and target knowledge space are not bound"
+                    )
+
+        return normalized.model_dump(mode="json")
+
+    @classmethod
+    async def _get_file_sync_portal_config(cls, tenant_id: int):
+        return await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
+
+    @classmethod
+    async def _get_file_sync_space(cls, knowledge_id: int):
+        return await cls.repository.get_file_sync_space(knowledge_id)
+
+    @staticmethod
+    @contextmanager
+    def _target_tenant_context(tenant_id: int):
+        tenant_context_token = set_current_tenant_id(int(tenant_id))
+        visible_context_token = set_visible_tenant_ids(frozenset({int(tenant_id)}))
+        admin_context_token = set_admin_scope_tenant_id(int(tenant_id))
+        try:
+            yield
+        finally:
+            admin_context_token.var.reset(admin_context_token)
+            visible_tenant_ids.reset(visible_context_token)
+            current_tenant_id.reset(tenant_context_token)
+
+    @classmethod
     async def authenticate(
         cls,
         raw_token: str | None,
@@ -305,6 +529,27 @@ class DeveloperTokenService:
         request_method: str | None = None,
         route_path: str | None = None,
     ) -> UserPayload:
+        principal = await cls.authenticate_principal(
+            raw_token,
+            request_ip=request_ip,
+            user_agent=user_agent,
+            endpoint_key=endpoint_key,
+            request_method=request_method,
+            route_path=route_path,
+        )
+        return principal.user
+
+    @classmethod
+    async def authenticate_principal(
+        cls,
+        raw_token: str | None,
+        *,
+        request_ip: str | None = None,
+        user_agent: str | None = None,
+        endpoint_key: str | None = None,
+        request_method: str | None = None,
+        route_path: str | None = None,
+    ) -> DeveloperTokenPrincipal:
         if not raw_token:
             raise DeveloperTokenMissingError()
 
@@ -333,27 +578,41 @@ class DeveloperTokenService:
 
         tenant_context_token = set_current_tenant_id(token.tenant_id)
         visible_context_token = set_visible_tenant_ids(frozenset({token.tenant_id}))
-
         try:
-            await cls.repository.update_last_used(token.id, request_ip)
-        except Exception:
-            logger.exception("developer token last-used update failed token_id=%s", token.id)
+            try:
+                await cls.repository.update_last_used(token.id, request_ip)
+            except Exception:
+                logger.exception("developer token last-used update failed token_id=%s", token.id)
 
-        roles = [role.role_id for role in UserRoleDao.get_user_roles(user.user_id)]
-        user_payload = UserPayload(
-            user_id=user.user_id,
-            user_name=user.user_name,
-            user_role=roles or [0],
-            tenant_id=token.tenant_id,
-            token_version=getattr(user, "token_version", 0) or 0,
-            is_global_super=False,
-        )
-        object.__setattr__(
-            user_payload,
-            "_developer_token_context_tokens",
-            (tenant_context_token, visible_context_token),
-        )
-        return user_payload
+            roles = [role.role_id for role in UserRoleDao.get_user_roles(user.user_id)]
+            user_payload = UserPayload(
+                user_id=user.user_id,
+                user_name=user.user_name,
+                user_role=roles or [0],
+                tenant_id=token.tenant_id,
+                token_version=getattr(user, "token_version", 0) or 0,
+                is_global_super=False,
+            )
+            object.__setattr__(
+                user_payload,
+                "_developer_token_context_tokens",
+                (tenant_context_token, visible_context_token),
+            )
+            raw_file_sync_rule = (
+                dict(token.file_sync_rule)
+                if isinstance(token.file_sync_rule, dict)
+                else ({"_invalid_stored_rule": True} if token.file_sync_rule is not None else None)
+            )
+            return DeveloperTokenPrincipal(
+                token_id=int(token.id),
+                tenant_id=int(token.tenant_id),
+                user=user_payload,
+                raw_file_sync_rule=raw_file_sync_rule,
+            )
+        except BaseException:
+            visible_tenant_ids.reset(visible_context_token)
+            current_tenant_id.reset(tenant_context_token)
+            raise
 
     @staticmethod
     def reset_auth_context(user_payload: UserPayload) -> None:
@@ -668,6 +927,12 @@ class DeveloperTokenService:
             user_name = getattr(user, "user_name", None) if user else None
         except Exception:
             logger.exception("developer token user enrichment failed token_id=%s", token.id)
+        file_sync_rule = None
+        if token.file_sync_rule is not None:
+            try:
+                file_sync_rule = cls._normalize_file_sync_rule(token.file_sync_rule)
+            except DeveloperTokenInvalidFileSyncRuleError:
+                logger.warning("developer token has invalid file sync rule token_id=%s", token.id)
         return DeveloperTokenRead(
             id=token.id,
             tenant_id=token.tenant_id,
@@ -681,6 +946,7 @@ class DeveloperTokenService:
             override_rate_limit=bool(token.override_rate_limit),
             rate_limit_per_minute=token.rate_limit_per_minute,
             route_rule_count=len(token.route_whitelist or []),
+            file_sync_rule=file_sync_rule,
             last_used_time=token.last_used_time,
             last_used_ip=token.last_used_ip,
             created_by=token.created_by,
@@ -698,6 +964,7 @@ class DeveloperTokenService:
 
     @staticmethod
     def _non_secret_snapshot(token: DeveloperToken) -> dict:
+        rule_summary = DeveloperTokenService._file_sync_rule_summary(token.file_sync_rule)
         return {
             "id": token.id,
             "tenant_id": token.tenant_id,
@@ -710,7 +977,25 @@ class DeveloperTokenService:
             "override_rate_limit": bool(token.override_rate_limit),
             "rate_limit_per_minute": token.rate_limit_per_minute,
             "route_rule_count": len(token.route_whitelist or []),
+            "file_sync_rule_configured": token.file_sync_rule is not None,
+            "file_sync_rule_summary": rule_summary,
             "logic_delete": token.logic_delete,
+        }
+
+    @staticmethod
+    def _file_sync_rule_summary(rule: dict | DeveloperTokenFileSyncRule | None) -> dict | None:
+        if rule is None:
+            return None
+        try:
+            normalized = DeveloperTokenService._normalize_file_sync_rule(rule)
+        except DeveloperTokenInvalidFileSyncRuleError:
+            return {"invalid": True}
+        return {
+            "category_code": normalized.category.code,
+            "subcategory_code": normalized.category.subcategory_code,
+            "business_domain_mode": normalized.business_domain.mode,
+            "target_space_mode": normalized.target_space.mode,
+            "dynamic_source": normalized.dynamic_source,
         }
 
     @classmethod

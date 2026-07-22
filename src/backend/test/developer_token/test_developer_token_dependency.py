@@ -13,12 +13,17 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenRateLimitedError,
     DeveloperTokenRouteForbiddenError,
 )
+from bisheng.common.errcode.filelib_sync import FilelibSyncRuleNotConfiguredError
 from bisheng.developer_token.api.dependencies import (
     _get_developer_token_endpoint_key,
     _get_developer_token_route,
+    get_developer_token_principal,
+    get_developer_token_user,
 )
 from bisheng.developer_token.domain.models import DeveloperToken
+from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.developer_token.domain.services.developer_token_service import DeveloperTokenService
+from bisheng.open_endpoints.api.dependencies import get_filelib_sync_principal
 
 
 def _active_token(**kwargs):
@@ -499,3 +504,235 @@ async def test_last_used_update_is_best_effort(monkeypatch):
     user = await DeveloperTokenService.authenticate(raw, request_ip="10.0.0.1")
 
     assert user.user_id == 7
+
+
+def _prepare_principal_auth(monkeypatch, raw: str, *, file_sync_rule: dict | None):
+    token = _active_token(
+        token_hash=DeveloperTokenService._hash_token(raw),
+        file_sync_rule=file_sync_rule,
+    )
+    calls = {"lookup": 0, "last_used": 0}
+
+    class Repo:
+        @staticmethod
+        async def get_token_by_hash(token_hash):
+            calls["lookup"] += 1
+            return token
+
+        @staticmethod
+        async def update_last_used(token_id, ip_address):
+            calls["last_used"] += 1
+            return True
+
+    monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
+    monkeypatch.setattr(
+        DeveloperTokenService,
+        "_read_global_config",
+        AsyncMock(return_value=SimpleNamespace(ip_whitelist="", rate_limit_per_minute=None)),
+    )
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.TenantDao",
+        SimpleNamespace(aget_by_id=AsyncMock(return_value=SimpleNamespace(id=5, status="active"))),
+    )
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.UserDao",
+        SimpleNamespace(
+            aget_user=AsyncMock(
+                return_value=SimpleNamespace(
+                    user_id=7,
+                    user_name="bound",
+                    delete=0,
+                    token_version=1,
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.UserTenantDao",
+        SimpleNamespace(aget_user_tenant=AsyncMock(return_value=SimpleNamespace(status="active"))),
+    )
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.UserRoleDao",
+        SimpleNamespace(get_user_roles=lambda user_id: [SimpleNamespace(role_id=2)]),
+    )
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_authenticate_principal_returns_token_context_without_second_lookup(monkeypatch):
+    raw = "bst_principal"
+    damaged_rule = {"unexpected": "stored-value"}
+    calls = _prepare_principal_auth(monkeypatch, raw, file_sync_rule=damaged_rule)
+
+    principal = await DeveloperTokenService.authenticate_principal(
+        raw,
+        request_ip="10.0.0.1",
+        request_method="POST",
+        route_path="/api/v2/filelib/file/sync",
+    )
+
+    assert principal.token_id == 2
+    assert principal.tenant_id == 5
+    assert principal.user.user_id == 7
+    assert principal.raw_file_sync_rule == damaged_rule
+    assert calls == {"lookup": 1, "last_used": 1}
+    DeveloperTokenService.reset_auth_context(principal.user)
+
+
+@pytest.mark.asyncio
+async def test_compatibility_authenticate_returns_principal_user(monkeypatch):
+    raw = "bst_compat"
+    _prepare_principal_auth(monkeypatch, raw, file_sync_rule=None)
+
+    user = await DeveloperTokenService.authenticate(raw, request_ip="10.0.0.1")
+
+    assert user.user_id == 7
+    assert user.tenant_id == 5
+    DeveloperTokenService.reset_auth_context(user)
+
+
+@pytest.mark.asyncio
+async def test_principal_dependency_resets_context_when_consumer_closes(monkeypatch):
+    from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.core.context.tenant import (
+        current_tenant_id,
+        get_current_tenant_id,
+        get_visible_tenant_ids,
+        set_current_tenant_id,
+        set_visible_tenant_ids,
+        visible_tenant_ids,
+    )
+
+    outer_tenant = set_current_tenant_id(99)
+    outer_visible = set_visible_tenant_ids(frozenset({99}))
+    inner_tenant = set_current_tenant_id(5)
+    inner_visible = set_visible_tenant_ids(frozenset({5}))
+    user = UserPayload(
+        user_id=7,
+        user_name="bound",
+        user_role=[2],
+        tenant_id=5,
+        token_version=1,
+        is_global_super=False,
+    )
+    object.__setattr__(user, "_developer_token_context_tokens", (inner_tenant, inner_visible))
+    principal = DeveloperTokenPrincipal(
+        token_id=2,
+        tenant_id=5,
+        user=user,
+        raw_file_sync_rule=None,
+    )
+    authenticate = AsyncMock(return_value=principal)
+    monkeypatch.setattr(DeveloperTokenService, "authenticate_principal", authenticate)
+    request = SimpleNamespace(
+        headers={"X-Developer-Token": "bst_test"},
+        client=SimpleNamespace(host="10.0.0.1"),
+        method="POST",
+        scope={"route": SimpleNamespace(path="/api/v2/filelib/file/sync")},
+        url=SimpleNamespace(path="/api/v2/filelib/file/sync"),
+    )
+
+    dependency = get_developer_token_principal(request)
+    yielded = await dependency.__anext__()
+    assert yielded is principal
+    await dependency.aclose()
+
+    try:
+        assert get_current_tenant_id() == 99
+        assert get_visible_tenant_ids() == frozenset({99})
+    finally:
+        visible_tenant_ids.reset(outer_visible)
+        current_tenant_id.reset(outer_tenant)
+
+
+@pytest.mark.asyncio
+async def test_compatibility_user_dependency_returns_principal_user() -> None:
+    from bisheng.common.dependencies.user_deps import UserPayload
+
+    user = UserPayload(
+        user_id=7,
+        user_name="bound",
+        user_role=[2],
+        tenant_id=5,
+        token_version=1,
+        is_global_super=False,
+    )
+    principal = DeveloperTokenPrincipal(
+        token_id=2,
+        tenant_id=5,
+        user=user,
+        raw_file_sync_rule=None,
+    )
+
+    assert await get_developer_token_user(principal) is user
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raw_rule", [None, {"unexpected": "value"}])
+async def test_file_sync_adapter_rejects_missing_or_damaged_rule(raw_rule) -> None:
+    from bisheng.common.dependencies.user_deps import UserPayload
+
+    principal = DeveloperTokenPrincipal(
+        token_id=2,
+        tenant_id=5,
+        user=UserPayload(
+            user_id=7,
+            user_name="bound",
+            user_role=[2],
+            tenant_id=5,
+            token_version=1,
+            is_global_super=False,
+        ),
+        raw_file_sync_rule=raw_rule,
+    )
+
+    with pytest.raises(FilelibSyncRuleNotConfiguredError) as exc_info:
+        await get_filelib_sync_principal(principal)
+
+    assert exc_info.value.code == 19906
+    assert exc_info.value.http_status == 403
+
+
+@pytest.mark.asyncio
+async def test_file_sync_adapter_returns_normalized_rule() -> None:
+    from bisheng.common.dependencies.user_deps import UserPayload
+
+    principal = DeveloperTokenPrincipal(
+        token_id=2,
+        tenant_id=5,
+        user=UserPayload(
+            user_id=7,
+            user_name="bound",
+            user_role=[2],
+            tenant_id=5,
+            token_version=1,
+            is_global_super=False,
+        ),
+        raw_file_sync_rule={
+            "category": {"code": " policy ", "subcategory_code": " mgmt_policy "},
+            "business_domain": {"mode": "dynamic", "code": None},
+            "target_space": {"mode": "dynamic", "knowledge_id": None},
+            "dynamic_source": "department_id",
+        },
+    )
+
+    result = await get_filelib_sync_principal(principal)
+
+    assert result.raw_file_sync_rule["category"] == {
+        "code": "POLICY",
+        "subcategory_code": "MGMT_POLICY",
+    }
+
+
+def test_file_sync_dependency_error_keeps_actual_http_status() -> None:
+    from pathlib import Path
+
+    error = FilelibSyncRuleNotConfiguredError()
+    assert error.http_status == 403
+    assert error.http_response_payload() == {
+        "status_code": 403,
+        "status_message": "filelib_sync_rule_not_configured",
+        "data": {"error_code": 19906},
+    }
+    main_source = Path("bisheng/main.py").read_text()
+    assert "isinstance(exc, FilelibSyncError)" in main_source

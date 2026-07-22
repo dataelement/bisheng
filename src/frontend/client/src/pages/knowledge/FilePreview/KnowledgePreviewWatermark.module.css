@@ -1,33 +1,33 @@
 .overlay {
     position: absolute;
     z-index: 20;
-    inset: -12%;
+    inset: 0;
     display: grid;
-    grid-template-columns: repeat(4, minmax(210px, 1fr));
-    align-content: space-around;
-    gap: 36px 24px;
+    grid-auto-rows: 160px;
+    align-content: start;
+    justify-content: start;
+    box-sizing: border-box;
+    padding: 48px 0 0 27px;
     overflow: hidden;
     pointer-events: none;
     user-select: none;
-    transform: rotate(-20deg);
-    transform-origin: center;
 }
 
 .tile {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    color: rgba(79, 96, 122, 0.2);
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.45;
-    text-align: center;
+    width: 240px;
+    height: 160px;
+    color: rgba(115, 115, 115, 0.16);
+    font-family: "WenQuanYi Zen Hei", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 20px;
+    text-align: left;
     white-space: nowrap;
 }
 
-@media (max-width: 900px) {
-    .overlay {
-        grid-template-columns: repeat(3, minmax(190px, 1fr));
-        gap: 28px 20px;
-    }
+.line {
+    display: block;
+    width: max-content;
+    transform: rotate(-35deg);
+    transform-origin: left center;
 }

@@ -56,6 +56,10 @@ class DeveloperToken(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(JsonType, nullable=True, comment="Developer token route allowlist rules"),
     )
+    file_sync_rule: dict | None = Field(
+        default=None,
+        sa_column=Column(JsonType, nullable=True, comment="Developer token file sync business rule"),
+    )
     last_used_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=True),

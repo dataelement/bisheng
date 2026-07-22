@@ -15,19 +15,11 @@ class FilelibSyncRepository(BaseRepository[KnowledgeFile, int], ABC):
         pass
 
     @abstractmethod
-    async def find_primary_department(self, user_id: int) -> UserDepartment | None:
+    async def find_primary_departments(self, user_id: int) -> list[UserDepartment]:
         pass
 
     @abstractmethod
     async def find_department_by_id(self, department_id: int) -> Department | None:
-        pass
-
-    @abstractmethod
-    async def find_department_by_name(self, name: str) -> Department | None:
-        pass
-
-    @abstractmethod
-    async def find_public_space_by_name(self, name: str) -> Knowledge | None:
         pass
 
     @abstractmethod

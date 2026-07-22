@@ -172,4 +172,33 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     expect(screen.queryByText("A")).not.toBeInTheDocument()
     expect(screen.queryByText("B")).not.toBeInTheDocument()
   })
+
+  it("propagates the mounted tenant id with a selected department member", async () => {
+    mockedTree.mockResolvedValue([{
+      id: 10,
+      dept_id: "tenant-root",
+      name: "Tenant root",
+      parent_id: null,
+      status: "active",
+      mounted_tenant_id: 7,
+      children: [],
+    }] as any)
+    mockedMembers.mockResolvedValue({
+      data: [{ user_id: 70, user_name: "Alice", person_id: "P-70" }],
+    } as any)
+    const onChange = vi.fn<(v: DepartmentUserOption[]) => void>()
+    render(<DepartmentUsersSelect value={[]} onChange={onChange} multiple={false} />)
+    openPicker()
+
+    await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument())
+    fireEvent.click(screen.getByText("Alice"))
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        value: 70,
+        department_id: 10,
+        tenant_id: 7,
+      }),
+    ])
+  })
 })

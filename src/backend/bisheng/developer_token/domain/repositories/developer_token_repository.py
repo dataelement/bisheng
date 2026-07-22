@@ -8,9 +8,19 @@ from sqlmodel import select
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.developer_token.domain.models import DeveloperToken
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScope,
+)
 
 
 class DeveloperTokenRepository:
+    FILE_SYNC_SPACE_LEVELS = (
+        KnowledgeSpaceLevelEnum.PUBLIC.value,
+        KnowledgeSpaceLevelEnum.DEPARTMENT.value,
+    )
+
     @classmethod
     async def list_tokens(
         cls,
@@ -144,3 +154,54 @@ class DeveloperTokenRepository:
                 )
                 await session.commit()
                 return (getattr(result, "rowcount", 0) or 0) > 0
+
+    @classmethod
+    async def get_file_sync_space(cls, knowledge_id: int) -> Knowledge | None:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Knowledge)
+                .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+                .where(
+                    Knowledge.id == knowledge_id,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                    KnowledgeSpaceScope.level.in_(cls.FILE_SYNC_SPACE_LEVELS),
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def list_file_sync_spaces(
+        cls,
+        *,
+        page: int,
+        limit: int,
+        keyword: str | None,
+    ) -> tuple[list[Knowledge], int]:
+        async with get_async_db_session() as session:
+            filters = [
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                KnowledgeSpaceScope.level.in_(cls.FILE_SYNC_SPACE_LEVELS),
+            ]
+            if keyword:
+                filters.append(Knowledge.name.contains(keyword, autoescape=True))
+
+            base = (
+                select(Knowledge)
+                .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+                .where(*filters)
+            )
+            count_stmt = (
+                select(func.count(func.distinct(Knowledge.id)))
+                .select_from(Knowledge)
+                .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+                .where(*filters)
+            )
+            total_result = await session.exec(count_stmt)
+            total = int(total_result.one() or 0)
+            result = await session.exec(
+                base.distinct()
+                .order_by(Knowledge.name.asc(), Knowledge.id.asc())
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+            return list(result.all()), total
