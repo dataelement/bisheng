@@ -16,6 +16,7 @@ import {
 import {
     KnowledgeSpace,
     SpaceRole,
+    SpaceLevel,
     VisibilityType,
     SpaceSortType,
     getSpaceInfoApi,
@@ -528,14 +529,21 @@ export default function Knowledge() {
 
             if (editingSpace) {
                 // ── Edit mode ──
-                const updated = await updateSpaceApi(editingSpace.id, {
+                const updatePayload: Parameters<typeof updateSpaceApi>[1] = {
                     name: form.name,
                     description: form.description,
                     auth_type,
                     is_released,
                     auto_tag_enabled: form.autoTagEnabled,
                     ...buildAutoTagLibraryPayload(form.autoTagLibraryIds, { syncExplicitly: true }),
-                });
+                };
+                if (
+                    form.departmentId !== undefined
+                    && (editingSpace.isClinic || editingSpace.spaceLevel === SpaceLevel.DEPARTMENT)
+                ) {
+                    updatePayload.department_id = form.departmentId;
+                }
+                const updated = await updateSpaceApi(editingSpace.id, updatePayload);
                 if (activeSpace?.id === updated.id) setActiveSpace({ ...updated, role: activeSpace.role });
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
@@ -883,6 +891,11 @@ export default function Knowledge() {
                 mode={editingSpace ? "edit" : "create"}
                 editingSpace={editingSpace}
                 showApprovalReason
+                canEditDepartmentBinding={
+                    editingSpace?.isClinic
+                        ? user?.role === "admin" || Boolean(user?.is_department_admin)
+                        : user?.role === "admin"
+                }
                 onViewSpace={() => setShowCreateDrawer(false)}
                 onManageMembers={() => {
                     setShowCreateDrawer(false);

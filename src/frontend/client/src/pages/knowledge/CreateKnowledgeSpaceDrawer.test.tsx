@@ -131,7 +131,7 @@ jest.mock("~/components/icons/channels", () => ({
 
 jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
     SubjectSearchDepartment: ({ value, onChange, loadDepartments, disabledIds = [] }: any) => {
-        const React = require("react");
+        const React = require("react") as typeof import("react");
         const [departments, setDepartments] = React.useState<any[]>([]);
         const [loading, setLoading] = React.useState(Boolean(loadDepartments));
         const [failed, setFailed] = React.useState(false);
@@ -244,6 +244,14 @@ describe("CreateKnowledgeSpaceDrawer", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockShowToast.mockReset();
+        // Tag-library mocks are overridden by individual tests; reset them to the
+        // module defaults before each test to avoid cross-test state leakage.
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockReset().mockResolvedValue({
+            data: [{ id: 1, name: "默认标签库", tag_count: 3, is_builtin: true }],
+            total: 1,
+        } as any);
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockReset().mockResolvedValue({ tags: [] } as any);
+        jest.mocked(getKnowledgeSpaceTagLibrariesByKnowledgeApi).mockReset().mockResolvedValue([] as any);
     });
 
     test("审批创建模式下按创建权限隐藏无权限空间层级", async () => {
@@ -368,7 +376,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(onConfirm).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: "选择炼铁部" }));
-        expect(screen.getByText("炼铁部")).toBeInTheDocument();
+        expect(screen.getByTestId("department-selector")).toHaveTextContent("炼铁部");
         await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
@@ -492,6 +500,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "团队资料库更新" },
         });
+        await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -591,6 +600,47 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
         expect(screen.getByText(/炼铁部/)).toBeInTheDocument();
+    });
+
+    test("系统管理员编辑科室知识库时可回显并修改所属科室", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+        jest.mocked(getCreateSpaceMyDepartmentTreeApi).mockResolvedValue({
+            data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", parent_id: null, children: [] }],
+            bound_department_ids: [],
+        });
+
+        renderDrawer({
+            mode: "edit",
+            canEditDepartmentBinding: true,
+            editingSpace: {
+                id: "clinic-1",
+                name: "科室资料库",
+                description: "原简介",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.TEAM,
+                isClinic: true,
+                departmentId: 9,
+                departmentName: "炼铁部",
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+            onConfirm,
+        });
+
+        expect(await screen.findByTestId("department-selector")).toHaveTextContent("炼铁部");
+        expect(screen.getByText("科室知识库 - 炼铁部")).toBeInTheDocument();
+        expect(screen.getByText("所属科室：炼铁部")).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole("button", { name: "选择炼钢部" }));
+        expect(screen.getByText("科室知识库 - 炼钢部")).toBeInTheDocument();
+        await selectDefaultTagLibrary();
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            spaceLevel: SpaceLevel.TEAM,
+            departmentId: 12,
+        }));
     });
 
     test("系统管理员编辑非部门知识库时不展示部门选择器", () => {
@@ -887,6 +937,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
         jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
             data: [{ id: 9, name: "空标签库", tag_count: 0, is_builtin: false }],
+            total: 1,
         });
         jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({
             id: 9,

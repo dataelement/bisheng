@@ -276,14 +276,19 @@ export function CreateKnowledgeSpaceDrawer({
         () => mode === "create" && initialSpaceLevel === SpaceLevel.TEAM && Boolean(createOptions?.canCreateDepartment),
         [mode, initialSpaceLevel, createOptions?.canCreateDepartment],
     );
+    const isEditingClinic = useMemo(
+        () => mode === "edit" && Boolean(editingSpace?.isClinic),
+        [mode, editingSpace?.isClinic],
+    );
+    const isClinicMode = isClinicContext || isEditingClinic;
     const departmentLevelLabel = useMemo(
         () => isClinicContext
-            ? localize("com_knowledge.clinic_space", "科室知识库")
-            : localize("com_knowledge.department_space", "部门知识库"),
+            ? localize("com_knowledge.clinic_space", { defaultValue: "科室知识库" })
+            : localize("com_knowledge.department_space", { defaultValue: "部门知识库" }),
         [isClinicContext, localize],
     );
-    const bindDepartmentLabel = isClinicContext ? "绑定科室" : "绑定部门";
-    const bindDepartmentPlaceholder = isClinicContext ? "请选择绑定科室" : "请选择绑定部门";
+    const bindDepartmentLabel = isClinicMode ? "绑定科室" : "绑定部门";
+    const bindDepartmentPlaceholder = isClinicMode ? "请选择绑定科室" : "请选择绑定部门";
 
     const levelOptions = useMemo(() => ([
         {
@@ -298,14 +303,13 @@ export function CreateKnowledgeSpaceDrawer({
         },
         {
             value: SpaceLevel.TEAM,
-            label: localize("com_knowledge.team_space", "团队知识库"),
+            label: localize("com_knowledge.team_space", { defaultValue: "团队知识库" }),
             enabled: createOptions?.canCreateTeam ?? false,
         },
         {
             value: SpaceLevel.PERSONAL,
             label: localize("com_knowledge.personal_spaces"),
-            // Personal knowledge bases are system-managed; users cannot create them.
-            enabled: false,
+            enabled: createOptions?.canCreatePersonal ?? false,
         },
     ]), [createOptions, departmentLevelLabel, localize]);
     const enabledLevelOptions = useMemo(
@@ -345,28 +349,36 @@ export function CreateKnowledgeSpaceDrawer({
     }, [levelOptions, mode, spaceLevel]);
     const shouldShowVisibilityControls = false;
     const shouldShowPublishOption = shouldShowVisibilityControls && needPublishOption;
-    const shouldShowDepartmentSelector = spaceLevel === SpaceLevel.DEPARTMENT
-        && (
-            (mode === "create" && selectedLevelCreateEnabled)
-            || (mode === "edit" && canEditDepartmentBinding)
-        );
+    const shouldShowDepartmentSelector = (
+        spaceLevel === SpaceLevel.DEPARTMENT
+            && (
+                (mode === "create" && selectedLevelCreateEnabled)
+                || (mode === "edit" && canEditDepartmentBinding)
+            )
+    ) || (isEditingClinic && canEditDepartmentBinding);
     const shouldShowApprovalReason = mode === "create"
         && showApprovalReason
         && initialSpaceLevel === SpaceLevel.TEAM;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
     const selectedDepartmentName = departmentSelection[0]?.name;
-    const currentLevelLabel = levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel;
-    const levelOwnerName = spaceLevel === SpaceLevel.DEPARTMENT
-        ? selectedDepartmentName || (!shouldShowDepartmentSelector
-            ? editingSpace?.ownerName || editingSpace?.departmentName
-            : undefined)
-        : !shouldShowDepartmentSelector
-            ? editingSpace?.ownerName || editingSpace?.departmentName
-            : undefined;
+    const currentLevelLabel = isEditingClinic
+        ? localize("com_knowledge.clinic_space")
+        : levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel;
+    // In create mode the department selector already shows the selected department, so keep
+    // the level label plain to avoid duplication. In edit mode the label reflects the bound
+    // (or newly selected) department as a read-only summary.
+    const levelOwnerName = mode === "create"
+        ? undefined
+        : isEditingClinic
+            ? selectedDepartmentName || editingSpace?.departmentName
+            : spaceLevel === SpaceLevel.DEPARTMENT
+                ? selectedDepartmentName || editingSpace?.ownerName || editingSpace?.departmentName
+                : editingSpace?.ownerName || editingSpace?.departmentName;
     const levelDisplayLabel = levelOwnerName
         ? `${currentLevelLabel} - ${levelOwnerName}`
         : currentLevelLabel;
+
     const selectedLibrariesHaveTags = useMemo(
         () => selectedAutoTagLibrariesHaveTags(autoTagLibraryIds, tagLibraries, autoTagLibraryTags),
         [autoTagLibraryIds, tagLibraries, autoTagLibraryTags],
@@ -415,7 +427,7 @@ export function CreateKnowledgeSpaceDrawer({
 
     const loadCreateDepartments = useCallback(
         async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
-            if (isClinicContext) {
+            if (isClinicMode) {
                 const res = await getCreateSpaceMyDepartmentTreeApi({
                     excludeSpaceId: mode === "edit" ? editingSpace?.id : undefined,
                     signal: config?.signal,
@@ -431,7 +443,7 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return res.data;
         },
-        [isClinicContext, mode, showApprovalReason, editingSpace?.id],
+        [isClinicMode, mode, showApprovalReason, editingSpace?.id],
     );
 
     // Pre-fill form in edit mode
@@ -459,11 +471,14 @@ export function CreateKnowledgeSpaceDrawer({
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setSpaceLevel(editingSpace.spaceLevel || SpaceLevel.PERSONAL);
             const departmentId = editingSpace.departmentId ?? editingSpace.ownerId;
-            if (editingSpace.spaceLevel === SpaceLevel.DEPARTMENT && departmentId) {
+            if (
+                (editingSpace.spaceLevel === SpaceLevel.DEPARTMENT || editingSpace.isClinic)
+                && departmentId
+            ) {
                 setDepartmentSelection([{
                     type: "department",
                     id: Number(departmentId),
-                    name: editingSpace.ownerName || editingSpace.departmentName || `#${departmentId}`,
+                    name: editingSpace.departmentName || editingSpace.ownerName || `#${departmentId}`,
                 }]);
             } else {
                 setDepartmentSelection([]);
@@ -836,6 +851,11 @@ export function CreateKnowledgeSpaceDrawer({
                                         {Math.ceil(getFullWidthLength(name))}/{MAX_SPACE_NAME}
                                     </span>
                                 </div>
+                                {isEditingClinic && (
+                                    <div className="text-[14px] text-[#4E5969]">
+                                        所属科室：{editingSpace?.departmentName || selectedDepartmentName || "-"}
+                                    </div>
+                                )}
                             </div>
 
                             {shouldShowDepartmentSelector && (

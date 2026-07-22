@@ -79,6 +79,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     can_unsubscribe: bool = Field(default=False, description="Whether current user can unsubscribe from this space")
     user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
+    is_clinic: bool = Field(
+        default=False,
+        description="True when the space is a clinic space (team-level space bound to a department)",
+    )
     department_id: int | None = Field(default=None, description="Bound department id for department spaces")
     department_name: str | None = Field(default=None, description="Bound department name for department spaces")
     approval_enabled: bool | None = Field(default=None, description="Whether department-space uploads require approval")

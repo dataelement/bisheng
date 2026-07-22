@@ -27,13 +27,13 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     Knowledge,
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
@@ -1045,6 +1045,92 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
         space_id=11,
         created_by=7,
     )
+
+
+@pytest.mark.asyncio
+async def test_update_clinic_space_rebinds_department():
+    """Editing a clinic space updates its department_knowledge_space binding."""
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7, is_admin=False)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    space = _make_space(space_id=11, user_id=7, space_level=KnowledgeSpaceLevelEnum.TEAM)
+    scope = SimpleNamespace(
+        id=1,
+        space_id=11,
+        level=KnowledgeSpaceLevelEnum.TEAM,
+        owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+        owner_id=7,
+        tenant_id=1,
+    )
+    binding = SimpleNamespace(id=1, space_id=11, department_id=99)
+    old_department = SimpleNamespace(id=99, status="active", dept_id="dept-99", is_deleted=0)
+    new_department = SimpleNamespace(id=100, status="active", dept_id="dept-100", is_deleted=0)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=scope,
+        ),
+        patch.object(
+            DepartmentKnowledgeSpaceDao,
+            "aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=binding,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
+            new_callable=AsyncMock,
+            side_effect=[new_department, old_department],
+        ),
+        patch.object(
+            svc,
+            "_can_bind_department_on_create",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch.object(
+            svc,
+            "_require_permission_id",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            svc,
+            "_ensure_space_name_unique_in_scope",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch.object(
+            svc,
+            "_apply_auto_tag_binding",
+            new_callable=AsyncMock,
+            return_value=(False, 1),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch.object(
+            DepartmentKnowledgeSpaceDao,
+            "aupdate",
+            new_callable=AsyncMock,
+        ) as mock_binding_update,
+    ):
+        result = await svc.update_knowledge_space(
+            space_id=11,
+            name="科室空间 renamed",
+            department_id=100,
+        )
+
+    assert result.id == 11
+    assert binding.department_id == 100
+    mock_binding_update.assert_awaited_once()
 
 
 @pytest.mark.asyncio

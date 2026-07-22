@@ -182,6 +182,8 @@ export interface KnowledgeSpace {
 
     /** "department" when bound to a department, "normal" otherwise */
     spaceKind?: "normal" | "department";
+    /** True when the space is a clinic space (team-level space bound to a department) */
+    isClinic?: boolean;
     departmentId?: number;
     departmentName?: string;
     approvalEnabled?: boolean;
@@ -601,6 +603,9 @@ interface RawKnowledgeSpace {
     owner_id?: number;
     owner_name?: string;
     business_domain_codes?: string[];
+    is_clinic?: boolean;
+    department_id?: number;
+    department_name?: string;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -754,6 +759,7 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             undefined,
         canUnsubscribe: Boolean((raw as any).can_unsubscribe ?? (raw as any).canUnsubscribe ?? false),
         spaceKind: (raw as any).space_kind || "normal",
+        isClinic: Boolean((raw as any).is_clinic),
         departmentId: (raw as any).department_id ?? undefined,
         departmentName: (raw as any).department_name ?? undefined,
         approvalEnabled:

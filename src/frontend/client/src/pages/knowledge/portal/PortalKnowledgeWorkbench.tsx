@@ -672,7 +672,9 @@ export default function PortalKnowledgeWorkbench() {
             signal: controller.signal,
         }).then((permissions) => {
             if (cancelled) return;
-            const permissionIdsByFileId = Object.fromEntries(fileIdsInBatch.map((fileId) => [fileId, []]));
+            const permissionIdsByFileId = Object.fromEntries(
+                fileIdsInBatch.map((fileId) => [fileId, [] as string[]]),
+            );
             for (const permission of permissions) {
                 if (permission.fileId in permissionIdsByFileId) {
                     permissionIdsByFileId[permission.fileId] = permission.permissionIds;
@@ -687,7 +689,9 @@ export default function PortalKnowledgeWorkbench() {
         }).catch(() => {
             if (cancelled || controller.signal.aborted) return;
             // Permission lookup errors fail closed, but never block the file list.
-            const permissionIdsByFileId = Object.fromEntries(fileIdsInBatch.map((fileId) => [fileId, []]));
+            const permissionIdsByFileId = Object.fromEntries(
+                fileIdsInBatch.map((fileId) => [fileId, [] as string[]]),
+            );
             setPublicFilePermissionState((previous) => ({
                 spaceId: activePublicSpaceId,
                 permissionIdsByFileId: previous.spaceId === activePublicSpaceId
@@ -2705,7 +2709,11 @@ export default function PortalKnowledgeWorkbench() {
                 editingSpace={editingSpace}
                 pendingCreateLevel={pendingCreateLevel}
                 showSuccessManageMembers={(spaceLevel) => spaceLevel !== SpaceLevel.PERSONAL}
-                canEditDepartmentBinding={isSystemAdmin}
+                canEditDepartmentBinding={
+                    editingSpace?.isClinic
+                        ? isSystemAdmin || Boolean(currentUser?.is_department_admin)
+                        : isSystemAdmin
+                }
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}
                 onManageEditingSpaceMembers={() => {
                     setCreateDrawerOpen(false);

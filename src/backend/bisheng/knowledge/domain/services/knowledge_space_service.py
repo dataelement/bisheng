@@ -1161,6 +1161,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if binding is not None:
                     space.approval_enabled = binding.approval_enabled
                     space.sensitive_check_enabled = binding.sensitive_check_enabled
+                    # Clinic spaces are team-level spaces with a department binding.
+                    scope = scopes.get(int(space.id))
+                    if (
+                        scope is not None
+                        and scope.level == KnowledgeSpaceLevelEnum.TEAM
+                        and scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+                    ):
+                        space.is_clinic = True
         return spaces
 
     async def _format_accessible_spaces(
@@ -7347,16 +7355,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         rebind_scope = None
         target_department = None
         old_department = None
+        clinic_binding = None
+        is_clinic_rebind = False
         if department_id is not None:
-            if not self.login_user.is_admin():
-                raise UnAuthorizedError(msg="仅系统管理员可以修改部门知识库归属")
             rebind_scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
-            if (
-                rebind_scope is None
-                or rebind_scope.level != KnowledgeSpaceLevelEnum.DEPARTMENT
-                or rebind_scope.owner_type != KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
-            ):
-                raise SpaceInvalidScopeOwnerError(msg="仅部门知识库可以修改所属部门")
+            is_department_space = (
+                rebind_scope is not None
+                and rebind_scope.level == KnowledgeSpaceLevelEnum.DEPARTMENT
+                and rebind_scope.owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
+            )
+            clinic_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+            is_clinic_space = (
+                rebind_scope is not None
+                and rebind_scope.level == KnowledgeSpaceLevelEnum.TEAM
+                and rebind_scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+                and clinic_binding is not None
+            )
+            if not is_department_space and not is_clinic_space:
+                raise SpaceInvalidScopeOwnerError(msg="仅部门知识库或科室知识库可以修改所属部门")
+
             target_department = await DepartmentDao.aget_by_id(department_id)
             if (
                 target_department is None
@@ -7364,16 +7381,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 or int(getattr(target_department, "is_deleted", 0) or 0) == 1
             ):
                 raise SpaceInvalidScopeOwnerError(msg="目标部门不存在或已归档")
-            old_department_id = int(rebind_scope.owner_id)
-            old_department = (
-                target_department
-                if old_department_id == int(department_id)
-                else await DepartmentDao.aget_by_id(old_department_id)
-            )
-            if old_department is None:
-                raise SpaceInvalidScopeOwnerError(msg="原所属部门不存在或已归档")
-            if self.department_space_binding_repo is None:
-                raise RuntimeError("DepartmentSpaceBindingRepository is not configured")
+
+            if is_department_space:
+                if not self.login_user.is_admin():
+                    raise UnAuthorizedError(msg="仅系统管理员可以修改部门知识库归属")
+                old_department_id = int(rebind_scope.owner_id)
+                old_department = (
+                    target_department
+                    if old_department_id == int(department_id)
+                    else await DepartmentDao.aget_by_id(old_department_id)
+                )
+                if old_department is None:
+                    raise SpaceInvalidScopeOwnerError(msg="原所属部门不存在或已归档")
+                if self.department_space_binding_repo is None:
+                    raise RuntimeError("DepartmentSpaceBindingRepository is not configured")
+            else:
+                # Clinic spaces are team-level spaces with a department binding;
+                # the binding department can be changed by admins or department
+                # admins within their visible scope.
+                is_clinic_rebind = True
+                if not await self._can_bind_department_on_create(int(department_id)):
+                    raise SpaceCreateDepartmentDeniedError()
+                old_department_id = int(clinic_binding.department_id)
+                old_department = (
+                    target_department
+                    if old_department_id == int(department_id)
+                    else await DepartmentDao.aget_by_id(old_department_id)
+                )
+                if old_department is None:
+                    raise SpaceInvalidScopeOwnerError(msg="原所属科室不存在或已归档")
 
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
@@ -7438,6 +7474,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space = await KnowledgeDao.async_update_space(space)
         if department_id is not None:
+            if is_clinic_rebind:
+                # Clinic spaces only need the department_knowledge_space binding updated;
+                # the scope remains TEAM/USER.
+                if int(clinic_binding.department_id) != int(department_id):
+                    clinic_binding.department_id = int(department_id)
+                    await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
+                return space
+
             old_admin_rows = await DepartmentService.aget_admins(old_department.dept_id, self.login_user)
             new_admin_rows = (
                 old_admin_rows
