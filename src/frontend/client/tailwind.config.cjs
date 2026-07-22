@@ -11,7 +11,9 @@ module.exports = {
   future: {
     hoverOnlyWhenSupported: true,
   },
-  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  // packages/ui is source-shipped: its classes must be scanned here too,
+  // or shared components (e.g. @bisheng/ui Button) lose their styles.
+  content: ['./src/**/*.{js,jsx,ts,tsx}', '../packages/ui/src/**/*.{ts,tsx}'],
   // darkMode: 'class',
   darkMode: ['class'],
   theme: {

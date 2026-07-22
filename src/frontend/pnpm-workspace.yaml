@@ -1,0 +1,27 @@
+# BiSheng frontend workspace — two apps + shared internal packages.
+# Apps keep their own stacks/builds; workspace only links them at the
+# package-manager level so packages/* can be consumed without publishing.
+packages:
+  - client
+  - platform
+  - packages/*
+
+# Single source of truth for dependency versions shared across the workspace.
+# New shared deps go here; app-specific deps stay in each app's package.json.
+# (Versions seeded from client to avoid any resolution drift on day one.)
+catalog:
+  react: ^18.2.0
+  react-dom: ^18.2.0
+  '@types/react': ^18.2.11
+  '@types/react-dom': ^18.2.4
+  '@radix-ui/react-slot': ^1.1.0
+  bisheng-icons: ^0.2.22
+  class-variance-authority: ^0.6.0
+  clsx: ^1.2.1
+  tailwind-merge: ^1.14.0
+  tailwindcss: ^3.4.1
+  postcss: ^8.4.31
+  autoprefixer: ^10.4.20
+  typescript: ^5.3.3
+  vite: ^6.3.6
+  '@vitejs/plugin-react': ^4.2.1

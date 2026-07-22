@@ -1,0 +1,328 @@
+import { useState } from 'react';
+import {
+  BRAND, BRAND_STEPS, GRAY, TEXT, FILL, BORDER, BG, FUNCTIONAL, TAG,
+  FONT_FAMILY, TYPE_SCALE, FONT_WEIGHT, RADIUS, ICON_SIZE,
+} from '~/design-token.cjs';
+
+export const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace';
+
+{/* Neutral/semantic tables follow the SITE theme (navbar sun/moon toggle):
+    swatches read the live CSS vars (`.dark` flips them), and the documented
+    hex pair is shown/hidden via the bs-hex-light / bs-hex-dark helpers in
+    rspress-overrides.css. */}
+
+export const Seg = ({ value, options, onChange }) => (
+  <div style={{ display: 'inline-flex', gap: 2, padding: 2, border: '1px solid rgb(var(--border-base))', borderRadius: 8 }}>
+    {options.map((o) => (
+      <button
+        key={o.value}
+        type="button"
+        onClick={() => onChange(o.value)}
+        style={{
+          height: 30, padding: '0 16px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13,
+          background: value === o.value ? 'rgb(var(--brand-500) / 0.08)' : 'transparent',
+          color: value === o.value ? 'rgb(var(--brand-500))' : 'rgb(var(--text-3))',
+          fontWeight: value === o.value ? 500 : 400,
+        }}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+);
+
+export const Dot = ({ color }) => (
+  <span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 3, background: color, marginRight: 8, verticalAlign: '-2px', boxShadow: 'inset 0 0 0 1px rgba(128,128,128,0.25)', flexShrink: 0 }} />
+);
+
+export const Name = ({ color, children }) => (
+  <span style={{ whiteSpace: 'nowrap', color: 'rgb(var(--text-1))' }}>
+    {color != null && <Dot color={color} />}
+    <span style={{ fontFamily: mono, fontSize: 13 }}>{children}</span>
+  </span>
+);
+
+export const Code = ({ children, dim }) => (
+  <span style={{ fontFamily: mono, fontSize: 12.5, color: dim ? 'rgb(var(--text-3))' : 'rgb(var(--text-2))' }}>{children}</span>
+);
+
+export const HexPair = ({ hex, darkHex }) => (
+  <>
+    <span className="bs-hex-light">{hex}</span>
+    <span className="bs-hex-dark">{darkHex}</span>
+  </>
+);
+
+export const TokenTable = ({ cols, rows }) => (
+  <div style={{ overflowX: 'auto', margin: '16px 0 8px' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, lineHeight: '20px' }}>
+      <thead>
+        <tr>
+          {cols.map((c) => (
+            <th key={c.t} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 500, whiteSpace: 'nowrap', color: 'rgb(var(--text-1))', background: 'rgb(var(--fill-1))', borderBottom: '1px solid rgb(var(--border-base))' }}>{c.t}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            {cols.map((c) => (
+              <td key={c.t} style={{ padding: '10px 16px', color: 'rgb(var(--text-2))', borderBottom: '1px solid rgb(var(--border-base))', ...(c.style || {}) }}>{c.r(r)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+export const BrandTable = () => {
+  const [theme, setTheme] = useState('blue');
+  const rows = [...BRAND_STEPS, 'muted'].map((step) => ({ step, hex: BRAND[theme][step] }));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '16px 0 0' }}>
+        <Seg value={theme} onChange={setTheme} options={[{ value: 'blue', label: '蓝' }, { value: 'green', label: '绿' }]} />
+      </div>
+      <TokenTable
+        cols={[
+          { t: '变量名', r: (r) => <Name color={r.hex}>brand-{r.step}</Name> },
+          { t: '变量值', r: (r) => <Code>{r.hex}</Code> },
+          { t: 'CSS 变量', r: (r) => <Code>--brand-{r.step}</Code> },
+          { t: 'Tailwind 类', r: (r) => (r.step === 'muted' ? <Code dim>—（rgb(var(--brand-muted))）</Code> : <Code>blue-{r.step}</Code>) },
+          { t: '描述', r: (r) => <>{BRAND.role[r.step]}{r.step === BRAND.main ? '（brand main）' : ''}</> },
+        ]}
+        rows={rows}
+      />
+    </div>
+  );
+};
+
+export const GrayTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (g) => <Name color={`rgb(var(--arco-gray-${g.n}))`}>gray-{g.n}</Name> },
+      { t: '变量值', r: (g) => <Code><HexPair hex={g.hex} darkHex={g.darkHex} /></Code> },
+      { t: 'CSS 变量', r: (g) => <Code>--arco-gray-{g.n}</Code> },
+      { t: '描述', r: (g) => g.role },
+    ]}
+    rows={GRAY}
+  />
+);
+
+export const RoleTable = ({ data, prefix, cls, legacy }) => {
+  return (
+    <TokenTable
+      cols={[
+        { t: '变量名', r: (x) => <Name color={`rgb(var(${x.cssVar}))`}>{prefix}-{x.name}</Name> },
+        { t: '变量值', r: (x) => <Code>{x.ref ? `${x.ref} · ` : ''}<HexPair hex={x.hex} darkHex={x.darkHex} /></Code>, style: { whiteSpace: 'nowrap' } },
+        { t: 'CSS 变量', r: (x) => <Code>{x.cssVar}</Code> },
+        {
+          t: 'Tailwind 类',
+          r: (x) => (
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <Code>{cls(x)}</Code>
+              {legacy && x.legacy && <><br /><Code dim>旧 {legacy(x)}（deprecated）</Code></>}
+            </span>
+          ),
+        },
+        { t: '描述', r: (x) => x.usage },
+      ]}
+      rows={data}
+    />
+  );
+};
+
+export const FunctionalTable = () => {
+  const stops = [['', 'main', '常规'], ['-hover', 'hover', '悬浮（hover）'], ['-active', 'active', '点击（active）'], ['-tint', 'tint', '浅底（tag / 提示条）']];
+  const rows = FUNCTIONAL.flatMap((fn) => stops.map(([suffix, key, desc]) => ({
+    name: `${fn.name}${suffix}`,
+    hex: fn[key],
+    cssVar: `${fn.cssVar}${suffix}`,
+    desc: `${fn.label} · ${desc}`,
+  })));
+  return (
+    <TokenTable
+      cols={[
+        { t: '变量名', r: (r) => <Name color={r.hex}>{r.name}</Name> },
+        { t: '变量值', r: (r) => <Code>{r.hex}</Code> },
+        { t: 'CSS 变量', r: (r) => <Code>{r.cssVar}</Code> },
+        { t: 'Tailwind 类', r: (r) => <Code>bg-{r.name} / text-{r.name}</Code>, style: { whiteSpace: 'nowrap' } },
+        { t: '描述', r: (r) => r.desc },
+      ]}
+      rows={rows}
+    />
+  );
+};
+
+export const TagTable = () => (
+  <TokenTable
+    cols={[
+      { t: '场景', r: (t) => <span style={{ color: 'rgb(var(--text-1))' }}>{t.label}</span> },
+      { t: '背景 / 文字', r: (t) => <span style={{ whiteSpace: 'nowrap' }}><Dot color={t.bg} /><Code>{t.bg}</Code>&emsp;<Dot color={t.fg} /><Code>{t.fg}</Code></span> },
+      { t: '预览', r: (t) => <span style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 4, padding: '2px 8px', fontSize: 12, background: t.bg, color: t.fg }}>标签</span> },
+      { t: '说明', r: (t) => t.note },
+    ]}
+    rows={TAG}
+  />
+);
+
+export const FontFamilyTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (f) => <Name>{f.token}</Name> },
+      { t: 'Tailwind 类', r: (f) => <Code>{f.cls}</Code> },
+      { t: '字体栈', r: (f) => <Code dim>{f.stack.join(', ')}</Code> },
+      { t: '描述', r: (f) => f.usage, style: { whiteSpace: 'nowrap' } },
+    ]}
+    rows={[FONT_FAMILY.base, FONT_FAMILY.mono]}
+  />
+);
+
+export const TypeScaleTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (s) => <Name>text-{s.name}</Name> },
+      { t: '桌面（字号 / 行高）', r: (s) => <Code>{s.desktop[0]}px / {s.desktop[1]}px</Code> },
+      { t: '移动 ≤768px', r: (s) => <Code dim={s.mobile[0] === s.desktop[0] && s.mobile[1] === s.desktop[1]}>{s.mobile[0]}px / {s.mobile[1]}px</Code> },
+      { t: '字重', r: (s) => <Code>{s.weight}</Code> },
+      { t: 'CSS 变量', r: (s) => <span style={{ whiteSpace: 'nowrap' }}><Code>{s.cssVar}</Code><br /><Code dim>{s.leadingVar}</Code></span> },
+      { t: '描述', r: (s) => s.usage },
+    ]}
+    rows={TYPE_SCALE}
+  />
+);
+
+export const WeightTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (w) => <Name>{w.token}</Name> },
+      { t: '变量值', r: (w) => <Code>{w.value}</Code> },
+      { t: 'Tailwind 类', r: (w) => <Code>{w.cls}</Code> },
+      { t: '示例', r: (w) => <span style={{ fontWeight: w.value, color: 'rgb(var(--text-1))' }}>字体示例 Aa 123</span> },
+      { t: '描述', r: (w) => w.usage },
+    ]}
+    rows={FONT_WEIGHT}
+  />
+);
+
+export const RadiusTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (x) => <Name>radius-{x.name}</Name> },
+      { t: '变量值', r: (x) => <Code>{x.px >= 999 ? '9999px（胶囊）' : `${x.px}px`}</Code> },
+      { t: 'Tailwind 类', r: (x) => <Code>{x.cls || `rounded-${x.name}`}</Code> },
+      {
+        t: '预览',
+        r: (x) => (x.px >= 999
+          ? <span style={{ display: 'inline-block', width: 44, height: 44, borderRadius: 9999, border: '1px solid rgb(var(--brand-500))', background: 'rgb(var(--brand-50))', verticalAlign: 'middle' }} />
+          : <span style={{ display: 'inline-block', width: 44, height: 44, borderTopLeftRadius: x.px, border: '1px solid rgb(var(--brand-500))', background: 'rgb(var(--brand-50))', verticalAlign: 'middle' }} />),
+      },
+      { t: '描述', r: (x) => x.usage },
+    ]}
+    rows={RADIUS}
+  />
+);
+
+export const IconSizeTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (x) => <Name>icon-{x.name}</Name> },
+      { t: '变量值', r: (x) => <Code>{x.px}px</Code> },
+      { t: '线宽 stroke', r: (x) => <Code dim={!x.strokeWidth}>{x.strokeWidth || '2（默认）'}</Code> },
+      {
+        t: '预览',
+        r: (x) => (
+          <svg width={x.px} height={x.px} viewBox="0 0 24 24" fill="none" stroke="rgb(var(--text-2))" strokeWidth={x.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M8 12h8M12 8v8" />
+          </svg>
+        ),
+      },
+      { t: '描述', r: (x) => x.usage },
+    ]}
+    rows={ICON_SIZE}
+  />
+);
+
+# 设计变量 Design Token
+
+组件库的全局 Token——单一源为 <code>src/design-token.cjs</code>（SSOT），本页所有表格与色块直接从该文件渲染，**改 token 即改此页**，规范不会与组件实际取值漂移。业务代码只消费 Tailwind 类 / CSS 变量（semantic 层），**禁止裸 hex**。色块与「变量值」随右上角站点主题切换，展示对应的亮 / 暗色取值。
+
+## 品牌色 Brand
+
+主色 = 500 档，随蓝⇄绿主题整体切换（运行时载体 `--brand-*`，`.theme-green` 覆写）。业务代码一律走 `blue-*` 类——它已重定向到 `--brand-*`，语义是「品牌色」而非字面蓝色；**禁止写品牌 hex**。
+
+<BrandTable />
+
+> 选中 / 激活浅底统一 `bg-blue-500/[0.07]`；muted 档无 Tailwind 类，用 `rgb(var(--brand-muted))`。
+
+## 中性色 Neutral（primitive）
+
+中性灰阶 1–10，中性色数值源；暗色模式下明度整体翻转（`.dark` 覆写 `--arco-gray-*`）。**组件不直接消费这层**，走下方 semantic 层。
+
+<GrayTable />
+
+## 文字颜色 Text
+
+强度阶 strong → muted → hint → disabled，对应 gray-10 → 8 → 6 → 4。旧数字名（`text-1`…）为 deprecated 别名，仅供渐进迁移。
+
+<RoleTable data={TEXT} prefix="text" cls={(x) => `text-text-${x.name}`} legacy={(x) => `text-text-${x.legacy}`} />
+
+## 填充颜色 Fill
+
+<RoleTable data={FILL} prefix="fill" cls={(x) => `bg-fill-${x.name}`} legacy={(x) => `bg-fill-${x.legacy}`} />
+
+## 边框颜色 Border
+
+<RoleTable data={BORDER} prefix="border" cls={(x) => `border-border-${x.name}`} />
+
+## 背景颜色 Background
+
+「会变暗的白」——页面最底层表面。固定不换肤的 `--white: #fff` 是另一职责，勿混用。
+
+<RoleTable data={BG} prefix="bg" cls={(x) => `bg-bg-${x.name}`} />
+
+## 功能色 Functional
+
+成功 / 警告 / 危险为固定 hex，**全主题恒定、不参与换肤**；链接 / 信息色 = 品牌色，随主题切换。
+
+<FunctionalTable />
+
+## 标签色 Tag
+
+成对使用：浅底 + 深字。橙 / 绿 / 红三对走 token；技能紫、审批蓝为固定例外色（不 token 化、不换肤）。
+
+<TagTable />
+
+## 字体家族 Font Family
+
+<FontFamilyTable />
+
+## 字号与行高 Font Size
+
+语义化字阶（Tailwind fontSize key 即变量名），≤768px 自动重映射（运行时载体为 CSS 变量，媒体查询切换）。字号与字重绑定：类名自带对应字重。
+
+<TypeScaleTable />
+
+## 字重 Font Weight
+
+只用 400 / 500 两档，不使用 600+。
+
+<WeightTable />
+
+## 圆角 Radius
+
+阶梯与 Tailwind 圆角命名 1:1 对齐——**类名即 token 名**。控件档 sm / md / lg（4 / 6 / 8，`--radius` 基准 = 8px），容器档 xl / 2xl（12 / 16），特大容器档 3xl / 4xl（24 / 32），胶囊 / 圆形用 full。
+
+<RadiusTable />
+
+> - 只允许表内档位；历史遗留的离散值（`rounded-[5px]` / `[10px]` / `[20px]` / `[2px]`…）迭代到时归并至最近档，不再新增。
+> - `4xl`（32px）为项目扩展档（Tailwind 官方阶梯止于 3xl），已在 `tailwind.config.cjs` 注册。
+> - Dialog 默认样式含 `sm:rounded-lg`，覆写圆角需连同 `sm:` 变体（`rounded-2xl sm:rounded-2xl`）。
+
+## 图标尺寸 Icon Size
+
+原始画布 24px、线宽 2；缩放只改容器尺寸，线宽随缩放视觉等比（xs / xl2 例外档单独标注）。
+
+<IconSizeTable />

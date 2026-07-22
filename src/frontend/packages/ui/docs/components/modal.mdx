@@ -1,0 +1,105 @@
+# 弹窗 Modal
+
+承载业务内容（表单、列表、预览）的普通弹窗。**统一标准尚未定稿**——本页只演示「已定」的基准候选壳与过渡期写法；现状盘点（5 套壳 64 文件）、待决策清单见「文档 → 组件规范 → Modal 弹窗」。
+
+## 基准候选壳
+
+当前推荐的新弹窗写法：`OGDialogTemplate`（壳已对齐 C 套视觉——圆角 16 / p-5 / 灰底毛玻璃，取消/确认按钮已统一两档）。
+
+```tsx
+import { RecoilRoot } from 'recoil';
+import '~/locales/i18n';
+import store from '~/store';
+import { Button } from '~/components/ui/Button';
+import { Input } from '~/components/ui/Input';
+import { OGDialog, OGDialogTrigger } from '~/components/ui/OriginalDialog';
+import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+
+export default () => (
+  <RecoilRoot initializeState={({ set }) => set(store.lang, 'zh-Hans')}>
+    <OGDialog>
+      <OGDialogTrigger asChild>
+        <Button color="default" variant="outlined">打开基准候选壳</Button>
+      </OGDialogTrigger>
+      <OGDialogTemplate
+        title="弹窗标题"
+        description="标题下的说明文字。"
+        className="max-w-md"
+        main={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p>这里是弹窗正文示例。观察内边距、行距与正文和标题/按钮的间距。</p>
+            <Input placeholder="示例输入框" />
+          </div>
+        }
+        selection={{
+          selectHandler: () => null,
+          selectVariant: 'primary',
+          selectText: '确定',
+        }}
+      />
+    </OGDialog>
+  </RecoilRoot>
+);
+```
+
+## 壳规格（已定部分）
+
+与二次确认弹窗同一套壳：
+
+| 部位 | 值 | 备注 |
+|---|---|---|
+| 圆角 | `rounded-2xl`（16px） | 移动端是否保留直角/贴底待定 |
+| 内边距 | `p-5`（20px）· 区块间 `gap-4` | |
+| 遮罩 | `bg-gray-500/90` + `backdrop-blur-md` | 灰底毛玻璃 |
+| 边框 / 阴影 | border `#ebebeb` + 淡投影 | |
+| 标题 | `text-base font-medium leading-6` | |
+| 取消 / 确认按钮 | 白底描边 + danger / primary 两档 | 与二次确认一致 |
+
+仍待定：遮罩、圆角 8 vs 16、内边距 20 vs 24、标题字重、z-index 三档（50 / 100 / 110）收敛、footer 按钮间距、原语收敛方向（A 套 22 处直拼是最大人群）。
+
+## 过渡期规则
+
+- 新增业务弹窗优先 `OGDialogTemplate`；**不要再新增手拼 `AlertDialog` 弹窗**。
+- 纯「确认 / 取消」的二次确认不属于本页——用 `useConfirm()`（见「Confirm 二次确认」）。
+- 窄屏下弹层贴边距、footer 按钮等宽平铺（见「文档 → 设计规范 → 多端适配」）。
+
+## 反馈评论弹窗 CommentDialog（共享壳）
+
+「标题 + textarea + 取消/提交」的轻量共享壳（容器零 padding、header/body/footer 各 `px-5`、移动端 `calc(100%-48px)` 宽 + 标题居中 + 按钮等宽、每次打开重置草稿、可选 `submitting` 支持异步提交）。点踩反馈、权限申请等场景都用它，不要再手拼。
+
+```tsx
+import { useState } from 'react';
+import { RecoilRoot } from 'recoil';
+import '~/locales/i18n';
+import store from '~/store';
+import { Button } from '~/components/ui/Button';
+import { CommentDialog } from '~/components/ui/CommentDialog';
+
+function Demo() {
+  const [open, setOpen] = useState(false);
+  const [last, setLast] = useState('—');
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <Button color="default" variant="outlined" onClick={() => setOpen(true)}>
+        打开 CommentDialog
+      </Button>
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>最近提交：{last}</span>
+      <CommentDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="接入申请"
+        placeholder="请填写申请原因（选填）"
+        onSubmit={(c) => setLast(c || '(空)')}
+      />
+    </div>
+  );
+}
+
+export default () => (
+  <RecoilRoot initializeState={({ set }) => set(store.lang, 'zh-Hans')}>
+    <Demo />
+  </RecoilRoot>
+);
+```
+
+> demo 里的 `RecoilRoot` + `import '~/locales/i18n'` 只是文档站的挂载脚手架（组件内部用了 `useLocalize`）；业务页在 App 全局已具备，无需自己包。

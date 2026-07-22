@@ -1,0 +1,145 @@
+import { FONT_FAMILY, TYPE_SCALE, FONT_WEIGHT } from '~/design-token.cjs';
+
+export const th = { padding: '8px 12px', color: 'rgb(var(--text-1))', whiteSpace: 'nowrap' };
+export const td = { padding: '8px 12px', color: 'rgb(var(--text-1))', borderBottom: '1px solid rgb(var(--border-base))' };
+export const headRow = { textAlign: 'left' };
+
+export const codeBlock = {
+  display: 'block',
+  margin: '16px 0',
+  padding: '14px 18px',
+  background: 'rgb(var(--fill-1))',
+  border: '1px solid rgb(var(--border-base))',
+  borderRadius: 8,
+  fontFamily: 'var(--bs-font-mono)',
+  fontSize: 13,
+  lineHeight: '22px',
+  color: 'rgb(var(--text-1))',
+  overflowX: 'auto',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+};
+
+export const FontStackBlock = ({ font }) => (
+  <div style={codeBlock}>
+    <span style={{ color: 'rgb(var(--brand-500))', fontWeight: 500 }}>{font.token}</span>
+    {`: ${font.stack.join(', ')};`}
+  </div>
+);
+
+export const PrimitiveTable = () => (
+  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+    <thead><tr style={headRow}><th style={th}>Token</th><th style={th}>字号 px</th><th style={th}>行高 px</th><th style={th}>rem</th></tr></thead>
+    <tbody>
+      {TYPE_SCALE.map((s, i) => (
+        <tr key={s.name}>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}><code>font-size-{i + 1}</code></td>
+          <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{s.desktop[0]}</td>
+          <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{s.desktop[1]}</td>
+          <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{s.desktop[0] / 16}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
+export const SemanticTable = () => (
+  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+    <thead><tr style={headRow}><th style={th}>Token</th><th style={th}>桌面 size/line</th><th style={th}>移动 size/line</th><th style={th}>字重</th><th style={th}>用途</th><th style={th}>示例</th></tr></thead>
+    <tbody>
+      {TYPE_SCALE.map((s) => (
+        <tr key={s.name} style={{ height: 60 }}>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}><code>text-{s.name}</code></td>
+          <td style={{ ...td, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{s.desktop[0]} / {s.desktop[1]}</td>
+          <td style={{ ...td, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{s.mobile[0]} / {s.mobile[1]}</td>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.weight}</td>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.usage}</td>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}><span className={`text-${s.name}`}>示例 Ag</span></td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
+export const WeightTable = () => (
+  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+    <thead><tr style={headRow}><th style={th}>Token</th><th style={th}>值</th><th style={th}>用途</th></tr></thead>
+    <tbody>
+      {FONT_WEIGHT.map((w) => (
+        <tr key={w.token}>
+          <td style={{ ...td, whiteSpace: 'nowrap' }}><code>{w.token}</code></td>
+          <td style={td}><span style={{ fontWeight: w.value }}>{w.value}</span></td>
+          <td style={td}>{w.usage}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
+# 文字规范 Typography
+
+字体是体系化界面设计中最基本的构成之一。我们的用户通过文本来理解内容和完成工作，科学的字体系统将大大提升用户的阅读体验及工作效率。BISHENG 字体方案以「行高 = 字号 + 8px」的偶数栅格规律构建九档字阶，经过大量中后台产品的实际验证后沉淀为规范，推荐给大家。在中后台视觉体系中定义字体系统，我们从下面四个方面出发：
+
+1. 字体家族 Font Family
+2. 字阶与行高 Font Size
+3. 字重 Font Weight
+4. 使用约定
+
+## 1. 字体家族 Font Family
+
+优秀的字体系统首先要选择合适的字体家族。BISHENG 优先使用各操作系统自带的默认界面字体，另配一套利于屏显的备用字体库，在不同平台与浏览器下都维持良好的易读性与一致性 —— 零 webfont 加载成本、多端原生观感。
+
+<FontStackBlock font={FONT_FAMILY.base} />
+
+> 同一份字体家族覆盖所有设备：macOS/iOS 命中 San Francisco + 苹方，Windows 命中 Segoe UI + 微软雅黑，Android 命中 Roboto + 思源黑体，无需为移动端单独配置。
+
+ID、哈希、代码、日志等需要等宽对齐的内容，使用等宽字体族 `font-family-mono`：
+
+<FontStackBlock font={FONT_FAMILY.mono} />
+
+> 另外，中后台系统里数字常需纵向对比展示，推荐把数字的 `font-variant-numeric` 设为 `tabular-nums`，使其成为等宽数字，保证纵向对齐、数值变化时不跳动。
+
+## 2. 字阶与行高 Font Size
+
+字阶分成两层。**Primitive（数值层）** 只登记九个具体字号（12～36px），像一套标好刻度的尺子，本身不关心用在哪里；**Semantic（语义层）** 再给每个字号起一个说明用途的名字——正文、卡片标题、页面标题……界面里只用这些名字，不直接写数字。
+
+多这一层，换来三个好处：
+
+- **改一处、全站生效**：想把正文从 14px 调到 15px，只改「正文」这一个指向，所有正文一起变，不用满仓库翻数字。
+- **不会各写各的**：大家统一用「正文」「标题」这类有含义的名字，同一层级不会冒出 14、15、16 各种随手值，界面自然整齐。
+- **换端不用动代码**：移动端只要把「正文」重新指向大一号的字号即可，页面一个字都不用改（下面 Semantic 表就是这样切换的）。
+
+### Primitive（桌面基准）
+
+primitive 即九档桌面字号的数值源，行高规律 **行高 = 字号 + 8px**（全偶数、对齐 4px 栅格）。
+
+<PrimitiveTable />
+
+### Semantic
+
+下表给每个字号都列了桌面、移动两套值。手机等窄屏（宽度 768px 以内）会自动切到移动那一套，页面不用为此改任何代码——这正是上面「换端不用动代码」的落地。最右「示例」列按真实样式渲染，所见即所得。
+
+<SemanticTable />
+
+移动端的调整思路：正文放大（14→16）方便阅读，标题收小（24→22）节省空间，整个阶梯更「扁」；字号差变小后，层级主要靠字重和间距来拉开。
+
+## 3. 字重 Font Weight
+
+<WeightTable />
+
+**只使用 400 / 500 两档。** 禁用 600/700：微软雅黑缺中间字重，600 以上在 Windows 会回退为合成粗体，视觉粗黑一团。PingFang Medium (500) 降级到雅黑 Regular 可接受。
+
+## 4. 使用约定
+
+### Token 约定
+
+- 组件与业务代码只引用 semantic token，不直接使用 primitive 或裸值。
+- 新增字号需求先在现有阶梯中找替代；确需新增走 token 评审加入 primitive 层。
+- 同一视图中标题层级连续使用（h1→h2→h3），不跳级取字号。
+
+### 移动端硬性规则
+
+1. **输入框字号 ≥ 16px**。iOS Safari 会在点击字号小于 16px 的输入框时自动放大页面，导致布局错位；保持 ≥ 16px 可完全避免。
+2. **可点击文字 ≥ 14px**，触达区域 ≥ 44×44px。12px 仅用于纯展示信息（按输入方式生效）。
+3. **尊重系统缩放**：token 以 rem 输出，`html` 的 font-size 保持 100%（不写死 px）。
+4. **Android 中文渲染**：思源黑体比苹方视觉偏大偏宽，同字号下行高不缩减，宁松勿紧。

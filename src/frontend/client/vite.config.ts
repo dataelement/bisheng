@@ -103,8 +103,8 @@ export default defineConfig(({ command, mode }) => {
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
   // SigV4 presigned URLs sign the Host header, so a mismatch yields 403
   // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
-  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
-  const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://192.168.106.120:3002/';
+  const apiTarget = env.VITE_DEV_API_TARGET || 'http://192.168.106.120:3002/';
 
   return {
     base: app_env.BASE_URL || '/',
@@ -246,6 +246,14 @@ export default defineConfig(({ command, mode }) => {
     build: {
       sourcemap: process.env.NODE_ENV === 'development',
       outDir: './build',
+      // pnpm workspace: deps live in ../node_modules (outside this vite root),
+      // which defeats vite-plugin-node-polyfills' node_modules exemption — its
+      // injected ESM imports land inside CJS deps (react, react-dom) and break
+      // rollup's named-export detection. Let the commonjs plugin transform
+      // mixed ESM/CJS modules so named exports survive the injection.
+      commonjsOptions: {
+        transformMixedEsModules: true,
+      },
       minify: 'terser',
       // Strip all console.* / debugger from production bundles so no debug data
       // (API payloads, tokens, filenames) leaks to the browser console. The
@@ -424,6 +432,10 @@ export default defineConfig(({ command, mode }) => {
         $fonts: path.resolve(__dirname, 'public/fonts'),
         // SUL-licensed nodebox is unused (only static/react-ts templates); stub it out of the bundle.
         '@codesandbox/nodebox': path.resolve(__dirname, 'stubs/nodebox-stub.ts'),
+        // node-only dynamic imports (see stubs/empty-module.ts) — the polyfill
+        // plugin's `fs` alias mangles the /promises subpath under pnpm layout.
+        'node:fs/promises': path.resolve(__dirname, 'stubs/empty-module.ts'),
+        'fs/promises': path.resolve(__dirname, 'stubs/empty-module.ts'),
       },
     },
   };

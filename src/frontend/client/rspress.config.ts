@@ -17,8 +17,12 @@ import autoprefixer from 'autoprefixer';
 const clientSrc = path.join(__dirname, 'src');
 
 export default defineConfig({
-  // req 2: docs root = bisheng/docs-ui-refactor
-  root: path.join(__dirname, '../../../docs-ui-refactor'),
+  // Docs live with the component library: src/frontend/packages/ui/docs
+  // (git-tracked; the site stays hosted in client until the app-coupled demos
+  // finish migrating onto @bisheng/ui).
+  root: path.join(__dirname, '../packages/ui/docs'),
+  // Build output next to the docs source (gitignored; CI artifact only).
+  outDir: path.join(__dirname, '../packages/ui/doc_build'),
   title: 'BISHENG 组件库',
   description: 'BISHENG client 设计规范 + 组件库',
   lang: 'zh', // single language — i18n intentionally not enabled (req 5)
@@ -177,7 +181,17 @@ export default defineConfig({
           filter: (url: string) => !url.startsWith('/') && !url.startsWith('$fonts'),
         },
       },
-      rspack: (config) => {
+      rspack: (config, { rspack }) => {
+        // node:-scheme imports reached only on node-only paths (e.g.
+        // @dicebear/core toFile → import('node:fs/promises') via the ~/hooks
+        // barrel) — replace with an empty stub; rspack has no node: handling.
+        config.plugins = config.plugins || [];
+        config.plugins.push(
+          new rspack.NormalModuleReplacementPlugin(
+            /^node:fs\/promises$/,
+            path.join(__dirname, 'stubs/empty-module.ts'),
+          ),
+        );
         config.resolve = config.resolve || {};
         // filenamify (ESM, imports node:path — an unbundlable scheme) comes
         // in via the ~/hooks barrel (usePresets); no demo executes it. The
@@ -209,7 +223,7 @@ export default defineConfig({
           // run, and MDX rejects the `<!-- site-hide -->` HTML comments this
           // loader relies on. Spec .mdx pages are authored reader-clean instead.
           test: /\.md$/,
-          include: [path.join(__dirname, '../../../docs-ui-refactor')],
+          include: [path.join(__dirname, '../packages/ui/docs')],
           enforce: 'pre',
           use: [path.join(__dirname, 'plugins/strip-internal-loader.cjs')],
         });

@@ -1,0 +1,234 @@
+# 按钮 Button
+
+组件库 `@bisheng/ui` Button 的实时预览(client 经 `~/components/ui/Button` re-export 同一实现)。**color × variant 双轴**：color 管颜色（primary / default / danger），variant 管画法（solid / outlined / filled / text / link），3×5 组合自动成立。规范全文见「文档 → 组件规范 → Button 按钮」。
+
+## 常用类型
+
+六个常用别名，其余组合按双轴自然推导。一个操作区域只放一个 `primary solid` 主按钮；最常用的次级按钮是 `default outlined`（白底灰描边）。
+
+```tsx
+import { Button } from '@bisheng/ui';
+
+const rows = [
+  ['Primary 主按钮 · primary × solid', <Button color="primary" variant="solid">主按钮</Button>],
+  ['Secondary 次强调 · primary × filled', <Button color="primary" variant="filled">次强调</Button>],
+  ['Default 默认按钮 · default × outlined', <Button color="default" variant="outlined">取消</Button>],
+  ['Text 文字按钮 · default × text', <Button color="default" variant="text">文字按钮</Button>],
+  ['Link 链接按钮 · primary × link', <Button color="primary" variant="link">链接按钮</Button>],
+  [
+    'Danger 危险按钮 · danger × solid / outlined / text',
+    <>
+      <Button color="danger" variant="solid">删除</Button>
+      <Button color="danger" variant="outlined">删除</Button>
+      <Button color="danger" variant="text">删除</Button>
+    </>,
+  ],
+];
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    {rows.map(([label, node]) => (
+      <div key={label as string} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 300, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))' }}>
+          {label}
+        </span>
+        {node}
+      </div>
+    ))}
+  </div>
+);
+```
+
+## color × variant 全矩阵
+
+3 色 × 5 画法共 15 种组合全部成立，不必逐个定义；不设 dashed 与 ghost，「无描边无背景」的诉求由 text 承接。
+
+```tsx
+import { Button } from '@bisheng/ui';
+
+const colors = ['primary', 'default', 'danger'] as const;
+const variants = ['solid', 'outlined', 'filled', 'text', 'link'] as const;
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ width: 80, flexShrink: 0 }} />
+      {colors.map((c) => (
+        <span key={c} style={{ width: 96, fontSize: 13, color: 'rgb(var(--text-2))' }}>{c}</span>
+      ))}
+    </div>
+    {variants.map((v) => (
+      <div key={v} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <code style={{ width: 80, flexShrink: 0, fontSize: 13 }}>{v}</code>
+        {colors.map((c) => (
+          <span key={c} style={{ width: 96 }}>
+            <Button color={c} variant={v}>按钮</Button>
+          </span>
+        ))}
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 尺寸 size
+
+三档：small 24px / medium 32px（默认）/ large 40px，圆角 4 / 6 / 8px。不要手写高度、内边距、圆角；同一视图内相邻按钮必须同尺寸。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+import { Button } from '@bisheng/ui';
+
+const sizes = [
+  ['small', '高 24px · 字号 14/22 · 圆角 4px — 表格行内、紧凑工具条'],
+  ['medium', '高 32px · 字号 14/22 · 圆角 6px — 默认，绝大多数场景'],
+  ['large', '高 40px · 字号 16/24 · 圆角 8px — 登录页、大表单提交'],
+] as const;
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    {sizes.map(([s, desc]) => (
+      <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 300, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))' }}>
+          <code>size="{s}"</code>
+          <div style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>{desc}</div>
+        </div>
+        <Button color="primary" size={s}>按钮</Button>
+        <Button color="default" size={s}>按钮</Button>
+        <Button color="default" size={s} iconOnly aria-label="搜索">
+          <Outlined.Search />
+        </Button>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 内容形态
+
+一个按钮最多一个 icon；icon 尺寸三档 14 / 16 / 18px，与文字间距 8px（small 档可收紧至 4px）。
+
+### 纯文字
+
+不换行不省略；两个汉字**不加**中间空格；字重 400（全尺寸全类型一致）。
+
+```tsx
+import { Button } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <Button>确定</Button>
+    <Button color="default">取消</Button>
+  </div>
+);
+```
+
+### 纯 icon（shape square / circle）
+
+`circle` 正圆仅限纯 icon 按钮；必须带 Tooltip 与 `aria-label`；触屏热区 ≥44px（组件内置，视觉尺寸不变）。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+import { Button } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <Button color="default" variant="outlined" size="small" iconOnly aria-label="编辑">
+      <Outlined.Edit />
+    </Button>
+    <Button color="default" variant="outlined" size="medium" iconOnly aria-label="编辑">
+      <Outlined.Edit />
+    </Button>
+    <Button color="default" variant="outlined" size="large" iconOnly aria-label="编辑">
+      <Outlined.Edit />
+    </Button>
+    <Button color="default" variant="outlined" shape="circle" iconOnly aria-label="搜索">
+      <Outlined.Search />
+    </Button>
+    <Button shape="circle" iconOnly aria-label="发送">
+      <Outlined.Send />
+    </Button>
+    <Button color="default" variant="text" iconOnly aria-label="删除">
+      <Outlined.Delete />
+    </Button>
+    <Button color="danger" variant="text" iconOnly aria-label="删除">
+      <Outlined.Delete />
+    </Button>
+  </div>
+);
+```
+
+### 文字 + icon
+
+用 `icon` 属性，默认在文字左侧；loading 时 spinner 顶替 icon 位。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+import { Button } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <Button icon={<Outlined.Plus />}>新建</Button>
+    <Button color="default" icon={<Outlined.Download />}>下载</Button>
+    <Button color="danger" variant="outlined" icon={<Outlined.Delete />}>删除</Button>
+  </div>
+);
+```
+
+### icon 在右（方向语义）
+
+「下一步 →」这类方向语义可放右侧：icon 走 children 尾部。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+import { Button } from '@bisheng/ui';
+
+export default () => (
+  <Button>
+    下一步
+    <Outlined.ArrowRight />
+  </Button>
+);
+```
+
+## 状态 state
+
+disabled / loading 全类型统一；focus 环仅键盘（`focus-visible`）出现。
+
+### disabled
+
+灰底、不可点，全类型一个样。
+
+```tsx
+import { Button } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <Button disabled>主按钮</Button>
+    <Button color="primary" variant="filled" disabled>次强调</Button>
+    <Button color="default" disabled>默认</Button>
+    <Button color="default" variant="text" disabled>文字</Button>
+    <Button color="danger" disabled>删除</Button>
+  </div>
+);
+```
+
+### loading
+
+用组件内置的 `loading` 属性，期间不可点；**禁止业务页自塞 Spinner**。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+import { Button } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <Button loading>提交中</Button>
+    <Button color="default" loading>提交中</Button>
+    <Button color="danger" loading>删除中</Button>
+    <Button loading icon={<Outlined.Plus />}>新建</Button>
+  </div>
+);
+```
+
+> 文档站为默认蓝主题；主按钮/品牌色显示蓝色是正常表现，绿主题仅存在于产品端换肤。

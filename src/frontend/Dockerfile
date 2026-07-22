@@ -2,8 +2,10 @@ FROM node:20-alpine as frontend_build
 ARG BACKEND
 WORKDIR /app
 COPY . /app
-RUN cd /app/platform && npm install --registry=https://registry.npmmirror.com && npm run build
-RUN cd /app/client && npm install --registry=https://registry.npmmirror.com && npm run build
+# pnpm workspace build (registry comes from .npmrc; packageManager pins the version).
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+RUN cd /app && pnpm install --frozen-lockfile
+RUN cd /app && pnpm --filter bisheng build && pnpm --filter bishengchat build
 
 FROM nginx
 COPY --from=frontend_build /app/platform/build/ /usr/share/nginx/html/platform

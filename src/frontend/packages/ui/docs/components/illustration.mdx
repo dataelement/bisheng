@@ -1,0 +1,109 @@
+# 插画 Illustration
+
+空状态 / 状态反馈用的主题化插画（`src/components/illustrations/`，内联 SVG），颜色走独立的插画调色板（比 UI 品牌色更亮），随蓝⇄绿主题自动切换，另有主题无关的灰稿模式。规范见「文档 → 设计规范 → 插画 Illustration」与「色彩 Color」§5。
+
+## 调色板三态
+
+| 档 | 蓝主题（默认） | 绿主题 | 灰稿 |
+|---|---|---|---|
+| 浅底 `--illus-100` | `#BEDAFF` | `#DDF0E8` | `#E5E5E5` |
+| 中间调 `--illus-300` | `#6AA1FF` | `#A2D7B5` | `#FFFFFF` |
+| 主体 `--illus-500` | `#165DFF` | `#169C47` | `#BCBCBC` |
+| 整图不透明度 | 100% | 100% | 80% |
+
+## 全部插画
+
+切换查看三种颜色模式（绿主题 = 外层加 `theme-green` 类的效果；灰稿 = 传 `grey` 属性）。
+
+```tsx
+import { CSSProperties, useState } from 'react';
+import {
+  ArticleQAIllustration,
+  CrawlingIllustration,
+  EmptyStateIllustration,
+  ListWebLinkIllustration,
+  NoPermissionIllustration,
+  SuccessIllustration,
+  SystemMaintenanceIllustration,
+} from '~/components/illustrations';
+
+const MODES = [
+  { id: 'blue', label: '蓝主题', hint: '默认主题。' },
+  { id: 'green', label: '绿主题', hint: '全局切换绿主题时，插画自动变绿。' },
+  { id: 'grey', label: '灰稿', hint: '主题无关的灰稿，整图降至 80% 不透明度。' },
+] as const;
+
+/* Display-only pin: keeps the blue tab deterministic whatever global theme is on. */
+const BLUE_ILLUS_VARS = {
+  '--illus-100': '190 218 255',
+  '--illus-300': '106 161 255',
+  '--illus-500': '22 93 255',
+} as CSSProperties;
+
+const ILLUSTRATIONS = [
+  ['EmptyStateIllustration', '通用空状态 — 列表 / 成员 / 频道等无数据', EmptyStateIllustration],
+  ['NoPermissionIllustration', '无权限访问 / 内容待审核不可见', NoPermissionIllustration],
+  ['ListWebLinkIllustration', '列表网页链接 — 按名称搜索无收录空态', ListWebLinkIllustration],
+  ['CrawlingIllustration', '爬取中 — 网页爬取等待态', CrawlingIllustration],
+  ['SuccessIllustration', '成功态 — 跟随品牌主题', SuccessIllustration],
+  ['ArticleQAIllustration', '文章问答场景', ArticleQAIllustration],
+  ['SystemMaintenanceIllustration', '系统维护 — 后端 500 全屏维护弹层', SystemMaintenanceIllustration],
+] as const;
+
+export default () => {
+  const [mode, setMode] = useState<'blue' | 'green' | 'grey'>('blue');
+  const active = MODES.find((m) => m.id === mode)!;
+  return (
+    <div>
+      <div style={{ display: 'inline-flex', gap: 2, padding: 2, border: '1px solid rgb(var(--border-base))', borderRadius: 8, marginBottom: 8 }}>
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setMode(m.id)}
+            style={{
+              height: 30,
+              padding: '0 16px',
+              borderRadius: 6,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+              background: mode === m.id ? 'rgb(var(--brand-500) / 0.08)' : 'transparent',
+              color: mode === m.id ? 'rgb(var(--brand-500))' : 'rgb(var(--text-3))',
+              fontWeight: mode === m.id ? 500 : 400,
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <p style={{ fontSize: 13, color: 'rgb(var(--text-3))', marginBottom: 16 }}>{active.hint}</p>
+      <div
+        className={mode === 'green' ? 'theme-green' : undefined}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: 12,
+          ...(mode === 'blue' ? BLUE_ILLUS_VARS : {}),
+        }}
+      >
+        {ILLUSTRATIONS.map(([name, usage, Comp]) => (
+          <div key={name} style={{ border: '1px solid rgb(var(--border-base))', borderRadius: 8, padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <Comp style={{ width: 120, height: 120 }} grey={mode === 'grey'} />
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'rgb(var(--text-2))', wordBreak: 'break-all' }}>{name}</div>
+            <div style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>{usage}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+```
+
+## 使用规则
+
+- 空状态 / 加载 / 无权限 / 成功等场景一律用这批插画组件，**不再用静态 PNG**。
+- 灰稿：给组件传 `grey` 属性，主题无关、整图降 80% 不透明度。
+- 插画调色板（`--illus-*`）只给插画用；UI 图标仍走品牌色。
+- 业务代码**禁止写死插画颜色**——一律 `rgb(var(--illus-NNN))`；SVG 展示属性里 `var()` 不生效，用内联 `style` / className / CSS mask，并用 `useId()` 去重渐变 / clip 的 id。

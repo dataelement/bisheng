@@ -24,3 +24,10 @@ yarn.lock
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# pnpm workspace
+node_modules/
+packages/ui/doc_build/
+package-lock.json
+yarn.lock
+.obsidian/

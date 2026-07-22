@@ -6,9 +6,9 @@ Cross-app boundary + hard rules common to both apps: root `AGENTS.md §4` (singl
 ## Commands (cwd: `src/frontend/platform/`)
 
 ```bash
-npm install
-npm start -- --host 0.0.0.0                                          # dev server on :3001
-VITE_PROXY_TARGET=http://localhost:8180 npm start -- --host 0.0.0.0  # commercial gateway proxy mode
+pnpm install   # run at src/frontend/ (pnpm workspace root; npm is disabled)
+pnpm start -- --host 0.0.0.0                                          # dev server on :3001
+VITE_PROXY_TARGET=http://localhost:8180 pnpm start -- --host 0.0.0.0  # commercial gateway proxy mode
 ```
 
 ## Tech Stack

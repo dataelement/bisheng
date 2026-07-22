@@ -26,6 +26,7 @@
   "dependencies": {
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",
+    "@bisheng/ui": "workspace:*",
     "@codesandbox/sandpack-react": "^2.19.10",
     "@dicebear/collection": "^7.0.4",
     "@dicebear/core": "^7.0.4",
@@ -94,7 +95,7 @@
     "react-flip-toolkit": "^7.1.0",
     "react-gtm-module": "^2.0.11",
     "react-hook-form": "^7.43.9",
-    "react-i18next": "^15.4.0",
+    "react-i18next": "^15.5.3",
     "react-lazy-load-image-component": "^1.6.0",
     "react-markdown": "^9.0.1",
     "react-resizable-panels": "^2.1.7",

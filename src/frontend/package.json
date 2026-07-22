@@ -1,0 +1,21 @@
+{
+  "name": "bisheng-frontend",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev:client": "pnpm --filter bishengchat dev",
+    "dev:platform": "pnpm --filter bisheng dev",
+    "dev:ui": "pnpm --filter bishengchat dev:docs",
+    "build:client": "pnpm --filter bishengchat build",
+    "build:platform": "pnpm --filter bisheng build",
+    "build": "pnpm --filter bisheng build && pnpm --filter bishengchat build",
+    "build:docs": "pnpm --filter bishengchat build:docs",
+    "preinstall": "npx only-allow pnpm"
+  },
+  "pnpm": {
+    "overrides": {
+      "rollup@>=4.45.0": "4.44.1",
+      "vite@>=6.4.2": "6.4.1"
+    }
+  }
+}
