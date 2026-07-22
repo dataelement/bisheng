@@ -6,7 +6,7 @@ vi.hoisted(() => {
   ;(globalThis as any).__APP_ENV__ = { BASE_URL: "" }
 })
 
-import { resolveRoutePermissions } from "@/routes"
+import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes"
 
 describe("resolveRoutePermissions", () => {
   it("returns the raw web_menu unchanged for plain users", () => {
@@ -18,21 +18,22 @@ describe("resolveRoutePermissions", () => {
     expect(perms).toEqual(["build", "knowledge"])
   })
 
-  it("injects create_app for department admins missing it", () => {
+  it("does not inject business permissions for department admins", () => {
     const perms = resolveRoutePermissions({
       web_menu: ["build", "knowledge"],
       is_department_admin: true,
       is_child_admin: false,
     })
-    expect(perms).toContain("create_app")
+    expect(perms).toEqual(["build", "knowledge"])
+    expect(perms).not.toContain("create_app")
   })
 
-  it("does not duplicate create_app when already present", () => {
+  it("preserves create_app when the role already grants it", () => {
     const perms = resolveRoutePermissions({
       web_menu: ["build", "create_app"],
       is_department_admin: true,
     })
-    expect(perms.filter((p) => p === "create_app")).toHaveLength(1)
+    expect(perms).toEqual(["build", "create_app"])
   })
 
   it("injects sys for Child Admin when web_menu lacks sys/system_config", () => {
@@ -124,5 +125,20 @@ describe("resolveRoutePermissions", () => {
     expect(perms).toContain("sys")
     expect(perms).toContain("workstation")
     expect(perms).toContain("create_app")
+  })
+})
+
+describe("resolveAdminLandingPath", () => {
+  it("lands a system-only department admin on the system page", () => {
+    expect(resolveAdminLandingPath(["admin", "system_config", "sys"], false)).toBe("/sys")
+  })
+
+  it("prefers an assigned business menu over the system page", () => {
+    expect(resolveAdminLandingPath(["admin", "dataset", "sys"], false)).toBe("/dataset")
+  })
+
+  it("keeps the approval placeholder fallback when no content menu is assigned", () => {
+    expect(resolveAdminLandingPath(["admin"], true)).toBe("/menu-pending?menu=board")
+    expect(resolveAdminLandingPath(["admin"], false)).toBe("/menu-pending")
   })
 })

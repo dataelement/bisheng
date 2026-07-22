@@ -158,12 +158,10 @@ export default function apps() {
     const canDelete = (id: string | number) => hasPermissionId(permIds, id, 'delete_app');
     const visibleApps = dataSource;
 
-    // 角色菜单权限：`create_app` 控制"新建应用/管理应用模板"入口是否可见。
-    // 超管：始终可见。组织上的部门管理员（is_department_admin）：与 PRD 一致默认可见（与 MainLayout 全量子壳一致）。
-    // 其余用户：依赖 web_menu 中的 create_app（角色里「创建应用」开关）。
+    // `create_app` controls the create and template-management entries.
+    // Only global super admins bypass the role menu permission.
     const canCreateApp =
         user.role === 'admin' ||
-        Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_app');
 
     const [copyingId, setCopyingId] = useState<string | number | null>(null);
