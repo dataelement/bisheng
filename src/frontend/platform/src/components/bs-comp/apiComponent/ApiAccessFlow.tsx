@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Badge } from '@/components/bs-ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
@@ -31,7 +32,7 @@ const ApiAccessFlow = () => {
         })
     }
 
-    const [isCopied, setIsCopied] = useState<Boolean>(false);
+    const [isCopied, setIsCopied] = useState<boolean>(false);
     const copyToClipboard = (code: string) => {
         setIsCopied(true);
         copyText(code).then(() => {

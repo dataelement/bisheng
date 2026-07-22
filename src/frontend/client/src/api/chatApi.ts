@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * Direct API calls for the AI chat system.
  */

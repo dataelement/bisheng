@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState } from 'react';
 import type { FC } from 'react';
 import type { TConversationTag } from '~/types/chat';

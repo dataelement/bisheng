@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { downloadFile } from "~/utils";
 import useLocalize from "~/hooks/useLocalize";

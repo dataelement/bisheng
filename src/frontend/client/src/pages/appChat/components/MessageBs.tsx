@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";

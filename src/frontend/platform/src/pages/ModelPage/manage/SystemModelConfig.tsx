@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { userContext } from "@/contexts/userContext";
@@ -70,10 +71,10 @@ export default function SystemModelConfig({
     }, [scope.scope_tenant_id, tenants])
 
     const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
-        let llmOptions = []
-        let embeddings = []
-        let asrModel = []
-        let ttsModel = []
+        const llmOptions = []
+        const embeddings = []
+        const asrModel = []
+        const ttsModel = []
         const rerank = []
         data.forEach(server => {
             const serverEmbItem = { value: server.id, label: server.name, children: [] }

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { AbilitiesIcon, FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
 import { AppType, AppTypeToNum } from "@/types/app";

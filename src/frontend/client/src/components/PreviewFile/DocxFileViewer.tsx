@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import * as mammoth from "mammoth";
 import { useEffect, useRef, useState } from "react";
 import { LoadingIcon } from "../ui/icon/Loading";

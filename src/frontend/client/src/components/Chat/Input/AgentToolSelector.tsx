@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * AgentToolSelector — v2.5 Agent-mode tool picker for the daily chat input bar.
  *

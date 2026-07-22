@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useMemo } from "react";
 import { cn } from "~/utils"
 import { AssistantIcon } from "~/components/ui/icon/AssistantIcon";

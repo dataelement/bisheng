@@ -650,7 +650,7 @@ export function KnowledgeSpaceContent({
                 return;
             }
 
-            for (let f of filesList) {
+            for (const f of filesList) {
                 const fileMaxSizeMB = getMaxFileSizeMBForFile(f.name, uploadSizeLimits);
                 const fileMaxSizeBytes = getMaxFileSizeBytesForFile(f.name, uploadSizeLimits);
                 if (f.size > fileMaxSizeBytes) {

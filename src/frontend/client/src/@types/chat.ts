@@ -20,7 +20,7 @@ export interface FlowData {
 
 //
 export type ChatMessageType = {
-  message: string | Object;
+  message: string | object;
   template?: string;
   isSend: boolean;
   thought?: string;

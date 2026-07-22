@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import ModelSelect from "@/pages/BuildPage/assistant/editAssistant/ModelSelect";
 import CollectionNameComponent from "@/pages/BuildPage/skills/editSkill/CollectionNameComponent";
@@ -179,7 +180,7 @@ export default function ParameterComponent({
   const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
   useEffect(() => {
-    let groupedObj: any = groupByFamily(myData, tooltipTitle!, left, flow.data?.nodes || []);
+    const groupedObj: any = groupByFamily(myData, tooltipTitle!, left, flow.data?.nodes || []);
     groupedEdge.current = groupedObj;
 
     if (groupedObj && groupedObj.length > 0) {
@@ -478,7 +479,7 @@ export default function ParameterComponent({
                   reactFlowInstance.setNodes((nds) =>
                     nds.map((nd) => {
                       if (nd.id === data.id) {
-                        let newNode = cloneDeep(nd);
+                        const newNode = cloneDeep(nd);
                         newNode.data.node = nodeClass
                         newNode.data.node.template[name].value = code;
                         return newNode;

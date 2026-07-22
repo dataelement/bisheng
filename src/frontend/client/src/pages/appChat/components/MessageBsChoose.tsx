@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { CheckIcon, File } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
@@ -10,7 +11,7 @@ import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { changeMinioUrl } from "./ResouceModal";
 
 export default function MessageBsChoose({ type = 'choose', disabled, logo, data, flow }
-    : { type?: string, disabled?: Boolean, logo: React.ReactNode, data: ChatMessageType }) {
+    : { type?: string, disabled?: boolean, logo: React.ReactNode, data: ChatMessageType }) {
     const t = useLocalize()
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {

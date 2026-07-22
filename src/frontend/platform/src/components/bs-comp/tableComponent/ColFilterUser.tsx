@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FilterIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Checkbox } from "@/components/bs-ui/checkBox";

@@ -4,7 +4,7 @@ import { FlowType } from "../flow";
 
 export type ChatType = { flow: FlowType; reactFlowInstance: ReactFlowInstance };
 export type ChatMessageType = {
-  message: string | Object;
+  message: string | object;
   template?: string;
   isSend: boolean;
   thought?: string;

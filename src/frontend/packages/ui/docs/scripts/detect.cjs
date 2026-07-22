@@ -13,7 +13,6 @@
 const fs = require('fs');
 const CJK = /[㐀-䶿一-鿿豈-﫿]/;
 const S = String.fromCharCode(1);
-const isCJK = (ch) => ch != null && CJK.test(ch);
 
 function mask(src) {
   let s = src;

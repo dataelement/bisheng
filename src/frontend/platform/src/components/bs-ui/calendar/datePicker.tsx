@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import { formatDate } from "@/util/utils"

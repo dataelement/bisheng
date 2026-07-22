@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { TrashIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";

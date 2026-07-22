@@ -14,7 +14,7 @@ export const SkillMethod = {
             inputs: {}
         } as any
         if (flow.flow_type === 1) {
-            let inputs = tabs[flow.id].formKeysData.input_keys;
+            const inputs = tabs[flow.id].formKeysData.input_keys;
             const input = inputs.find((el: any) => !el.type)
             const inputKey = input ? Object.keys(input)[0] : '';
             if (message) msgData.inputs = { ...input, [inputKey]: message }

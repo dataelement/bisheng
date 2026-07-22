@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";

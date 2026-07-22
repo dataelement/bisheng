@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ArrowLeftRight, Loader2, Search, Pin } from 'lucide-react';
 import type { AppItem } from '~/@types/app';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/Popover';

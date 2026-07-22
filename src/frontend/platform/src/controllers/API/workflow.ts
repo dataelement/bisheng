@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { WorkFlow } from "@/types/flow";
 import axios from "../request";
 

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import clsx, { ClassValue } from "clsx";
 import cloneDeep from "lodash-es/cloneDeep";
 import {
@@ -529,8 +530,8 @@ for (let i = 97; i <= 122; i++) {
 export function measureTextWidth(text: string, fontSize: number) {
   let wordWidth = 0;
   for (let j = 0; j < text.length; j++) {
-    let char = text[j];
-    let charWidth = charWidths[char] || 0.5;
+    const char = text[j];
+    const charWidth = charWidths[char] || 0.5;
     wordWidth += charWidth * fontSize;
   }
   return wordWidth;
@@ -551,8 +552,8 @@ export function measureTextHeight(
   let lineWidth = 0;
   let totalHeight = 0;
   for (let i = 0; i < words.length; i++) {
-    let word = words[i];
-    let wordWidth = measureTextWidth(word, fontSize);
+    const word = words[i];
+    const wordWidth = measureTextWidth(word, fontSize);
     if (lineWidth + wordWidth + charWidths[" "] * fontSize <= width) {
       lineWidth += wordWidth + charWidths[" "] * fontSize;
     } else {
@@ -586,7 +587,7 @@ export function snakeToSpaces(str: string) {
 }
 
 export function toNormalCase(str: string) {
-  let result = str
+  const result = str
     .split("_")
     .map((word, index) => {
       if (index === 0) {
@@ -650,7 +651,7 @@ export function isValidConnection(
       ) ||
     targetHandle.split("|")[0] === "str"
   ) {
-    let targetNode = reactFlowInstance?.getNode(target)?.data?.node;
+    const targetNode = reactFlowInstance?.getNode(target)?.data?.node;
     if (!targetNode) {
       if (
         !reactFlowInstance
@@ -673,7 +674,7 @@ export function isValidConnection(
 }
 
 export function removeApiKeys(flow: FlowType): FlowType {
-  let cleanFLow = cloneDeep(flow);
+  const cleanFLow = cloneDeep(flow);
   cleanFLow.data.nodes.forEach((node) => {
     for (const key in node.data.node.template) {
       if (node.data.node.template[key].password) {
@@ -688,7 +689,7 @@ export function updateObject<T extends Record<string, any>>(
   reference: T,
   objectToUpdate: T
 ): T {
-  let clonedObject = cloneDeep(objectToUpdate);
+  const clonedObject = cloneDeep(objectToUpdate);
   // Loop through each key in the object to update
   for (const key in clonedObject) {
     // If the key is not in the reference object, delete it
@@ -720,7 +721,7 @@ export function updateTemplate(
   reference: APITemplateType,
   objectToUpdate: APITemplateType
 ): APITemplateType {
-  let clonedObject: APITemplateType = cloneDeep(reference); // temp clone
+  const clonedObject: APITemplateType = cloneDeep(reference); // temp clone
 
   // Loop through each key in the reference object
   for (const tmpkey in clonedObject) {
@@ -791,7 +792,7 @@ export const programmingLanguages: languageMap = {
 };
 
 export function toTitleCase(str: string) {
-  let result = str
+  const result = str
     .split("_")
     .map((word, index) => {
       if (index === 0) {
@@ -828,11 +829,11 @@ export function checkUpperWords(str: string) {
 }
 
 export function updateIds(newFlow, getNodeId) {
-  let idsMap = {};
+  const idsMap = {};
 
   newFlow.nodes.forEach((n: NodeType) => {
     // Generate a unique node ID
-    let newId = getNodeId(n.data.type);
+    const newId = getNodeId(n.data.type);
     idsMap[n.id] = newId;
     n.id = newId;
     n.data.id = newId;
@@ -842,14 +843,14 @@ export function updateIds(newFlow, getNodeId) {
   newFlow.edges.forEach((e) => {
     e.source = idsMap[e.source];
     e.target = idsMap[e.target];
-    let sourceHandleSplitted = e.sourceHandle.split("|");
+    const sourceHandleSplitted = e.sourceHandle.split("|");
     e.sourceHandle =
       sourceHandleSplitted[0] +
       "|" +
       e.source +
       "|" +
       sourceHandleSplitted.slice(2).join("|");
-    let targetHandleSplitted = e.targetHandle.split("|");
+    const targetHandleSplitted = e.targetHandle.split("|");
     e.targetHandle =
       targetHandleSplitted.slice(0, -1).join("|") + "|" + e.target;
     e.id =
@@ -869,19 +870,19 @@ export function groupByFamily(
   flow?: NodeType[]
 ): groupedObjType[] {
   const baseClassesSet = new Set(baseClasses.split("\n"));
-  let arrOfPossibleInputs: Array<{
+  const arrOfPossibleInputs: Array<{
     category: string;
     nodes: nodeGroupedObjType[];
     full: boolean;
     display_name?: string;
   }> = [];
-  let arrOfPossibleOutputs: Array<{
+  const arrOfPossibleOutputs: Array<{
     category: string;
     nodes: nodeGroupedObjType[];
     full: boolean;
     display_name?: string;
   }> = [];
-  let checkedNodes = new Map();
+  const checkedNodes = new Map();
   const excludeTypes = new Set([
     "str",
     "bool",
@@ -928,7 +929,7 @@ export function groupByFamily(
   }
 
   for (const [d, nodes] of Object.entries(data)) {
-    let tempInputs: nodeGroupedObjType[] = [],
+    const tempInputs: nodeGroupedObjType[] = [],
       tempOutputs: nodeGroupedObjType[] = [];
 
     for (const [n, node] of Object.entries(nodes!)) {
@@ -1093,7 +1094,7 @@ export function getRandomName(
   }
 
   // Construct the final name
-  let final_name = noSpace ? `${lv}_${rv}` : `${lv} ${rv}`;
+  const final_name = noSpace ? `${lv}_${rv}` : `${lv} ${rv}`;
   // Return title case final name
   return toTitleCase(final_name);
 }

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { getAssistantModelConfig, getLlmDefaultModel } from "@/controllers/API/finetune";
 import { copyReportTemplate } from "@/controllers/API/workflow";
 import { Node } from "@xyflow/react";
@@ -342,7 +343,7 @@ export function importFlow() {
                 const currentfile = (e.target as HTMLInputElement).files[0];
                 currentfile.text().then(async (text) => {
                     try {
-                        let flow = JSON.parse(text);
+                        const flow = JSON.parse(text);
 
                         if (!flow || !Array.isArray(flow.nodes)) {
                             return reject("flow.nodes 不存在或不是数组");

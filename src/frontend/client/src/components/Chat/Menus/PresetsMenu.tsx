@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type { FC } from 'react';
 import { BookCopy } from 'lucide-react';
 import { Content, Portal, Root, Trigger } from '@radix-ui/react-popover';

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import CodeAreaComponent from "@/components/codeAreaComponent";
 import Dropdown from "@/components/dropdownComponent";
 import FloatComponent from "@/components/floatComponent";

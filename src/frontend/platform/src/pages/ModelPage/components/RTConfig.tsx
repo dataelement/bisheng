@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

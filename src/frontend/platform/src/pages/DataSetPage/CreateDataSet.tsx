@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";

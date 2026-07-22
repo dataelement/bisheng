@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';

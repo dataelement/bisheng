@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // 嵌iframe、适配移动端(企业接入)
 import { useContext, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";

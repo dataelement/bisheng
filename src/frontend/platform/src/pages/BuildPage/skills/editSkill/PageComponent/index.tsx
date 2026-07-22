@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import GenericNode from "@/CustomNodes/GenericNode";
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { Badge } from "@/components/bs-ui/badge";
@@ -42,7 +43,7 @@ import ExtraSidebar from "../extraSidebarComponent";
 const nodeTypes = { genericNode: GenericNode };
 export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: string }) {
 
-  let {
+  const {
     version,
     setFlow,
     setTabsState,
@@ -93,7 +94,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       // 节点变化update flow(唯一修改口)
       flow.data = reactFlowInstance.toObject();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     /**
      * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点 做重复id校验使用
      */
@@ -113,7 +114,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     (s: EdgeChange[]) => {
       onEdgesChange(s);
       setNodes((x) => {
-        let newX = cloneDeep(x);
+        const newX = cloneDeep(x);
         return newX;
       });
       setTabsState((prev) => {
@@ -165,7 +166,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       });
 
       setNodes((x) => {
-        let newX = cloneDeep(x);
+        const newX = cloneDeep(x);
         // inputFileNode类型跟随下游组件决定上传文件类型
         const inputNodeId = params.source
         if (inputNodeId.split('-')[0] === 'InputFileNode') {
@@ -219,7 +220,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
         const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
 
         // Extract the data from the drag event and parse it as a JSON object
-        let data: { type: string; node?: APIClassType } = JSON.parse(
+        const data: { type: string; node?: APIClassType } = JSON.parse(
           event.dataTransfer.getData("nodedata")
         );
 
@@ -231,8 +232,8 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
         });
 
         // Generate a unique node ID
-        let { type } = data;
-        let newId = getNodeId(type);
+        const { type } = data;
+        const newId = getNodeId(type);
         let newNode: NodeType;
 
         if (data.type !== "groupNode") {
@@ -455,7 +456,7 @@ const useKeyBoard = (reactFlowWrapper) => {
   const position = useRef({ x: 0, y: 0 });
   const [lastSelection, setLastSelection] =
     useState<OnSelectionChangeParams | null>(null);
-  let {
+  const {
     lastCopiedSelection,
     paste,
     setLastCopiedSelection,
@@ -486,7 +487,7 @@ const useKeyBoard = (reactFlowWrapper) => {
         lastCopiedSelection
       ) {
         event.preventDefault();
-        let bounds = reactFlowWrapper.current.getBoundingClientRect();
+        const bounds = reactFlowWrapper.current.getBoundingClientRect();
         paste(lastCopiedSelection, {
           x: position.current.x - bounds.left,
           y: position.current.y - bounds.top,

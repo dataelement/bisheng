@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import React, { useMemo, useState } from "react";
 import { generateUUID } from "~/utils";

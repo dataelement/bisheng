@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRef, useEffect, useCallback, useMemo, useContext, useState } from "react";
 import { copyText } from "../utils";
 import { alertContext } from "../contexts/alertContext";
@@ -160,7 +161,7 @@ export function useMiniDebounce(fn, delay = 300) {
 
 // 防抖
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
-    let timer = useRef<NodeJS.Timeout | null>();
+    const timer = useRef<NodeJS.Timeout | null>();
     const fnRef = useRef<any>(func);
     useEffect(() => { fnRef.current = func; }, [func]);
     const timerCancel = function () { if (timer.current) clearTimeout(timer.current); };
@@ -173,7 +174,7 @@ export function useDebounce(func: any, wait: number, immediate: boolean, callbac
         };
         timerCancel();
         if (immediate) {
-            let runNow = !timer.current;
+            const runNow = !timer.current;
             timer.current = setTimeout(() => { timer.current = null; }, wait);
             if (runNow) {
                 runFunction();
@@ -393,12 +394,12 @@ export function useUndoRedo<T>(maxHistorySize = 100) {
         if (pastState) {
             setPast((old) => {
                 // let newPast = cloneDeep(old);
-                let newPast = old.slice(0, old.length - 1);
+                const newPast = old.slice(0, old.length - 1);
                 return newPast;
             });
             setFuture((old) => {
                 // let newFuture = cloneDeep(old);
-                let newFuture = old;
+                const newFuture = old;
                 newFuture.push({ nodes: cloneDeep(getNodes()), edges: cloneDeep(getEdges()) });
                 return newFuture;
             });
@@ -419,12 +420,12 @@ export function useUndoRedo<T>(maxHistorySize = 100) {
         if (futureState) {
             setFuture((old) => {
                 // let newFuture = cloneDeep(old);
-                let newFuture = old.slice(0, old.length - 1);
+                const newFuture = old.slice(0, old.length - 1);
                 return newFuture;
             });
             setPast((old) => {
                 // let newPast = cloneDeep(old);
-                let newPast = old
+                const newPast = old
                 newPast.push({ nodes: cloneDeep(getNodes()), edges: cloneDeep(getEdges()) });;
                 return newPast;
             });

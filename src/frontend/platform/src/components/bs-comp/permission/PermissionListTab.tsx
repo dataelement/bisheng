@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import {
   DropdownMenu,

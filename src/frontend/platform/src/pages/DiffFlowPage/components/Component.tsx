@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { DelIcon } from "@/components/bs-icons/del";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useMemo } from "react";

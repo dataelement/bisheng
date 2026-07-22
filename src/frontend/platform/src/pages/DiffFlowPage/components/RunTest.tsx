@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { DelIcon } from "@/components/bs-icons/del";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
@@ -233,7 +234,7 @@ const useBuild = () => {
         const _flow = { ...flow, id: flow.flow_id }
         const { flowId } = await postBuildInit({ flow: _flow, versionId: flow.id });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
-        let validationResults = [];
+        const validationResults = [];
         let finished = false;
         let buildEnd = false
         const qstr = flow.id ? `?version_id=${flow.id}` : ''

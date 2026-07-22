@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";

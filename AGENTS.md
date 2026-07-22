@@ -50,6 +50,7 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 - **Never** introduce new UI or state-management libraries.
 - All code comments in English.
 - 403 handled automatically by response interceptors — never add 403 branches in business code.
+- **Quality gate (CI-enforced, `frontend-quality.yml`)**: `pnpm lint` + `pnpm typecheck` (run from `src/frontend/`) must pass. Legacy violations are frozen — ESLint in each app's `eslint-suppressions.json`, TS strict via `// @ts-strict-ignore` file headers — and may only shrink: never hand-edit the suppressions file, never add `@ts-strict-ignore` to a new file. After fixing violations in a file, run `pnpm lint:prune` (per app) and delete its `@ts-strict-ignore` header if it now passes strict.
 
 ---
 

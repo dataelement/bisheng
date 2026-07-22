@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AceEditor from "react-ace";
 // import "ace-builds/webpack-resolver";
 import { useContext, useEffect, useRef, useState } from "react";

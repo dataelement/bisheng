@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { ChartItems } from "./ComponentPicker"
 import { cn } from "@/utils"

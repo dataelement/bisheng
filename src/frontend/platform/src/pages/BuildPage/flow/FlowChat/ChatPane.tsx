@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { getFlowApi } from "@/controllers/API/flow";
 import { useEffect, useMemo } from "react";
 import Chat from "./Chat";

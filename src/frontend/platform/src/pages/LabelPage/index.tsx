@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";

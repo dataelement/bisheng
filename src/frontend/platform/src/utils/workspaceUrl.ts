@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 const WORKSPACE_BASE_PATH = '/workspace';
 
 function joinUrlPath(base: string, path: string) {

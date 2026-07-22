@@ -10,6 +10,8 @@
     "build:platform": "pnpm --filter bisheng build",
     "build": "pnpm --filter bisheng build && pnpm --filter bishengchat build",
     "build:docs": "pnpm --filter bishengchat build:docs",
+    "lint": "pnpm --filter bisheng lint && pnpm --filter bishengchat lint && pnpm --filter @bisheng/ui lint",
+    "typecheck": "pnpm --filter bisheng typecheck && pnpm --filter bishengchat typecheck",
     "preinstall": "npx only-allow pnpm"
   },
   "pnpm": {
@@ -17,5 +19,13 @@
       "rollup@>=4.45.0": "4.44.1",
       "vite@>=6.4.2": "6.4.1"
     }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "eslint-plugin-react-hooks": "^5",
+    "globals": "^17.7.0",
+    "typescript-eslint": "^8",
+    "typescript-strict-plugin": "^2.4.4"
   }
 }

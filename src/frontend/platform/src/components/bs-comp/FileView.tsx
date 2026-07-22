@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import throttle from 'lodash-es/throttle';
 import * as pdfjsLib from 'pdfjs-dist';
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -269,7 +270,7 @@ export default function FileView({
 
         const throttledResizeHandler = throttle(entries => {
             if (panneDom) {
-                for (let entry of entries) {
+                for (const entry of entries) {
                     const [width, height] = [entry.contentRect.width, entry.contentRect.height];
                     setBoxSize({ width, height });
                     const warpDom = document.getElementById('warp-pdf');

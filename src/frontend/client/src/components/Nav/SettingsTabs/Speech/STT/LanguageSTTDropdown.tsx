@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilState } from 'recoil';
 import { Dropdown } from '~/components/ui';
 import { useLocalize } from '~/hooks';

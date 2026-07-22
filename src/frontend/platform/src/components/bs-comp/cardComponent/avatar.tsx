@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { AssistantIcon, FlowIcon, SkillIcon } from "@/components/bs-icons";
 import { AppNumType } from "@/types/app";
 import { cn } from "@/utils";

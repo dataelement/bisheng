@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import Helper from "./helper.svg?react";
 import Flow from "./flow.svg?react";

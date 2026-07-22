@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { WorkflowNode } from "@/types/flow";
 import { useTranslation } from "react-i18next";
 import Parameter from "./Parameter";

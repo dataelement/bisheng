@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { Button } from "@/components/bs-ui/button";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { checkAppEditPermission, getFlowApi } from "@/controllers/API/flow";
 import { flowVersionCompatible } from "@/util/flowCompatible";
 import { useEffect, useMemo, useState } from "react";

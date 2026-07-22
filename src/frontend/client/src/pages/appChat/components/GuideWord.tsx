@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useMemo } from "react";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText"
 

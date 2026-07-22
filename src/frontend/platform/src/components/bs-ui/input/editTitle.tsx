@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { PenLine } from "lucide-react";
 import { useRef, useState } from "react";
 import { Input } from ".";

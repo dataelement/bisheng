@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown"
 import { copyText } from "@/utils"

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
@@ -215,7 +216,7 @@ const useBeforeUnload = (changed, checking) => {
     useEffect(() => {
         if (checking) return // Don't prompt when checking permissions
         const fun = (e) => {
-            var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            const confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
             return confirmationMessage;
         }

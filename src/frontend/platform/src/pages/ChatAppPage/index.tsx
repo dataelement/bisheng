@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import LoadMore from "@/components/bs-comp/loadMore";
@@ -191,7 +192,7 @@ const useChatList = () => {
     useEffect(() => {
         // 根据工作流消息更新会话列表描述
         if (flowMessages.length > 0 && flowChatId === flowMessages[0].chat_id) {
-            let latest: any = flowMessages[flowMessages.length - 1]
+            const latest: any = flowMessages[flowMessages.length - 1]
             if (!['stream_msg', 'close', 'over'].includes(latest.category)) return
             setChatList(chats => chats.map(chat => (chat.chat_id === flowChatId)
                 ? {

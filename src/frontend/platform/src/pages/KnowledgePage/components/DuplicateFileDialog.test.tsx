@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState } from "react";
 
 import { fireEvent, render, screen } from "@/test/test-utils";

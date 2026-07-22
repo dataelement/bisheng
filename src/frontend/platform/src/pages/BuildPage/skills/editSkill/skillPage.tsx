@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { TabsContext } from "@/contexts/tabsContext";
 import { getFlowApi } from "@/controllers/API/flow";
 import cloneDeep from "lodash-es/cloneDeep";

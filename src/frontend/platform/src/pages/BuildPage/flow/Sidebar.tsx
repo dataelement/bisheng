@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
@@ -140,7 +141,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
         data: { type: string; node?: any }
     ) {
         // start drag event
-        var crt = event.currentTarget.cloneNode(true);
+        const crt = event.currentTarget.cloneNode(true);
         crt.style.position = "absolute";
         crt.style.width = "238px";
         crt.style.top = "-500px"; // 移出可视区

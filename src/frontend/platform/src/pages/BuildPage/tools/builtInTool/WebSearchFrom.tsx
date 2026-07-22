@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";

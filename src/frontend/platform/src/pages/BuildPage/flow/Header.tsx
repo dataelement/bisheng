@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import TipPng from "@/assets/tip.jpg";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
@@ -672,7 +673,7 @@ const useNodeEvent = (flow) => {
             [[], [], []]
         );
 
-        let result = findParallelNodes(inputNodeLs, branchNodeLs);
+        const result = findParallelNodes(inputNodeLs, branchNodeLs);
         if (result.length) {
             sendEvent([...result, []]);
             return [t('parallelInputOutputNodes')];
@@ -804,7 +805,7 @@ const useBeforeUnload = (flow, nodes, preFlow, onPreFlowChange) => {
     useEffect(() => {
         const fun = (e) => {
             // 系统 重新加载 提示
-            var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            const confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
             return confirmationMessage;
         }

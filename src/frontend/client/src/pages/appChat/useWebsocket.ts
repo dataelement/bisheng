@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 import { useEffect, useRef } from "react"
 import { useRecoilState, useRecoilValue } from "recoil"

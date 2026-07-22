@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // src/configs/advancedParamsTemplates.ts
 
 // 定义高级参数配置的类型接口

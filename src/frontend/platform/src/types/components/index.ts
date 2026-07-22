@@ -49,7 +49,7 @@ export type ParameterComponentType = {
   required?: boolean;
   name?: string;
   tooltipTitle: string | undefined;
-  optionalHandle?: Array<String> | null;
+  optionalHandle?: Array<string> | null;
   info?: string;
   proxy?: { field: string; id: string };
   showNode?: boolean;
@@ -66,7 +66,7 @@ export type InputListComponentType = {
 
 export type KeyPairListComponentType = {
   value: any;
-  onChange: (value: Object[]) => void;
+  onChange: (value: object[]) => void;
   disabled: boolean;
   editNode?: boolean;
   duplicateKey?: boolean;
@@ -607,7 +607,7 @@ export type codeTabsPropsType = {
     ) => string;
     buildTweakObject?: (
       tw: string,
-      changes: string | string[] | boolean | number | Object[] | Object,
+      changes: string | string[] | boolean | number | object[] | object,
       template: TemplateVariableType
     ) => string | void;
   };

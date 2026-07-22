@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * F035 Track H (P3): pure helpers that turn the raw WS event log
  * (task.history / linsight.sessionSteps) into a renderable step tree.

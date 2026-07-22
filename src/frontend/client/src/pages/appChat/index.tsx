@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
@@ -266,7 +267,7 @@ const useBuild = () => {
         const res = await postBuildInit({ flow, chatId });
         const flowId = res.data.flowId;
         // Step 2: Use the session ID to establish an SSE connection using EventSource
-        let validationResults = [];
+        const validationResults = [];
         let finished = false;
         let buildEnd = false
         const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}?chat_id=${chatId}`;

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import L2ParameterComponent from "@/CustomNodes/GenericNode/components/parameterComponent/l2Index";
 import FlowSetting from "@/components/Pro/security/FlowSetting";
 import ShadTooltip from "@/components/ShadTooltipComponent";

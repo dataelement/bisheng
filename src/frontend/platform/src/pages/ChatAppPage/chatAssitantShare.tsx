@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // 支持嵌iframe、适配移动端
 import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";

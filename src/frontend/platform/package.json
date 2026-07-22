@@ -79,7 +79,11 @@
     "format": "npx prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --suppressions-location eslint-suppressions.json",
+    "lint:fix": "eslint . --suppressions-location eslint-suppressions.json --fix",
+    "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
+    "typecheck": "tsc-strict"
   },
   "eslintConfig": {
     "extends": [

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";

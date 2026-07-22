@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Check, X } from "lucide-react"
 import React, { useEffect, useRef, useState } from "react"
 import { Select, SelectContent, SelectTrigger } from "."

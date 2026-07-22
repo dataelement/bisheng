@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // Mock API functions for dashboard operations
 
 import { generateUUID } from "@/components/bs-ui/utils";

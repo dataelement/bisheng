@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useMemo, useState } from 'react';
 import ToolSelector from './ToolSelector';
 

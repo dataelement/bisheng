@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { DepartmentTree } from "@/pages/DepartmentPage/components/DepartmentTree";
 import { render, screen } from "@/test/test-utils";
 import type { DepartmentTreeNode } from "@/types/api/department";

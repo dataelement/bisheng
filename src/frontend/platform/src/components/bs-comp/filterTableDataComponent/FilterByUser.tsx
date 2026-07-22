@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getUsersApi } from "@/controllers/API/user";
 import { debounce } from "lodash";

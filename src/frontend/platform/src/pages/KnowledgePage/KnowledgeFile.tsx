@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
 import { Input, SearchInput } from "../../components/bs-ui/input";

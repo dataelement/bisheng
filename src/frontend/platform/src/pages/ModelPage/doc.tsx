@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { useEffect } from "react";
 
@@ -5,21 +6,21 @@ export default function Doc() {
     // const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        var link = __APP_ENV__.BASE_URL + '/doc.pdf'
+        const link = __APP_ENV__.BASE_URL + '/doc.pdf'
 
-        var iframe: any = document.getElementById('iframe')
+        const iframe: any = document.getElementById('iframe')
 
         // if (navigator.userAgent.match(/Android/i) || navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
         //     iframe.src = '/pdf/web/viewer.html?file=' + location.search.split('=')[1];
         // } else {
-        var xhr = new XMLHttpRequest();
+        const xhr = new XMLHttpRequest();
         xhr.open('GET', link, true);
         xhr.responseType = 'blob';
         xhr.onload = function () {
             // setLoading(false)
             if (this.status === 200) {
-                var blob = new Blob([this.response], { type: 'application/pdf' });
-                var url = URL.createObjectURL(blob);
+                const blob = new Blob([this.response], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
                 if (iframe) iframe.src = url;
             }
         };

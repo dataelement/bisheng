@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useCallback } from 'react';
 import { QrCode, RotateCw, Trash2 } from 'lucide-react';
 import type { TSharedLinkGetResponse } from '~/types/chat';

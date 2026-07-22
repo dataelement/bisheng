@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Input } from "@/components/bs-ui/input";
 import { readFileLibDatabase } from "@/controllers/API";
 import { useEffect, useMemo, useRef, useState } from "react";

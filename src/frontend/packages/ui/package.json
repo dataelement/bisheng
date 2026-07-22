@@ -11,7 +11,8 @@
     "./design-token": "./design-token.cjs"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "peerDependencies": {
     "react": "^18.2.0",

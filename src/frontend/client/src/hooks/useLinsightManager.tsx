@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // src/hooks/useLinsightManager.ts
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';

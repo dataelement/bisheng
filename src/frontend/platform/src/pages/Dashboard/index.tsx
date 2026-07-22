@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { useToast } from "@/components/bs-ui/toast/use-toast"

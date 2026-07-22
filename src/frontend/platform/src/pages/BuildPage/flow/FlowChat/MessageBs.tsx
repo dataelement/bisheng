@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import MessageButtons from "@/components/bs-comp/chatComponent/MessageButtons";
 import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
 import { ToastIcon } from "@/components/bs-icons";

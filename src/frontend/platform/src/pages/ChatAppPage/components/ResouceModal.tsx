@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";

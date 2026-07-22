@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useRef, useEffect } from 'react';
 import { AutoSizer, List } from 'react-virtualized';
 import { EModelEndpoint } from '~/types/chat';

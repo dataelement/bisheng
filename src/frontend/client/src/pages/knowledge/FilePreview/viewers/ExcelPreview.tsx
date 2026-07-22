@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
@@ -154,7 +155,7 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
         }
 
         // Step 3: 等待 base64
-        for (let img of images) {
+        for (const img of images) {
             img.base64 = await img.base64Promise;
             delete img.base64Promise;
             img.mimeType = getMimeType(img.ext);

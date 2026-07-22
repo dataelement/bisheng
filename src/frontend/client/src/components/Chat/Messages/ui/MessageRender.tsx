@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type { TMessage } from '~/types/chat';
 import { memo, useCallback, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';

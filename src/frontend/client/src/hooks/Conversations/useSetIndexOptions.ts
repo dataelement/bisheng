@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { TPreset, TPlugin, TConversation, tConvoUpdateSchema } from '~/types/chat';
 import type { TSetExample, TSetOption, TSetOptionsPayload } from '~/common';

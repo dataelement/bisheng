@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import CardComponent from "@/components/bs-comp/cardComponent";
 import LoadMore from "@/components/bs-comp/loadMore";
 import { AssistantIcon, FlowIcon, SettingIcon, SkillIcon } from "@/components/bs-icons";

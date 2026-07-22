@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate';
@@ -162,7 +163,7 @@ const ExcelPreview = ({ filePath }) => {
     }
 
     // Step 3: 等待 base64
-    for (let img of images) {
+    for (const img of images) {
       img.base64 = await img.base64Promise;
       delete img.base64Promise;
       img.mimeType = getMimeType(img.ext);

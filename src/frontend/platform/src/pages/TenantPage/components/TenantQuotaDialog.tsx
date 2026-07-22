@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { getTenantQuotaApi, setTenantQuotaApi } from "@/controllers/API/tenant";

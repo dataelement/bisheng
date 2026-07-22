@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 import { getDashboard } from "@/controllers/API/dashboard"
 import { useQuery } from "react-query"

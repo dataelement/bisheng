@@ -124,7 +124,7 @@ export function UndoRedoProvider({ children }) {
         return newFuture;
       });
       setPast((old) => {
-        let newPast = cloneDeep(old);
+        const newPast = cloneDeep(old);
         newPast.push({ nodes: getNodes(), edges: getEdges() });
         return newPast;
       });
