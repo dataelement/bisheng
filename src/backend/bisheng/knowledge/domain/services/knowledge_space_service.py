@@ -680,21 +680,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             department_ids = await self._admin_department_ids()
             departments = await DepartmentDao.aget_by_ids(list(department_ids)) if department_ids else []
+        return await self._build_department_tree(departments)
+
+    async def _build_department_tree(self, departments: list[Any]) -> list[dict]:
+        """Build a sorted department tree from a list of Department rows."""
         if not departments:
             return []
 
         dept_ids = [int(dept.id) for dept in departments if getattr(dept, "id", None) is not None]
         count_map: dict[int, int] = {}
-        async with get_async_db_session() as session:
-            count_result = await session.exec(
-                select(
-                    UserDepartment.department_id,
-                    func.count(UserDepartment.id),
+        if dept_ids:
+            async with get_async_db_session() as session:
+                count_result = await session.exec(
+                    select(
+                        UserDepartment.department_id,
+                        func.count(UserDepartment.id),
+                    )
+                    .where(UserDepartment.department_id.in_(dept_ids))
+                    .group_by(UserDepartment.department_id)
                 )
-                .where(UserDepartment.department_id.in_(dept_ids))
-                .group_by(UserDepartment.department_id)
-            )
-            count_map = {int(dept_id): int(count) for dept_id, count in count_result.all()}
+                count_map = {int(dept_id): int(count) for dept_id, count in count_result.all()}
 
         nodes = {
             int(dept.id): {
@@ -725,6 +730,77 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return items
 
         return _sort_tree(roots)
+
+    async def _bound_department_ids(
+        self,
+        department_ids: set[int],
+        *,
+        exclude_space_id: int | None = None,
+    ) -> set[int]:
+        """Return department IDs already bound to knowledge spaces.
+
+        When ``exclude_space_id`` is provided, the binding for that space is
+        ignored so the caller can re-select the currently bound department.
+        """
+        if not department_ids:
+            return set()
+        bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(list(department_ids))
+        bound = {int(binding.department_id) for binding in bindings}
+        if exclude_space_id is not None:
+            excluded = {
+                int(binding.department_id)
+                for binding in bindings
+                if int(binding.space_id) == int(exclude_space_id)
+            }
+            bound -= excluded
+        return bound
+
+    async def get_my_department_tree_for_create(
+        self,
+        *,
+        exclude_space_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Return the current user's organization departments and their subordinates,
+        with IDs of departments already bound to other knowledge spaces.
+        """
+        user_departments = await UserDepartmentDao.aget_user_departments(self.login_user.user_id)
+        user_department_ids = {
+            int(ud.department_id)
+            for ud in user_departments
+            if getattr(ud, "department_id", None) is not None
+        }
+        if not user_department_ids:
+            return {"data": [], "bound_department_ids": []}
+
+        all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+        user_dept_paths = {
+            dept.path
+            for dept in all_departments
+            if dept.id in user_department_ids and getattr(dept, "path", None)
+        }
+        if not user_dept_paths:
+            return {"data": [], "bound_department_ids": []}
+
+        filtered_departments = [
+            dept
+            for dept in all_departments
+            if getattr(dept, "path", None)
+            and any(dept.path.startswith(path) for path in user_dept_paths)
+        ]
+
+        tree = await self._build_department_tree(filtered_departments)
+
+        filtered_ids = {
+            int(dept.id)
+            for dept in filtered_departments
+            if getattr(dept, "id", None) is not None
+        }
+        bound_ids = await self._bound_department_ids(
+            filtered_ids,
+            exclude_space_id=exclude_space_id,
+        )
+
+        return {"data": tree, "bound_department_ids": sorted(bound_ids)}
 
     async def _user_group_options_for_create(self) -> list[KnowledgeSpaceCreateOptionUserGroup]:
         user_group_ids = await self._user_group_ids_for_create()

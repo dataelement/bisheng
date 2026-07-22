@@ -111,6 +111,20 @@ async def get_create_option_departments(
     return resp_200(options)
 
 
+@router.get("/create-options/my-department-tree")
+async def get_create_option_my_department_tree(
+    exclude_space_id: int | None = Query(default=None),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Return the current user's organization departments (and their subordinates)
+    as a tree, plus IDs of departments already bound to other knowledge spaces.
+    """
+    options = await svc.get_my_department_tree_for_create(
+        exclude_space_id=exclude_space_id,
+    )
+    return resp_200(options)
+
+
 @router.get("/create-options/user-groups")
 async def get_create_option_user_groups(
     keyword: str = Query(default=""),
