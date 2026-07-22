@@ -76,7 +76,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     // object-top so the preview keeps the page header (title area) visible instead
     // of clipping it equally top & bottom.
     if (file.thumbnail && file.status === FileStatus.SUCCESS) {
-        return <img src={file.thumbnail} alt={file.name} className={cn("size-full object-cover object-top", thumbBordered && "rounded-[6px] border border-[#EBECF0]")} />;
+        return <img src={file.thumbnail} alt={file.name} className={cn("size-full object-cover object-top", thumbBordered && "rounded-md border border-[#EBECF0]")} />;
     }
 
     // For non-success states (uploading/processing/failed/etc.), use the neutral

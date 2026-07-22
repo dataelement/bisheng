@@ -45,7 +45,7 @@ const PaginationLink = ({
         size,
       }),
       'text-[14px]',
-      isActive && 'rounded-[8px]',
+      isActive && 'rounded-lg',
       className,
     )}
     {...props}

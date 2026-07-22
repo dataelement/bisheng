@@ -282,6 +282,9 @@ module.exports = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        // Tailwind's ladder ends at 3xl (24px); the spec's largest container
+        // step is 32px (design-token.cjs RADIUS) — extend so it has a class.
+        '4xl': '2rem',
       },
     },
   },

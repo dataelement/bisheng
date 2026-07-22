@@ -265,7 +265,7 @@ export function AddSourceDropdown({
                     className={cn(
                         "absolute left-0 right-0 top-0 z-[220] flex flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]",
                         "h-[440px] min-w-[400px]",
-                        isH5 && "h-[min(70dvh,560px)] min-w-0 max-w-full rounded-[8px]"
+                        isH5 && "h-[min(70dvh,560px)] min-w-0 max-w-full rounded-lg"
                     )}
                 >
                     <div className="flex shrink-0 items-center gap-2 border-b border-[#E5E6EB] pb-0 mb-2">
@@ -356,7 +356,7 @@ export function AddSourceDropdown({
                                     <Button
                                         variant="secondary"
                                         onClick={mgr.handleClearSearch}
-                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969]"
+                                        className="h-8 rounded-md min-w-[74px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969]"
                                     >
                                         {localize("com_subscription.do_not_crawl")}
                                     </Button>
@@ -370,7 +370,7 @@ export function AddSourceDropdown({
                                             mgr.handleClearSearch();
                                             mgr.setActiveTab("website");
                                         }}
-                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-blue-500 hover:bg-blue-400 btn-brand-primary"
+                                        className="h-8 rounded-md min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-blue-500 hover:bg-blue-400 btn-brand-primary"
                                     >
                                         {localize("com_subscription.confirm_crawl")}
                                     </Button>
@@ -388,7 +388,7 @@ export function AddSourceDropdown({
                                 <Button
                                     variant="secondary"
                                     onClick={mgr.handleClearSearch}
-                                    className="h-8 rounded-[6px] min-w-[84px] inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969]"
+                                    className="h-8 rounded-md min-w-[84px] inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969]"
                                 >
                                     {localize("com_subscription.do_not_add")}
                                 </Button>
@@ -483,7 +483,7 @@ export function AddSourceDropdown({
                                         if (!confirmed) return;
                                         mgr.handleCancel();
                                     }}
-                                    className="border border-[#E5E6EB] bg-white h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-[#4E5969] touch-mobile:flex-1"
+                                    className="border border-[#E5E6EB] bg-white h-8 rounded-md inline-flex items-center justify-center leading-none text-[14px] !font-normal text-[#4E5969] touch-mobile:flex-1"
                                 >
                                     {localize("cancel")}
                                 </Button>
@@ -491,7 +491,7 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={mgr.handleConfirm}
                                     disabled={mgr.pendingSources.length === 0}
-                                    className="bg-blue-500 h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
+                                    className="bg-blue-500 h-8 rounded-md inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
                                 >
                                     {localize("com_subscription.confirm_add")}
                                 </Button>
@@ -534,7 +534,7 @@ export function AddSourceDropdown({
                     <div className="px-6 pb-4 flex justify-end">
                         <AlertDialogAction
                             onClick={() => mgr.setWechatAddError(false)}
-                            className="h-8 px-6 rounded-[6px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969] hover:bg-[#F7F8FA]"
+                            className="h-8 px-6 rounded-md inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969] hover:bg-[#F7F8FA]"
                         >{localize("com_subscription.cancel")}</AlertDialogAction>
                     </div>
                 </AlertDialogContent>

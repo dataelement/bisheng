@@ -279,7 +279,7 @@ export default function CitationDocumentPreviewDrawer({
                 'shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-blue-500 disabled:cursor-not-allowed disabled:text-[#C9CDD4]',
                 isFullBleedMobile
                   ? 'inline-flex size-8 rounded-md'
-                  : 'inline-flex size-6 rounded-[6px]',
+                  : 'inline-flex size-6 rounded-md',
               )}
               aria-label={localize("com_knowledge.download_file")}
             >
@@ -294,7 +294,7 @@ export default function CitationDocumentPreviewDrawer({
             'items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]',
             isFullBleedMobile
               ? 'inline-flex size-8 rounded-md'
-              : 'inline-flex size-6 rounded-[6px]',
+              : 'inline-flex size-6 rounded-md',
           )}
           aria-label="关闭文档预览"
         >

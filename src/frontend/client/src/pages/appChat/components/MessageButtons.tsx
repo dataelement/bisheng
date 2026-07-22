@@ -8,7 +8,7 @@ import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 // 14px bisheng-icons Outlined glyph, #818181 idle / brand-500 active) so the
 // whole workflow action row reads as one consistent set.
 const ACTION_BTN =
-    "flex size-6 items-center justify-center rounded-[6px] transition-colors hover:bg-[#F7F7F7]";
+    "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]";
 
 export default function MessageButtons({ id, text, onCopy, data, children = null }) {
     const [copied, setCopied] = useState(false)

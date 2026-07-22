@@ -68,9 +68,9 @@ const buttonStyles = cva(
         small:
           'h-6 gap-1 rounded px-2 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-3.5',
         medium:
-          'btn-touch-hit h-8 gap-2 rounded-[6px] px-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-4',
+          'btn-touch-hit h-8 gap-2 rounded-md px-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-4',
         large:
-          'h-10 gap-2 rounded-[8px] px-4 text-[length:var(--font-size-4)] leading-[var(--line-height-4)] [&_svg]:size-[18px]',
+          'h-10 gap-2 rounded-lg px-4 text-[length:var(--font-size-4)] leading-[var(--line-height-4)] [&_svg]:size-[18px]',
       },
       // `circle` is declared AFTER `size` so its rounded-full wins the merge
       // over the per-size radius; resolveVariants restricts it to icon-only (§1).

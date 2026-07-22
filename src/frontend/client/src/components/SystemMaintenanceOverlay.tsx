@@ -38,7 +38,7 @@ export function SystemMaintenanceOverlay() {
                     {localize("com_app.service_maintenance")}
                 </p>
             </div>
-            <Button variant="outline" className="h-8 rounded-[6px] px-4" onClick={() => window.location.reload()}>
+            <Button variant="outline" className="h-8 rounded-md px-4" onClick={() => window.location.reload()}>
                 {localize("com_app.refresh")}
             </Button>
         </div>

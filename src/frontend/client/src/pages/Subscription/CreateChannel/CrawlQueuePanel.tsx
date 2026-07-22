@@ -51,13 +51,13 @@ export function CrawlQueuePanel({
             </button>
 
             {panelOpen && (
-                <div className="absolute right-0 top-6 z-[230] w-[320px] max-h-[360px] overflow-y-auto rounded-[8px] bg-white px-[8px] py-[12px] flex flex-col gap-[4px] drop-shadow-[0px_4px_10px_rgba(7,34,88,0.07)]">
+                <div className="absolute right-0 top-6 z-[230] w-[320px] max-h-[360px] overflow-y-auto rounded-lg bg-white px-[8px] py-[12px] flex flex-col gap-[4px] drop-shadow-[0px_4px_10px_rgba(7,34,88,0.07)]">
                     {queue.map(item => {
                         if (item.status === "pending" || item.status === "crawling") {
                             return (
                                 <div
                                     key={item.id}
-                                    className="group relative flex items-center gap-[8px] rounded-[6px] px-[12px] py-[6px] hover:bg-[#F8F8F8]"
+                                    className="group relative flex items-center gap-[8px] rounded-md px-[12px] py-[6px] hover:bg-[#F8F8F8]"
                                 >
                                     <span className="flex-1 truncate text-[14px] leading-[22px] text-[#999]">
                                         {truncate(item.url)}
@@ -82,7 +82,7 @@ export function CrawlQueuePanel({
                             return (
                                 <div
                                     key={item.id}
-                                    className="group flex items-center gap-[8px] rounded-[6px] px-[12px] py-[6px] hover:bg-[#F8F8F8]"
+                                    className="group flex items-center gap-[8px] rounded-md px-[12px] py-[6px] hover:bg-[#F8F8F8]"
                                 >
                                     <CircleCheck className="size-4 shrink-0 text-[#00B42A]" />
                                     <span className="flex-1 truncate text-[14px] leading-[22px] text-[#212121]">
@@ -113,7 +113,7 @@ export function CrawlQueuePanel({
                                                 onOpenFeedback();
                                             }
                                         }}
-                                        className="flex items-center gap-[8px] rounded-[6px] px-[12px] py-[6px] cursor-pointer hover:bg-[#F8F8F8]"
+                                        className="flex items-center gap-[8px] rounded-md px-[12px] py-[6px] cursor-pointer hover:bg-[#F8F8F8]"
                                     >
                                         <TriangleAlert className="size-4 shrink-0 text-[#FF7D00]" />
                                         <span className="flex-1 truncate text-[14px] leading-[22px] text-[#212121]">

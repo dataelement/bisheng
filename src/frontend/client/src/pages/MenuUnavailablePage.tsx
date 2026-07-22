@@ -111,7 +111,7 @@ export default function MenuUnavailablePage() {
       </div>
       {canApply && (
         <Button
-          className="h-8 rounded-[6px] px-4"
+          className="h-8 rounded-md px-4"
           disabled={applied}
           onClick={() => setShowDialog(true)}
         >

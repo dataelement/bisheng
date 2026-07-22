@@ -169,11 +169,20 @@ const TAG = [
  * Radius (01-设计规范.md §1) & icon sizes (基础-图标规范.md §3.2)
  * ------------------------------------------------------------------ */
 
+/* Radius ladder aligns 1:1 with Tailwind's own scale (sm…4xl + full) so the
+ * class name IS the token name. sm/md/lg derive from --radius (8px base) in
+ * tailwind.config; xl/2xl/3xl are Tailwind defaults; 4xl (32px) is our extend.
+ * Off-scale legacy values (rounded-[5px]/[10px]/[20px]…) fold into the
+ * nearest step when touched. */
 const RADIUS = [
-  { name: 'sm',  px: 4,  usage: 'small 控件 / 表格行内按钮' },
-  { name: 'md',  px: 6,  usage: 'medium 控件（默认）' },
-  { name: 'lg',  px: 8,  usage: 'large 控件 / --radius 基准' },
-  { name: 'xl2', px: 16, cls: 'rounded-2xl', usage: '弹窗 / 大卡片容器' },
+  { name: 'sm',   px: 4,    usage: 'small 控件 / 标签 / 表格行内按钮' },
+  { name: 'md',   px: 6,    usage: 'medium 控件（默认）：按钮、输入框、菜单项' },
+  { name: 'lg',   px: 8,    usage: 'large 控件 / --radius 基准 / 消息气泡' },
+  { name: 'xl',   px: 12,   usage: '卡片、下拉面板 Popover' },
+  { name: '2xl',  px: 16,   usage: '弹窗 / 大卡片容器' },
+  { name: '3xl',  px: 24,   usage: '抽屉、超大容器' },
+  { name: '4xl',  px: 32,   usage: '特大容器 / hero 区块' },
+  { name: 'full', px: 9999, usage: '胶囊 / 圆形：头像、圆形图标按钮、pill 标签' },
 ];
 
 const ICON_SIZE = [

@@ -461,7 +461,7 @@ export function FileCard({
                 onClick={handleCardClick}
             >
                 {/* File icon 48x48 — colored icons render without backdrop on H5 */}
-                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px]">
+                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md">
                     <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-12 shrink-0" thumbBordered transparentBg />
                 </div>
 
@@ -534,7 +534,7 @@ export function FileCard({
             onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
             onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
             className={cn(
-                "group relative rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
+                "group relative rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-md",
                 !mobileListMode && "h-[160px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected

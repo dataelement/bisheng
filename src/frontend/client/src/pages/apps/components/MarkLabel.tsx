@@ -259,13 +259,13 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                 <DialogFooter className="shrink-0 gap-3 px-5 py-4 max-[768px]:!flex-row max-[768px]:!flex-nowrap max-[768px]:pb-[max(1rem,env(safe-area-inset-bottom))] min-[769px]:justify-end">
                     <Button
                         variant="outline"
-                        className="h-8 rounded-[6px] border-[#E5E6EB] bg-white px-4 text-[14px] font-normal text-[#4E5969] hover:bg-[#F7F8FA] max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
+                        className="h-8 rounded-md border-[#E5E6EB] bg-white px-4 text-[14px] font-normal text-[#4E5969] hover:bg-[#F7F8FA] max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
                         onClick={handleCancel}
                     >
                         {localize('com_label_cancel')}
                     </Button>
                     <Button
-                        className="h-8 rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal hover:bg-blue-600 max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
+                        className="h-8 rounded-md bg-blue-500 px-4 text-[14px] font-normal hover:bg-blue-600 max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
                         onClick={handleConfirm}
                     >
                         {localize('com_label_save')}

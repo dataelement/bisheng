@@ -67,7 +67,7 @@ function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; t
   return (
     <div
       className={cn(
-        'inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px]',
+        'inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-md px-1 text-[12px] font-normal leading-[18px]',
         isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-blue-50 text-blue-600',
       )}
     >
@@ -120,7 +120,7 @@ function CitationReferenceCard({
     'text-[14px] font-normal leading-[22px] text-[#1D2129]';
 
   return (
-    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] border border-[#ECECEC] bg-white p-2">
+    <div className="flex min-h-[92px] flex-col gap-2 rounded-md border border-[#ECECEC] bg-white p-2">
       <div className="flex items-center">
         <SourceTypeBadge preview={preview} type={item.data.type} />
       </div>
@@ -709,7 +709,7 @@ export default function CitationReferencesDrawer({
           data-citation-references-trigger="true"
           onClick={handleOpenButtonClick}
           className={cn(
-            'flex h-6 shrink-0 items-center justify-end gap-1 rounded-[6px] bg-transparent px-1 py-0.5 text-[#818181] transition-colors hover:bg-[#F7F7F7]',
+            'flex h-6 shrink-0 items-center justify-end gap-1 rounded-md bg-transparent px-1 py-0.5 text-[#818181] transition-colors hover:bg-[#F7F7F7]',
             referenceButtonWidth,
           )}
         >
@@ -738,7 +738,7 @@ export default function CitationReferencesDrawer({
             <aside
               className={cn(
                 'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
-                'rounded-tl-[8px]',
+                'rounded-tl-lg',
               )}
               aria-label="参考资料"
               onClick={(event) => event.stopPropagation()}

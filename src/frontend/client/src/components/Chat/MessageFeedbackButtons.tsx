@@ -25,7 +25,7 @@ import { cn } from "~/utils";
 type ThumbsState = 0 | 1 | 2;
 
 const ACTION_BTN =
-    "flex size-6 items-center justify-center rounded-[6px] transition-colors hover:bg-[#F7F7F7]";
+    "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]";
 
 interface MessageFeedbackButtonsProps {
     /** Initial / persisted verdict: 0 none, 1 up, 2 down. */

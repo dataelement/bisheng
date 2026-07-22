@@ -158,7 +158,7 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                                 align="end"
-                                className="min-w-[96px] rounded-[8px] border border-gray-100 bg-white p-2 shadow-md"
+                                className="min-w-[96px] rounded-lg border border-gray-100 bg-white p-2 shadow-md"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <div className="flex flex-col gap-1">
