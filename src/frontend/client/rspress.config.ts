@@ -38,9 +38,10 @@ export default defineConfig({
   plugins: [pluginPreview({ previewMode: 'internal' })],
 
   route: {
-    // 00-总纲 is the Claude-window working charter, not reader material —
-    // keep it out of the site entirely (routes AND search index).
-    exclude: ['**/00-总纲.md'],
+    // Working/meta docs that are not reader material — kept out of the site
+    // entirely (routes AND search index): 00-总纲 (Claude-window charter) and
+    // 元-文档撰写规范 (how-to-author-these-docs guide, for authors only).
+    exclude: ['**/00-总纲.md', '**/元-文档撰写规范.md'],
   },
 
   themeConfig: {
