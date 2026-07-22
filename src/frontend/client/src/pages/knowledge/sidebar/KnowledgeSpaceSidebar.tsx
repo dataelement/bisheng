@@ -404,19 +404,19 @@ export function KnowledgeSpaceSidebar({
                         <div className="mt-3 flex gap-2">
                             <Button
                                 variant="secondary"
-                                onClick={() => onKnowledgeSquare?.()}
-                                className="h-8 min-w-0 flex-1 gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-1 py-[5px] text-[13px] font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
-                            >
-                                <Outlined.BlocksAndArrows className="size-4 shrink-0" />
-                                <span className="truncate">{localize("com_knowledge.knowledge_square")}</span>
-                            </Button>
-                            <Button
-                                variant="secondary"
                                 onClick={onCreateSpace}
-                                className="h-8 min-w-0 flex-1 gap-1 rounded-[6px] bg-blue-100 px-1 py-[5px] text-[13px] font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                                className="h-8 min-w-0 flex-1 gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-1 py-[5px] text-[13px] font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                             >
                                 <Plus className="size-4 shrink-0" />
                                 <span className="truncate">{localize("com_knowledge.create")}</span>
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onClick={() => onKnowledgeSquare?.()}
+                                className="h-8 min-w-0 flex-1 gap-1 rounded-[6px] bg-blue-100 px-1 py-[5px] text-[13px] font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                            >
+                                <Outlined.BlocksAndArrows className="size-4 shrink-0" />
+                                <span className="truncate">{localize("com_knowledge.knowledge_square")}</span>
                             </Button>
                         </div>
                     )}
